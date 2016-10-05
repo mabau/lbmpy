@@ -153,11 +153,11 @@ class KernelFunction(Node):
                 self.isFieldArgument = True
                 self.fieldName = name[len(FIELD_STRIDE_PREFIX):]
                 
-    def __init__(self, body):
+    def __init__(self, body, functionName="kernel"):
         super(KernelFunction, self).__init__()
         self._body = body
         self._parameters = None
-        self._functionName = "mykernel"
+        self._functionName = functionName
         self._body.parent = self
 
 
@@ -568,9 +568,10 @@ class TypedSymbol(sp.Symbol):
 # --------------------------------------- Factory Functions ------------------------------------------------------------
 
 
-def makeLoopOverDomain(body):
+def makeLoopOverDomain(body, functionName):
     """
     :param body: list of nodes
+    :param functionName: name of generated C function
     :return: LoopOverCoordinate instance with nested loops, ordered according to field layouts
     """
 
@@ -599,7 +600,7 @@ def makeLoopOverDomain(body):
     for loopCoordinate in reversed(layout):
         currentBody = Block([LoopOverCoordinate(currentBody, loopCoordinate, shape, 1, requiredGhostLayers)])
 
-    return KernelFunction(currentBody)
+    return KernelFunction(currentBody, functionName)
 
 
 # --------------------------------------- Transformations --------------------------------------------------------------
@@ -735,7 +736,7 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
     assignments = explicitReadAssignments + assignments
 
     body = Block(assignments)
-    code = makeLoopOverDomain(body)
+    code = makeLoopOverDomain(body, functionName)
     resolveFieldAccesses(code)
     moveConstantsBeforeLoop(code)
     return code

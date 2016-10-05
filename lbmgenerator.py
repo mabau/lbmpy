@@ -1,11 +1,26 @@
-import lbmpy.collisionoperator as coll
 import lbmpy.generator as generator
-
 import lbmpy.util as util
 import sympy as sp
 import lbmpy.transformations as trafos
-from lbmpy.stencils import getStencil
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
+from lbmpy.generator import Field
+
+
+def getCommonQuadraticAndConstantTerms(simplifiedUpdateRuleForCenter, latticeModel):
+    """Determines a common subexpression useful for most LBM model often called f_eq_common.
+    It contains the quadratic and constant terms of the center update rule."""
+    t = simplifiedUpdateRuleForCenter
+    for rp in latticeModel.collisionDOFs:
+        t = t.subs(rp, 1)
+
+    for fa in t.atoms(Field.Access):
+        t = t.subs(fa, 0)
+
+    weight = t
+    for u in util.getSymbolicVelocityVector(latticeModel.dim):
+        weight = weight.subs(u, 0)
+    weight = weight / util.getSymbolicDensity()
+    return t / weight
 
 
 def processCollideTerms(lm, pdfSymbols):
@@ -20,18 +35,25 @@ def processCollideTerms(lm, pdfSymbols):
     rhoDefinition = [sp.Eq(rho, sum(pdfSymbols))]
     uDefinition = [sp.Eq(u_i, u_term_i) for u_i, u_term_i in zip(u, lm.getVelocityTerms(pdfSymbols))]
 
-    sum_u_sq = sum([u_i ** 2 for u_i in u])
-    f_eq_common = [sp.Eq(sp.Symbol('f_eq_common'), rho - rho * sp.Rational(3, 2) * sum_u_sq).expand()]
-    replacements.append(f_eq_common[0].factor())
+    simplifiedUpdateRules = []
     for s in terms:
         s = s.expand()
         s = sp.simplify(trafos.replaceSecondOrderProducts(s, u, positive=None, replaceMixed=replacements).expand())
 
         for rp in lm.collisionDOFs:
             s = s.collect(rp)
-        for replacement in rhoDefinition + uDefinition + f_eq_common:
+        for replacement in rhoDefinition + uDefinition:
             s = trafos.replaceAdditive(s, replacement.lhs, replacement.rhs, len(replacement.rhs.args) // 2)
+        simplifiedUpdateRules.append(s)
+
+    assert sum([abs(e) for e in lm.stencil[0]]) == 0, "Works only if first stencil entry is the center direction"
+    f_eq_common = getCommonQuadraticAndConstantTerms(simplifiedUpdateRules[0], lm)
+    f_eq_common = sp.Eq(sp.Symbol('f_eq_common'), f_eq_common)
+    replacements.append(f_eq_common)
+    for s in simplifiedUpdateRules:
+        s = trafos.replaceAdditive(s, f_eq_common.lhs, f_eq_common.rhs, len(f_eq_common.rhs.args) // 2)
         result.append(s)
+
     return result, replacements
 
 

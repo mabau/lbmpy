@@ -213,9 +213,10 @@ def discreteMoment(function, moment, stencil):
                 factor *= vel**exponent
             res += factor
         else:
+            weight = moment
             for variable, e_i in zip(MOMENT_SYMBOLS, e):
-                moment = moment.subs(variable, e_i)
-            res += moment * factor
+                weight = weight.subs(variable, e_i)
+            res += weight * factor
 
     return sp.simplify(res)
 

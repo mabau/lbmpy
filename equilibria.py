@@ -7,7 +7,7 @@ from lbmpy.transformations import removeHigherOrderTerms
 
 from joblib import Memory
 
-memory = Memory(cachedir="/tmp/lbmpy", verbose=False)
+memory = Memory(cachedir="/tmp/pylbm", verbose=False)
 
 
 def getWeights(stencil):

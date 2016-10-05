@@ -1,24 +1,35 @@
 import sympy as sp
-from lbmpy.equilibria import getMaxwellBoltzmannEquilibriumMoments
+from lbmpy.equilibria import getMaxwellBoltzmannEquilibriumMoments, standardDiscreteEquilibrium
 import lbmpy.moments as m
 
 
-def makeSRT(stencil, order=2):
+def makeSRT(stencil, order=2, compressible=False):
+    Q = len(stencil)
+    moments = m.getDefaultOrthogonalMoments(stencil)
+    discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
+                                                      compressible=compressible, c_s_sq=sp.Rational(1, 3))
+    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in moments]
+    return LatticeModel(stencil, moments, equilibriumMoments, relaxationFactors=[sp.Symbol('omega')] * Q)
+
+
+def makeTRT(stencil, order=2, compressible=False):
+    Q = len(stencil)
+    moments = m.getDefaultMoments(Q)
+    discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
+                                                      compressible=compressible, c_s_sq=sp.Rational(1, 3))
+    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in moments]
+
+    lambda_e, lambda_o = sp.symbols("lambda_e lambda_o")
+    relaxationFactors = [lambda_e if m.isEven(moment) else lambda_o for moment in moments]
+    return LatticeModel(stencil, moments, equilibriumMoments, relaxationFactors=relaxationFactors)
+
+
+def makeSRTFromMaxwellBoltzmann(stencil, order=2):
     Q = len(stencil)
     moments = m.getDefaultOrthogonalMoments(stencil)
     return LatticeModel(stencil, moments,
                         getMaxwellBoltzmannEquilibriumMoments(moments, order=order),
                         relaxationFactors=[sp.Symbol('omega')] * Q)
-
-
-def makeTRT(stencil, order=2):
-    Q = len(stencil)
-    moments = m.getDefaultMoments(Q)
-    lambda_e, lambda_o = sp.symbols("lambda_e lambda_o")
-    relaxationFactors = [lambda_e if m.isEven(moment) else lambda_o for moment in moments]
-    return LatticeModel(stencil, moments,
-                        getMaxwellBoltzmannEquilibriumMoments(moments, order=order),
-                        relaxationFactors=relaxationFactors)
 
 
 class LatticeModel:
