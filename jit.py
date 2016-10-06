@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 
 CONFIG = {
     'compiler': 'g++',
-    'flags': '-Ofast -DNDEBUG -fPIC -shared -march=native',
+    'flags': '-Ofast -DNDEBUG -fPIC -shared -march=native -fopenmp',
 }
 
 
@@ -46,43 +46,7 @@ def ctypeFromNumpyType(numpyType):
     return typeMap[numpyType]
 
 
-def makePythonFunction(kernelFunctionNode, argumentDict):
-
-    # build up list of ctype arguments
-    ctypeArguments = []
-    for arg in kernelFunctionNode.parameters:
-        if arg.isFieldArgument:
-            field = argumentDict[arg.fieldName]
-            if arg.isFieldPtrArgument:
-                ctypeArguments.append(field.ctypes.data_as(ctypeFromString(arg.dtype)))
-            elif arg.isFieldShapeArgument:
-                dtype = ctypeFromString(gen.SHAPE_DTYPE, includePointers=False)
-                ctypeArguments.append(field.ctypes.shape_as(dtype))
-            elif arg.isFieldStrideArgument:
-                dtype = ctypeFromString(gen.STRIDE_DTYPE, includePointers=False)
-                baseFieldType = ctypeFromNumpyType(field.dtype)
-                strides = field.ctypes.strides_as(dtype)
-                for i in range(len(field.shape)):
-                    assert strides[i] % sizeof(baseFieldType) == 0
-                    strides[i] //= sizeof(baseFieldType)
-                ctypeArguments.append(strides)
-            else:
-                assert False
-        else:
-            param = argumentDict[arg.name]
-            expectedType = ctypeFromString(arg.dtype)
-            ctypeArguments.append(expectedType(param))
-
-    dll = compileAndLoad(kernelFunctionNode)
-    cfunc = dll[kernelFunctionNode.functionName]
-    cfunc.restype = None
-
-    return lambda: cfunc(*ctypeArguments)
-
-
 def compileAndLoad(kernelFunctionNode):
-
-    loadedJitLib = None
     with TemporaryDirectory() as tmpDir:
         srcFile = os.path.join(tmpDir, 'source.c')
         with open(srcFile, 'w') as sourceFile:
@@ -99,29 +63,74 @@ def compileAndLoad(kernelFunctionNode):
     return loadedJitLib
 
 
-def fieldFromArr(arr):
-    typeMap = {
-        np.dtype('float64'): c_double,
-        np.dtype('float32'): c_float,
-    }
+def buildCTypeArgumentList(kernelFunctionNode, argumentDict):
+    ctArguments = []
+    for arg in kernelFunctionNode.parameters:
+        if arg.isFieldArgument:
+            field = argumentDict[arg.fieldName]
+            if arg.isFieldPtrArgument:
+                ctArguments.append(field.ctypes.data_as(ctypeFromString(arg.dtype)))
+            elif arg.isFieldShapeArgument:
+                dataType = ctypeFromString(gen.SHAPE_DTYPE, includePointers=False)
+                ctArguments.append(field.ctypes.shape_as(dataType))
+            elif arg.isFieldStrideArgument:
+                dataType = ctypeFromString(gen.STRIDE_DTYPE, includePointers=False)
+                baseFieldType = ctypeFromNumpyType(field.dtype)
+                strides = field.ctypes.strides_as(dataType)
+                for i in range(len(field.shape)):
+                    assert strides[i] % sizeof(baseFieldType) == 0
+                    strides[i] //= sizeof(baseFieldType)
+                ctArguments.append(strides)
+            else:
+                assert False
+        else:
+            param = argumentDict[arg.name]
+            expectedType = ctypeFromString(arg.dtype)
+            ctArguments.append(expectedType(param))
+    return ctArguments
 
-    baseFieldType = typeMap[arr.dtype]
 
-    class Field(Structure):
-        _fields_ = [
-            ("data", POINTER(baseFieldType)),
-            ("dim", c_long),
-            ("strides", POINTER(c_long)),
-            ("shape", POINTER(c_long)),
-        ]
+def makePythonFunction(kernelFunctionNode, argumentDict):
+    # build up list of CType arguments
+    args = buildCTypeArgumentList(kernelFunctionNode, argumentDict)
+    func = compileAndLoad(kernelFunctionNode)[kernelFunctionNode.functionName]
+    func.restype = None
+    return lambda: func(*args)
 
-    data = arr.ctypes.data_as(POINTER(baseFieldType))
-    dim = c_long(len(arr.shape))
-    strides = arr.ctypes.strides_as(c_long)
-    for i in range(len(arr.shape)):
-        assert strides[i] % sizeof(baseFieldType) == 0
-        strides[i] //= sizeof(baseFieldType)
-    shape = arr.ctypes.shape_as(c_long)
-    return Field(data, dim, strides, shape)
+
+def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src', destinationFieldName='dst'):
+    from waLBerla import field
+
+    swapFields = {}
+
+    func = compileAndLoad(kernelFunctionNode)[kernelFunctionNode.functionName]
+    func.restype = None
+
+    # Counting the number of domain loops to get dimensionality
+    dim = len(kernelFunctionNode.atoms(gen.LoopOverCoordinate))
+
+    def f(**kwargs):
+        src = kwargs[sourceFieldName]
+        sizeInfo = (src.size, src.allocSize, src.layout)
+        if sizeInfo not in swapFields:
+            swapFields[sizeInfo] = src.cloneUninitialized()
+        dst = swapFields[sizeInfo]
+
+        kwargs[sourceFieldName] = field.toArray(src, withGhostLayers=True)
+        kwargs[destinationFieldName] = field.toArray(dst, withGhostLayers=True)
+
+        # Since waLBerla does not really support 2D domains a small hack is required here
+        if dim == 2:
+            assert kwargs[sourceFieldName].shape[2] in [1, 3]
+            assert kwargs[destinationFieldName].shape[2] in [1, 3]
+            kwargs[sourceFieldName] = kwargs[sourceFieldName][:, :, 1, :]
+            kwargs[destinationFieldName] = kwargs[destinationFieldName][:, :, 1, :]
+
+        args = buildCTypeArgumentList(kernelFunctionNode, kwargs)
+        func(*args)
+        src.swapDataPointers(dst)
+
+    return f
+
 
 

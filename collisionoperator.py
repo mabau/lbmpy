@@ -9,7 +9,7 @@ def makeSRT(stencil, order=2, compressible=False):
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
     equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in moments]
-    return LatticeModel(stencil, moments, equilibriumMoments, relaxationFactors=[sp.Symbol('omega')] * Q)
+    return LatticeModel(stencil, moments, equilibriumMoments, [sp.Symbol('omega')] * Q, compressible)
 
 
 def makeTRT(stencil, order=2, compressible=False):
@@ -21,7 +21,7 @@ def makeTRT(stencil, order=2, compressible=False):
 
     lambda_e, lambda_o = sp.symbols("lambda_e lambda_o")
     relaxationFactors = [lambda_e if m.isEven(moment) else lambda_o for moment in moments]
-    return LatticeModel(stencil, moments, equilibriumMoments, relaxationFactors=relaxationFactors)
+    return LatticeModel(stencil, moments, equilibriumMoments, relaxationFactors, compressible)
 
 
 def makeSRTFromMaxwellBoltzmann(stencil, order=2):
@@ -29,19 +29,19 @@ def makeSRTFromMaxwellBoltzmann(stencil, order=2):
     moments = m.getDefaultOrthogonalMoments(stencil)
     return LatticeModel(stencil, moments,
                         getMaxwellBoltzmannEquilibriumMoments(moments, order=order),
-                        relaxationFactors=[sp.Symbol('omega')] * Q)
+                        [sp.Symbol('omega')] * Q, True)
 
 
 class LatticeModel:
 
-    def __init__(self, stencil, moments, equilibriumMoments, relaxationFactors):
+    def __init__(self, stencil, moments, equilibriumMoments, relaxationFactors, compressible):
         self._stencil = stencil
         self._moments = moments
         self._equilibriumMoments = sp.Matrix(equilibriumMoments)
 
         self._momentMatrix = m.momentMatrix(moments, stencil)
         self._relaxationMatrix = sp.diag(*relaxationFactors)
-        #self._pdfs = sp.Matrix(len(stencil), 1, [sp.Symbol("f_%d" % (i,)) for i in range(len(stencil))])
+        self.compressible = compressible
 
     @property
     def dim(self):

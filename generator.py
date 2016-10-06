@@ -24,10 +24,10 @@ SHAPE_DTYPE = "const int *"
 
 class CodePrinter(CCodePrinter):
     def _print_Pow(self, expr):
-        if expr.exp.is_integer and expr.exp.is_number:
+        if expr.exp.is_integer and expr.exp.is_number and expr.exp > 0:
             return '(' + '*'.join([self._print(expr.base)] * expr.exp) + ')'
         else:
-            return super(SympyAssignment.CodePrinter, self)._print_Pow(expr)
+            return super(CodePrinter, self)._print_Pow(expr)
 
 codePrinter = CodePrinter()
 
@@ -245,6 +245,7 @@ class LoopOverCoordinate(Node):
         self._increment = increment
         self._ghostLayers = ghostLayers
         self._body.parent = self
+        self.openmpClause = ""
 
     @property
     def args(self):
@@ -282,10 +283,28 @@ class LoopOverCoordinate(Node):
         end = self._shape[coord] - self._ghostLayers
 
         counterVar = self.loopCounterName
-        return c.For("int %s = %d" % (counterVar, self._ghostLayers),
-                     "%s < %s" % (counterVar, codePrinter.doprint(end)),
-                     "++%s" % (counterVar,),
-                     self._body.generateC())
+
+        introLine = ""
+        if self.openmpClause:
+            introLine = "#pragma omp " + self.openmpClause + "\n"
+
+        class OpenMPLoop(c.CustomLoop):
+            def __init__(self, intro_line, body, openmpClause=""):
+                super(OpenMPLoop, self).__init__(intro_line, body)
+                self.openmpClause_ = openmpClause
+
+            def generate(self):
+                if self.openmpClause_:
+                    yield self.openmpClause_
+
+                for e in super(OpenMPLoop,self).generate():
+                    yield e
+
+        start = "int %s = %d" % (counterVar, self._ghostLayers)
+        condition = "%s < %s" % (counterVar, codePrinter.doprint(end))
+        update = "++%s" % (counterVar,)
+        loopStr = "for (%s; %s; %s)" % (start, condition, update)
+        return OpenMPLoop(loopStr, self._body.generateC(), openmpClause=introLine)
 
 
 class SympyAssignment(Node):
@@ -597,9 +616,11 @@ def makeLoopOverDomain(body, functionName):
     shape = list(shapes)[0]
 
     currentBody = body
+    lastLoop = None
     for loopCoordinate in reversed(layout):
-        currentBody = Block([LoopOverCoordinate(currentBody, loopCoordinate, shape, 1, requiredGhostLayers)])
-
+        lastLoop = LoopOverCoordinate(currentBody, loopCoordinate, shape, 1, requiredGhostLayers)
+        currentBody = Block([lastLoop])
+    lastLoop.openmpClause = "parallel for schedule(static)"
     return KernelFunction(currentBody, functionName)
 
 

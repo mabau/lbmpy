@@ -70,7 +70,7 @@ def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="ds
         inverseIdx = tuple([-d for d in offset])
         streamedPdfs.append(src[inverseIdx](ownIdx))
 
-    densityVelocityDefinition = getDensityVelocityExpressions(lm.stencil, streamedPdfs)
+    densityVelocityDefinition = getDensityVelocityExpressions(lm.stencil, streamedPdfs, lm.compressible)
 
     collideTerms, subExpressions = processCollideTerms(lm, streamedPdfs)
 
