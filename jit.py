@@ -98,39 +98,7 @@ def makePythonFunction(kernelFunctionNode, argumentDict):
     return lambda: func(*args)
 
 
-def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src', destinationFieldName='dst'):
-    from waLBerla import field
 
-    swapFields = {}
-
-    func = compileAndLoad(kernelFunctionNode)[kernelFunctionNode.functionName]
-    func.restype = None
-
-    # Counting the number of domain loops to get dimensionality
-    dim = len(kernelFunctionNode.atoms(gen.LoopOverCoordinate))
-
-    def f(**kwargs):
-        src = kwargs[sourceFieldName]
-        sizeInfo = (src.size, src.allocSize, src.layout)
-        if sizeInfo not in swapFields:
-            swapFields[sizeInfo] = src.cloneUninitialized()
-        dst = swapFields[sizeInfo]
-
-        kwargs[sourceFieldName] = field.toArray(src, withGhostLayers=True)
-        kwargs[destinationFieldName] = field.toArray(dst, withGhostLayers=True)
-
-        # Since waLBerla does not really support 2D domains a small hack is required here
-        if dim == 2:
-            assert kwargs[sourceFieldName].shape[2] in [1, 3]
-            assert kwargs[destinationFieldName].shape[2] in [1, 3]
-            kwargs[sourceFieldName] = kwargs[sourceFieldName][:, :, 1, :]
-            kwargs[destinationFieldName] = kwargs[destinationFieldName][:, :, 1, :]
-
-        args = buildCTypeArgumentList(kernelFunctionNode, kwargs)
-        func(*args)
-        src.swapDataPointers(dst)
-
-    return f
 
 
 
