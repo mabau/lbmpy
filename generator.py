@@ -406,11 +406,14 @@ class Field:
         if spatialDimensions < 1:
             raise ValueError("Too many index dimensions. At least one spatial dimension required")
 
-        layout = tuple(getLayoutFromNumpyField(npArray)[:spatialDimensions])
+        fullLayout = getLayoutFromNumpyField(npArray)
+        spatialLayout = tuple([i for i in fullLayout if i < spatialDimensions])
+        assert len(spatialLayout) == spatialDimensions
+
         strides = tuple([s // np.dtype(npArray.dtype).itemsize for s in npArray.strides])
         shape = tuple([int(s) for s in npArray.shape])
 
-        return Field(fieldName, npArray.dtype, layout, shape, strides)
+        return Field(fieldName, npArray.dtype, spatialLayout, shape, strides)
 
     @staticmethod
     def createGeneric(fieldName, spatialDimensions, dtype=np.float64, indexDimensions=0, layout=None):
@@ -458,6 +461,10 @@ class Field:
     @property
     def name(self):
         return self._fieldName
+
+    @property
+    def shape(self):
+        return self._shape
 
     @property
     def spatialShape(self):
@@ -596,7 +603,14 @@ def makeLoopOverDomain(body, functionName):
 
     # find correct ordering by inspecting participating FieldAccesses
     fieldAccesses = body.atoms(Field.Access)
-    fields = set([e.field for e in fieldAccesses])
+    fieldList = [e.field for e in fieldAccesses]
+    fields = set(fieldList)
+    assert len(fields) > 0
+    refField = fieldList[0]
+    for field in fields:
+        if field.spatialDimensions != refField.spatialDimensions:
+            raise ValueError("All fields have to have the same number of spatial dimensions")
+
     layouts = set([field.layout for field in fields])
     if len(layouts) > 1:
         warnings.warn("makeLoopOverDomain: Due to different layout of the fields no optimal loop ordering exists")

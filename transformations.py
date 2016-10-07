@@ -27,6 +27,9 @@ def replaceAdditive(expr, replacement, subExpression, minimalMatchingTerms):
     :param minimalMatchingTerms: how many sum-terms have to match to do the replacement
     :return:
     """
+    if minimalMatchingTerms <= 0:
+        minimalMatchingTerms = 1
+
     def visit(currentExpr):
         if currentExpr.is_Add:
             exprCoeffs = currentExpr.as_coefficients_dict()

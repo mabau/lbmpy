@@ -14,7 +14,7 @@ def makeSRT(stencil, order=2, compressible=False):
 
 def makeTRT(stencil, order=2, compressible=False):
     Q = len(stencil)
-    moments = m.getDefaultMoments(Q)
+    moments = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
     equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in moments]
