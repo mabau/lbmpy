@@ -354,10 +354,26 @@ def getDefaultOrthogonalMoments(stencil):
         orthoMoments, orthoVecs = gramSchmidt(defaultMoments, stencil, weights=eq.getWeights(stencil))
         orthoMomentsScaled = [e * util.commonDenominator(e) for e in orthoMoments]
         return orthoMomentsScaled
-    #elif number == 15:
-    #    pass
+    elif number == 15:
+        # from Khirevich, Ginzburg, Tallarek 2015: Coarse- and fine-grid numerical ...
+        # took the D3Q19 moments and delete 16,17,18 and 10, 12 - renumbered - and added the last one
+        # should be same as in above paper :)
+        sq = x ** 2 + y ** 2 + z ** 2
+        return [
+            sp.Rational(1, 1),  # 0
+            sq - 1,  # 1
+            3 * sq ** 2 - 6 * sq + 1,  # 2
+            x, (3 * sq - 5) * x,  # 3,4
+            y, (3 * sq - 5) * y,  # 5,6
+            z, (3 * sq - 5) * z,  # 7,8
+            3 * x ** 2 - sq,  # 9
+            y ** 2 - z ** 2,  # 10
+            x * y, y * z, x * z,  # 11,12,13
+            x*y*z,  # 14
+        ]
     elif number == 19:
         # from: Toelke, Freudiger, Krafczyk 2006: An adaptive scheme using hierarchical grids
+        # and :
         sq = x ** 2 + y ** 2 + z ** 2
         return [
             sp.Rational(1, 1),  # 0
