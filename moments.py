@@ -197,6 +197,21 @@ def isEven(moment):
         return sp.simplify(moment-opposite) == 0
 
 
+def isConservedMoment(moment):
+    return moment == sp.Rational(1, 1) or moment in MOMENT_SYMBOLS
+
+
+def getOrder(moment):
+    """Computes polynomial order of given moment
+    Examples: x**2 * y + x   ->  3
+              z**4 * x**2    ->  6"""
+    if len(moment.atoms(sp.Symbol)) == 0:
+        return 0
+    leadingCoefficient = sp.polys.polytools.LM(moment)
+    symbolsInLeadingCoefficient = leadingCoefficient.atoms(sp.Symbol)
+    return sum([sp.degree(leadingCoefficient, gen=m) for m in symbolsInLeadingCoefficient])
+
+
 def discreteMoment(function, moment, stencil):
     """Computes discrete moment of given distribution function
     :param function     list of distribution functions for each direction
@@ -343,6 +358,62 @@ def getDefaultMoments(number):
     raise Exception("No set of moments available")
 
 
+class MomentSystem:
+
+    def __init__(self, allMoments, momentIdGroups):
+        self._allMoments = allMoments
+        self._momentIdGroups = momentIdGroups
+
+        if momentIdGroups is not None:
+            # Extract and check conserved moments
+            conservedMomentIds = momentIdGroups[0]
+            for i in conservedMomentIds:
+                assert isConservedMoment(allMoments[i])
+
+            if len(allMoments) <= 9:
+                assert len(self.conservedMomentIds) == 3
+            else:
+                assert len(self.conservedMomentIds) == 4
+
+            # Check non-conserved moments: in one group all moments should have the same order
+            for momentIdGroup in momentIdGroups[1:]:
+                assert len(set([getOrder(allMoments[i]) for i in momentIdGroup])) == 1
+
+    @property
+    def hasMomentGroups(self):
+        return self._momentIdGroups is not None
+
+    @property
+    def allMoments(self):
+        return self._allMoments
+
+    @property
+    def conservedMomentIds(self):
+        return self._momentIdGroups[0]
+
+    @property
+    def nonConservedMomentGroupIds(self):
+        return self._momentIdGroups[1:]
+
+    def getSymbolicRelaxationRates(self, ordering='lowestMomentId', namePrefix="s_"):
+        assert self.hasMomentGroups
+        result = [0] * len(self._allMoments)
+
+        if ordering == 'lowestMomentId':
+            for momentIdGroup in self.nonConservedMomentGroupIds:
+                rate = sp.Symbol("%s%d" % (namePrefix, momentIdGroup[0]))
+                for momentId in momentIdGroup:
+                    result[momentId] = rate
+        elif ordering == 'ascending':
+            nextParam = 1
+            for momentIdGroup in self.nonConservedMomentGroupIds:
+                rate = sp.Symbol("%s%d" % (namePrefix, nextParam))
+                nextParam += 1
+                for momentId in momentIdGroup:
+                    result[momentId] = rate
+        return result
+
+
 def getDefaultOrthogonalMoments(stencil):
     number = len(stencil)
     x, y, z = MOMENT_SYMBOLS
@@ -353,13 +424,13 @@ def getDefaultOrthogonalMoments(stencil):
         defaultMoments = getDefaultMoments(number)
         orthoMoments, orthoVecs = gramSchmidt(defaultMoments, stencil, weights=eq.getWeights(stencil))
         orthoMomentsScaled = [e * util.commonDenominator(e) for e in orthoMoments]
-        return orthoMomentsScaled
+        return MomentSystem(orthoMomentsScaled, None)
     elif number == 15:
         # from Khirevich, Ginzburg, Tallarek 2015: Coarse- and fine-grid numerical ...
         # took the D3Q19 moments and delete 16,17,18 and 10, 12 - renumbered - and added the last one
         # should be same as in above paper :)
         sq = x ** 2 + y ** 2 + z ** 2
-        return [
+        allMoments = [
             sp.Rational(1, 1),  # 0
             sq - 1,  # 1
             3 * sq ** 2 - 6 * sq + 1,  # 2
@@ -371,11 +442,19 @@ def getDefaultOrthogonalMoments(stencil):
             x * y, y * z, x * z,  # 11,12,13
             x*y*z,  # 14
         ]
+        momentGroups = [[0, 3, 5, 7],
+                        [9, 10, 11, 12, 13],
+                        [1],
+                        [2],
+                        [4, 6, 8],
+                        [14],
+                        ]
+        return MomentSystem(allMoments, momentGroups)
     elif number == 19:
         # from: Toelke, Freudiger, Krafczyk 2006: An adaptive scheme using hierarchical grids
         # and :
         sq = x ** 2 + y ** 2 + z ** 2
-        return [
+        allMoments = [
             sp.Rational(1, 1),  # 0
             sq - 1,  # 1
             3 * sq ** 2 - 6 * sq + 1,  # 2
@@ -391,6 +470,15 @@ def getDefaultOrthogonalMoments(stencil):
             (z ** 2 - x ** 2) * y,  # 17
             (x ** 2 - y ** 2) * z,  # 18
         ]
+        momentGroups = [[0, 3, 5, 7],
+                        [9, 11, 13, 14, 15],
+                        [1],
+                        [2],
+                        [4, 6, 8],
+                        [10, 12],
+                        [16, 17, 18]]
+        return MomentSystem(allMoments, momentGroups)
+
     elif number == 27:
         # from Premnath, Banerjee 2012: On the three dimensional central moment LBM
         xsq, ysq, zsq = x**2, y**2, z**2
@@ -417,7 +505,7 @@ def getDefaultOrthogonalMoments(stencil):
             xsq * ysq * z,  # 25
             xsq * ysq * zsq,  # 26
         ]
-        return [
+        allMoments = [
             sp.Rational(1, 1),  # 0
             x, y, z,  # 1, 2, 3
             x * y, x * z, y * z,  # 4, 5, 6
@@ -442,4 +530,6 @@ def getDefaultOrthogonalMoments(stencil):
             9 * (xsq * ysq * z) - 6 * (xsq * z + ysq * z) + 4 * z,  # 25
             27 * (xsq * ysq * zsq) - 18 * (xsq * ysq + xsq * zsq + ysq * zsq) + 12 * (xsq + ysq + zsq) - 8,  # 26
         ]
+        return MomentSystem(allMoments, None)
+
     raise Exception("No set of moments available")

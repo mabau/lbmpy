@@ -105,7 +105,7 @@ def replaceSecondOrderProducts(expr, searchSymbols, positive=None, replaceMixed=
                     replaceMixed.append(sp.Eq(mixedSymbol, u + sign * v))
             else:
                 mixedSymbol = u + sign * v
-            expr = sp.Rational(1, 2) * sign * otherFactors * (mixedSymbol ** 2 - u ** 2 - v ** 2)
+            return sp.Rational(1, 2) * sign * otherFactors * (mixedSymbol ** 2 - u ** 2 - v ** 2)
 
     paramList = [replaceSecondOrderProducts(a, searchSymbols, positive, replaceMixed) for a in expr.args]
     result = expr.func(*paramList) if paramList else expr

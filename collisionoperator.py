@@ -3,25 +3,42 @@ from lbmpy.equilibria import getMaxwellBoltzmannEquilibriumMoments, standardDisc
 import lbmpy.moments as m
 
 
+# ----------------      From standard discrete equilibrium -------------------------------------------------------------
+
+
 def makeSRT(stencil, order=2, compressible=False):
-    Q = len(stencil)
-    moments = m.getDefaultOrthogonalMoments(stencil)
+    momentSystem = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
-    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in moments]
-    return LatticeModel(stencil, moments, equilibriumMoments, [sp.Symbol('omega')] * Q, compressible)
+    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
+    relaxationFactors = [sp.Symbol('omega')] * len(stencil)
+    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationFactors, compressible)
 
 
 def makeTRT(stencil, order=2, compressible=False):
-    Q = len(stencil)
-    moments = m.getDefaultOrthogonalMoments(stencil)
+    momentSystem = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
-    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in moments]
+    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
 
     lambda_e, lambda_o = sp.symbols("lambda_e lambda_o")
-    relaxationFactors = [lambda_e if m.isEven(moment) else lambda_o for moment in moments]
-    return LatticeModel(stencil, moments, equilibriumMoments, relaxationFactors, compressible)
+    relaxationFactors = [lambda_e if m.isEven(moment) else lambda_o for moment in momentSystem.allMoments]
+    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationFactors, compressible)
+
+
+def makeMRT(stencil, order=2, compressible=False):
+    momentSystem = m.getDefaultOrthogonalMoments(stencil)
+    discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
+                                                      compressible=compressible, c_s_sq=sp.Rational(1, 3))
+    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
+    if not momentSystem.hasMomentGroups:
+        raise NotImplementedError("No moment grouping available for this lattice model")
+
+    relaxationFactors = momentSystem.getSymbolicRelaxationRates()
+    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationFactors, compressible)
+
+
+# ----------------      From Continuous Maxwell Boltzmann  -------------------------------------------------------------
 
 
 def makeSRTFromMaxwellBoltzmann(stencil, order=2):
@@ -68,6 +85,10 @@ class LatticeModel:
         for i in range(self.dim):
             result.append(sum([st[i] * f for st, f in zip(self._stencil, pdfs)]))
         return result
+
+    def setCollisionDOFs(self, symbolToConstantMap):
+        substitutions = [(sp.Symbol(key), value) for key, value in symbolToConstantMap.items()]
+        self._relaxationMatrix = self._relaxationMatrix.subs(substitutions)
 
     @property
     def collisionDOFs(self):

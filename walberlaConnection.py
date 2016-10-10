@@ -2,12 +2,16 @@ from waLBerla import lbm
 
 
 def convertWalberlaToLbmpyLatticeModel(lm):
-    from lbmpy.collisionoperator import makeSRT, makeTRT
+    from lbmpy.collisionoperator import makeSRT, makeTRT, makeMRT
     stencil = lm.directions
     if type(lm.collisionModel) == lbm.collisionModels.SRT:
         return makeSRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder)
     elif type(lm.collisionModel) == lbm.collisionModels.TRT:
         return makeTRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder)
+    elif type(lm.collisionModel) == lbm.collisionModels.D3Q19MRT:
+        return makeMRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder)
+    else:
+        raise ValueError("Unknown lattice model")
 
 
 def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src', destinationFieldName='dst'):
@@ -46,7 +50,8 @@ def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src'
     return f
 
 
-def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFieldName, variableSize=False):
+def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFieldName,
+                                           variableSize=False, replaceRelaxationTimes=False):
     from lbmpy.lbmgenerator import createLbmEquations
     from lbmpy.generator import createKernel
     from waLBerla import field
@@ -56,16 +61,29 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
     elif type(walberlaLatticeModel.collisionModel) == lbm.collisionModels.TRT:
         params = {'lambda_o': walberlaLatticeModel.collisionModel.lambda_d,
                   'lambda_e': walberlaLatticeModel.collisionModel.lambda_e, }
+    elif type(walberlaLatticeModel.collisionModel == lbm.collisionModels.D3Q19MRT):
+        s = walberlaLatticeModel.collisionModel.relaxationRates
+        params = {}
+        for i in [1, 2, 4, 9, 10, 16]:
+            params["s_%d" % (i,)] = s[i]
+    else:
+        raise ValueError("Unknown lattice model")
 
     lm = convertWalberlaToLbmpyLatticeModel(walberlaLatticeModel)
+    if replaceRelaxationTimes:
+        lm.setCollisionDOFs(params)
+        params = {}
 
     numpyField = None
     if not variableSize:
         numpyField = field.toArray(blocks[0][pdfFieldName], withGhostLayers=True)
         dim = len(walberlaLatticeModel.directions[0])
-        if dim == 2: numpyField = numpyField[:, :, 1, :]
+        if dim == 2:
+            numpyField = numpyField[:, :, 1, :]
 
-    funcNode = createKernel(createLbmEquations(lm, numpyField=numpyField))
+    lbmEquations = createLbmEquations(lm, numpyField=numpyField)
+    funcNode = createKernel(lbmEquations)
+    print(funcNode.generateC())
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst')
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst')
     return lambda block: sweepFunction(src=block[pdfFieldName], **params)

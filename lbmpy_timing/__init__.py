@@ -1,5 +1,4 @@
 import waLBerla as wlb
-import numba
 from lbmpy.walberlaConnection import makeLbmpySweepFromWalberlaLatticeModel
 import time
 
@@ -9,11 +8,12 @@ default_parameters = {
     'compressible': False,
     'collisionModel': 'SRT',
     'variableLoopBounds': False,
+    'replaceRelaxationTimes': False,
     'layout': 'fzyx',
     'domain_size': (200, 200, 200),
     'threads': 1,
-    'timesteps': 5,
-    'setup_timesteps': 0,
+    'timesteps': 10,
+    'setup_timesteps': 5,
 }
 
 
@@ -23,6 +23,9 @@ def create_walberla_lattice_model(stencil, collisionModel, equilibriumAccuracyOr
         collisionModel = wlb.lbm.collisionModels.SRT(1.8)
     elif collisionModel == 'TRT':
         collisionModel = wlb.lbm.collisionModels.TRT.constructWithMagicNumber(1.8)
+    elif collisionModel == 'MRT':
+        #collisionModel = wlb.lbm.collisionModels.D3Q19MRT(1.8, 1.8, 1.1, 0.9, 1.8, 1.1)
+        collisionModel = wlb.lbm.collisionModels.D3Q19MRT(1.3, 1.4, 1.1, 0.9, 0.7, 1.24)
     else:
         raise ValueError("Unknown collision model " + collisionModel)
 
@@ -49,8 +52,9 @@ def run_sweep(blocks, sweep, timesteps):
             sweep(block)
 
 
-def lbmpy_timing(blocks, walberla_lattice_model, variableLoopBounds, setup_timesteps, timesteps):
-    sweep = makeLbmpySweepFromWalberlaLatticeModel(walberla_lattice_model, blocks, 'pdfs', variableLoopBounds)
+def lbmpy_timing(blocks, walberla_lattice_model, variableLoopBounds, replaceRelaxationTimes, setup_timesteps, timesteps):
+    sweep = makeLbmpySweepFromWalberlaLatticeModel(walberla_lattice_model, blocks, 'pdfs',
+                                                   variableLoopBounds, replaceRelaxationTimes)
     run_sweep(blocks, sweep, setup_timesteps)
     start_time = time.perf_counter()
     run_sweep(blocks, sweep, timesteps)
@@ -80,10 +84,13 @@ def run_timing(**kwargs):
         if arg not in default_parameters:
             raise ValueError("Unknown parameter " + str(arg))
 
-    kwargs.update(default_parameters)
-
-    #from omp import set_num_threads
-    #set_num_threads(kwargs['threads'])
+    params = {}
+    for key,value in default_parameters.items():
+        if key in kwargs:
+            params[key] = kwargs[key]
+        else:
+            params[key] = default_parameters[key]
+    kwargs = params
 
     result_lbmpy = None
     result_wlb = None
@@ -97,6 +104,7 @@ def run_timing(**kwargs):
             result_wlb = walberla_timing(blocks, kwargs['setup_timesteps'], kwargs['timesteps'])
         else:
             result_lbmpy = lbmpy_timing(blocks, lattice_model, kwargs['variableLoopBounds'],
+                                        kwargs['replaceRelaxationTimes'],
                                         kwargs['setup_timesteps'], kwargs['timesteps'])
 
     domain_size = kwargs['domain_size']
@@ -107,5 +115,5 @@ def run_timing(**kwargs):
 if __name__ == "__main__":
     from waLBerla import build_info
     print(build_info.compiler_flags)
-    run_timing(compressible=True, equilibriumAccuracyOrder=2)
+    run_timing(collisionModel='TRT', compressible=False, replaceRelaxationTimes=True)
 

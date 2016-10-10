@@ -190,7 +190,13 @@ class KernelFunction(Node):
 
     def generateC(self):
         self.__updateArguments()
-        functionArguments = [MyPOD(s.dtype, s.name) for s in self._parameters]
+
+        def addRestrictToPointer(dtype):
+            if '*' in dtype:
+                dtype += " __restrict__"
+            return dtype
+
+        functionArguments = [MyPOD(addRestrictToPointer(s.dtype), s.name) for s in self._parameters]
         funcDeclaration = c.FunctionDeclaration(MyPOD("void", self._functionName, ), functionArguments)
         return c.FunctionBody(funcDeclaration, self._body.generateC())
 
@@ -648,7 +654,7 @@ def resolveFieldAccesses(ast):
         if isinstance(expr, Field.Access):
             fieldAccess = expr
             field = fieldAccess.field
-            dtype = "%s *" % field.dtype
+            dtype = "%s * __restrict__" % field.dtype
             fieldPtrType = "%s *" % (field.dtype,)
             fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), fieldPtrType)
             idxStr = "_".join([str(i) for i in fieldAccess.index])

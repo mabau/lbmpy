@@ -38,7 +38,8 @@ def processCollideTerms(lm, pdfSymbols):
     simplifiedUpdateRules = []
     for s in terms:
         s = s.expand()
-        s = sp.simplify(trafos.replaceSecondOrderProducts(s, u, positive=None, replaceMixed=replacements).expand())
+        s = trafos.replaceSecondOrderProducts(s, u, positive=None, replaceMixed=replacements)
+        s = s.expand(s)
 
         for rp in lm.collisionDOFs:
             s = s.collect(rp)
