@@ -11,8 +11,8 @@ def makeSRT(stencil, order=2, compressible=False):
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
     equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
-    relaxationFactors = [sp.Symbol('omega')] * len(stencil)
-    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationFactors, compressible)
+    relaxationRates = [sp.Symbol('omega')] * len(stencil)
+    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationRates, compressible)
 
 
 def makeTRT(stencil, order=2, compressible=False):
@@ -22,8 +22,8 @@ def makeTRT(stencil, order=2, compressible=False):
     equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
 
     lambda_e, lambda_o = sp.symbols("lambda_e lambda_o")
-    relaxationFactors = [lambda_e if m.isEven(moment) else lambda_o for moment in momentSystem.allMoments]
-    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationFactors, compressible)
+    relaxationRates = [lambda_e if m.isEven(moment) else lambda_o for moment in momentSystem.allMoments]
+    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationRates, compressible)
 
 
 def makeMRT(stencil, order=2, compressible=False):
@@ -34,8 +34,8 @@ def makeMRT(stencil, order=2, compressible=False):
     if not momentSystem.hasMomentGroups:
         raise NotImplementedError("No moment grouping available for this lattice model")
 
-    relaxationFactors = momentSystem.getSymbolicRelaxationRates()
-    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationFactors, compressible)
+    relaxationRates = momentSystem.getSymbolicRelaxationRates()
+    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationRates, compressible)
 
 
 # ----------------      From Continuous Maxwell Boltzmann  -------------------------------------------------------------
@@ -51,13 +51,13 @@ def makeSRTFromMaxwellBoltzmann(stencil, order=2):
 
 class LatticeModel:
 
-    def __init__(self, stencil, moments, equilibriumMoments, relaxationFactors, compressible):
+    def __init__(self, stencil, moments, equilibriumMoments, relaxationRates, compressible):
         self._stencil = stencil
         self._moments = moments
         self._equilibriumMoments = sp.Matrix(equilibriumMoments)
 
         self._momentMatrix = m.momentMatrix(moments, stencil)
-        self._relaxationMatrix = sp.diag(*relaxationFactors)
+        self._relaxationMatrix = sp.diag(*relaxationRates)
         self.compressible = compressible
 
     @property
@@ -91,7 +91,7 @@ class LatticeModel:
         self._relaxationMatrix = self._relaxationMatrix.subs(substitutions)
 
     @property
-    def collisionDOFs(self):
+    def relaxationRates(self):
         return self._relaxationMatrix.atoms(sp.Symbol)
 
     @property

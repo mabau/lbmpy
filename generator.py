@@ -29,6 +29,9 @@ class CodePrinter(CCodePrinter):
         else:
             return super(CodePrinter, self)._print_Pow(expr)
 
+    def _print_Rational(self, expr):
+        return str(expr.evalf().num)
+
 codePrinter = CodePrinter()
 
 

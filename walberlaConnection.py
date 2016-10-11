@@ -51,7 +51,7 @@ def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src'
 
 
 def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFieldName,
-                                           variableSize=False, replaceRelaxationTimes=False):
+                                           variableSize=False, replaceRelaxationTimes=False, doCSE=False):
     from lbmpy.lbmgenerator import createLbmEquations
     from lbmpy.generator import createKernel
     from waLBerla import field
@@ -81,7 +81,7 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
         if dim == 2:
             numpyField = numpyField[:, :, 1, :]
 
-    lbmEquations = createLbmEquations(lm, numpyField=numpyField)
+    lbmEquations = createLbmEquations(lm, numpyField=numpyField, doCSE=doCSE)
     funcNode = createKernel(lbmEquations)
     print(funcNode.generateC())
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst')

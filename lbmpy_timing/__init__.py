@@ -14,6 +14,7 @@ default_parameters = {
     'threads': 1,
     'timesteps': 10,
     'setup_timesteps': 5,
+    'doCSE' : False,
 }
 
 
@@ -52,9 +53,10 @@ def run_sweep(blocks, sweep, timesteps):
             sweep(block)
 
 
-def lbmpy_timing(blocks, walberla_lattice_model, variableLoopBounds, replaceRelaxationTimes, setup_timesteps, timesteps):
+def lbmpy_timing(blocks, walberla_lattice_model, variableLoopBounds,
+                 replaceRelaxationTimes, setup_timesteps, timesteps, doCSE):
     sweep = makeLbmpySweepFromWalberlaLatticeModel(walberla_lattice_model, blocks, 'pdfs',
-                                                   variableLoopBounds, replaceRelaxationTimes)
+                                                   variableLoopBounds, replaceRelaxationTimes, doCSE)
     run_sweep(blocks, sweep, setup_timesteps)
     start_time = time.perf_counter()
     run_sweep(blocks, sweep, timesteps)
@@ -105,7 +107,7 @@ def run_timing(**kwargs):
         else:
             result_lbmpy = lbmpy_timing(blocks, lattice_model, kwargs['variableLoopBounds'],
                                         kwargs['replaceRelaxationTimes'],
-                                        kwargs['setup_timesteps'], kwargs['timesteps'])
+                                        kwargs['setup_timesteps'], kwargs['timesteps'], kwargs['doCSE'])
 
     domain_size = kwargs['domain_size']
     print("waLBerla: %f MLUPS   -  lbmpy: %f MLUPS" % (secondsPerTimestepToMLUPS(domain_size, result_wlb),
@@ -115,5 +117,5 @@ def run_timing(**kwargs):
 if __name__ == "__main__":
     from waLBerla import build_info
     print(build_info.compiler_flags)
-    run_timing(collisionModel='TRT', compressible=False, replaceRelaxationTimes=True)
+    run_timing(collisionModel='TRT', compressible=False, replaceRelaxationTimes=False, doCSE=True)
 
