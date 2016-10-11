@@ -14,7 +14,7 @@ default_parameters = {
     'threads': 1,
     'timesteps': 10,
     'setup_timesteps': 5,
-    'doCSE' : False,
+    'doCSE': False,
 }
 
 
@@ -87,7 +87,7 @@ def run_timing(**kwargs):
             raise ValueError("Unknown parameter " + str(arg))
 
     params = {}
-    for key,value in default_parameters.items():
+    for key, value in default_parameters.items():
         if key in kwargs:
             params[key] = kwargs[key]
         else:
@@ -116,6 +116,7 @@ def run_timing(**kwargs):
 
 if __name__ == "__main__":
     from waLBerla import build_info
-    print(build_info.compiler_flags)
-    run_timing(collisionModel='TRT', compressible=False, replaceRelaxationTimes=False, doCSE=True)
+    #print(build_info.compiler_flags)
+    run_timing(collisionModel='TRT', compressible=False, replaceRelaxationTimes=False,
+               doCSE=True, variableLoopBounds=False)
 

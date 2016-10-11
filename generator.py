@@ -254,7 +254,7 @@ class LoopOverCoordinate(Node):
         self._increment = increment
         self._ghostLayers = ghostLayers
         self._body.parent = self
-        self.openmpClause = ""
+        self.prefixLines = []
 
     @property
     def args(self):
@@ -293,27 +293,23 @@ class LoopOverCoordinate(Node):
 
         counterVar = self.loopCounterName
 
-        introLine = ""
-        if self.openmpClause:
-            introLine = "#pragma omp " + self.openmpClause + "\n"
-
         class OpenMPLoop(c.CustomLoop):
-            def __init__(self, intro_line, body, openmpClause=""):
+            def __init__(self, intro_line, body, prefixLines=[]):
                 super(OpenMPLoop, self).__init__(intro_line, body)
-                self.openmpClause_ = openmpClause
+                self.prefixLines = prefixLines
 
             def generate(self):
-                if self.openmpClause_:
-                    yield self.openmpClause_
+                for l in self.prefixLines:
+                    yield l
 
-                for e in super(OpenMPLoop,self).generate():
+                for e in super(OpenMPLoop, self).generate():
                     yield e
 
         start = "int %s = %d" % (counterVar, self._ghostLayers)
         condition = "%s < %s" % (counterVar, codePrinter.doprint(end))
         update = "++%s" % (counterVar,)
         loopStr = "for (%s; %s; %s)" % (start, condition, update)
-        return OpenMPLoop(loopStr, self._body.generateC(), openmpClause=introLine)
+        return OpenMPLoop(loopStr, self._body.generateC(), prefixLines=self.prefixLines)
 
 
 class SympyAssignment(Node):
@@ -641,9 +637,14 @@ def makeLoopOverDomain(body, functionName):
     currentBody = body
     lastLoop = None
     for loopCoordinate in reversed(layout):
-        lastLoop = LoopOverCoordinate(currentBody, loopCoordinate, shape, 1, requiredGhostLayers)
+        newLoop = LoopOverCoordinate(currentBody, loopCoordinate, shape, 1, requiredGhostLayers)
+        #if lastLoop is None:
+        #    newLoop.prefixLines.append("#pragma vector nontemporal")
+        #    newLoop.prefixLines.append("#pragma ivdep")
+        #    newLoop.prefixLines.append("#pragma simd")
+        lastLoop = newLoop
         currentBody = Block([lastLoop])
-    lastLoop.openmpClause = "parallel for schedule(static)"
+    lastLoop.prefixLines.append("#pragma omp parallel for schedule(static)")
     return KernelFunction(currentBody, functionName)
 
 

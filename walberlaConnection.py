@@ -83,7 +83,7 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
 
     lbmEquations = createLbmEquations(lm, numpyField=numpyField, doCSE=doCSE)
     funcNode = createKernel(lbmEquations)
-    print(funcNode.generateC())
+    #print(funcNode.generateC())
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst')
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst')
     return lambda block: sweepFunction(src=block[pdfFieldName], **params)

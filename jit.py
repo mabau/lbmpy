@@ -1,14 +1,27 @@
-from ctypes import cdll, Structure, c_long, c_double, c_float, POINTER, byref, sizeof
+from ctypes import cdll, c_double, c_float, sizeof
 import numpy as np
 import lbmpy.generator as gen
 import subprocess
 import os
 from tempfile import TemporaryDirectory
 
-CONFIG = {
+CONFIG_GCC = {
     'compiler': 'g++',
     'flags': '-Ofast -DNDEBUG -fPIC -shared -march=native -fopenmp',
 }
+CONFIG_INTEL = {
+    'compiler': '/software/intel/2017/bin/icpc',
+    'flags': '-Ofast -DNDEBUG -fPIC -shared -march=native -fopenmp -Wl,-rpath=/software/intel/2017/lib/intel64',
+    'env': {
+        'INTEL_LICENSE_FILE': '1713@license4.rrze.uni-erlangen.de',
+        'LM_PROJECT': 'iwia',
+    }
+}
+CONFIG_CLANG = {
+    'compiler': 'clang++',
+    'flags': '-Ofast -DNDEBUG -fPIC -shared -march=native -fopenmp',
+}
+CONFIG = CONFIG_INTEL
 
 
 def ctypeFromString(typename, includePointers=True):
@@ -48,7 +61,7 @@ def ctypeFromNumpyType(numpyType):
 
 def compileAndLoad(kernelFunctionNode):
     with TemporaryDirectory() as tmpDir:
-        srcFile = os.path.join(tmpDir, 'source.c')
+        srcFile = os.path.join(tmpDir, 'source.cpp')
         with open(srcFile, 'w') as sourceFile:
             print('extern "C" { ', file=sourceFile)
             print(kernelFunctionNode.generateC(), file=sourceFile)
@@ -57,7 +70,18 @@ def compileAndLoad(kernelFunctionNode):
         compilerCmd = [CONFIG['compiler']] + CONFIG['flags'].split()
         libFile = os.path.join(tmpDir, "jit.so")
         compilerCmd += [srcFile, '-o', libFile]
-        subprocess.call(compilerCmd)
+        configEnv = CONFIG['env'] if 'env' in CONFIG else {}
+        env = os.environ.copy()
+        env.update(configEnv)
+        subprocess.call(compilerCmd, env=env)
+
+        showAssembly = False
+        if showAssembly:
+            assemblyFile = os.path.join(tmpDir, "assembly.s")
+            compilerCmd = [CONFIG['compiler'], '-S', '-o', assemblyFile, srcFile] + CONFIG['flags'].split()
+            subprocess.call(compilerCmd, env=env)
+            assembly = open(assemblyFile, 'r').read()
+            print(assembly)
         loadedJitLib = cdll.LoadLibrary(libFile)
 
     return loadedJitLib
