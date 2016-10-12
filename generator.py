@@ -573,6 +573,10 @@ class Field:
             return len(self._offsets)
 
         @property
+        def offsetName(self):
+            return self._offsetName
+
+        @property
         def index(self):
             return self._index
 
@@ -670,7 +674,7 @@ def resolveFieldAccesses(ast):
 
             fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), dtype)
             idxStr = "_".join([str(i) for i in fieldAccess.index])
-            basePtr = TypedSymbol("%s%s_%s" % (BASE_PTR_PREFIX, field.name, idxStr), dtype)
+            basePtr = TypedSymbol("%s%s_%s_%s" % (BASE_PTR_PREFIX, field.name, idxStr, fieldAccess.offsetName), dtype)
             baseArr = IndexedBase(basePtr, shape=(1,))
 
             offset = 0
@@ -682,13 +686,15 @@ def resolveFieldAccesses(ast):
             for i in range(field.indexDimensions):
                 offset += field.indexStrides[i] * fieldAccess.index[i]
 
+            neighborOffset = sum([field.spatialStrides[c] * fieldAccess.offsets[c]
+                                  for c in range(len(fieldAccess.offsets))])
+            offset += neighborOffset
+
             if basePtr not in enclosingBlock.symbolsDefined:
                 enclosingBlock.insertFront(SympyAssignment(basePtr, fieldPtr + offset, const=False))
 
-            neighborOffset = sum([field.spatialStrides[c] * fieldAccess.offsets[c]
-                                  for c in range(len(fieldAccess.offsets))])
             innerCounterVar = TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, fastestLoopCoord), "int")
-            return baseArr[innerCounterVar*field.spatialStrides[fastestLoopCoord] + neighborOffset]
+            return baseArr[innerCounterVar*field.spatialStrides[fastestLoopCoord]]
         else:
             newArgs = [visitSympyExpr(e, enclosingBlock, enclosingLoop) for e in expr.args]
             kwargs = {'evaluate': False} if type(expr) == sp.Add or type(expr) == sp.Mul else {}
