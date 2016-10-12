@@ -194,12 +194,7 @@ class KernelFunction(Node):
     def generateC(self):
         self.__updateArguments()
 
-        def addRestrictToPointer(dtype):
-            if '*' in dtype:
-                dtype += " __restrict__"
-            return dtype
-
-        functionArguments = [MyPOD(addRestrictToPointer(s.dtype), s.name) for s in self._parameters]
+        functionArguments = [MyPOD(s.dtype, s.name) for s in self._parameters]
         funcDeclaration = c.FunctionDeclaration(MyPOD("void", self._functionName, ), functionArguments)
         return c.FunctionBody(funcDeclaration, self._body.generateC())
 
@@ -450,6 +445,7 @@ class Field:
         self._layout = layout
         self._shape = shape
         self._strides = strides
+        self._readonly = False
 
     @property
     def spatialDimensions(self):
@@ -490,6 +486,16 @@ class Field:
     @property
     def dtype(self):
         return self._dtype
+
+    @property
+    def readOnly(self):
+        return self._readonly
+
+    def setReadOnly(self):
+        self._readonly = True
+
+    def __repr__(self):
+        return self._fieldName
 
     def __getitem__(self, offset):
         if type(offset) is np.ndarray:
@@ -659,8 +665,10 @@ def resolveFieldAccesses(ast):
             fieldAccess = expr
             field = fieldAccess.field
             dtype = "%s * __restrict__" % field.dtype
-            fieldPtrType = "%s *" % (field.dtype,)
-            fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), fieldPtrType)
+            if field.readOnly:
+                dtype = "const " + dtype
+
+            fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), dtype)
             idxStr = "_".join([str(i) for i in fieldAccess.index])
             basePtr = TypedSymbol("%s%s_%s" % (BASE_PTR_PREFIX, field.name, idxStr), dtype)
             baseArr = IndexedBase(basePtr, shape=(1,))
@@ -741,6 +749,8 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
     explicitReadAssignments = []
     symbolsWithReadAssignment = set()
 
+    GENERATE_EXPLICIT_READ_ASSIGNMENTS = False
+
     def replaceCharactersForC(s):
         return s.replace("^", "_")
 
@@ -752,11 +762,14 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
         """
         if isinstance(term, Field.Access):
             fieldsRead.add(term.field)
-            substitute = TypedSymbol(replaceCharactersForC(term.name), term.field.dtype)
-            if substitute not in symbolsWithReadAssignment:
-                explicitReadAssignments.append(SympyAssignment(substitute, term))
-                symbolsWithReadAssignment.add(substitute)
-            return substitute
+            if GENERATE_EXPLICIT_READ_ASSIGNMENTS:
+                substitute = TypedSymbol(replaceCharactersForC(term.name), term.field.dtype)
+                if substitute not in symbolsWithReadAssignment:
+                    explicitReadAssignments.append(SympyAssignment(substitute, term))
+                    symbolsWithReadAssignment.add(substitute)
+                return substitute
+            else:
+                return term
         elif isinstance(term, sp.Symbol):
             return TypedSymbol(term.name, typeForSymbol[term.name])
         else:
@@ -780,8 +793,13 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
         assignments.append(SympyAssignment(newLhs, newRhs))
     assignments = explicitReadAssignments + assignments
 
+    # Mark read-only fields
+    for f in fieldsRead - fieldsWritten:
+        f.setReadOnly()
+
     body = Block(assignments)
     code = makeLoopOverDomain(body, functionName)
     resolveFieldAccesses(code)
     moveConstantsBeforeLoop(code)
     return code
+
