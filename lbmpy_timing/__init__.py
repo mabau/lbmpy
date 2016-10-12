@@ -117,6 +117,6 @@ def run_timing(**kwargs):
 if __name__ == "__main__":
     from waLBerla import build_info
     #print(build_info.compiler_flags)
-    run_timing(collisionModel='TRT', compressible=False, replaceRelaxationTimes=False,
-               doCSE=True, variableLoopBounds=False)
+    run_timing(collisionModel='SRT', compressible=False, replaceRelaxationTimes=False,
+               doCSE=False, variableLoopBounds=False)
 

@@ -7,6 +7,9 @@ from lbmpy.generator import Field
 from collections import Counter
 import operator
 
+from joblib import Memory
+memory = Memory(cachedir="/tmp/pylbm", verbose=False)
+
 
 def getCommonQuadraticAndConstantTerms(simplifiedUpdateRuleForCenter, latticeModel):
     """Determines a common subexpression useful for most LBM model often called f_eq_common.

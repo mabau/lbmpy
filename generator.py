@@ -4,7 +4,7 @@ import sympy as sp
 from sympy.core.cache import cacheit
 from sympy.utilities.codegen import CCodePrinter
 from sympy.tensor import IndexedBase
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import warnings
 
 
@@ -225,6 +225,17 @@ class Block(Node):
         self._nodes = []
         return tmp
 
+    def replace(self, child, replacements):
+        idx = self._nodes.index(child)
+        del self._nodes[idx]
+        if type(replacements) is list:
+            for e in replacements:
+                e.parent = self
+            self._nodes = self._nodes[:idx] + replacements + self._nodes[idx:]
+        else:
+            replacements.parent = self
+            self._nodes.insert(idx, replacements)
+
     @property
     def symbolsDefined(self):
         result = set()
@@ -242,7 +253,8 @@ class Block(Node):
 
 class LoopOverCoordinate(Node):
 
-    def __init__(self, body, coordinateToLoopOver, shape, increment=1, ghostLayers=1):
+    def __init__(self, body, coordinateToLoopOver, shape, increment=1, ghostLayers=1,
+                 isInnermostLoop=False, isOutermostLoop=False):
         self._body = body
         self._coordinateToLoopOver = coordinateToLoopOver
         self._shape = shape
@@ -250,14 +262,27 @@ class LoopOverCoordinate(Node):
         self._ghostLayers = ghostLayers
         self._body.parent = self
         self.prefixLines = []
+        self._isInnermostLoop = isInnermostLoop
+        self._isOutermostLoop = isOutermostLoop
+
+    def newLoopWithDifferentBody(self, newBody):
+        result = LoopOverCoordinate(newBody, self._coordinateToLoopOver, self._shape, self._increment,
+                                    self._ghostLayers, self._isInnermostLoop, self._isOutermostLoop)
+        result.prefixLines = self.prefixLines
+        return result
+
 
     @property
     def args(self):
         result = [self._body]
-        for s in self._shape:
-            if isinstance(s, Node) or isinstance(s, sp.Basic):
-                result.append(s)
+        limit = self._shape[self._coordinateToLoopOver]
+        if isinstance(limit, Node) or isinstance(limit, sp.Basic):
+            result.append(limit)
         return result
+
+    @property
+    def body(self):
+        return self._body
 
     @property
     def loopCounterName(self):
@@ -270,17 +295,32 @@ class LoopOverCoordinate(Node):
     @property
     def symbolsDefined(self):
         result = self._body.symbolsDefined
-        result.add(TypedSymbol(self.loopCounterName, "int"))
+        result.add(self.loopCounterSymbol)
         return result
+
+    @property
+    def loopCounterSymbol(self):
+        return TypedSymbol(self.loopCounterName, "int")
 
     @property
     def symbolsRead(self):
         result = self._body.symbolsRead
-        for s in self._shape:
-            if isinstance(s, sp.Basic):
-                result.update(s.atoms(sp.Symbol))
-
+        limit = self._shape[self._coordinateToLoopOver]
+        if isinstance(limit, Node) or isinstance(limit, sp.Basic):
+            result.append(limit)
         return result
+
+    @property
+    def isOutermostLoop(self):
+        return self._isOutermostLoop
+
+    @property
+    def isInnermostLoop(self):
+        return self._isInnermostLoop
+
+    @property
+    def coordinateToLoopOver(self):
+        return self._coordinateToLoopOver
 
     def generateC(self):
         coord = self._coordinateToLoopOver
@@ -288,34 +328,34 @@ class LoopOverCoordinate(Node):
 
         counterVar = self.loopCounterName
 
-        class OpenMPLoop(c.CustomLoop):
+        class LoopWithOptionalPrefix(c.CustomLoop):
             def __init__(self, intro_line, body, prefixLines=[]):
-                super(OpenMPLoop, self).__init__(intro_line, body)
+                super(LoopWithOptionalPrefix, self).__init__(intro_line, body)
                 self.prefixLines = prefixLines
 
             def generate(self):
                 for l in self.prefixLines:
                     yield l
 
-                for e in super(OpenMPLoop, self).generate():
+                for e in super(LoopWithOptionalPrefix, self).generate():
                     yield e
 
         start = "int %s = %d" % (counterVar, self._ghostLayers)
         condition = "%s < %s" % (counterVar, codePrinter.doprint(end))
         update = "++%s" % (counterVar,)
         loopStr = "for (%s; %s; %s)" % (start, condition, update)
-        return OpenMPLoop(loopStr, self._body.generateC(), prefixLines=self.prefixLines)
+        return LoopWithOptionalPrefix(loopStr, self._body.generateC(), prefixLines=self.prefixLines)
 
 
 class SympyAssignment(Node):
 
-    def __init__(self, lhsSymbol, rhsTerm, const=True):
+    def __init__(self, lhsSymbol, rhsTerm, isConst=True):
         self._lhsSymbol = lhsSymbol
         self._rhsTerm = rhsTerm
         self._isDeclaration = True
         if isinstance(self, Field.Access):
             self._isDeclaration = False
-        self._const = const
+        self._isConst = isConst
 
     @property
     def rhs(self):
@@ -347,10 +387,17 @@ class SympyAssignment(Node):
     def symbolsRead(self):
         return self._rhsTerm.atoms(sp.Symbol)
 
+    @property
+    def isConst(self):
+        return self._isConst
+
+    def __repr__(self):
+        return repr(self.lhs) + " = " + repr(self.rhs)
+
     def generateC(self):
         dtype = ""
         if hasattr(self._lhsSymbol, 'dtype') and self._isDeclaration:
-            if self._const:
+            if self._isConst:
                 dtype = "const " + self._lhsSymbol.dtype + " "
             else:
                 dtype = self._lhsSymbol.dtype + " "
@@ -646,9 +693,11 @@ def makeLoopOverDomain(body, functionName):
 
     currentBody = body
     lastLoop = None
-    for loopCoordinate in reversed(layout):
-        newLoop = LoopOverCoordinate(currentBody, loopCoordinate, shape, 1, requiredGhostLayers)
+    for i, loopCoordinate in enumerate(reversed(layout)):
+        newLoop = LoopOverCoordinate(currentBody, loopCoordinate, shape, 1, requiredGhostLayers,
+                                     isInnermostLoop=(i == 0), isOutermostLoop=(i == len(layout) - 1))
         #if lastLoop is None:
+        #    newLoop.prefixLines.append("#pragma GCC ivdep")
         #    newLoop.prefixLines.append("#pragma vector nontemporal")
         #    newLoop.prefixLines.append("#pragma ivdep")
         #    newLoop.prefixLines.append("#pragma simd")
@@ -691,7 +740,7 @@ def resolveFieldAccesses(ast):
             offset += neighborOffset
 
             if basePtr not in enclosingBlock.symbolsDefined:
-                enclosingBlock.insertFront(SympyAssignment(basePtr, fieldPtr + offset, const=False))
+                enclosingBlock.insertFront(SympyAssignment(basePtr, fieldPtr + offset, isConst=False))
 
             innerCounterVar = TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, fastestLoopCoord), "int")
             return baseArr[innerCounterVar*field.spatialStrides[fastestLoopCoord]]
@@ -732,6 +781,14 @@ def moveConstantsBeforeLoop(ast):
             element = element.parent
         return lastBlock
 
+    def checkIfAssignmentAlreadyInBlock(assignment, targetBlock):
+        for arg in targetBlock.args:
+            if type(arg) is not SympyAssignment:
+                continue
+            if arg.lhs == assignment.lhs:
+                return arg
+        return None
+
     for block in ast.atoms(Block):
         children = block.takeChildNodes()
         for child in children:
@@ -742,7 +799,155 @@ def moveConstantsBeforeLoop(ast):
                 if target == block:     # movement not possible
                     target.append(child)
                 else:
-                    target.insertFront(child)
+                    existingAssignment = checkIfAssignmentAlreadyInBlock(child, target)
+                    if not existingAssignment:
+                        target.insertFront(child)
+                    else:
+                        assert existingAssignment.rhs == child.rhs, "Symbol with same name exists already"
+
+
+def splitInnerLoop(ast, symbolGroups):
+    # 0) "symbolsWithTemporaryArray" - initially empty set of variables replaced by temporary array
+    # 1) create assignmentMap, from symbol to SympyAssignment
+    # 2) out of the symbolGroups create assignmentGroups which are complete and later become loop bodies
+    #      - each symbolGroup is transformed into an assignmentGroup
+    #      - initially the assignmentGroup contains only the symbolGroup assignments (taken from the assignment map)
+    #      - for all NEW entries in the assignmentGroup:
+    #           - handleAssignment(sympyAssignment, tmpArrSymbols, loopCounterSymbol) ->
+    #                               set of dependencies
+    #                   * iterate over all symbols:
+    #                          - ignore field accesses of const fields
+    #                          - variables: if in tmpArrSymbols: replace them
+    #                                       else: put them into result set
+    # 4) compare all assignments to previous body and issue a warning if assignments are missing
+    # 5) create (inner) loops around each symbolGroup
+    # 6) define temporary arrays before the outer loop
+
+    allLoops = ast.atoms(LoopOverCoordinate)
+    innerLoop = [l for l in allLoops if l.isInnermostLoop]
+    assert len(innerLoop) == 1, "Error in AST: multiple innermost loops. Was split transformation already called?"
+    innerLoop = innerLoop[0]
+    assert type(innerLoop.body) is Block
+    outerLoop = [l for l in allLoops if l.isOutermostLoop]
+    assert len(outerLoop) == 1, "Error in AST, multiple outermost loops."
+    outerLoop = outerLoop[0]
+
+    symbolsWithTemporaryArray = dict()
+
+    #def handleAssignment(ast):
+    #    if type(ast) is TypedSymbol:
+    #        if ast in symbolsWithTemporaryArray:
+    #            return set(), IndexedBase(ast, shape=(1,))[innerLoop.loopCounterSymbol]
+    #        else:
+    #            return set([ast]), ast
+    #    elif type(ast) is Field.Access:
+    #        assert ast.field.readOnly
+    #        return set(), ast
+    #    else:
+    #        dependencies = set()
+    #        params = []
+    #        for arg in ast.args:
+    #            dep, term = handleAssignment(arg)
+    #            dependencies.update(dep)
+    #            params.append(term)
+    #        if len(params) == 0:
+    #            return set(), ast
+    #        else:
+    #            return dependencies, ast.func(*params)
+
+    assignmentMap = {a.lhs: a for a in innerLoop.body.args}
+
+    assignmentGroups = []
+    for symbolGroup in symbolGroups:
+        # get all dependent symbols
+        symbolsToProcess = list(symbolGroup)
+        symbolsResolved = set()
+        while symbolsToProcess:
+            s = symbolsToProcess.pop()
+            if s in symbolsResolved:
+                continue
+
+            if s in assignmentMap:  # if there is no assignment inside the loop body it is independent already
+                for newSymbol in assignmentMap[s].rhs.atoms(sp.Symbol):
+                    if type(newSymbol) is not Field.Access and newSymbol not in symbolsWithTemporaryArray:
+                        symbolsToProcess.append(newSymbol)
+            symbolsResolved.add(s)
+
+        for symbol in symbolGroup:
+            if type(symbol) is not Field.Access:
+                assert type(symbol) is TypedSymbol
+                symbolsWithTemporaryArray[symbol] = IndexedBase(symbol, shape=(1,))[innerLoop.loopCounterSymbol]
+
+        assignmentGroup = []
+        for assignment in innerLoop.body.args:
+            if assignment.lhs in symbolsResolved:
+                newRhs = assignment.rhs.subs(symbolsWithTemporaryArray.items())
+                if type(assignment.lhs) is not Field.Access and assignment.lhs in symbolGroup:
+                    newLhs = IndexedBase(assignment.lhs, shape=(1,))[innerLoop.loopCounterSymbol]
+                else:
+                    newLhs = assignment.lhs
+                assignmentGroup.append(SympyAssignment(newLhs, newRhs))
+        assignmentGroups.append(assignmentGroup)
+
+        #newDependencies = symbolsIncludedInGroup
+        #while newDependencies:
+        #    for newDependency in newDependencies:
+        #        assignmentMap[newDependency].rhs.symbolsRead()
+        #
+        #
+        #assignmentGroup = [a for a in innerLoop.body.args if a.lhs in symbolGroup]
+        #definedSymbols = set([a.lhs for a in assignmentGroup])
+        #
+        #newElements = len(assignmentGroup)
+        #
+        #while newElements:
+        #    elementsToAdd = []
+        #    for idx, assignment in enumerate(assignmentGroup[:newElements]):
+        #        newDeps, newRhs = handleAssignment(assignment.rhs)
+        #        newDeps.difference_update(definedSymbols)
+        #        assignment = SympyAssignment(assignment.lhs, newRhs, assignment.isConst)
+        #        assignmentGroup[idx] = assignment
+        #
+        #        elementsToAdd = [arg for arg in innerLoop.body.args if arg.lhs in newDeps] + elementsToAdd
+        #        definedSymbols.update(newDeps)
+        #
+        #    newElements = len(elementsToAdd)
+        #    assignmentGroup = elementsToAdd + assignmentGroup
+        #assignmentGroups.append(assignmentGroup)
+
+    newLoops = [innerLoop.newLoopWithDifferentBody(Block(group)) for group in assignmentGroups]
+    innerLoop.parent.replace(innerLoop, newLoops)
+
+    #for temporaryArray in symbolsWithTemporaryArray:
+    #    outerLoop.parent.insertFront()
+
+    print(assignmentGroups)
+
+# ----- Version 1: split sweep at equation level
+#def createSplitKernel(equations, splitGroups, functionName="kernel", typeForSymbol=defaultdict(lambda: "double")):
+#    eqMap = {e.lhs: e.rhs for e in equations}
+#
+#    symbolsWithTemporaryArray = {}
+#
+#    for splitGroup in splitGroups:
+#        for symbol in splitGroup:
+#            temporaryArrayRequired = type(symbol) is not Field.Access
+#            if temporaryArrayRequired:
+#                assert symbol not in symbolsWithTemporaryArray
+#                typedTmpArray = TypedSymbol(symbol.name, typeForSymbol[symbol.name])
+#                symbolsWithTemporaryArray[symbol] = IndexedBase(typedTmpArray, shape=(1,))
+#                # PROBLEM create special symbol which is resolved similar to Field.Access in makeLoopOverCoordinate
+#
+#            currentRhs = eqMap[symbol].rhs
+#            dependentSymbols = currentRhs.atoms(sp.Symbol)
+#            for dependentSymbol in dependentSymbols:
+#                if type(dependentSymbol) is Field.Access:
+#                    pass
+#                elif dependentSymbol in symbolsWithTemporaryArray:
+#
+#                    currentRhs = currentRhs.subs(dependentSymbol, INSERT HERE)
+#                else:
+#                    pass # NOT IMPLEMENTED
 
 
 # ------------------------------------- Main ---------------------------------------------------------------------------
@@ -805,7 +1010,14 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
 
     body = Block(assignments)
     code = makeLoopOverDomain(body, functionName)
+
+    dst = list(fieldsWritten)[0]
+    splitInnerLoop(code, [
+        [TypedSymbol(name, "double") for name in ["u_0", "u_1", "u_2", "f_eq_common"]],
+        [dst[0, 0, 0](1), dst[0, 0, 0](2)],
+        [dst[0, 0, 0](7), dst[0, 0, 0](10)]
+    ])
+
     resolveFieldAccesses(code)
     moveConstantsBeforeLoop(code)
     return code
-
