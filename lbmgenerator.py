@@ -160,8 +160,12 @@ def createLbmSplitGroups(lm, equations):
     directionGroups = defaultdict(list)
 
     for eq in equations:
+        if f_eq_common in eq.rhs.atoms(sp.Symbol) and f_eq_common not in result[0]:
+            result[0].append(f_eq_common)
+
         if not type(eq.lhs) is Field.Access:
             continue
+
         idx = eq.lhs.index[0]
         if idx == 0:
             result[0].append(eq.lhs)
@@ -170,16 +174,14 @@ def createLbmSplitGroups(lm, equations):
         dir = lm.stencil[idx]
         inverseDir = tuple([-i for i in dir])
 
-        if f_eq_common in eq.rhs.atoms(sp.Symbol) and f_eq_common not in result[0]:
-            result[0].append(f_eq_common)
-        if rho in eq.rhs.atoms(sp.Symbol) and rho not in result[0]:
-            result[0].append(rho)
-
         if inverseDir in directionGroups:
             directionGroups[inverseDir].append(eq.lhs)
         else:
             directionGroups[dir].append(eq.lhs)
     result += directionGroups.values()
+
+    if f_eq_common not in result[0]:
+        result[0].append(rho)
 
     return result
 

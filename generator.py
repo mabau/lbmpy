@@ -178,6 +178,10 @@ class KernelFunction(Node):
         return self._parameters
 
     @property
+    def body(self):
+        return self._body
+
+    @property
     def args(self):
         return [self._body]
 
@@ -249,6 +253,25 @@ class Block(Node):
         for a in self.args:
             result.update(a.symbolsRead)
         return result
+
+
+class PragmaBlock(Block):
+    def __init__(self, pragmaLine, listOfNodes):
+        super(PragmaBlock, self).__init__(listOfNodes)
+        self._pragmaLine = pragmaLine
+
+    def generateC(self):
+        class PragmaGenerable(c.Generable):
+            def __init__(self, line, block):
+                self._line = line
+                self._block = block
+
+            def generate(self):
+                yield self._line
+                for e in self._block.generate():
+                    yield e
+
+        return PragmaGenerable(self._pragmaLine, super(PragmaBlock, self).generateC())
 
 
 class LoopOverCoordinate(Node):
@@ -902,6 +925,17 @@ def splitInnerLoop(ast, symbolGroups):
 
 # ------------------------------------- Main ---------------------------------------------------------------------------
 
+def addOpenMP(ast):
+    assert type(ast) is KernelFunction
+    body = ast.body
+    wrapperBlock = PragmaBlock('#pragma omp parallel', body.takeChildNodes())
+    body.append(wrapperBlock)
+
+    outerLoops = [l for l in body.atoms(LoopOverCoordinate) if l.isOutermostLoop]
+    assert outerLoops, "No outer loop found"
+    assert len(outerLoops) <= 1, "More than one outer loop found. Which one should be parallelized?"
+    outerLoops[0].prefixLines.append("#pragma omp for schedule(static)")
+
 
 def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdict(lambda: "double"), splitGroups=[]):
 
@@ -964,4 +998,6 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
 
     resolveFieldAccesses(code)
     moveConstantsBeforeLoop(code)
+
+    addOpenMP(code)
     return code
