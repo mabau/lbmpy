@@ -14,17 +14,14 @@ def convertWalberlaToLbmpyLatticeModel(lm):
         raise ValueError("Unknown lattice model")
 
 
-def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src', destinationFieldName='dst'):
+def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src', destinationFieldName='dst',
+                                       is2D=False):
     from waLBerla import field
     from lbmpy.jit import buildCTypeArgumentList, compileAndLoad
-    from lbmpy.generator import LoopOverCoordinate
     swapFields = {}
 
     func = compileAndLoad(kernelFunctionNode)[kernelFunctionNode.functionName]
     func.restype = None
-
-    # Counting the number of domain loops to get dimensionality
-    dim = len(kernelFunctionNode.atoms(LoopOverCoordinate))
 
     def f(**kwargs):
         src = kwargs[sourceFieldName]
@@ -37,7 +34,7 @@ def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src'
         kwargs[destinationFieldName] = field.toArray(dst, withGhostLayers=True)
 
         # Since waLBerla does not really support 2D domains a small hack is required here
-        if dim == 2:
+        if is2D:
             assert kwargs[sourceFieldName].shape[2] in [1, 3]
             assert kwargs[destinationFieldName].shape[2] in [1, 3]
             kwargs[sourceFieldName] = kwargs[sourceFieldName][:, :, 1, :]
@@ -51,8 +48,9 @@ def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src'
 
 
 def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFieldName,
-                                           variableSize=False, replaceRelaxationTimes=False, doCSE=False):
-    from lbmpy.lbmgenerator import createLbmEquations
+                                           variableSize=False, replaceRelaxationTimes=False, doCSE=False,
+                                           splitInnerLoop=True):
+    from lbmpy.lbmgenerator import createLbmEquations, createLbmSplitGroups
     from lbmpy.generator import createKernel
     from waLBerla import field
 
@@ -82,8 +80,9 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
             numpyField = numpyField[:, :, 1, :]
 
     lbmEquations = createLbmEquations(lm, numpyField=numpyField, doCSE=doCSE)
-    funcNode = createKernel(lbmEquations)
-    print(funcNode.generateC())
-    sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst')
-    sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst')
+    splitGroups = createLbmSplitGroups(lm, lbmEquations) if splitInnerLoop else []
+    funcNode = createKernel(lbmEquations, splitGroups=splitGroups)
+    #print(funcNode.generateC())
+    sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst', is2D=(lm.dim == 2))
+    sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst', is2D=(lm.dim == 2))
     return lambda block: sweepFunction(src=block[pdfFieldName], **params)

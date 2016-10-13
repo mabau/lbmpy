@@ -4,7 +4,7 @@ import sympy as sp
 import lbmpy.transformations as trafos
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 from lbmpy.generator import Field
-from collections import Counter
+from collections import Counter, defaultdict
 import operator
 
 from joblib import Memory
@@ -108,11 +108,16 @@ def createCollisionEquations(lm, pdfSymbols, dstField, doCSE):
 
     assert sum([abs(e) for e in lm.stencil[0]]) == 0, "Works only if first stencil entry is the center direction"
     f_eq_common = getCommonQuadraticAndConstantTerms(updateEquations[0].rhs, lm)
-    f_eq_common = sp.Eq(sp.Symbol('f_eq_common'), f_eq_common)
-    replacements.append(f_eq_common)
+    if f_eq_common != rho:
+        f_eq_common = sp.Eq(sp.Symbol('f_eq_common'), f_eq_common)
+        replacements.append(f_eq_common)
+    else:
+        f_eq_common = None
     updateRulesTransformed = []
     for s in updateEquations:
-        sRhs = trafos.replaceAdditive(s.rhs, f_eq_common.lhs, f_eq_common.rhs, len(f_eq_common.rhs.args) // 2)
+        sRhs = s.rhs
+        if f_eq_common is not None:
+            sRhs = trafos.replaceAdditive(sRhs, f_eq_common.lhs, f_eq_common.rhs, len(f_eq_common.rhs.args) // 2)
         for velSumEq in velocitySumReplacements:
             sRhs = trafos.replaceAdditive(sRhs, velSumEq.lhs, velSumEq.rhs, len(velSumEq.rhs.args))
         updateRulesTransformed.append(sp.Eq(s.lhs, sRhs))
@@ -143,6 +148,40 @@ def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="ds
     collideEqs, subExpressions = createCollisionEquations(lm, streamedPdfs, dst, doCSE)
 
     return densityVelocityDefinition + subExpressions + collideEqs
+
+
+def createLbmSplitGroups(lm, equations):
+    f_eq_common = sp.Symbol('f_eq_common')
+    rho = sp.Symbol('rho')
+
+    result = [
+        list(util.getSymbolicVelocityVector(lm.dim)),
+    ]
+    directionGroups = defaultdict(list)
+
+    for eq in equations:
+        if not type(eq.lhs) is Field.Access:
+            continue
+        idx = eq.lhs.index[0]
+        if idx == 0:
+            result[0].append(eq.lhs)
+            continue
+
+        dir = lm.stencil[idx]
+        inverseDir = tuple([-i for i in dir])
+
+        if f_eq_common in eq.rhs.atoms(sp.Symbol) and f_eq_common not in result[0]:
+            result[0].append(f_eq_common)
+        if rho in eq.rhs.atoms(sp.Symbol) and rho not in result[0]:
+            result[0].append(rho)
+
+        if inverseDir in directionGroups:
+            directionGroups[inverseDir].append(eq.lhs)
+        else:
+            directionGroups[dir].append(eq.lhs)
+    result += directionGroups.values()
+
+    return result
 
 
 if __name__ == "__main__":
