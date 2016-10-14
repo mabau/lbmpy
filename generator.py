@@ -3,8 +3,8 @@ import numpy as np
 import sympy as sp
 from sympy.core.cache import cacheit
 from sympy.utilities.codegen import CCodePrinter
-from sympy.tensor import IndexedBase
-from collections import defaultdict, OrderedDict
+from sympy.tensor import IndexedBase, Indexed
+from collections import defaultdict
 import warnings
 
 
@@ -83,15 +83,6 @@ def directionStringToOffset(directionStr, dim=3):
     return offset[:dim]
 
 
-def fieldStruct(baseType=np.float64):
-    return c.Struct("ndarray", [
-        c.Pointer(c.POD(baseType, "data")),
-        c.POD(np.long, "dim"),
-        c.Pointer(c.POD(np.long, "strides")),
-        c.Pointer(c.POD(np.long, "shape")),
-    ])
-
-
 def getLayoutFromNumpyField(npField):
     coordinates = list(range(len(npField.shape)))
     return [x for (y, x) in sorted(zip(npField.strides, coordinates), key=lambda pair: pair[0], reverse=True)]
@@ -112,6 +103,21 @@ class MyPOD(c.Declarator):
 
     def get_decl_pair(self):
         return [self.dtype], self.name
+
+    def getNextParentOfType(node, parentType):
+        parent = node.parent
+        while parent is not None:
+            if isinstance(parent, parentType):
+                return parent
+        return None
+
+
+def getNextParentOfType(node, parentType):
+    parent = node.parent
+    while parent is not None:
+        if isinstance(parent, parentType):
+            return parent
+    return None
 
 
 # --------------------------------------- AST Nodes  -------------------------------------------------------------------
@@ -162,7 +168,8 @@ class KernelFunction(Node):
         self._parameters = None
         self._functionName = functionName
         self._body.parent = self
-
+        self.variablesToIgnore = set()
+        self.qualifierPrefix = ""
 
     @property
     def symbolsDefined(self):
@@ -174,7 +181,7 @@ class KernelFunction(Node):
 
     @property
     def parameters(self):
-        self.__updateArguments()
+        self._updateArguments()
         return self._parameters
 
     @property
@@ -189,17 +196,17 @@ class KernelFunction(Node):
     def functionName(self):
         return self._functionName
 
-    def __updateArguments(self):
-        undefinedSymbols = self._body.symbolsRead - self._body.symbolsDefined
+    def _updateArguments(self):
+        undefinedSymbols = self._body.symbolsRead - self._body.symbolsDefined - self.variablesToIgnore
         self._parameters = [KernelFunction.Argument(s.name, s.dtype) for s in undefinedSymbols]
-        self._parameters.sort(key=lambda l: (l.fieldName, l.isFieldPtrArgument, l.isFieldShapeArgument, l.isFieldStrideArgument, l.name),
+        self._parameters.sort(key=lambda l: (l.fieldName, l.isFieldPtrArgument, l.isFieldShapeArgument,
+                                             l.isFieldStrideArgument, l.name),
                               reverse=True)
 
     def generateC(self):
-        self.__updateArguments()
-
+        self._updateArguments()
         functionArguments = [MyPOD(s.dtype, s.name) for s in self._parameters]
-        funcDeclaration = c.FunctionDeclaration(MyPOD("void", self._functionName, ), functionArguments)
+        funcDeclaration = c.FunctionDeclaration(MyPOD(self.qualifierPrefix + "void", self._functionName, ), functionArguments)
         return c.FunctionBody(funcDeclaration, self._body.generateC())
 
 
@@ -379,7 +386,7 @@ class SympyAssignment(Node):
         self._lhsSymbol = lhsSymbol
         self._rhsTerm = rhsTerm
         self._isDeclaration = True
-        if isinstance(self, Field.Access):
+        if isinstance(self._lhsSymbol, Field.Access) or isinstance(self._lhsSymbol, IndexedBase):
             self._isDeclaration = False
         self._isConst = isConst
 
@@ -398,6 +405,9 @@ class SympyAssignment(Node):
     @lhs.setter
     def lhs(self, newValue):
         self._lhsSymbol = newValue
+        self._isDeclaration = True
+        if isinstance(self._lhsSymbol, Field.Access) or isinstance(self._lhsSymbol, Indexed):
+            self._isDeclaration = False
 
     @property
     def args(self):
@@ -411,7 +421,10 @@ class SympyAssignment(Node):
 
     @property
     def symbolsRead(self):
-        return self._rhsTerm.atoms(sp.Symbol)
+        result = self._rhsTerm.atoms(sp.Symbol)
+        if isinstance(self._lhsSymbol, Indexed):
+            result.add(self._lhsSymbol.base.args[0])
+        return result
 
     @property
     def isConst(self):
@@ -599,6 +612,10 @@ class Field:
         return self._strides[self.spatialDimensions:]
 
     @property
+    def strides(self):
+        return self._strides
+
+    @property
     def dtype(self):
         return self._dtype
 
@@ -710,7 +727,6 @@ class TypedSymbol(sp.Symbol):
     def __new_stage2__(cls, name, dtype):
         obj = super(TypedSymbol, cls).__xnew__(cls, name)
         obj._dtype = dtype
-
         return obj
 
     __xnew__ = staticmethod(__new_stage2__)
@@ -719,7 +735,6 @@ class TypedSymbol(sp.Symbol):
     @property
     def dtype(self):
         return self._dtype
-
 
 # --------------------------------------- Factory Functions ------------------------------------------------------------
 
@@ -766,7 +781,6 @@ def makeLoopOverDomain(body, functionName):
                                      isInnermostLoop=(i == 0), isOutermostLoop=(i == len(layout) - 1))
         lastLoop = newLoop
         currentBody = Block([lastLoop])
-    #lastLoop.prefixLines.append("#pragma omp parallel for schedule(static)")
     return KernelFunction(currentBody, functionName)
 
 
@@ -786,7 +800,8 @@ def resolveFieldAccesses(ast):
 
             fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), dtype)
             idxStr = "_".join([str(i) for i in fieldAccess.index])
-            basePtr = TypedSymbol("%s%s_%s_%s" % (BASE_PTR_PREFIX, field.name, idxStr, fieldAccess.offsetName), dtype)
+            basePtr = TypedSymbol("%s%s_%s_%s" % (BASE_PTR_PREFIX, field.name, idxStr, fieldAccess.offsetName),
+                                  dtype)
             baseArr = IndexedBase(basePtr, shape=(1,))
 
             offset = 0
@@ -937,26 +952,12 @@ def addOpenMP(ast):
     outerLoops[0].prefixLines.append("#pragma omp for schedule(static)")
 
 
-def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdict(lambda: "double"), splitGroups=[]):
-
+def typeAllEquations(eqs, typeForSymbol):
     fieldsWritten = set()
     fieldsRead = set()
 
-    def replaceCharactersForC(s):
-        return s.replace("^", "_")
-
-    def typeSymbol(term):
-        if isinstance(term, Field.Access) or isinstance(term, TypedSymbol):
-            return term
-        elif isinstance(term, sp.Symbol):
-            return TypedSymbol(term.name, typeForSymbol[term.name])
-        else:
-            raise ValueError("Term has to be field access or symbol")
-
     def processRhs(term):
         """Replaces Symbols by:
-            - new variable and defines the new variable in explicitReadAssignments (for field accesses)
-              type is used from the field, additionally adds the field to fieldsRead
             - TypedSymbol if symbol is not a field access
         """
         if isinstance(term, Field.Access):
@@ -978,14 +979,27 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
         else:
             assert False, "Expected a symbol as left-hand-side"
 
-    assignments = []
-    for eq in listOfEquations:
+    typedEquations = []
+    for eq in eqs:
         newLhs = processLhs(eq.lhs)
         newRhs = processRhs(eq.rhs)
-        assignments.append(SympyAssignment(newLhs, newRhs))
-    assignments = assignments
+        typedEquations.append(SympyAssignment(newLhs, newRhs))
+    typedEquations = typedEquations
 
-    # Mark read-only fields
+    return fieldsRead, fieldsWritten, typedEquations
+
+
+def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdict(lambda: "double"), splitGroups=[]):
+
+    def typeSymbol(term):
+        if isinstance(term, Field.Access) or isinstance(term, TypedSymbol):
+            return term
+        elif isinstance(term, sp.Symbol):
+            return TypedSymbol(term.name, typeForSymbol[term.name])
+        else:
+            raise ValueError("Term has to be field access or symbol")
+
+    fieldsRead, fieldsWritten, assignments = typeAllEquations(listOfEquations, typeForSymbol)
     for f in fieldsRead - fieldsWritten:
         f.setReadOnly()
 

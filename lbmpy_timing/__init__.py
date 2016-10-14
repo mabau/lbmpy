@@ -118,5 +118,5 @@ def run_timing(**kwargs):
 
 if __name__ == "__main__":
     run_timing(collisionModel='SRT', compressible=False, replaceRelaxationTimes=False,
-               doCSE=True, variableLoopBounds=True, splitInnerLoop=True)
+               doCSE=True, variableLoopBounds=False, splitInnerLoop=True)
 
