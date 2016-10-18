@@ -1,7 +1,7 @@
 import sympy as sp
 import itertools
 import math
-from collections import Counter
+from collections import Counter, defaultdict
 import functools
 from lbmpy.util import getSymbolicVelocityVector, uniqueList
 from lbmpy.transformations import makeExponentialFuncArgumentSquares
@@ -17,7 +17,7 @@ def __createMomentGeneratingFunction(function, symbols, newSymbols):
     assert len(symbols) == len(newSymbols)
 
     for t_i, v_i in zip(newSymbols, symbols):
-        function *= sp.exp(t_i*v_i)
+        function *= sp.exp(t_i * v_i)
 
     # This is a custom transformation that speeds up the integrating process
     # of a MaxwellBoltzmann distribution
@@ -66,17 +66,24 @@ def __continuousCumulantOrMoment(function, exponents, symbols, cumulant):
 
 
 @functools.lru_cache(maxsize=512)
-def continuousMoment(function, exponents, symbols=None):
+def continuousMoment(function, moment, symbols=None):
     """
     Computes moment of given function
 
     to speed up the computation first a moment generating function is calculated and stored in a cache
     :param function: function to compute moments of
-    :param exponents: power of the symbols
+    :param moment: tuple specifiying power of the symbols, or a polynomial in symbols
     :param symbols: tuple of symbols: computes moments w.r.t. these variables
                      defaults to v_0, v_1, ...
     """
-    return __continuousCumulantOrMoment(function, exponents, symbols, False)
+    if type(moment) is tuple:
+        return __continuousCumulantOrMoment(function, moment, symbols, False)
+    else:
+        contMom = 0
+        for term, coeff in moment.as_coefficients_dict().items():
+            exponents = tuple([term.as_coeff_exponent(v_i)[1] for v_i in symbols])
+            contMom += coeff * continuousMoment(function, exponents, symbols=symbols)
+        return contMom
 
 
 @functools.lru_cache(maxsize=512)
@@ -104,7 +111,7 @@ def __unique_permutations(elements):
 
 def __generateFixedSumTuples(tupleLength, tupleSum, allowedValues=None, ordered=False):
     if not allowedValues:
-        allowedValues = list(range(0, tupleSum+1))
+        allowedValues = list(range(0, tupleSum + 1))
 
     assert (0 in allowedValues)
 
@@ -148,7 +155,7 @@ def momentsOfOrder(order, dim=3, includePermutations=True):
 
 def momentsUpToOrder(order, dim=3, includePermutations=True):
     """All tuples of length 'dim' which sum is smaller than 'order' """
-    singleMomentIterators = [momentsOfOrder(o, dim, includePermutations) for o in range(order+1)]
+    singleMomentIterators = [momentsOfOrder(o, dim, includePermutations) for o in range(order + 1)]
     return itertools.chain(*singleMomentIterators)
 
 
@@ -170,7 +177,7 @@ def exponentTuplesToPolynomials(exponentTuples):
     result = []
     for tup in exponentTuples:
         poly = 1
-        for sym, tupleEntry in zip( MOMENT_SYMBOLS[:len(tup)], tup):
+        for sym, tupleEntry in zip(MOMENT_SYMBOLS[:len(tup)], tup):
             poly *= sym ** tupleEntry
         result.append(poly)
     return result
@@ -194,7 +201,7 @@ def isEven(moment):
         opposite = moment
         for s in MOMENT_SYMBOLS:
             opposite = opposite.subs(s, -s)
-        return sp.simplify(moment-opposite) == 0
+        return sp.simplify(moment - opposite) == 0
 
 
 def isConservedMoment(moment):
@@ -225,7 +232,7 @@ def discreteMoment(function, moment, stencil):
     for factor, e in zip(function, stencil):
         if type(moment) is tuple:
             for vel, exponent in zip(e, moment):
-                factor *= vel**exponent
+                factor *= vel ** exponent
             res += factor
         else:
             weight = moment
@@ -243,7 +250,7 @@ def momentMatrix(moments, stencil):
         def generator(row, column):
             result = sp.Rational(1, 1)
             for exponent, stencilEntry in zip(moments[row], stencil[column]):
-                result *= int(stencilEntry**exponent)
+                result *= int(stencilEntry ** exponent)
             return result
     else:
         def generator(row, column):
@@ -275,11 +282,11 @@ def gramSchmidt(moments, stencil, weights=None):
         currentElement = columnsOfM[i]
         for j in range(i):
             prevElement = result[j]
-            denom = prevElement.dot(weights*prevElement)
+            denom = prevElement.dot(weights * prevElement)
             if denom == 0:
                 raise ValueError("Not an independent set of vectors given: "
-                                 "vector %d is dependent on previous vectors" %(i,))
-            overlap = currentElement.dot(weights*prevElement) / denom
+                                 "vector %d is dependent on previous vectors" % (i,))
+            overlap = currentElement.dot(weights * prevElement) / denom
             currentElement -= overlap * prevElement
             moments[i] -= overlap * moments[j]
         result.append(currentElement)
@@ -306,7 +313,7 @@ def momentEqualityTable(stencil, discreteEq, continuousEq, maxOrder=4, truncateO
     matchedMoments = 0
     nonMatchedMoments = 0
 
-    momentsList = [list(momentsOfOrder(o, dim, includePermutations=False)) for o in range(maxOrder+1)]
+    momentsList = [list(momentsOfOrder(o, dim, includePermutations=False)) for o in range(maxOrder + 1)]
 
     colors = dict()
     nrOfColumns = max([len(v) for v in momentsList]) + 1
@@ -351,7 +358,7 @@ def momentEqualityTable(stencil, discreteEq, continuousEq, maxOrder=4, truncateO
 def getDefaultMoments(number):
     x, y, z = MOMENT_SYMBOLS
     if number == 9:
-        return [x**i * y**j for i in range(3) for j in range(3)]
+        return [x ** i * y ** j for i in range(3) for j in range(3)]
     elif number == 27:
         return [x ** i * y ** j * z ** k for i in range(3) for j in range(3) for k in range(3)]
 
@@ -359,7 +366,6 @@ def getDefaultMoments(number):
 
 
 class MomentSystem:
-
     def __init__(self, allMoments, momentIdGroups):
         self._allMoments = allMoments
         self._momentIdGroups = momentIdGroups
@@ -378,6 +384,21 @@ class MomentSystem:
             # Check non-conserved moments: in one group all moments should have the same order
             for momentIdGroup in momentIdGroups[1:]:
                 assert len(set([getOrder(allMoments[i]) for i in momentIdGroup])) == 1
+        else:
+            self._momentIdGroups = defaultdict(list)
+            for i, moment in enumerate(allMoments):
+                if isConservedMoment(moment):
+                    self._momentIdGroups[0].append(i)
+                else:
+                    order = getOrder(moment)
+                    self._momentIdGroups[order - 1].append(i)
+
+    @property
+    def symbols(self):
+        result = set()
+        for m in self._allMoments:
+            result.update(m.atoms(sp.Symbol))
+        return tuple(sorted(result, key=lambda e: e.name))
 
     @property
     def hasMomentGroups(self):
@@ -390,6 +411,10 @@ class MomentSystem:
     @property
     def conservedMomentIds(self):
         return self._momentIdGroups[0]
+
+    @property
+    def conservedMoments(self):
+        return [self._allMoments[i] for i in self._momentIdGroups[0]]
 
     @property
     def nonConservedMomentGroupIds(self):
@@ -422,7 +447,8 @@ def getDefaultOrthogonalMoments(stencil):
         import lbmpy.util as util
         import lbmpy.equilibria as eq
         defaultMoments = getDefaultMoments(number)
-        orthoMoments, orthoVecs = gramSchmidt(defaultMoments, stencil, weights=eq.getWeights(stencil))
+        #orthoMoments, orthoVecs = gramSchmidt(defaultMoments, stencil, weights=eq.getWeights(stencil))
+        orthoMoments, orthoVecs = gramSchmidt(defaultMoments, stencil)
         orthoMomentsScaled = [e * util.commonDenominator(e) for e in orthoMoments]
         return MomentSystem(orthoMomentsScaled, None)
     elif number == 15:
@@ -440,7 +466,7 @@ def getDefaultOrthogonalMoments(stencil):
             3 * x ** 2 - sq,  # 9
             y ** 2 - z ** 2,  # 10
             x * y, y * z, x * z,  # 11,12,13
-            x*y*z,  # 14
+            x * y * z,  # 14
         ]
         momentGroups = [[0, 3, 5, 7],
                         [9, 10, 11, 12, 13],
@@ -481,7 +507,7 @@ def getDefaultOrthogonalMoments(stencil):
 
     elif number == 27:
         # from Premnath, Banerjee 2012: On the three dimensional central moment LBM
-        xsq, ysq, zsq = x**2, y**2, z**2
+        xsq, ysq, zsq = x ** 2, y ** 2, z ** 2
         a = [
             sp.Rational(1, 1),  # 0
             x, y, z,  # 1,2,3
@@ -522,9 +548,9 @@ def getDefaultOrthogonalMoments(stencil):
             3 * (xsq * ysq + xsq * zsq + ysq * zsq) - 4 * (xsq + ysq + zsq) + 4,  # 17
             3 * (xsq * ysq + xsq * zsq - 2 * ysq * zsq) - 2 * (2 * xsq - ysq - zsq),  # 18
             3 * (xsq * ysq - xsq * zsq) - 2 * (ysq - zsq),  # 19
-            3 * (xsq*y*z) - 2 * (y*z), # 20
-            3 * (x*ysq*z) - 2 * (x*z),  # 21
-            3 * (x*y*zsq) - 2 * (x*y),  # 22
+            3 * (xsq * y * z) - 2 * (y * z),  # 20
+            3 * (x * ysq * z) - 2 * (x * z),  # 21
+            3 * (x * y * zsq) - 2 * (x * y),  # 22
             9 * (x * ysq * zsq) - 6 * (x * ysq + x * zsq) + 4 * x,  # 23
             9 * (xsq * y * zsq) - 6 * (xsq * y + y * zsq) + 4 * y,  # 24
             9 * (xsq * ysq * z) - 6 * (xsq * z + ysq * z) + 4 * z,  # 25

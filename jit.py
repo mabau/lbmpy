@@ -63,6 +63,7 @@ def compileAndLoad(kernelFunctionNode):
     with TemporaryDirectory() as tmpDir:
         srcFile = os.path.join(tmpDir, 'source.cpp')
         with open(srcFile, 'w') as sourceFile:
+            print('#include <iostream>', file=sourceFile);
             print('extern "C" { ', file=sourceFile)
             print(kernelFunctionNode.generateC(), file=sourceFile)
             print('}', file=sourceFile)

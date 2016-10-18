@@ -1,5 +1,5 @@
 import sympy as sp
-from lbmpy.equilibria import getMaxwellBoltzmannEquilibriumMoments, standardDiscreteEquilibrium
+from lbmpy.equilibria import getMaxwellBoltzmannEquilibriumMoments, standardDiscreteEquilibrium, getWeights
 import lbmpy.moments as m
 
 
@@ -50,7 +50,6 @@ def makeSRTFromMaxwellBoltzmann(stencil, order=2):
 
 
 class LatticeModel:
-
     def __init__(self, stencil, moments, equilibriumMoments, relaxationRates, compressible):
         self._stencil = stencil
         self._moments = moments
@@ -106,18 +105,9 @@ class LatticeModel:
     def stencil(self):
         return self._stencil
 
-    #def getWeights(self):
-    #    result = []
-    #    for f_q in feq:
-    #        containingSymbols = f_q.atoms(sp.Symbol)
-    #        for s in containingSymbols:
-    #            if s.name.startswith('u_'):
-    #                f_q = f_q.subs(s, 0)
-    #            elif s.name == 'rho':
-    #                f_q = f_q.subs(s, 1)
-    #        result.append(f_q)
-    #    return result
-
+    @property
+    def weights(self):
+        return getWeights(self._stencil)
 
 
 

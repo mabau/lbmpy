@@ -1,3 +1,5 @@
+from itertools import chain
+
 import cgen as c
 import numpy as np
 import sympy as sp
@@ -93,6 +95,8 @@ def numpyDataTypeToString(dtype):
         return "double"
     elif dtype == np.float32:
         return "float"
+    elif dtype == np.int32:
+        return "int"
     raise NotImplementedError()
 
 
@@ -103,13 +107,6 @@ class MyPOD(c.Declarator):
 
     def get_decl_pair(self):
         return [self.dtype], self.name
-
-    def getNextParentOfType(node, parentType):
-        parent = node.parent
-        while parent is not None:
-            if isinstance(parent, parentType):
-                return parent
-        return None
 
 
 def getNextParentOfType(node, parentType):
@@ -134,6 +131,27 @@ class Node:
                 result.add(arg)
             result.update(arg.atoms(argType))
         return result
+
+
+class DebugNode(Node):
+    def __init__(self, code, symbolsRead=[]):
+        self._code = code
+        self._symbolsRead = set(symbolsRead)
+
+    @property
+    def args(self):
+        return []
+
+    @property
+    def symbolsDefined(self):
+        return set()
+
+    @property
+    def symbolsRead(self):
+        return self._symbolsRead
+
+    def generateC(self):
+        return c.LiteralLines(self._code)
 
 
 class KernelFunction(Node):
@@ -161,7 +179,7 @@ class KernelFunction(Node):
                 self.isFieldStrideArgument = True
                 self.isFieldArgument = True
                 self.fieldName = name[len(FIELD_STRIDE_PREFIX):]
-                
+
     def __init__(self, body, functionName="kernel"):
         super(KernelFunction, self).__init__()
         self._body = body
@@ -422,8 +440,7 @@ class SympyAssignment(Node):
     @property
     def symbolsRead(self):
         result = self._rhsTerm.atoms(sp.Symbol)
-        if isinstance(self._lhsSymbol, Indexed):
-            result.add(self._lhsSymbol.base.args[0])
+        result.update(self._lhsSymbol.atoms(sp.Symbol))
         return result
 
     @property
@@ -574,6 +591,16 @@ class Field:
         self._shape = shape
         self._strides = strides
         self._readonly = False
+        self._fixedSpatialCoordinates = None
+
+    def setFixedSpatialCoordinates(self, coordinates):
+        assert len(coordinates) == self.spatialDimensions
+        self._fixedSpatialCoordinates = coordinates
+
+    def getCoordinateOffset(self, coordNr, coordinate):
+        if self._fixedSpatialCoordinates is not None and self._fixedSpatialCoordinates[coordNr] is not None:
+            coordinate = self._fixedSpatialCoordinates[coordNr]
+        return self.spatialStrides[coordNr] * coordinate
 
     @property
     def spatialDimensions(self):
@@ -654,23 +681,37 @@ class Field:
 
         def __new_stage2__(cls, field, offsets=(0, 0, 0), idx=None):
             fieldName = field.name
-            offsetName = offsetToDirectionString(offsets)
-            offsetVector = np.array(offsets)
+            offsetsAndIndex = chain(offsets, idx) if idx is not None else offsets
+            constantOffsets = not any([isinstance(o, sp.Basic) for o in offsetsAndIndex])
+
             if not idx:
                 idx = tuple([0] * field.indexDimensions)
 
-            if field.indexDimensions == 0:
-                obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName)
-            elif field.indexDimensions == 1:
-                obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName + "^" + str(idx[0]))
+            if constantOffsets:
+                offsetName = offsetToDirectionString(offsets)
+
+                if field.indexDimensions == 0:
+                    obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName)
+                elif field.indexDimensions == 1:
+                    obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName + "^" + str(idx[0]))
+                else:
+                    idxStr = ",".join([str(e) for e in idx])
+                    obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName + "^" + idxStr)
+
             else:
-                idxStr = ",".join([str(e) for e in idx])
-                obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName + "^" + idxStr)
+                offsetName = "%0.6X" % (abs(hash(tuple(offsetsAndIndex))))
+                obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName)
 
             obj._field = field
-            obj._offsets = [int(i) for i in offsetVector]
+            obj._offsets = []
+            for o in offsets:
+                if isinstance(o, sp.Basic):
+                    obj._offsets.append(o)
+                else:
+                    obj._offsets.append(int(o))
             obj._offsetName = offsetName
             obj._index = idx
+            obj._constantOffsets = constantOffsets
 
             return obj
 
@@ -687,6 +728,10 @@ class Field:
                 raise ValueError("Wrong number of indices: "
                                  "Got %d, expected %d" % (len(idx), self.field.indexDimensions))
             return Field.Access(self.field, self._offsets, idx)
+
+        @property
+        def constantOffsets(self):
+            return self._constantOffsets
 
         @property
         def field(self):
@@ -794,22 +839,10 @@ def resolveFieldAccesses(ast):
         if isinstance(expr, Field.Access):
             fieldAccess = expr
             field = fieldAccess.field
-            dtype = "%s * __restrict__" % field.dtype
-            if field.readOnly:
-                dtype = "const " + dtype
-
-            fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), dtype)
-            idxStr = "_".join([str(i) for i in fieldAccess.index])
-            basePtr = TypedSymbol("%s%s_%s_%s" % (BASE_PTR_PREFIX, field.name, idxStr, fieldAccess.offsetName),
-                                  dtype)
-            baseArr = IndexedBase(basePtr, shape=(1,))
 
             offset = 0
-            fastestLoopCoord = enclosingLoop.coordinateToLoopOver
             for i in range(field.spatialDimensions):
-                if i == fastestLoopCoord:
-                    continue
-                offset += field.spatialStrides[i] * TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, i), "int")
+                offset += field.getCoordinateOffset(i, TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, i), "int"))
             for i in range(field.indexDimensions):
                 offset += field.indexStrides[i] * fieldAccess.index[i]
 
@@ -817,11 +850,28 @@ def resolveFieldAccesses(ast):
                                   for c in range(len(fieldAccess.offsets))])
             offset += neighborOffset
 
-            if basePtr not in enclosingBlock.symbolsDefined:
-                enclosingBlock.insertFront(SympyAssignment(basePtr, fieldPtr + offset, isConst=False))
+            dtype = "%s * __restrict__" % field.dtype
+            if field.readOnly:
+                dtype = "const " + dtype
 
-            innerCounterVar = TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, fastestLoopCoord), "int")
-            return baseArr[innerCounterVar*field.spatialStrides[fastestLoopCoord]]
+            fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), dtype)
+
+            if fieldAccess.constantOffsets:
+                fastestLoopCoord = enclosingLoop.coordinateToLoopOver
+                innerOffset = field.getCoordinateOffset(fastestLoopCoord, TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, fastestLoopCoord), "int"))
+                offset -= innerOffset
+                offset = sp.simplify(offset)
+                idxStr = "_".join([str(i) for i in fieldAccess.index])
+                basePtr = TypedSymbol("%s%s_%s_%s" % (BASE_PTR_PREFIX, field.name, idxStr, fieldAccess.offsetName),
+                                      dtype)
+                baseArr = IndexedBase(basePtr, shape=(1,))
+
+                if basePtr not in enclosingBlock.symbolsDefined:
+                    enclosingBlock.insertFront(SympyAssignment(basePtr, fieldPtr + offset, isConst=False))
+
+                return baseArr[innerOffset]
+            else:
+                return IndexedBase(fieldPtr, shape=(1,))[offset]
         else:
             newArgs = [visitSympyExpr(e, enclosingBlock, enclosingLoop) for e in expr.args]
             kwargs = {'evaluate': False} if type(expr) == sp.Add or type(expr) == sp.Mul else {}

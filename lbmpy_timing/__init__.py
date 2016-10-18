@@ -10,9 +10,10 @@ default_parameters = {
     'variableLoopBounds': False,
     'replaceRelaxationTimes': False,
     'layout': 'fzyx',
-    'domain_size': (200, 200, 200),
+    #'domain_size': (200, 200, 200),
+    'domain_size': (200, 100, 100),
     'threads': 1,
-    'timesteps': 10,
+    'timesteps': 5,
     'setup_timesteps': 5,
     'doCSE': False,
     'splitInnerLoop': False,
@@ -26,8 +27,8 @@ def create_walberla_lattice_model(stencil, collisionModel, equilibriumAccuracyOr
     elif collisionModel == 'TRT':
         collisionModel = wlb.lbm.collisionModels.TRT.constructWithMagicNumber(1.8)
     elif collisionModel == 'MRT':
-        #collisionModel = wlb.lbm.collisionModels.D3Q19MRT(1.8, 1.8, 1.1, 0.9, 1.8, 1.1)
-        collisionModel = wlb.lbm.collisionModels.D3Q19MRT(1.3, 1.4, 1.1, 0.9, 0.7, 1.24)
+        collisionModel = wlb.lbm.collisionModels.D3Q19MRT(1.8, 1.8, 1.1, 0.9, 1.8, 1.1)
+        #collisionModel = wlb.lbm.collisionModels.D3Q19MRT(1.3, 1.4, 1.1, 0.9, 0.7, 1.24)
     else:
         raise ValueError("Unknown collision model " + collisionModel)
 
@@ -118,5 +119,7 @@ def run_timing(**kwargs):
 
 if __name__ == "__main__":
     run_timing(collisionModel='SRT', compressible=False, replaceRelaxationTimes=False,
-               doCSE=True, variableLoopBounds=False, splitInnerLoop=True)
+               doCSE=True, variableLoopBounds=True, splitInnerLoop=False)
+    #run_timing(collisionModel='MRT', compressible=False, replaceRelaxationTimes=True,
+    #           doCSE=False, variableLoopBounds=False, splitInnerLoop=False)
 
