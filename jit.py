@@ -1,4 +1,6 @@
 from ctypes import cdll, c_double, c_float, sizeof
+
+import functools
 import numpy as np
 import lbmpy.generator as gen
 import subprocess
@@ -115,12 +117,30 @@ def buildCTypeArgumentList(kernelFunctionNode, argumentDict):
     return ctArguments
 
 
+def makePythonFunctionIncompleteParams(kernelFunctionNode, argumentDict):
+    func = compileAndLoad(kernelFunctionNode)[kernelFunctionNode.functionName]
+    func.restype = None
+
+    def wrapper(**kwargs):
+        from copy import copy
+        fullArguments = copy(argumentDict)
+        fullArguments.update(kwargs)
+        args = buildCTypeArgumentList(kernelFunctionNode, fullArguments)
+        func(*args)
+    return wrapper
+
+
 def makePythonFunction(kernelFunctionNode, argumentDict):
     # build up list of CType arguments
-    args = buildCTypeArgumentList(kernelFunctionNode, argumentDict)
+    try:
+        args = buildCTypeArgumentList(kernelFunctionNode, argumentDict)
+    except KeyError:
+        # not all parameters specified yet
+        return makePythonFunctionIncompleteParams(kernelFunctionNode, argumentDict)
     func = compileAndLoad(kernelFunctionNode)[kernelFunctionNode.functionName]
     func.restype = None
     return lambda: func(*args)
+
 
 
 

@@ -86,3 +86,30 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst', is2D=(lm.dim == 2))
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst', is2D=(lm.dim == 2))
     return lambda block: sweepFunction(src=block[pdfFieldName], **params)
+
+
+def createBoundaryIndexList(flagField, stencil, boundaryFlag, fluidFlag):
+    import waLBerla as wlb
+    import numpy as np
+    import itertools
+
+    flagFieldArr = wlb.field.toArray(flagField, withGhostLayers=True)
+    fluidMask = flagField.flag(fluidFlag)
+    boundaryMask = flagField.flag(boundaryFlag)
+    gl = flagField.nrOfGhostLayers
+    result = []
+    dim = len(stencil[0])
+    flagFieldArr = flagFieldArr[:, :, :, 0]
+    if dim == 2:
+        flagFieldArr = flagFieldArr[:, :, gl]
+
+    for cell in itertools.product(*[range(gl, i-gl) for i in flagFieldArr.shape]):
+        if not flagFieldArr[cell] & fluidMask:
+            continue
+        for dirIdx, direction in enumerate(stencil):
+            neighborCell = tuple([cell_i + dir_i for cell_i, dir_i in zip(cell, direction)])
+            if flagFieldArr[neighborCell] & boundaryMask:
+                result.append(list(cell) + [dirIdx])
+
+    return np.array(result, dtype=np.int32)
+

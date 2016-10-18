@@ -120,6 +120,6 @@ def run_timing(**kwargs):
 if __name__ == "__main__":
     run_timing(collisionModel='SRT', compressible=False, replaceRelaxationTimes=False,
                doCSE=True, variableLoopBounds=True, splitInnerLoop=False)
-    #run_timing(collisionModel='MRT', compressible=False, replaceRelaxationTimes=True,
+    #run_timing(collisionModel='MRT', compressible=False, replaceRelaxationTimes=False,
     #           doCSE=False, variableLoopBounds=False, splitInnerLoop=False)
 
