@@ -9,11 +9,9 @@ from sympy.tensor import IndexedBase, Indexed
 from collections import defaultdict
 import warnings
 
-
 COORDINATE_LOOP_COUNTER_NAME = "ctr"
-FIELD_PREFIX = "field_"
-BASE_PTR_PREFIX = FIELD_PREFIX + "base_"
-FIELD_PTR_PREFIX = FIELD_PREFIX + "data_"
+FIELD_PREFIX = "f"
+FIELD_PTR_PREFIX = FIELD_PREFIX + "d_"
 FIELD_SHAPE_PREFIX = FIELD_PREFIX + "shape_"
 FIELD_STRIDE_PREFIX = FIELD_PREFIX + "stride_"
 
@@ -37,6 +35,21 @@ class CodePrinter(CCodePrinter):
 codePrinter = CodePrinter()
 
 
+def offsetComponentToDirectionString(coordinateId, value):
+    nameComponents = (('W', 'E'),  # west, east
+                      ('S', 'N'),  # south, north
+                      ('B', 'T'),  # bottom, top
+                      )
+    if value == 0: return ""
+    elif value < 0:
+        result = nameComponents[coordinateId][0]
+    elif value > 0:
+        result = nameComponents[coordinateId][1]
+    if abs(value) > 1:
+        result = "%d%s" %(abs(value), result )
+    return result
+
+
 def offsetToDirectionString(offsetTuple):
     nameComponents = (('W', 'E'),  # west, east
                       ('S', 'N'),  # south, north
@@ -44,12 +57,7 @@ def offsetToDirectionString(offsetTuple):
                       )
     names = ["", "", ""]
     for i in range(len(offsetTuple)):
-        if offsetTuple[i] < 0:
-            names[i] = nameComponents[i][0]
-        elif offsetTuple[i] > 0:
-            names[i] = nameComponents[i][1]
-        if abs(offsetTuple[i]) > 1:
-            names[i] = str(abs(offsetTuple[i])) + names[i]
+        names[i] = offsetComponentToDirectionString(i, offsetTuple[i])
     name = "".join(reversed(names))
     if name == "":
         name = "C"
@@ -114,6 +122,7 @@ def getNextParentOfType(node, parentType):
     while parent is not None:
         if isinstance(parent, parentType):
             return parent
+        parent = parent.parent
     return None
 
 
@@ -591,16 +600,6 @@ class Field:
         self._shape = shape
         self._strides = strides
         self._readonly = False
-        self._fixedSpatialCoordinates = None
-
-    def setFixedSpatialCoordinates(self, coordinates):
-        assert len(coordinates) == self.spatialDimensions
-        self._fixedSpatialCoordinates = coordinates
-
-    def getCoordinateOffset(self, coordNr, coordinate):
-        if self._fixedSpatialCoordinates is not None and self._fixedSpatialCoordinates[coordNr] is not None:
-            coordinate = self._fixedSpatialCoordinates[coordNr]
-        return self.spatialStrides[coordNr] * coordinate
 
     @property
     def spatialDimensions(self):
@@ -699,7 +698,7 @@ class Field:
                     obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName + "^" + idxStr)
 
             else:
-                offsetName = "%0.6X" % (abs(hash(tuple(offsetsAndIndex))))
+                offsetName = "%0.10X" % (abs(hash(tuple(offsetsAndIndex))))
                 obj = super(Field.Access, cls).__xnew__(cls, fieldName + "_" + offsetName)
 
             obj._field = field
@@ -711,7 +710,6 @@ class Field:
                     obj._offsets.append(int(o))
             obj._offsetName = offsetName
             obj._index = idx
-            obj._constantOffsets = constantOffsets
 
             return obj
 
@@ -728,10 +726,6 @@ class Field:
                 raise ValueError("Wrong number of indices: "
                                  "Got %d, expected %d" % (len(idx), self.field.indexDimensions))
             return Field.Access(self.field, self._offsets, idx)
-
-        @property
-        def constantOffsets(self):
-            return self._constantOffsets
 
         @property
         def field(self):
@@ -781,6 +775,10 @@ class TypedSymbol(sp.Symbol):
     def dtype(self):
         return self._dtype
 
+    def _hashable_content(self):
+        superClassContents = list(super(TypedSymbol, self)._hashable_content())
+        t = tuple([*superClassContents, hash(self._dtype)])
+        return t
 # --------------------------------------- Factory Functions ------------------------------------------------------------
 
 
@@ -831,24 +829,111 @@ def makeLoopOverDomain(body, functionName):
 
 # --------------------------------------- Transformations --------------------------------------------------------------
 
+def createIntermediateBasePointer(fieldAccess, coordinates, previousPtr):
+    field = fieldAccess.field
 
-def resolveFieldAccesses(ast):
+    offset = 0
+    name = ""
+    listToHash = []
+    for coordinateId, coordinateValue in coordinates.items():
+        offset += field.strides[coordinateId] * coordinateValue
+
+        if coordinateId < field.spatialDimensions:
+            offset += field.strides[coordinateId] * fieldAccess.offsets[coordinateId]
+            if type(fieldAccess.offsets[coordinateId]) is int:
+                offsetComp = offsetComponentToDirectionString(coordinateId, fieldAccess.offsets[coordinateId])
+                name += "_"
+                name += offsetComp if offsetComp else "C"
+            else:
+                listToHash.append(fieldAccess.offsets[coordinateId])
+        else:
+            if type(coordinateValue) is int:
+                name += "_%d" % (coordinateValue,)
+            else:
+                listToHash.append(coordinateValue)
+
+    if len(listToHash) > 0:
+        name += "%0.6X" % (abs(hash(tuple(listToHash))))
+
+    newPtr = TypedSymbol(previousPtr.name + name, previousPtr.dtype)
+    return newPtr, offset
+
+
+def parseBasePointerSpecification(basePointerSpecification, loopOrder, field):
+    """
+    Allowed specifications:
+    "spatialInner<int>" spatialInner0 is the innermost loop coordinate, spatialInner1 the loop enclosing the innermost
+    "spatialOuter<int>" spatialOuter0 is the outermost loop
+    "index<int>": index coordinate
+    "<int>": specifying directly the coordinate
+    :param basePointerSpecification: nested list with above specifications
+    :param loopOrder: list with ordering of loops from inner to outer
+    :param field:
+    :return:
+    """
+    result = []
+    specifiedCoordinates = set()
+    for specGroup in basePointerSpecification:
+        newGroup = []
+
+        def addNewElement(i):
+            if i >= field.spatialDimensions + field.indexDimensions:
+                raise ValueError("Coordinate %d does not exist" % (i,) )
+            newGroup.append(i)
+            if i in specifiedCoordinates:
+                raise ValueError("Coordinate %d specified two times" % (i,))
+            specifiedCoordinates.add(i)
+
+        for element in specGroup:
+            if type(element) is int:
+                addNewElement(element)
+            elif element.startswith("spatial"):
+                element = element[len("spatial"):]
+                if element.startswith("Inner"):
+                    index = int(element[len("Inner"):])
+                    addNewElement(loopOrder[index])
+                elif element.startswith("Outer"):
+                    index = int(element[len("Outer"):])
+                    addNewElement(loopOrder[-index])
+                elif element == "all":
+                    for i in range(field.spatialDimensions):
+                        addNewElement(i)
+                else:
+                    raise ValueError("Could not parse " + element)
+            elif element.startswith("index"):
+                index = int(element[len("index"):])
+                addNewElement(field.spatialDimensions + index)
+            else:
+                raise ValueError("Unknown specification %s" % (element,))
+
+        result.append(newGroup)
+
+    allCoordinates = set(range(field.spatialDimensions + field.indexDimensions))
+    rest = allCoordinates - specifiedCoordinates
+    if rest:
+        result.append(list(rest))
+    return result
+
+
+def getLoopHierarchy(block):
+    result = []
+    node = block
+    while node is not None:
+        node = getNextParentOfType(node, LoopOverCoordinate)
+        if node:
+            result.append(node.coordinateToLoopOver)
+    return result
+
+
+def resolveFieldAccesses(ast, fieldToFixedCoordinates={},
+                         basePointerSpecification=(('spatialInner0',), ('spatialInner1',))
+                         ):
     """Substitutes FieldAccess nodes by array indexing"""
 
-    def visitSympyExpr(expr, enclosingBlock, enclosingLoop):
+    def visitSympyExpr(expr, enclosingBlock):
         if isinstance(expr, Field.Access):
             fieldAccess = expr
             field = fieldAccess.field
-
-            offset = 0
-            for i in range(field.spatialDimensions):
-                offset += field.getCoordinateOffset(i, TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, i), "int"))
-            for i in range(field.indexDimensions):
-                offset += field.indexStrides[i] * fieldAccess.index[i]
-
-            neighborOffset = sum([field.spatialStrides[c] * fieldAccess.offsets[c]
-                                  for c in range(len(fieldAccess.offsets))])
-            offset += neighborOffset
 
             dtype = "%s * __restrict__" % field.dtype
             if field.readOnly:
@@ -856,38 +941,48 @@ def resolveFieldAccesses(ast):
 
             fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), dtype)
 
-            if fieldAccess.constantOffsets:
-                fastestLoopCoord = enclosingLoop.coordinateToLoopOver
-                innerOffset = field.getCoordinateOffset(fastestLoopCoord, TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, fastestLoopCoord), "int"))
-                offset -= innerOffset
-                offset = sp.simplify(offset)
-                idxStr = "_".join([str(i) for i in fieldAccess.index])
-                basePtr = TypedSymbol("%s%s_%s_%s" % (BASE_PTR_PREFIX, field.name, idxStr, fieldAccess.offsetName),
-                                      dtype)
-                baseArr = IndexedBase(basePtr, shape=(1,))
+            loopHierarchy = getLoopHierarchy(enclosingBlock)
+            basePtrSpec = parseBasePointerSpecification(basePointerSpecification, loopHierarchy, field)
+            lastPointer = fieldPtr
 
-                if basePtr not in enclosingBlock.symbolsDefined:
-                    enclosingBlock.insertFront(SympyAssignment(basePtr, fieldPtr + offset, isConst=False))
+            def createCoordinateDict(group):
+                coordDict = {}
+                for e in group:
+                    if e < field.spatialDimensions:
+                        if field.name in fieldToFixedCoordinates:
+                            coordDict[e] = fieldToFixedCoordinates[field.name][e]
+                        else:
+                            coordDict[e] = TypedSymbol("%s_%d" % (COORDINATE_LOOP_COUNTER_NAME, e), "int")
+                    else:
+                        coordDict[e] = fieldAccess.index[e-field.spatialDimensions]
+                return coordDict
 
-                return baseArr[innerOffset]
-            else:
-                return IndexedBase(fieldPtr, shape=(1,))[offset]
+            for group in reversed(basePtrSpec[1:]):
+                coordDict = createCoordinateDict(group)
+                newPtr, offset = createIntermediateBasePointer(fieldAccess, coordDict, lastPointer)
+                if newPtr not in enclosingBlock.symbolsDefined:
+                    enclosingBlock.insertFront(SympyAssignment(newPtr, lastPointer + offset, isConst=False))
+                lastPointer = newPtr
+
+            _, offset = createIntermediateBasePointer(fieldAccess, createCoordinateDict(basePtrSpec[0]), lastPointer)
+            baseArr = IndexedBase(lastPointer, shape=(1,))
+            return baseArr[offset]
         else:
-            newArgs = [visitSympyExpr(e, enclosingBlock, enclosingLoop) for e in expr.args]
+            newArgs = [visitSympyExpr(e, enclosingBlock) for e in expr.args]
             kwargs = {'evaluate': False} if type(expr) == sp.Add or type(expr) == sp.Mul else {}
             return expr.func(*newArgs, **kwargs) if newArgs else expr
 
-    def visitNode(subAst, enclosingBlock, enclosingLoop):
+    def visitNode(subAst):
         if isinstance(subAst, SympyAssignment):
-            subAst.lhs = visitSympyExpr(subAst.lhs, enclosingBlock, enclosingLoop)
-            subAst.rhs = visitSympyExpr(subAst.rhs, enclosingBlock, enclosingLoop)
+            enclosingBlock = subAst.parent
+            assert type(enclosingBlock) is Block
+            subAst.lhs = visitSympyExpr(subAst.lhs, enclosingBlock)
+            subAst.rhs = visitSympyExpr(subAst.rhs, enclosingBlock)
         else:
             for i, a in enumerate(subAst.args):
-                visitNode(a,
-                          subAst if isinstance(subAst, Block) else enclosingBlock,
-                          subAst if isinstance(subAst, LoopOverCoordinate) else enclosingLoop)
+                visitNode(a)
 
-    return visitNode(ast, None, None)
+    return visitNode(ast)
 
 
 def moveConstantsBeforeLoop(ast):
@@ -1062,6 +1157,12 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
 
     resolveFieldAccesses(code)
     moveConstantsBeforeLoop(code)
-
     addOpenMP(code)
+
     return code
+
+
+if __name__ == "__main__":
+    f = Field.createGeneric('f', 3, indexDimensions=1)
+    pointerSpec = [['spatialInner0']]
+    parseBasePointerSpecification(pointerSpec, [0, 1, 2], f)

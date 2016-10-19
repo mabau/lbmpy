@@ -76,16 +76,31 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     dirSymbol = gen.TypedSymbol("dir", "int")
     cellLoopBody.append(gen.SympyAssignment(dirSymbol, indexField[0](dim)))
 
-    pdfField.setFixedSpatialCoordinates(coordinateSymbols[:dim])
     cellLoopBody.append(boundaryFunctor(pdfField, dirSymbol, latticeModel))
 
     functionBody = gen.Block([cellLoop])
     ast = gen.KernelFunction(functionBody)
 
     functionBody.insertFront(LatticeModelInfo(latticeModel))
-    gen.resolveFieldAccesses(ast)
+    gen.resolveFieldAccesses(ast, fieldToFixedCoordinates={pdfField.name: coordinateSymbols[:dim]},
+                             basePointerSpecification=())
     gen.moveConstantsBeforeLoop(ast)
     return ast
+
+
+def createBoundaryIndexList(flagFieldArr, nrOfGhostLayers, stencil, boundaryMask, fluidMask):
+    result = []
+
+    gl = nrOfGhostLayers
+    for cell in itertools.product(*[range(gl, i-gl) for i in flagFieldArr.shape]):
+        if not flagFieldArr[cell] & fluidMask:
+            continue
+        for dirIdx, direction in enumerate(stencil):
+            neighborCell = tuple([cell_i + dir_i for cell_i, dir_i in zip(cell, direction)])
+            if flagFieldArr[neighborCell] & boundaryMask:
+                result.append(list(cell) + [dirIdx])
+
+    return np.array(result, dtype=np.int32)
 
 
 def noSlip(pdfField, direction, latticeModel):
