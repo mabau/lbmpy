@@ -23,7 +23,7 @@ CONFIG_CLANG = {
     'compiler': 'clang++',
     'flags': '-Ofast -DNDEBUG -fPIC -shared -march=native -fopenmp',
 }
-CONFIG = CONFIG_GCC
+CONFIG = CONFIG_INTEL
 
 
 def ctypeFromString(typename, includePointers=True):
@@ -78,13 +78,13 @@ def compileAndLoad(kernelFunctionNode):
         env.update(configEnv)
         subprocess.call(compilerCmd, env=env)
 
-        showAssembly = False
+        showAssembly = True
         if showAssembly:
             assemblyFile = os.path.join(tmpDir, "assembly.s")
             compilerCmd = [CONFIG['compiler'], '-S', '-o', assemblyFile, srcFile] + CONFIG['flags'].split()
             subprocess.call(compilerCmd, env=env)
             assembly = open(assemblyFile, 'r').read()
-            print(assembly)
+            kernelFunctionNode.assembly = assembly
         loadedJitLib = cdll.LoadLibrary(libFile)
 
     return loadedJitLib

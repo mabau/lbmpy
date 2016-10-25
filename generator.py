@@ -136,7 +136,7 @@ class Node:
     def atoms(self, argType):
         result = set()
         for arg in self.args:
-            if type(arg) == argType:
+            if isinstance(arg, argType):
                 result.add(arg)
             result.update(arg.atoms(argType))
         return result
@@ -161,6 +161,12 @@ class DebugNode(Node):
 
     def generateC(self):
         return c.LiteralLines(self._code)
+
+
+class PrintNode(DebugNode):
+    def __init__(self, symbolToPrint):
+        code = '\nstd::cout << "%s  =  " << %s << std::endl; \n' % (symbolToPrint.name, symbolToPrint.name)
+        super(PrintNode, self).__init__(code, [symbolToPrint])
 
 
 class KernelFunction(Node):
@@ -667,6 +673,10 @@ class Field:
                              "Got %d, expected %d" % (len(offset), self.spatialDimensions))
         return Field.Access(self, offset)
 
+    def __call__(self, *args, **kwargs):
+        center = tuple([0]*self.spatialDimensions)
+        return Field.Access(self, center)(*args, **kwargs)
+
     def __hash__(self):
         return hash((self._layout, self._shape, self._strides, self._dtype, self._fieldName))
 
@@ -722,7 +732,7 @@ class Field:
                 raise ValueError("Indexing an already indexed Field.Access")
 
             idx = tuple(idx)
-            if len(idx) != self.field.indexDimensions:
+            if len(idx) != self.field.indexDimensions and idx != (0,):
                 raise ValueError("Wrong number of indices: "
                                  "Got %d, expected %d" % (len(idx), self.field.indexDimensions))
             return Field.Access(self.field, self._offsets, idx)
@@ -779,7 +789,23 @@ class TypedSymbol(sp.Symbol):
         superClassContents = list(super(TypedSymbol, self)._hashable_content())
         t = tuple([*superClassContents, hash(self._dtype)])
         return t
+
+
 # --------------------------------------- Factory Functions ------------------------------------------------------------
+
+
+def getOptimalLoopOrdering(fields):
+    assert len(fields) > 0
+    refField = next(iter(fields))
+    for field in fields:
+        if field.spatialDimensions != refField.spatialDimensions:
+            raise ValueError("All fields have to have the same number of spatial dimensions")
+
+    layouts = set([field.layout for field in fields])
+    if len(layouts) > 1:
+        raise ValueError("Due to different layout of the fields no optimal loop ordering exists")
+    layout = list(layouts)[0]
+    return list(reversed(layout))
 
 
 def makeLoopOverDomain(body, functionName):
@@ -788,21 +814,11 @@ def makeLoopOverDomain(body, functionName):
     :param functionName: name of generated C function
     :return: LoopOverCoordinate instance with nested loops, ordered according to field layouts
     """
-
     # find correct ordering by inspecting participating FieldAccesses
     fieldAccesses = body.atoms(Field.Access)
     fieldList = [e.field for e in fieldAccesses]
     fields = set(fieldList)
-    assert len(fields) > 0
-    refField = fieldList[0]
-    for field in fields:
-        if field.spatialDimensions != refField.spatialDimensions:
-            raise ValueError("All fields have to have the same number of spatial dimensions")
-
-    layouts = set([field.layout for field in fields])
-    if len(layouts) > 1:
-        warnings.warn("makeLoopOverDomain: Due to different layout of the fields no optimal loop ordering exists")
-    layout = list(layouts)[0]
+    loopOrder = getOptimalLoopOrdering(fields)
 
     # find number of required ghost layers
     requiredGhostLayers = max([fa.requiredGhostLayers for fa in fieldAccesses])
@@ -819,9 +835,9 @@ def makeLoopOverDomain(body, functionName):
 
     currentBody = body
     lastLoop = None
-    for i, loopCoordinate in enumerate(reversed(layout)):
+    for i, loopCoordinate in enumerate(loopOrder):
         newLoop = LoopOverCoordinate(currentBody, loopCoordinate, shape, 1, requiredGhostLayers,
-                                     isInnermostLoop=(i == 0), isOutermostLoop=(i == len(layout) - 1))
+                                     isInnermostLoop=(i == 0), isOutermostLoop=(i == len(loopOrder) - 1))
         lastLoop = newLoop
         currentBody = Block([lastLoop])
     return KernelFunction(currentBody, functionName)
@@ -859,7 +875,7 @@ def createIntermediateBasePointer(fieldAccess, coordinates, previousPtr):
     return newPtr, offset
 
 
-def parseBasePointerSpecification(basePointerSpecification, loopOrder, field):
+def parseBasePointerInfo(basePointerSpecification, loopOrder, field):
     """
     Allowed specifications:
     "spatialInner<int>" spatialInner0 is the innermost loop coordinate, spatialInner1 the loop enclosing the innermost
@@ -878,7 +894,7 @@ def parseBasePointerSpecification(basePointerSpecification, loopOrder, field):
 
         def addNewElement(i):
             if i >= field.spatialDimensions + field.indexDimensions:
-                raise ValueError("Coordinate %d does not exist" % (i,) )
+                raise ValueError("Coordinate %d does not exist" % (i,))
             newGroup.append(i)
             if i in specifiedCoordinates:
                 raise ValueError("Coordinate %d specified two times" % (i,))
@@ -925,15 +941,17 @@ def getLoopHierarchy(block):
     return result
 
 
-def resolveFieldAccesses(ast, fieldToFixedCoordinates={},
-                         basePointerSpecification=(('spatialInner0',), ('spatialInner1',))
-                         ):
+def resolveFieldAccesses(ast, fieldToBasePointerInfo={}, fieldToFixedCoordinates={}):
     """Substitutes FieldAccess nodes by array indexing"""
 
     def visitSympyExpr(expr, enclosingBlock):
         if isinstance(expr, Field.Access):
             fieldAccess = expr
             field = fieldAccess.field
+            if field.name in fieldToBasePointerInfo:
+                basePointerInfo = fieldToBasePointerInfo[field.name]
+            else:
+                basePointerInfo = [list(range(field.indexDimensions + field.spatialDimensions))]
 
             dtype = "%s * __restrict__" % field.dtype
             if field.readOnly:
@@ -941,8 +959,6 @@ def resolveFieldAccesses(ast, fieldToFixedCoordinates={},
 
             fieldPtr = TypedSymbol("%s%s" % (FIELD_PTR_PREFIX, field.name), dtype)
 
-            loopHierarchy = getLoopHierarchy(enclosingBlock)
-            basePtrSpec = parseBasePointerSpecification(basePointerSpecification, loopHierarchy, field)
             lastPointer = fieldPtr
 
             def createCoordinateDict(group):
@@ -957,14 +973,14 @@ def resolveFieldAccesses(ast, fieldToFixedCoordinates={},
                         coordDict[e] = fieldAccess.index[e-field.spatialDimensions]
                 return coordDict
 
-            for group in reversed(basePtrSpec[1:]):
+            for group in reversed(basePointerInfo[1:]):
                 coordDict = createCoordinateDict(group)
                 newPtr, offset = createIntermediateBasePointer(fieldAccess, coordDict, lastPointer)
                 if newPtr not in enclosingBlock.symbolsDefined:
                     enclosingBlock.insertFront(SympyAssignment(newPtr, lastPointer + offset, isConst=False))
                 lastPointer = newPtr
 
-            _, offset = createIntermediateBasePointer(fieldAccess, createCoordinateDict(basePtrSpec[0]), lastPointer)
+            _, offset = createIntermediateBasePointer(fieldAccess, createCoordinateDict(basePointerInfo[0]), lastPointer)
             baseArr = IndexedBase(lastPointer, shape=(1,))
             return baseArr[offset]
         else:
@@ -1085,6 +1101,18 @@ def splitInnerLoop(ast, symbolGroups):
 
 # ------------------------------------- Main ---------------------------------------------------------------------------
 
+
+def extractCommonSubexpressions(equations):
+    """Uses sympy to find common subexpressions in equations and returns
+    them in a topologically sorted order, ready for evaluation"""
+    replacements, newEq = sp.cse(equations)
+    replacementEqs = [sp.Eq(*r) for r in replacements]
+    equations = replacementEqs + newEq
+    topologicallySortedPairs = sp.cse_main.reps_toposort([[e.lhs, e.rhs] for e in equations])
+    equations = [sp.Eq(*a) for a in topologicallySortedPairs]
+    return equations
+
+
 def addOpenMP(ast):
     assert type(ast) is KernelFunction
     body = ast.body
@@ -1155,7 +1183,13 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
         typedSplitGroups = [[typeSymbol(s) for s in splitGroup] for splitGroup in splitGroups]
         splitInnerLoop(code, typedSplitGroups)
 
-    resolveFieldAccesses(code)
+    allFields = fieldsRead.union(fieldsWritten)
+    loopOrder = getOptimalLoopOrdering(allFields)
+
+    basePointerInfo = [['spatialInner0'], ['spatialInner1']]
+    basePointerInfos = {f.name: parseBasePointerInfo(basePointerInfo, loopOrder, f) for f in allFields}
+
+    resolveFieldAccesses(code, fieldToBasePointerInfo=basePointerInfos)
     moveConstantsBeforeLoop(code)
     addOpenMP(code)
 
@@ -1165,4 +1199,4 @@ def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdi
 if __name__ == "__main__":
     f = Field.createGeneric('f', 3, indexDimensions=1)
     pointerSpec = [['spatialInner0']]
-    parseBasePointerSpecification(pointerSpec, [0, 1, 2], f)
+    parseBasePointerInfo(pointerSpec, [0, 1, 2], f)

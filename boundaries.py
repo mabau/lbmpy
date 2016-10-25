@@ -4,7 +4,7 @@ import lbmpy.generator as gen
 import numpy as np
 import cgen as c
 
-from stencils import getStencil
+from lbmpy.stencils import getStencil
 
 INV_DIR_SYMBOL = gen.TypedSymbol("invDir", "int")
 WEIGHTS_SYMBOL = gen.TypedSymbol("weights", "double")
@@ -83,7 +83,7 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
 
     functionBody.insertFront(LatticeModelInfo(latticeModel))
     gen.resolveFieldAccesses(ast, fieldToFixedCoordinates={pdfField.name: coordinateSymbols[:dim]},
-                             basePointerSpecification=())
+                             basePointerSpecification=((0,),))
     gen.moveConstantsBeforeLoop(ast)
     return ast
 
