@@ -417,19 +417,11 @@ class SympyAssignment(Node):
 
     def __init__(self, lhsSymbol, rhsTerm, isConst=True):
         self._lhsSymbol = lhsSymbol
-        self._rhsTerm = rhsTerm
+        self.rhs = rhsTerm
         self._isDeclaration = True
         if isinstance(self._lhsSymbol, Field.Access) or isinstance(self._lhsSymbol, IndexedBase):
             self._isDeclaration = False
         self._isConst = isConst
-
-    @property
-    def rhs(self):
-        return self._rhsTerm
-
-    @rhs.setter
-    def rhs(self, newValue):
-        self._rhsTerm = newValue
 
     @property
     def lhs(self):
@@ -444,7 +436,7 @@ class SympyAssignment(Node):
 
     @property
     def args(self):
-        return [self._lhsSymbol, self._rhsTerm]
+        return [self._lhsSymbol, self.rhs]
 
     @property
     def symbolsDefined(self):
@@ -454,7 +446,7 @@ class SympyAssignment(Node):
 
     @property
     def symbolsRead(self):
-        result = self._rhsTerm.atoms(sp.Symbol)
+        result = self.rhs.atoms(sp.Symbol)
         result.update(self._lhsSymbol.atoms(sp.Symbol))
         return result
 
@@ -474,7 +466,29 @@ class SympyAssignment(Node):
                 dtype = self._lhsSymbol.dtype + " "
 
         return c.Assign(dtype + codePrinter.doprint(self._lhsSymbol),
-                        codePrinter.doprint(self._rhsTerm))
+                        codePrinter.doprint(self.rhs))
+
+
+class CustomCppCode(Node):
+    def __init__(self, code, symbolsRead, symbolsDefined):
+        self._code = "\n" + code
+        self._symbolsRead = set(symbolsRead)
+        self._symbolsDefined = set(symbolsDefined)
+
+    @property
+    def args(self):
+        return []
+
+    @property
+    def symbolsDefined(self):
+        return self._symbolsDefined
+
+    @property
+    def symbolsRead(self):
+        return self._symbolsRead
+
+    def generateC(self):
+        return c.LiteralLines(self._code)
 
 
 class TemporaryArrayDefinition(Node):
@@ -1154,9 +1168,14 @@ def typeAllEquations(eqs, typeForSymbol):
 
     typedEquations = []
     for eq in eqs:
-        newLhs = processLhs(eq.lhs)
-        newRhs = processRhs(eq.rhs)
-        typedEquations.append(SympyAssignment(newLhs, newRhs))
+        if isinstance(eq, sp.Eq):
+            newLhs = processLhs(eq.lhs)
+            newRhs = processRhs(eq.rhs)
+            typedEquations.append(SympyAssignment(newLhs, newRhs))
+        else:
+            assert isinstance(eq, Node), "Only equations and ast nodes are allowed in input"
+            typedEquations.append(eq)
+
     typedEquations = typedEquations
 
     return fieldsRead, fieldsWritten, typedEquations
