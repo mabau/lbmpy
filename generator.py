@@ -25,12 +25,16 @@ SHAPE_DTYPE = "const int *"
 class CodePrinter(CCodePrinter):
     def _print_Pow(self, expr):
         if expr.exp.is_integer and expr.exp.is_number and expr.exp > 0:
-            return '(' + '*'.join([self._print(expr.base)] * expr.exp) + ')'
+            return '(' + '*'.join(["(" + self._print(expr.base) + ")"] * expr.exp) + ')'
         else:
             return super(CodePrinter, self)._print_Pow(expr)
 
     def _print_Rational(self, expr):
         return str(expr.evalf().num)
+
+    def _print_Piecewise(self, expr):
+        str = super(CodePrinter, self)._print_Piecewise(expr)
+        return str.replace("\n", "")
 
 codePrinter = CodePrinter()
 
