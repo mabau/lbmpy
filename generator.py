@@ -1003,7 +1003,7 @@ def resolveFieldAccesses(ast, fieldToBasePointerInfo={}, fieldToFixedCoordinates
             return baseArr[offset]
         else:
             newArgs = [visitSympyExpr(e, enclosingBlock) for e in expr.args]
-            kwargs = {'evaluate': False} if type(expr) == sp.Add or type(expr) == sp.Mul else {}
+            kwargs = {'evaluate': False} if type(expr) is sp.Add or type(expr) is sp.Mul else {}
             return expr.func(*newArgs, **kwargs) if newArgs else expr
 
     def visitNode(subAst):
