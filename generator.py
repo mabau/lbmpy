@@ -4,10 +4,10 @@ import cgen as c
 import numpy as np
 import sympy as sp
 from sympy.core.cache import cacheit
+from sympy.logic.boolalg import Boolean
 from sympy.utilities.codegen import CCodePrinter
 from sympy.tensor import IndexedBase, Indexed
 from collections import defaultdict
-import warnings
 
 COORDINATE_LOOP_COUNTER_NAME = "ctr"
 FIELD_PREFIX = "f"
@@ -31,6 +31,9 @@ class CodePrinter(CCodePrinter):
 
     def _print_Rational(self, expr):
         return str(expr.evalf().num)
+
+    def _print_Equality(self, expr):
+        return '((' + self._print(expr.lhs) + ") == (" + self._print(expr.rhs) + '))'
 
     def _print_Piecewise(self, expr):
         str = super(CodePrinter, self)._print_Piecewise(expr)
@@ -1173,6 +1176,7 @@ def typeAllEquations(eqs, typeForSymbol):
     typedEquations = []
     for eq in eqs:
         if isinstance(eq, sp.Eq):
+            sp.Add
             newLhs = processLhs(eq.lhs)
             newRhs = processRhs(eq.rhs)
             typedEquations.append(SympyAssignment(newLhs, newRhs))
@@ -1185,7 +1189,17 @@ def typeAllEquations(eqs, typeForSymbol):
     return fieldsRead, fieldsWritten, typedEquations
 
 
-def createKernel(listOfEquations, functionName="kernel", typeForSymbol=defaultdict(lambda: "double"), splitGroups=[]):
+def typingFromSympyInspection(eqs, defaultType="double"):
+    result = defaultdict(lambda: defaultType)
+    for eq in eqs:
+        if isinstance(eq.rhs, Boolean):
+            result[eq.lhs.name] = "bool"
+    return result
+
+
+def createKernel(listOfEquations, functionName="kernel", typeForSymbol=None, splitGroups=[]):
+    if not typeForSymbol:
+        typeForSymbol = typingFromSympyInspection(listOfEquations, "double")
 
     def typeSymbol(term):
         if isinstance(term, Field.Access) or isinstance(term, TypedSymbol):
