@@ -1,14 +1,16 @@
-import lbmpy.generator as generator
-import lbmpy.util as util
-import sympy as sp
-import lbmpy.transformations as trafos
-from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
-from lbmpy.generator import Field
-from collections import Counter, defaultdict
 import operator
+from collections import Counter, defaultdict
 
+import sympy as sp
 from joblib import Memory
-memory = Memory(cachedir="/tmp/pylbm", verbose=False)
+
+import lbmpy.transformations as trafos
+import lbmpy.util as util
+import pystencils.generator as generator
+from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
+from pystencils.generator import Field
+
+memory = Memory(cachedir="/tmp/lbmpy", verbose=False)
 
 
 def getCommonQuadraticAndConstantTerms(simplifiedUpdateRuleForCenter, latticeModel):

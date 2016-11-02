@@ -1,9 +1,10 @@
 import itertools
-import sympy as sp
-import lbmpy.generator as gen
-import numpy as np
-import cgen as c
 
+import cgen as c
+import numpy as np
+import sympy as sp
+
+import pystencils.generator as gen
 from lbmpy.stencils import getStencil
 
 INV_DIR_SYMBOL = gen.TypedSymbol("invDir", "int")
