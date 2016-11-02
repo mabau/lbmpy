@@ -82,8 +82,7 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     ast = gen.KernelFunction(functionBody)
 
     functionBody.insertFront(LatticeModelInfo(latticeModel))
-    gen.resolveFieldAccesses(ast, fieldToFixedCoordinates={pdfField.name: coordinateSymbols[:dim]},
-                             basePointerSpecification=((0,),))
+    gen.resolveFieldAccesses(ast, fieldToFixedCoordinates={pdfField.name: coordinateSymbols[:dim]})
     gen.moveConstantsBeforeLoop(ast)
     return ast
 

@@ -65,7 +65,8 @@ def compileAndLoad(kernelFunctionNode):
     with TemporaryDirectory() as tmpDir:
         srcFile = os.path.join(tmpDir, 'source.cpp')
         with open(srcFile, 'w') as sourceFile:
-            print('#include <iostream>', file=sourceFile);
+            print('#include <iostream>', file=sourceFile)
+            print("#include <cmath>", file=sourceFile)
             print('extern "C" { ', file=sourceFile)
             print(kernelFunctionNode.generateC(), file=sourceFile)
             print('}', file=sourceFile)
@@ -130,7 +131,7 @@ def makePythonFunctionIncompleteParams(kernelFunctionNode, argumentDict):
     return wrapper
 
 
-def makePythonFunction(kernelFunctionNode, argumentDict):
+def makePythonFunction(kernelFunctionNode, argumentDict={}):
     # build up list of CType arguments
     try:
         args = buildCTypeArgumentList(kernelFunctionNode, argumentDict)
