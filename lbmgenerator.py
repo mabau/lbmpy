@@ -6,9 +6,8 @@ from joblib import Memory
 
 import lbmpy.transformations as trafos
 import lbmpy.util as util
-import pystencils.generator as generator
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
-from pystencils.generator import Field
+from pystencils.field import Field
 
 memory = Memory(cachedir="/tmp/lbmpy", verbose=False)
 
@@ -134,11 +133,11 @@ def createCollisionEquations(lm, pdfSymbols, dstField, doCSE):
 
 def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="dst", doCSE=False):
     if numpyField is None:
-        src = generator.Field.createGeneric(srcFieldName, lm.dim, indexDimensions=1)
-        dst = generator.Field.createGeneric(dstFieldName, lm.dim, indexDimensions=1)
+        src = Field.createGeneric(srcFieldName, lm.dim, indexDimensions=1)
+        dst = Field.createGeneric(dstFieldName, lm.dim, indexDimensions=1)
     else:
-        src = generator.Field.createFromNumpyArray(srcFieldName, numpyField, indexDimensions=1)
-        dst = generator.Field.createFromNumpyArray(dstFieldName, numpyField, indexDimensions=1)
+        src = Field.createFromNumpyArray(srcFieldName, numpyField, indexDimensions=1)
+        dst = Field.createFromNumpyArray(dstFieldName, numpyField, indexDimensions=1)
 
     streamedPdfs = []
     for ownIdx, offset in enumerate(lm.stencil):

@@ -51,7 +51,7 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
                                            variableSize=False, replaceRelaxationTimes=False, doCSE=False,
                                            splitInnerLoop=True):
     from lbmpy.lbmgenerator import createLbmEquations, createLbmSplitGroups
-    from pystencils.generator import createKernel
+    from pystencils.transformations import createKernel
     from waLBerla import field
 
     if type(walberlaLatticeModel.collisionModel) == lbm.collisionModels.SRT:
