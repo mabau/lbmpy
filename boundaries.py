@@ -57,7 +57,7 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     dim = latticeModel.dim
 
     cellLoopBody = Block([])
-    cellLoop = LoopOverCoordinate(cellLoopBody, 0, indexArr.shape, increment=1, ghostLayers=0)
+    cellLoop = LoopOverCoordinate(cellLoopBody, coordinateToLoopOver=0, start=0, stop=indexArr.shape[0])
 
     indexField = Field.createFromNumpyArray("indexField", indexArr, indexDimensions=1)
 
