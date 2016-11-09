@@ -78,7 +78,7 @@ def cseInOpposingDirections(updateRules, stencil, relaxationParameters):
     return substitutions, result
 
 
-def createCollisionEquations(lm, pdfSymbols, dstField, doCSE):
+def createCollisionEquations(lm, pdfSymbols, dstField, forceModel=None, doCSE=False):
     replacements = []
     result = []
 
@@ -103,7 +103,8 @@ def createCollisionEquations(lm, pdfSymbols, dstField, doCSE):
             s = trafos.replaceAdditive(s, replacement.lhs, replacement.rhs, len(replacement.rhs.args) // 2)
 
         noOffset = tuple([0] * lm.dim)
-        updateEquations.append(sp.Eq(dstField[noOffset](i), pdfSymbols[i] + s))
+        forceTerm = 0 if forceModel is None else forceModel(stencil=lm.stencil)[i]
+        updateEquations.append(sp.Eq(dstField[noOffset](i), pdfSymbols[i] + s + forceTerm))
 
     replacements += velocitySumReplacements
 
@@ -131,7 +132,7 @@ def createCollisionEquations(lm, pdfSymbols, dstField, doCSE):
     return result, replacements
 
 
-def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="dst", doCSE=False):
+def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="dst", forceModel=None, doCSE=False):
     if numpyField is None:
         src = Field.createGeneric(srcFieldName, lm.dim, indexDimensions=1)
         dst = Field.createGeneric(dstFieldName, lm.dim, indexDimensions=1)
@@ -146,7 +147,7 @@ def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="ds
 
     densityVelocityDefinition = getDensityVelocityExpressions(lm.stencil, streamedPdfs, lm.compressible)
 
-    collideEqs, subExpressions = createCollisionEquations(lm, streamedPdfs, dst, doCSE)
+    collideEqs, subExpressions = createCollisionEquations(lm, streamedPdfs, dst, forceModel=forceModel, doCSE=doCSE)
 
     return densityVelocityDefinition + subExpressions + collideEqs
 

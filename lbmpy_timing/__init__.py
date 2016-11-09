@@ -10,7 +10,6 @@ default_parameters = {
     'variableLoopBounds': False,
     'replaceRelaxationTimes': False,
     'layout': 'fzyx',
-    #'domain_size': (200, 200, 200),
     'domain_size': (200, 100, 100),
     'threads': 1,
     'timesteps': 5,
