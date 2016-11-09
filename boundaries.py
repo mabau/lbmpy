@@ -61,7 +61,6 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
 
     indexField = Field.createFromNumpyArray("indexField", indexArr, indexDimensions=1)
 
-    indexField.setReadOnly()
     coordinateSymbols = [TypedSymbol(name, "int") for name in ['x', 'y', 'z']]
     for d in range(dim):
         cellLoopBody.append(SympyAssignment(coordinateSymbols[d], indexField[0](d)))
@@ -74,7 +73,7 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     ast = KernelFunction(functionBody)
 
     functionBody.insertFront(LatticeModelInfo(latticeModel))
-    resolveFieldAccesses(ast, fieldToFixedCoordinates={pdfField.name: coordinateSymbols[:dim]})
+    resolveFieldAccesses(ast, set(['indexField']), fieldToFixedCoordinates={pdfField.name: coordinateSymbols[:dim]})
     moveConstantsBeforeLoop(ast)
     return ast
 
