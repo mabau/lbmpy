@@ -1,15 +1,34 @@
 from waLBerla import lbm
+import lbmpy.forcemodels as forcemodels
 
 
 def convertWalberlaToLbmpyLatticeModel(lm):
     from lbmpy.latticemodel import makeSRT, makeTRT, makeMRT
     stencil = lm.directions
+
+    def getForce():
+        dim = len(stencil[0])
+        forceAsList = list(lm.forceModel.force())
+        return tuple(forceAsList[:dim])
+
+    if type(lm.forceModel) == lbm.forceModels.SimpleConstant:
+        forceModel = forcemodels.Simple(getForce())
+    elif type(lm.forceModel) == lbm.forceModels.LuoConstant:
+        forceModel = forcemodels.Luo(getForce())
+    elif type(lm.forceModel) == lbm.forceModels.GuoConstant:
+        # currently only works with SRT -> more complex Guo version taking omega_bulk has to be implemented
+        forceModel = forcemodels.Guo(getForce(), lm.collisionModel.omega)
+    elif type(lm.forceModel) == lbm.forceModels.NoForce:
+        forceModel = None
+    else:
+        raise NotImplementedError("No such force model in lbmpy")
+
     if type(lm.collisionModel) == lbm.collisionModels.SRT:
-        return makeSRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder)
+        return makeSRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder, forceModel=forceModel)
     elif type(lm.collisionModel) == lbm.collisionModels.TRT:
-        return makeTRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder)
+        return makeTRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder, forceModel=forceModel)
     elif type(lm.collisionModel) == lbm.collisionModels.D3Q19MRT:
-        return makeMRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder)
+        return makeMRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder, forceModel=forceModel)
     else:
         raise ValueError("Unknown lattice model")
 

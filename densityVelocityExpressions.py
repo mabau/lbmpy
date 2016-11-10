@@ -40,13 +40,14 @@ def getDensityVelocityExpressions(stencil, symbolicPdfs, compressible):
         u[i] = u[i].subs(subexpressions[i].rhs, subexpressions[i].lhs)
         u[i] = sp.Eq(symbolicVel[i], u[i])
 
+    velSubexpressions = []
     if compressible:
         rho_inv = sp.Symbol("rho_inv")
         rho_inv_eq = sp.Eq(rho_inv, 1 / util.getSymbolicDensity())
         u = [sp.Eq(u_i.lhs, u_i.rhs*rho_inv) for u_i in u]
-        u.insert(0, rho_inv_eq)
+        velSubexpressions.append(rho_inv_eq)
 
-    return subexpressions + [rho] + u
+    return subexpressions, rho, velSubexpressions, u
 
 
 

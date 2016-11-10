@@ -41,9 +41,7 @@ class Luo:
         self._force = force
 
     def __call__(self, latticeModel):
-        dim = len(latticeModel.stencil[0])
-        assert len(self._force) == dim
-        u = sp.Matrix(util.getSymbolicVelocityVector(dim))
+        u = sp.Matrix(util.getSymbolicVelocityVector(latticeModel.dim))
 
         force = sp.Matrix(self._force)
 
@@ -75,7 +73,7 @@ class Guo:
     def __call__(self, latticeModel):
         luo = Luo(self._force)
         correctionFactor = (1 - sp.Rational(1, 2) * self._viscosityRelaxationRate)
-        return [correctionFactor * t for t in luo(latticeModel.stencil)]
+        return [correctionFactor * t for t in luo(latticeModel)]
 
     def macroscopicVelocity(self, latticeModel, vel, density):
         return defaultVelocityShift(vel, density, self._force, latticeModel.compressible)

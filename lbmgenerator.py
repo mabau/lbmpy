@@ -90,10 +90,6 @@ def createCollisionEquations(lm, pdfSymbols, dstField, densityOutputField=None, 
     rhoDefinition = [sp.Eq(rho, sum(pdfSymbols))]
     uDefinition = [sp.Eq(u_i, u_term_i) for u_i, u_term_i in zip(u, lm.getVelocityTerms(pdfSymbols))]
 
-    if hasattr(lm.forceModel, "equilibriumVelocity"):
-        uDefinition = [sp.Eq(eq.lhs, lm.forceModel.macroscopicVelocity(lm, eq.rhs, rho))
-                       for eq in uDefinition]
-
     updateEquations = []
     velocitySumReplacements = []
     for i, s in enumerate(terms):
@@ -163,7 +159,8 @@ def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="ds
     :param doCSE: if True, common subexpression elimination is done for pdfs in opposing directions
     :return: list of sympy equations
     """
-    assert len(numpyField.shape) == lm.dim + 1
+    if numpyField is not None:
+        assert len(numpyField.shape) == lm.dim + 1
 
     velOutField = None
     densityOutField = None
@@ -192,7 +189,15 @@ def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="ds
         inverseIdx = tuple([-d for d in offset])
         streamedPdfs.append(src[inverseIdx](ownIdx))
 
-    densityVelocityDefinition = getDensityVelocityExpressions(lm.stencil, streamedPdfs, lm.compressible)
+    rhoSubexprs, rhoEq, uSubexrp, uEqs = getDensityVelocityExpressions(lm.stencil, streamedPdfs, lm.compressible)
+
+    if hasattr(lm.forceModel, "equilibriumVelocity"):
+        uSymbols = [e.lhs for e in uEqs]
+        uRhs = [e.rhs for e in uEqs]
+        correctedVel = lm.forceModel.macroscopicVelocity(lm, uRhs, rhoEq.lhs)
+        uEqs = [sp.Eq(u_i, correctedVel_i) for u_i, correctedVel_i in zip(uSymbols, correctedVel)]
+
+    densityVelocityDefinition = rhoSubexprs + [rhoEq] + uSubexrp + uEqs
 
     collideEqs, subExpressions = createCollisionEquations(lm, streamedPdfs, dst, velocityOutputField=velOutField,
                                                           densityOutputField=densityOutField, doCSE=doCSE)
