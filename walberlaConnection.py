@@ -2,7 +2,7 @@ from waLBerla import lbm
 
 
 def convertWalberlaToLbmpyLatticeModel(lm):
-    from lbmpy.collisionoperator import makeSRT, makeTRT, makeMRT
+    from lbmpy.latticemodel import makeSRT, makeTRT, makeMRT
     stencil = lm.directions
     if type(lm.collisionModel) == lbm.collisionModels.SRT:
         return makeSRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder)

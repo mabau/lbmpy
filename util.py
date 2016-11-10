@@ -1,6 +1,10 @@
 import sympy as sp
 
 
+def scalarProduct(a, b):
+    return sum(a_i * b_i for a_i, b_i in zip(a, b))
+
+
 def getSymbolicVelocityVector(dim, name="u"):
     return sp.symbols(" ".join(["%s_%d" % (name, i) for i in range(dim)]))
 

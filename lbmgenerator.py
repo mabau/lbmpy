@@ -7,7 +7,7 @@ from joblib import Memory
 import lbmpy.transformations as trafos
 import lbmpy.util as util
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
-from pystencils.field import Field
+from pystencils.field import Field, getLayoutFromNumpyArray
 
 memory = Memory(cachedir="/tmp/lbmpy", verbose=False)
 
@@ -78,7 +78,7 @@ def cseInOpposingDirections(updateRules, stencil, relaxationParameters):
     return substitutions, result
 
 
-def createCollisionEquations(lm, pdfSymbols, dstField, forceModel=None, doCSE=False):
+def createCollisionEquations(lm, pdfSymbols, dstField, densityOutputField=None, velocityOutputField=None, doCSE=False):
     replacements = []
     result = []
 
@@ -89,6 +89,10 @@ def createCollisionEquations(lm, pdfSymbols, dstField, forceModel=None, doCSE=Fa
 
     rhoDefinition = [sp.Eq(rho, sum(pdfSymbols))]
     uDefinition = [sp.Eq(u_i, u_term_i) for u_i, u_term_i in zip(u, lm.getVelocityTerms(pdfSymbols))]
+
+    if hasattr(lm.forceModel, "equilibriumVelocity"):
+        uDefinition = [sp.Eq(eq.lhs, lm.forceModel.macroscopicVelocity(lm, eq.rhs, rho))
+                       for eq in uDefinition]
 
     updateEquations = []
     velocitySumReplacements = []
@@ -103,7 +107,7 @@ def createCollisionEquations(lm, pdfSymbols, dstField, forceModel=None, doCSE=Fa
             s = trafos.replaceAdditive(s, replacement.lhs, replacement.rhs, len(replacement.rhs.args) // 2)
 
         noOffset = tuple([0] * lm.dim)
-        forceTerm = 0 if forceModel is None else forceModel(stencil=lm.stencil)[i]
+        forceTerm = 0 if lm.forceModel is None else lm.forceModel(latticeModel=lm)[i]
         updateEquations.append(sp.Eq(dstField[noOffset](i), pdfSymbols[i] + s + forceTerm))
 
     replacements += velocitySumReplacements
@@ -129,10 +133,53 @@ def createCollisionEquations(lm, pdfSymbols, dstField, forceModel=None, doCSE=Fa
         replacements += repl
     result += updateRulesTransformed
 
+    if densityOutputField is not None:
+        result.append(sp.Eq(densityOutputField(0), rho))
+    if velocityOutputField is not None:
+        if hasattr(lm.forceModel, "macroscopicVelocity"):
+            macroscopicVelocity = lm.forceModel.macroscopicVelocity(lm, u, rho)
+        else:
+            macroscopicVelocity = u
+        result += [sp.Eq(velocityOutputField(i), u_i) for i, u_i in enumerate(macroscopicVelocity)]
+
     return result, replacements
 
 
-def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="dst", forceModel=None, doCSE=False):
+def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="dst",
+                       velocityOutputField=None, densityOutputField=None,
+                       doCSE=False):
+    """
+    Creates a list of LBM update equations
+    :param lm: instance of lattice model
+    :param numpyField: optional numpy field for PDFs. Used to create a kernel of fixed loop bounds and strides
+                       if None, a generic kernel is created
+    :param srcFieldName: name of the pdf source field
+    :param dstFieldName: name of the pdf destination field
+    :param velocityOutputField: can be either None in which case the velocity is not written to field
+                                if it is a string, velocity is written to a generic velocity field with that name
+                                if it is a tuple (name, numpyArray), the numpyArray is used to determine size and stride
+                                of the output field
+    :param densityOutputField: similar to velocityOutputField
+    :param doCSE: if True, common subexpression elimination is done for pdfs in opposing directions
+    :return: list of sympy equations
+    """
+    assert len(numpyField.shape) == lm.dim + 1
+
+    velOutField = None
+    densityOutField = None
+
+    layout = tuple(getLayoutFromNumpyArray(numpyField)[:lm.dim]) if numpyField is not None else None
+    if velocityOutputField:
+        if isinstance(velocityOutputField, tuple):
+            velOutField = Field.createFromNumpyArray(velocityOutputField[0], velocityOutputField[1], indexDimensions=1)
+        else:
+            velOutField = Field.createGeneric(velocityOutputField, lm.dim, indexDimensions=1, layout=layout)
+    if densityOutputField:
+        if isinstance(densityOutputField, tuple):
+            densityOutField = Field.createFromNumpyArray(densityOutputField[0], densityOutputField[1])
+        else:
+            densityOutField = Field.createGeneric(densityOutputField, lm.dim, indexDimensions=0, layout=layout)
+
     if numpyField is None:
         src = Field.createGeneric(srcFieldName, lm.dim, indexDimensions=1)
         dst = Field.createGeneric(dstFieldName, lm.dim, indexDimensions=1)
@@ -147,7 +194,8 @@ def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="ds
 
     densityVelocityDefinition = getDensityVelocityExpressions(lm.stencil, streamedPdfs, lm.compressible)
 
-    collideEqs, subExpressions = createCollisionEquations(lm, streamedPdfs, dst, forceModel=forceModel, doCSE=doCSE)
+    collideEqs, subExpressions = createCollisionEquations(lm, streamedPdfs, dst, velocityOutputField=velOutField,
+                                                          densityOutputField=densityOutField, doCSE=doCSE)
 
     return densityVelocityDefinition + subExpressions + collideEqs
 
