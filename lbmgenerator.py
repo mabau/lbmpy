@@ -212,6 +212,10 @@ def createLbmSplitGroups(lm, equations):
     result = [
         list(util.getSymbolicVelocityVector(lm.dim)),
     ]
+
+    if lm.compressible:
+        result[0].append(rho)
+
     directionGroups = defaultdict(list)
 
     for eq in equations:
