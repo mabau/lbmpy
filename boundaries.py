@@ -1,6 +1,5 @@
 import itertools
 
-import cgen as c
 import numpy as np
 import sympy as sp
 
