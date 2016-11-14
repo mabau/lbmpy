@@ -4,10 +4,7 @@ import sympy as sp
 from lbmpy.util import getSymbolicDensity, getSymbolicVelocityVector, getSymbolicSoundSpeed
 from lbmpy.moments import momentMatrix, continuousMoment, MOMENT_SYMBOLS
 from lbmpy.transformations import removeHigherOrderTerms
-
-from joblib import Memory
-
-memory = Memory(cachedir="/tmp/pylbm", verbose=False)
+from lbmpy.diskcache import diskcache
 
 
 def getWeights(stencil):
@@ -42,7 +39,7 @@ getWeights.weights = {
 }
 
 
-@memory.cache
+@diskcache
 def standardDiscreteEquilibrium(stencil, rho=None, u=None, order=2, c_s_sq=None, compressible=True):
     """
     Returns the common quadratic LBM equilibrium as a list of sympy expressions
@@ -97,7 +94,7 @@ def standardDiscreteEquilibrium(stencil, rho=None, u=None, order=2, c_s_sq=None,
     return sp.Matrix(len(stencil), 1, res)
 
 
-@memory.cache
+@diskcache
 def maxwellBoltzmannEquilibrium(dimension=3, rho=None, u=None, v=None, c_s_sq=None):
     """
     Returns sympy expression of Maxwell Boltzmann distribution
@@ -125,7 +122,7 @@ def maxwellBoltzmannEquilibrium(dimension=3, rho=None, u=None, v=None, c_s_sq=No
     return rho / (2 * sp.pi * c_s_sq) ** (R(D, 2)) * sp.exp(- velTerm / (2 * c_s_sq))
 
 
-@memory.cache
+@diskcache
 def getEquilibriumMoments(listOfMoments, continuousEquilibrium, u, v, order=None):
     result = []
     for moment in listOfMoments:
@@ -139,7 +136,7 @@ def getEquilibriumMoments(listOfMoments, continuousEquilibrium, u, v, order=None
     return result
 
 
-@memory.cache
+@diskcache
 def getMaxwellBoltzmannEquilibriumMoments(moments, order=None, velSymbols=MOMENT_SYMBOLS):
     dim = len(velSymbols)
     rho = getSymbolicDensity()
@@ -148,7 +145,7 @@ def getMaxwellBoltzmannEquilibriumMoments(moments, order=None, velSymbols=MOMENT
     return getEquilibriumMoments(moments, mb, u, velSymbols, order)
 
 
-@memory.cache
+@diskcache
 def generateEquilibriumByMatchingMoments(stencil, moments, order=None, velSymbols=MOMENT_SYMBOLS):
     Q = len(stencil)
     assert len(moments) == Q, "Moment count(%d) does not match stencil size(%d)" % (len(moments), Q)

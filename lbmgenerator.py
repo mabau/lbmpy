@@ -2,14 +2,10 @@ import operator
 from collections import Counter, defaultdict
 
 import sympy as sp
-from joblib import Memory
-
 import lbmpy.transformations as trafos
 import lbmpy.util as util
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 from pystencils.field import Field, getLayoutFromNumpyArray
-
-memory = Memory(cachedir="/tmp/lbmpy", verbose=False)
 
 
 def getCommonQuadraticAndConstantTerms(simplifiedUpdateRuleForCenter, latticeModel):
@@ -230,24 +226,16 @@ def createLbmSplitGroups(lm, equations):
             result[0].append(eq.lhs)
             continue
 
-        dir = lm.stencil[idx]
-        inverseDir = tuple([-i for i in dir])
+        direction = lm.stencil[idx]
+        inverseDir = tuple([-i for i in direction])
 
         if inverseDir in directionGroups:
             directionGroups[inverseDir].append(eq.lhs)
         else:
-            directionGroups[dir].append(eq.lhs)
+            directionGroups[direction].append(eq.lhs)
     result += directionGroups.values()
 
     if f_eq_common not in result[0]:
         result[0].append(rho)
 
     return result
-
-
-if __name__ == "__main__":
-    from lbmpy.collisionoperator import makeSRT
-    from lbmpy.stencils import getStencil
-
-    latticeModel = makeSRT(getStencil("D3Q19"), order=2, compressible=False)
-    r = createLbmEquations(latticeModel)
