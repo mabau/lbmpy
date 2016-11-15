@@ -69,7 +69,7 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     cellLoopBody.append(boundaryFunctor(pdfField, dirSymbol, latticeModel))
 
     functionBody = Block([cellLoop])
-    ast = KernelFunction(functionBody)
+    ast = KernelFunction(functionBody, [pdfField, indexField])
 
     functionBody.insertFront(LatticeModelInfo(latticeModel))
     resolveFieldAccesses(ast, set(['indexField']), fieldToFixedCoordinates={pdfField.name: coordinateSymbols[:dim]})
