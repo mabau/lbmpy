@@ -1,5 +1,6 @@
 from waLBerla import lbm
 import lbmpy.forcemodels as forcemodels
+from pystencils.cpu.kernelcreation import addOpenMP
 
 
 def convertWalberlaToLbmpyLatticeModel(lm):
@@ -68,7 +69,7 @@ def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src'
 
 def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFieldName,
                                            variableSize=False, replaceRelaxationTimes=False, doCSE=False,
-                                           splitInnerLoop=True):
+                                           splitInnerLoop=True, openmpThreads=1):
     from lbmpy.lbmgenerator import createLbmEquations, createLbmSplitGroups
     from pystencils.cpu import createKernel
     from waLBerla import field
@@ -101,6 +102,12 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
     lbmEquations = createLbmEquations(lm, numpyField=numpyField, doCSE=doCSE)
     splitGroups = createLbmSplitGroups(lm, lbmEquations) if splitInnerLoop else []
     funcNode = createKernel(lbmEquations, splitGroups=splitGroups)
+    if openmpThreads:
+        numThreads = None
+        if isinstance(openmpThreads, int):
+            numThreads = openmpThreads
+        addOpenMP(funcNode, numThreads=numThreads)
+
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst', is2D=(lm.dim == 2))
     sweepFunction = makeWalberlaSourceDestinationSweep(funcNode, 'src', 'dst', is2D=(lm.dim == 2))
     return lambda block: sweepFunction(src=block[pdfFieldName], **params)
