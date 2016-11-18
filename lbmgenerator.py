@@ -6,6 +6,7 @@ import lbmpy.transformations as trafos
 import lbmpy.util as util
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 from pystencils.field import Field, getLayoutFromNumpyArray
+import numpy as np
 
 
 def getCommonQuadraticAndConstantTerms(simplifiedUpdateRuleForCenter, latticeModel):
@@ -35,6 +36,13 @@ def pullCommonFactorOut(term):
 
 
 def cseInOpposingDirections(updateRules, stencil, relaxationParameters):
+    """
+    Looks for common subexpressions in terms for opposing directions (e.g. north & south, top & bottom )
+    :param updateRules: list of equations, in the same order as stencil, defining the update rules for each direction
+    :param stencil: list of directions, has to have the same length as updateRules
+    :param relaxationParameters: list of relaxation parameter symbols
+    :return: substitutions, simplified update rules
+    """
     def ReplacementSymbolGenerator(name="xi"):
         counter = 0
         while True:
@@ -139,7 +147,7 @@ def createCollisionEquations(lm, pdfSymbols, dstField, densityOutputField=None, 
 
 def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="dst",
                        velocityOutputField=None, densityOutputField=None,
-                       doCSE=False):
+                       doCSE=False, genericLayout='numpy', genericFieldType=np.float64):
     """
     Creates a list of LBM update equations
     :param lm: instance of lattice model
@@ -153,6 +161,9 @@ def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="ds
                                 of the output field
     :param densityOutputField: similar to velocityOutputField
     :param doCSE: if True, common subexpression elimination is done for pdfs in opposing directions
+    :param genericLayout: if no numpyField is given to determine the layout, a variable sized field with the given
+                          genericLayout is used
+    :param genericFieldType: if no numpyField is given, this data type is used for the fields
     :return: list of sympy equations
     """
     if numpyField is not None:
@@ -161,21 +172,23 @@ def createLbmEquations(lm, numpyField=None, srcFieldName="src", dstFieldName="ds
     velOutField = None
     densityOutField = None
 
-    layout = tuple(getLayoutFromNumpyArray(numpyField)[:lm.dim]) if numpyField is not None else None
+    layout = tuple(getLayoutFromNumpyArray(numpyField)[:lm.dim]) if numpyField is not None else genericLayout
     if velocityOutputField:
         if isinstance(velocityOutputField, tuple):
             velOutField = Field.createFromNumpyArray(velocityOutputField[0], velocityOutputField[1], indexDimensions=1)
         else:
-            velOutField = Field.createGeneric(velocityOutputField, lm.dim, indexDimensions=1, layout=layout)
+            velOutField = Field.createGeneric(velocityOutputField, lm.dim, indexDimensions=1,
+                                              layout=layout, dtype=genericFieldType)
     if densityOutputField:
         if isinstance(densityOutputField, tuple):
             densityOutField = Field.createFromNumpyArray(densityOutputField[0], densityOutputField[1])
         else:
-            densityOutField = Field.createGeneric(densityOutputField, lm.dim, indexDimensions=0, layout=layout)
+            densityOutField = Field.createGeneric(densityOutputField, lm.dim, indexDimensions=0,
+                                                  layout=layout, dtype=genericFieldType)
 
     if numpyField is None:
-        src = Field.createGeneric(srcFieldName, lm.dim, indexDimensions=1)
-        dst = Field.createGeneric(dstFieldName, lm.dim, indexDimensions=1)
+        src = Field.createGeneric(srcFieldName, lm.dim, indexDimensions=1, layout=genericLayout, dtype=genericFieldType)
+        dst = Field.createGeneric(dstFieldName, lm.dim, indexDimensions=1, layout=genericLayout, dtype=genericFieldType)
     else:
         src = Field.createFromNumpyArray(srcFieldName, numpyField, indexDimensions=1)
         dst = Field.createFromNumpyArray(dstFieldName, numpyField, indexDimensions=1)
