@@ -13,6 +13,9 @@ class LbmCollisionRule:
         assert len(self.updateEquations) == len(newUpdateEquations)
         return LbmCollisionRule(newUpdateEquations, self.subexpressions+newSubexpressions, self.latticeModel)
 
+    def countNumberOfOperations(self):
+        return trafos.countNumberOfOperations(self.subexpressions + self.updateEquations)
+
 
 class Strategy:
     def __init__(self):
@@ -25,6 +28,19 @@ class Strategy:
         for t in self._transformations:
             updateRule = t(updateRule)
         return updateRule
+
+    def applyWithReport(self, updateRule):
+        import time
+        report = []
+        op = updateRule.countNumberOfOperations()
+        report.append(["OriginalTerm", op['adds'], op['muls'], op['divs'], '-'])
+        for t in self._transformations:
+            startTime = time.perf_counter()
+            updateRule = t(updateRule)
+            endTime = time.perf_counter()
+            op = updateRule.countNumberOfOperations()
+            report.append([t.__name__, op['adds'], op['muls'], op['divs'], "%.2f ms" % ((endTime-startTime)*1000,)])
+        return updateRule, report
 
 
 def makeMomentSpaceSimplificationStrategy():

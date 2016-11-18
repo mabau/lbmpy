@@ -1,6 +1,64 @@
 import sympy as sp
 import operator
-from collections import defaultdict
+from collections import defaultdict, Sequence
+import warnings
+
+
+def countNumberOfOperations(term):
+    """
+    Counts the number of additions, multiplications and division
+    :param term: a sympy term, equation or sequence of terms/equations
+    :return: a dictionary with 'adds', 'muls' and 'divs' keys
+    """
+    result = {'adds': 0, 'muls': 0, 'divs': 0}
+
+    if isinstance(term, Sequence):
+        for element in term:
+            r = countNumberOfOperations(element)
+            for operationName in result.keys():
+                result[operationName] += r[operationName]
+        return result
+    elif isinstance(term, sp.Eq):
+        term = term.rhs
+
+    term = term.evalf()
+
+    def visit(t):
+        visitChildren = True
+        if t.func is sp.Add:
+            result['adds'] += len(t.args) - 1
+        elif t.func is sp.Mul:
+            result['muls'] += len(t.args) - 1
+            for a in t.args:
+                if a == 1 or a == -1:
+                    result['muls'] -= 1
+        elif t.func is sp.Float:
+            pass
+        elif isinstance(t, sp.Symbol):
+            pass
+        elif t.is_integer:
+            pass
+        elif t.func is sp.Pow:
+            visitChildren = False
+            if t.exp.is_integer and t.exp.is_number:
+                if t.exp >= 0:
+                    result['muls'] += int(t.exp) - 1
+                else:
+                    result['muls'] -= 1
+                    result['divs'] += 1
+                    result['muls'] += (-int(t.exp)) - 1
+            else:
+                warnings.warn("Counting operations: only integer exponents are supported in Pow, "
+                              "counting will be inaccurate")
+        else:
+            warnings.warn("Unknown sympy node of type " + str(t.func) + " counting will be inaccurate")
+
+        if visitChildren:
+            for a in t.args:
+                visit(a)
+
+    visit(term)
+    return result
 
 
 def replaceAdditive(expr, replacement, subExpression, minimalMatchingTerms):
