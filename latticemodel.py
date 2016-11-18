@@ -60,11 +60,17 @@ class LatticeModel:
         self.compressible = compressible
         self._forceModel = forceModel
 
+    def pdfSymbols(self):
+        Q = len(self._stencil)
+        return [sp.Symbol("f_%d" % (i,)) for i in range(Q)]
+
     @property
     def dim(self):
         return len(self._stencil[0])
 
     def getCollideTerms(self, pdfs=None):
+        # TODO define pdf symbols here instead of passing them in
+        # TODO define density and velocity also here?
         Q = len(self._stencil)
         if pdfs is None:
             pdfs = sp.Matrix(Q, 1, [sp.Symbol("f_%d" % (i,)) for i in range(Q)])

@@ -53,7 +53,7 @@ def replaceAdditive(expr, replacement, subExpression, minimalMatchingTerms):
         if not paramList:
             return currentExpr
         else:
-            return currentExpr.func(*paramList)
+            return currentExpr.func(*paramList, evaluate=False)
 
     return visit(expr)
 
@@ -206,8 +206,20 @@ def pow2mul(expr):
     """
     pows = list(expr.atoms(sp.Pow))
     if any(not e.is_Integer for b, e in (i.as_base_exp() for i in pows)):
-
         raise ValueError("A power contains a non-integer exponent")
     repl = zip(pows, (sp.Mul(*[b]*e, evaluate=False) for b, e in (i.as_base_exp() for i in pows)))
     return expr.subs(repl)
 
+
+def extractMostCommonFactor(term):
+    """Processes a sum of fractions: determines the most common factor and splits term in common factor and rest"""
+    import operator
+    from collections import Counter
+    from sympy.functions import Abs
+
+    coeffDict = term.as_coefficients_dict()
+    counter = Counter([Abs(v) for v in coeffDict.values()])
+    commonFactor, occurances = max(counter.items(), key=operator.itemgetter(1))
+    if occurances == 1 and (1 in counter):
+        commonFactor = 1
+    return commonFactor, term / commonFactor
