@@ -166,7 +166,7 @@ def replaceSecondOrderProducts(expr, searchSymbols, positive=None, replaceMixed=
             return sp.Rational(1, 2) * sign * otherFactors * (mixedSymbol ** 2 - u ** 2 - v ** 2)
 
     paramList = [replaceSecondOrderProducts(a, searchSymbols, positive, replaceMixed) for a in expr.args]
-    result = expr.func(*paramList) if paramList else expr
+    result = expr.func(*paramList, evaluate=False) if paramList else expr
     return result
 
 

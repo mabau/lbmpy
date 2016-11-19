@@ -45,14 +45,30 @@ class Strategy:
 
 def makeMomentSpaceSimplificationStrategy():
     s = Strategy()
+    s.addSimplificationRule(expand)
     s.addSimplificationRule(replaceSecondOrderProducts)
+    s.addSimplificationRule(expand)
+    s.addSimplificationRule(factorRelaxationTimes)
     s.addSimplificationRule(replaceDensityAndVelocity)
     s.addSimplificationRule(replaceCommonQuadraticAndConstantTerm)
+    s.addSimplificationRule(factorRhoAfterFactoringRelaxationTimes)
     s.addSimplificationRule(replaceExistingSubexpressions)
     return s
 
 
 # ------------------------------------  Simplification Rules    --------------------------------------------------------
+
+def factorRhoAfterFactoringRelaxationTimes(lbmUpdateRule):
+    """Important for compressible models only"""
+    result = []
+    rho = util.getSymbolicDensity()
+    for s in lbmUpdateRule.updateEquations:
+        newRhs = s.rhs
+        for rp in lbmUpdateRule.latticeModel.relaxationRates:
+            coeff = newRhs.coeff(rp)
+            newRhs = newRhs.subs(coeff, coeff.collect(rho))
+        result.append(sp.Eq(s.lhs, newRhs))
+    return lbmUpdateRule.newWithSubexpressions(result, [])
 
 
 def replaceExistingSubexpressions(lbmUpdateRule):
@@ -70,9 +86,25 @@ def replaceSecondOrderProducts(lbmUpdateRule):
     substitutions = []
     u = util.getSymbolicVelocityVector(lbmUpdateRule.latticeModel.dim)
     for i, s in enumerate(lbmUpdateRule.updateEquations):
-        newRhs = trafos.replaceSecondOrderProducts(s.rhs.expand(), u, positive=None, replaceMixed=substitutions)
-        result.append(sp.Eq(s.lhs, newRhs.expand()))
+        newRhs = trafos.replaceSecondOrderProducts(s.rhs, u, positive=None, replaceMixed=substitutions)
+        result.append(sp.Eq(s.lhs, newRhs))
     return lbmUpdateRule.newWithSubexpressions(result, substitutions)
+
+
+def expand(lbmUpdateRule):
+    result = [s.expand() for s in lbmUpdateRule.updateEquations]
+    return lbmUpdateRule.newWithSubexpressions(result, [])
+
+
+def factorRelaxationTimes(lbmUpdateRule):
+    lm = lbmUpdateRule.latticeModel
+    result = []
+    for s in lbmUpdateRule.updateEquations:
+        newRhs = s.rhs
+        for rp in lm.relaxationRates:
+            newRhs = newRhs.collect(rp)
+        result.append(sp.Eq(s.lhs, newRhs))
+    return lbmUpdateRule.newWithSubexpressions(result, [])
 
 
 def replaceDensityAndVelocity(lbmUpdateRule):
@@ -88,8 +120,6 @@ def replaceDensityAndVelocity(lbmUpdateRule):
     result = []
     for s in lbmUpdateRule.updateEquations:
         newRhs = s.rhs
-        for rp in lm.relaxationRates:
-            newRhs = newRhs.collect(rp)
         for replacement in substitutions:
             newRhs = trafos.replaceAdditive(newRhs, replacement.lhs, replacement.rhs, len(replacement.rhs.args) // 2)
         result.append(sp.Eq(s.lhs, newRhs))

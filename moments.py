@@ -392,6 +392,12 @@ class MomentSystem:
                 else:
                     order = getOrder(moment)
                     self._momentIdGroups[order - 1].append(i)
+            maxOrder = max(self._momentIdGroups.keys())+1
+            momentIdGroupsAsList = [0]*maxOrder
+            for i in range(maxOrder):
+                momentIdGroupsAsList[i] = self._momentIdGroups[i]
+            self._momentIdGroups = momentIdGroupsAsList
+
 
     @property
     def symbols(self):
