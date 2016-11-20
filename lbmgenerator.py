@@ -106,9 +106,8 @@ def createCollisionEquations(lm, pdfSymbols, dstField, densityOutputField=None, 
         for replacement in rhoDefinition + uDefinition:
             s = trafos.replaceAdditive(s, replacement.lhs, replacement.rhs, len(replacement.rhs.args) // 2)
 
-        noOffset = tuple([0] * lm.dim)
         forceTerm = 0 if lm.forceModel is None else lm.forceModel(latticeModel=lm)[i]
-        updateEquations.append(sp.Eq(dstField[noOffset](i), pdfSymbols[i] + s + forceTerm))
+        updateEquations.append(sp.Eq(dstField(i), pdfSymbols[i] + s + forceTerm))
 
     replacements += velocitySumReplacements
 

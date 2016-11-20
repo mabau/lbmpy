@@ -3,20 +3,6 @@ import lbmpy.util as util
 import lbmpy.transformations as trafos
 
 
-class LbmCollisionRule:
-    def __init__(self, updateEquations, subExpressions, latticeModel):
-        self.subexpressions = subExpressions
-        self.updateEquations = updateEquations
-        self.latticeModel = latticeModel
-
-    def newWithSubexpressions(self, newUpdateEquations, newSubexpressions):
-        assert len(self.updateEquations) == len(newUpdateEquations)
-        return LbmCollisionRule(newUpdateEquations, self.subexpressions+newSubexpressions, self.latticeModel)
-
-    def countNumberOfOperations(self):
-        return trafos.countNumberOfOperations(self.subexpressions + self.updateEquations)
-
-
 class Strategy:
     def __init__(self):
         self._transformations = []
@@ -113,8 +99,12 @@ def replaceDensityAndVelocity(lbmUpdateRule):
     rho = util.getSymbolicDensity()
     u = util.getSymbolicVelocityVector(lm.dim, "u")
 
-    rhoDefinition = [sp.Eq(rho, sum(lm.pdfSymbols()))]
-    uDefinition = [sp.Eq(u_i, u_term_i) for u_i, u_term_i in zip(u, lm.getVelocityTerms(lm.pdfSymbols()))]
+    velocity = []
+    for i in range(lm.dim):
+        velocity.append(sum([st[i] * f for st, f in zip(lm.stencil, lm.pdfSymbols)]))
+
+    rhoDefinition = [sp.Eq(rho, sum(lm.pdfSymbols))]
+    uDefinition = [sp.Eq(u_i, u_term_i) for u_i, u_term_i in zip(u, velocity)]
 
     substitutions = rhoDefinition + uDefinition
     result = []
@@ -219,7 +209,7 @@ def __getCommonQuadraticAndConstantTerms(lbmUpdateRule):
     for rp in latticeModel.relaxationRates:
         t = t.subs(rp, 1)
 
-    for fa in latticeModel.pdfSymbols():
+    for fa in latticeModel.pdfSymbols:
         t = t.subs(fa, 0)
 
     weight = t

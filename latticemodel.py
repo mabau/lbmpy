@@ -1,6 +1,9 @@
 import sympy as sp
+
+from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 from lbmpy.equilibria import getMaxwellBoltzmannEquilibriumMoments, standardDiscreteEquilibrium, getWeights
 import lbmpy.moments as m
+import lbmpy.transformations as trafos
 
 
 # ----------------      From standard discrete equilibrium -------------------------------------------------------------
@@ -12,7 +15,8 @@ def makeSRT(stencil, order=2, compressible=False, forceModel=None):
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
     equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
     relaxationRates = [sp.Symbol('omega')] * len(stencil)
-    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationRates, compressible, forceModel)
+    return MomentRelaxationLatticeModel(stencil, momentSystem.allMoments, equilibriumMoments,
+                                        relaxationRates, compressible, forceModel)
 
 
 def makeTRT(stencil, order=2, compressible=False, forceModel=None):
@@ -23,7 +27,8 @@ def makeTRT(stencil, order=2, compressible=False, forceModel=None):
 
     lambda_e, lambda_o = sp.symbols("lambda_e lambda_o")
     relaxationRates = [lambda_e if m.isEven(moment) else lambda_o for moment in momentSystem.allMoments]
-    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationRates, compressible, forceModel)
+    return MomentRelaxationLatticeModel(stencil, momentSystem.allMoments, equilibriumMoments,
+                                        relaxationRates, compressible, forceModel)
 
 
 def makeMRT(stencil, order=2, compressible=False, forceModel=None):
@@ -35,7 +40,8 @@ def makeMRT(stencil, order=2, compressible=False, forceModel=None):
         raise NotImplementedError("No moment grouping available for this lattice model")
 
     relaxationRates = momentSystem.getSymbolicRelaxationRates()
-    return LatticeModel(stencil, momentSystem.allMoments, equilibriumMoments, relaxationRates, compressible, forceModel)
+    return MomentRelaxationLatticeModel(stencil, momentSystem.allMoments, equilibriumMoments,
+                                        relaxationRates, compressible, forceModel)
 
 
 # ----------------      From Continuous Maxwell Boltzmann  -------------------------------------------------------------
@@ -49,74 +55,111 @@ def makeSRTFromMaxwellBoltzmann(stencil, order=2, forceModel=None):
                         [sp.Symbol('omega')] * Q, True, forceModel)
 
 
+# ----------------      From Continuous Maxwell Boltzmann  -------------------------------------------------------------
+
+
+class LbmCollisionRule:
+    def __init__(self, updateEquations, subExpressions, latticeModel):
+        self.subexpressions = subExpressions
+        self.updateEquations = updateEquations
+        self.latticeModel = latticeModel
+
+    def newWithSubexpressions(self, newUpdateEquations, newSubexpressions):
+        assert len(self.updateEquations) == len(newUpdateEquations)
+        return LbmCollisionRule(newUpdateEquations, self.subexpressions+newSubexpressions, self.latticeModel)
+
+    def countNumberOfOperations(self):
+        return trafos.countNumberOfOperations(self.subexpressions + self.updateEquations)
+
+
 class LatticeModel:
-    def __init__(self, stencil, moments, equilibriumMoments, relaxationRates, compressible, forceModel):
+    def __init__(self, stencil, relaxationRates, compressible, forceModel=None):
         self._stencil = stencil
-        self._moments = moments
-        self._equilibriumMoments = sp.Matrix(equilibriumMoments)
-
-        self._momentMatrix = m.momentMatrix(moments, stencil)
-        self._relaxationMatrix = sp.diag(*relaxationRates)
-        self.compressible = compressible
+        self._compressible = compressible
         self._forceModel = forceModel
+        self._relaxationRates = relaxationRates
 
+    @property
+    def stencil(self):
+        """Sequence of directions (discretization of velocity space)"""
+        return self._stencil
+
+    @property
+    def compressible(self):
+        """Determines how to calculate density/velocity and how pdfs are stored:
+        True: pdfs are centered around 1 (normal)
+        False: pdfs are centered around 0, density is sum(pdfs)+1"""
+        return self._compressible
+
+    @property
+    def dim(self):
+        """Spatial dimension of method"""
+        return len(self._stencil[0])
+
+    @property
+    def forceModel(self):
+        """Force model passed in constructor"""
+        return self._forceModel
+
+    @property
     def pdfSymbols(self):
         Q = len(self._stencil)
         return [sp.Symbol("f_%d" % (i,)) for i in range(Q)]
 
     @property
-    def dim(self):
-        return len(self._stencil[0])
-
-    def getCollideTerms(self, pdfs=None):
-        # TODO define pdf symbols here instead of passing them in
-        # TODO define density and velocity also here?
+    def pdfDestinationSymbols(self):
         Q = len(self._stencil)
-        if pdfs is None:
-            pdfs = sp.Matrix(Q, 1, [sp.Symbol("f_%d" % (i,)) for i in range(Q)])
-        elif type(pdfs) is list:
-            pdfs = sp.Matrix(Q, 1, pdfs)
-
-        M = self._momentMatrix
-        return M.inv() * self._relaxationMatrix * (self._equilibriumMoments - M * pdfs)
-
-    def getVelocityTerms(self, pdfs=None):
-        Q = len(self._stencil)
-        if pdfs is None:
-            pdfs = sp.Matrix(Q, 1, [sp.Symbol("f_%d" % (i,)) for i in range(Q)])
-        elif type(pdfs) is list:
-            pdfs = sp.Matrix(Q, 1, pdfs)
-
-        result = []
-        for i in range(self.dim):
-            result.append(sum([st[i] * f for st, f in zip(self._stencil, pdfs)]))
-        return result
-
-    def setCollisionDOFs(self, symbolToConstantMap):
-        substitutions = [(sp.Symbol(key), value) for key, value in symbolToConstantMap.items()]
-        self._relaxationMatrix = self._relaxationMatrix.subs(substitutions)
+        return [sp.Symbol("d_%d" % (i,)) for i in range(Q)]
 
     @property
     def relaxationRates(self):
-        return self._relaxationMatrix.atoms(sp.Symbol)
+        """Sequence of len(stencil) relaxation rates (may be symbolic or constant)"""
+        return self._relaxationRates
 
-    @property
-    def relaxationMatrix(self):
-        return self._relaxationMatrix
+    def setCollisionDOFs(self, replacementDict):
+        """Replace relaxation rate symbols by passing a dictionary from symbol name to new value"""
+        substitutions = [(sp.Symbol(key), value) for key, value in replacementDict.items()]
+        self._relaxationRates = [rr.subs(substitutions) for rr in self._relaxationRates]
+
+    def getCollisionRule(self):
+        raise NotImplemented("This method has to be implemented in subclass")
+
+
+class MomentRelaxationLatticeModel(LatticeModel):
+
+    def __init__(self, stencil, moments, equilibriumMoments, relaxationRates, compressible, forceModel=None):
+        super(MomentRelaxationLatticeModel, self).__init__(stencil, relaxationRates, compressible, forceModel)
+        self._moments = moments
+        self._equilibriumMoments = sp.Matrix(equilibriumMoments)
 
     @property
     def momentMatrix(self):
-        return self._momentMatrix
-
-    @property
-    def stencil(self):
-        return self._stencil
+        return m.momentMatrix(self._moments, self.stencil)
 
     @property
     def weights(self):
         return getWeights(self._stencil)
 
-    @property
-    def forceModel(self):
-        return self._forceModel
+    def getCollisionRule(self):
+        relaxationMatrix = sp.diag(*self._relaxationRates)
+        M = self.momentMatrix  # transform from physical to moment space
+        pdfVector = sp.Matrix(self.pdfSymbols)
+        collisionResult = M.inv() * relaxationMatrix * (self._equilibriumMoments - M * pdfVector)
+        if self.forceModel:
+            collisionResult += sp.Matrix(self.forceModel(latticeModel=self))
+        collisionEqs = [sp.Eq(dst_i, t) for dst_i, t in zip(self.pdfDestinationSymbols, collisionResult)]
+
+        # get optimized calculation rules for density and velocity
+        rhoSubexprs, rhoEq, uSubexprs, uEqs = getDensityVelocityExpressions(self.stencil, self.pdfSymbols,
+                                                                            self.compressible)
+
+        # for some force models the velocity has to be shifted
+        if self.forceModel and hasattr(self.forceModel, "equilibriumVelocity"):
+            uSymbols = [e.lhs for e in uEqs]
+            uRhs = [e.rhs for e in uEqs]
+            correctedVel = self.forceModel.equilibriumVelocity(self, uRhs, rhoEq.lhs)
+            uEqs = [sp.Eq(u_i, correctedVel_i) for u_i, correctedVel_i in zip(uSymbols, correctedVel)]
+        subExpressions = rhoSubexprs + [rhoEq] + uSubexprs + uEqs
+
+        return LbmCollisionRule(collisionEqs, subExpressions, self)
 
