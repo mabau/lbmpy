@@ -58,10 +58,12 @@ def addVelocityFieldOutput(lbmCollisionRule, velocityField, shiftForceIfNecessar
         macroscopicVelocity = u
 
     newEqs = [sp.Eq(velocityField(i), u_i) for i, u_i in enumerate(macroscopicVelocity)]
-    return LbmCollisionRule(lbmCollisionRule.updateEquations+newEqs, lbmCollisionRule.subexpressions, lm)
+    return LbmCollisionRule(lbmCollisionRule.updateEquations+newEqs, lbmCollisionRule.subexpressions,
+                            lm, lbmCollisionRule.updateEquationDirections)
 
 
 def addDensityFieldOutput(lbmCollisionRule, densityField):
     lm = lbmCollisionRule.latticeModel
     newEqs = [sp.Eq(densityField(0), lm.symbolicDensity)]
-    return LbmCollisionRule(lbmCollisionRule.updateEquations+newEqs, lbmCollisionRule.subexpressions, lm)
+    return LbmCollisionRule(lbmCollisionRule.updateEquations+newEqs, lbmCollisionRule.subexpressions, lm,
+                            lbmCollisionRule.updateEquationDirections)

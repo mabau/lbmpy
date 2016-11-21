@@ -4,8 +4,8 @@ import numpy as np
 from pystencils.field import Field
 from lbmpy.fieldaccess import streamPullWithSourceAndDestinationFields
 from lbmpy.latticemodel import MomentRelaxationLatticeModel
-from lbmpy.simplification import createDefaultMomentSpaceSimplificationStrategy
-import lbmpy.simplification as simplifications
+from lbmpy.simplifications import createDefaultMomentSpaceSimplificationStrategy
+import lbmpy.simplifications as simplifications
 
 
 def createStreamCollideUpdateRule(lm, numpyField=None, srcFieldName="src", dstFieldName="dst",

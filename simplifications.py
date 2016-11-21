@@ -31,6 +31,23 @@ class Strategy:
             report.append([t.__name__, op['adds'], op['muls'], op['divs'], "%.2f ms" % ((endTime-startTime)*1000,)])
         return updateRule, report
 
+    def applyAndPrintIntermediateResults(self, updateRule, printFunction=print, directions=None):
+        printFunction("Initial version")
+        updateRule.displayRepresentative(printFunction, directions)
+
+        for t in self._transformations:
+            updateRule = t(updateRule)
+            printFunction(t.__name__)
+            updateRule.displayRepresentative(printFunction, directions)
+
+        return updateRule
+
+    def __repr__(self):
+        result = "Simplification Strategy:\n"
+        for t in self._transformations:
+            result += " - %s\n" % (t.__name__,)
+        return result
+
 
 def createDefaultMomentSpaceSimplificationStrategy():
     s = Strategy()
@@ -53,7 +70,8 @@ def sympyCSE(lbmUpdateRule):
 
     modifiedSubexpressions = newEq[:len(lbmUpdateRule.subexpressions)]
     modifiedUpdateEquations = newEq[len(lbmUpdateRule.subexpressions):]
-    return LbmCollisionRule(modifiedUpdateEquations, replacementEqs + modifiedSubexpressions)
+    return LbmCollisionRule(modifiedUpdateEquations, replacementEqs + modifiedSubexpressions,
+                            lbmUpdateRule.updateEquationDirections)
 
 
 def factorRhoAfterFactoringRelaxationTimes(lbmUpdateRule):
@@ -165,7 +183,7 @@ def cseInOpposingDirections(lbmUpdateRule):
     result = []
     substitutions = []
     newCoefficientSubstitutions = dict()
-
+    handledDirections = []
     for updateRule, direction in zip(updateRules, stencil):
         if direction not in directionToUpdateRule:
             continue  # already handled the inverse direction
@@ -173,6 +191,7 @@ def cseInOpposingDirections(lbmUpdateRule):
         inverseRule = directionToUpdateRule[inverseDir]
         if inverseDir == direction:
             result.append(updateRule)  # center is not modified
+            handledDirections.append(direction)
             continue
         del directionToUpdateRule[inverseDir]
         del directionToUpdateRule[direction]
@@ -202,11 +221,12 @@ def cseInOpposingDirections(lbmUpdateRule):
             updateRules = [sp.Eq(ur.lhs, ur.rhs.subs(relaxationRate*oldTerm, newCoefficient*newTerm))
                            for ur, newTerm, oldTerm in zip(updateRules, newTerms, terms)]
         result += updateRules
+        handledDirections += [direction, inverseDir]
 
     for term, substitutedVar in newCoefficientSubstitutions.items():
         substitutions.append(sp.Eq(substitutedVar, term))
 
-    return lbmUpdateRule.newWithSubexpressions(result, substitutions)
+    return lbmUpdateRule.newWithSubexpressions(result, substitutions, handledDirections)
 
 
 # -------------------------------------- Helper Functions --------------------------------------------------------------

@@ -60,19 +60,25 @@ def makeSRTFromMaxwellBoltzmann(stencil, order=2, forceModel=None):
 
 
 class LbmCollisionRule:
-    def __init__(self, updateEquations, subExpressions, latticeModel):
+    def __init__(self, updateEquations, subExpressions, latticeModel, updateEquationDirections=None):
         self.subexpressions = subExpressions
         self.updateEquations = updateEquations
+        if updateEquationDirections is None:
+            self.updateEquationDirections = latticeModel.stencil
+        else:
+            self.updateEquationDirections = updateEquationDirections
         self.latticeModel = latticeModel
 
-    def newWithSubexpressions(self, newUpdateEquations, newSubexpressions):
+    def newWithSubexpressions(self, newUpdateEquations, newSubexpressions, newOrder=None):
         assert len(self.updateEquations) == len(newUpdateEquations)
-        return LbmCollisionRule(newUpdateEquations, self.subexpressions+newSubexpressions, self.latticeModel)
+        ordering = self.updateEquationDirections if newOrder is None else newOrder
+        return LbmCollisionRule(newUpdateEquations, self.subexpressions+newSubexpressions, self.latticeModel, ordering)
 
-    def newWithSubstitutions(self, substitutionDict):
+    def newWithSubstitutions(self, substitutionDict, newOrder=None):
         newSubexpressions = [e.subs(substitutionDict) for e in self.subexpressions]
         newUpdateEquations = [e.subs(substitutionDict) for e in self.updateEquations]
-        return LbmCollisionRule(newUpdateEquations, newSubexpressions, self.latticeModel)
+        ordering = self.updateEquationDirections if newOrder is not None else newOrder
+        return LbmCollisionRule(newUpdateEquations, newSubexpressions, self.latticeModel, ordering)
 
     def countNumberOfOperations(self):
         return trafos.countNumberOfOperations(self.subexpressions + self.updateEquations)
@@ -80,6 +86,35 @@ class LbmCollisionRule:
     @property
     def equations(self):
         return self.subexpressions + self.updateEquations
+
+    def display(self, printFunction=print):
+        """
+        Prints subexpressions and update rules of this collision rule
+        :param printFunction: function that is used for printing, for IPython notebooks IPython.display can be useful
+        """
+        printFunction("Subexpressions:")
+        for s in self.subexpressions:
+            printFunction(s)
+        printFunction("Update Rules")
+        for s in self.updateEquations:  # [-1:]:
+            printFunction(s)
+
+    def displayRepresentative(self, printFunction=print, representativeDirections=None):
+        """Prints the update rules for C, W, NW and for 3D models TNW
+        :param printFunction: function that is used for printing, for IPython notebooks IPython.display can be useful
+        :param representativeDirections: can be a list of directions, to print only these directions
+                                         if None, the default directions are printed
+        """
+        if representativeDirections is None:
+            if self.latticeModel.dim == 2:
+                representativeDirections = [(0, 0), (1, 0), (1, 1)]
+            elif self.latticeModel.dim == 3:
+                representativeDirections = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 1, 1)]
+            else:
+                raise NotImplementedError("Only 2D and 3D models supported")
+        indices = [self.updateEquationDirections.index(i) for i in representativeDirections]
+        for i in indices:
+            printFunction(self.updateEquations[i])
 
 
 class LatticeModel:
