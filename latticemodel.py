@@ -4,6 +4,7 @@ from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 from lbmpy.equilibria import getMaxwellBoltzmannEquilibriumMoments, standardDiscreteEquilibrium, getWeights
 import lbmpy.moments as m
 import lbmpy.transformations as trafos
+import lbmpy.util as util
 
 
 # ----------------      From standard discrete equilibrium -------------------------------------------------------------
@@ -68,8 +69,17 @@ class LbmCollisionRule:
         assert len(self.updateEquations) == len(newUpdateEquations)
         return LbmCollisionRule(newUpdateEquations, self.subexpressions+newSubexpressions, self.latticeModel)
 
+    def newWithSubstitutions(self, substitutionDict):
+        newSubexpressions = [e.subs(substitutionDict) for e in self.subexpressions]
+        newUpdateEquations = [e.subs(substitutionDict) for e in self.updateEquations]
+        return LbmCollisionRule(newUpdateEquations, newSubexpressions, self.latticeModel)
+
     def countNumberOfOperations(self):
         return trafos.countNumberOfOperations(self.subexpressions + self.updateEquations)
+
+    @property
+    def equations(self):
+        return self.subexpressions + self.updateEquations
 
 
 class LatticeModel:
@@ -116,6 +126,14 @@ class LatticeModel:
         """Sequence of len(stencil) relaxation rates (may be symbolic or constant)"""
         return self._relaxationRates
 
+    @property
+    def symbolicDensity(self):
+        return util.getSymbolicDensity()
+
+    @property
+    def symbolicVelocity(self):
+        return util.getSymbolicVelocityVector(self.dim)
+
     def setCollisionDOFs(self, replacementDict):
         """Replace relaxation rate symbols by passing a dictionary from symbol name to new value"""
         substitutions = [(sp.Symbol(key), value) for key, value in replacementDict.items()]
@@ -147,7 +165,8 @@ class MomentRelaxationLatticeModel(LatticeModel):
         collisionResult = M.inv() * relaxationMatrix * (self._equilibriumMoments - M * pdfVector)
         if self.forceModel:
             collisionResult += sp.Matrix(self.forceModel(latticeModel=self))
-        collisionEqs = [sp.Eq(dst_i, t) for dst_i, t in zip(self.pdfDestinationSymbols, collisionResult)]
+        collisionEqs = [sp.Eq(dst_i, s+t)
+                        for s, dst_i, t in zip(self.pdfSymbols, self.pdfDestinationSymbols, collisionResult)]
 
         # get optimized calculation rules for density and velocity
         rhoSubexprs, rhoEq, uSubexprs, uEqs = getDensityVelocityExpressions(self.stencil, self.pdfSymbols,
@@ -162,4 +181,3 @@ class MomentRelaxationLatticeModel(LatticeModel):
         subExpressions = rhoSubexprs + [rhoEq] + uSubexprs + uEqs
 
         return LbmCollisionRule(collisionEqs, subExpressions, self)
-

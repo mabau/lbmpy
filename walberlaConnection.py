@@ -70,7 +70,7 @@ def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src'
 def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFieldName,
                                            variableSize=False, replaceRelaxationTimes=False, doCSE=False,
                                            splitInnerLoop=True, openmpThreads=True):
-    from lbmpy.lbmgenerator import createLbmEquations, createLbmSplitGroups
+    from lbmpy.lbmgenerator import createStreamCollideUpdateRule, createLbmSplitGroups
     from pystencils.cpu import createKernel
     from waLBerla import field
 
@@ -99,9 +99,10 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
         if dim == 2:
             numpyField = numpyField[:, :, 1, :]
 
-    lbmEquations = createLbmEquations(lm, numpyField=numpyField, doCSE=doCSE)
-    splitGroups = createLbmSplitGroups(lm, lbmEquations) if splitInnerLoop else []
-    funcNode = createKernel(lbmEquations, splitGroups=splitGroups)
+    lbmUpdateRule = createStreamCollideUpdateRule(lm, numpyField=numpyField, doCSE=doCSE)
+    splitGroups = createLbmSplitGroups(lm, lbmUpdateRule.equations) if splitInnerLoop else []
+    funcNode = createKernel(lbmUpdateRule.equations, splitGroups=splitGroups)
+
     if openmpThreads:
         numThreads = None
         if type(openmpThreads) is int:
