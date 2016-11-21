@@ -219,6 +219,7 @@ def getOrder(moment):
     return sum([sp.degree(leadingCoefficient, gen=m) for m in symbolsInLeadingCoefficient])
 
 
+@functools.lru_cache(maxsize=512)
 def discreteMoment(function, moment, stencil):
     """Computes discrete moment of given distribution function
     :param function     list of distribution functions for each direction

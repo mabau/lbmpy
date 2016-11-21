@@ -1,5 +1,6 @@
 import sympy as sp
 
+from pystencils.transformations import fastSubs
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 from lbmpy.equilibria import getMaxwellBoltzmannEquilibriumMoments, standardDiscreteEquilibrium, getWeights
 import lbmpy.moments as m
@@ -14,7 +15,7 @@ def makeSRT(stencil, order=2, compressible=False, forceModel=None):
     momentSystem = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
-    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
+    equilibriumMoments = [m.discreteMoment(tuple(discreteEquilibrium), mom, stencil) for mom in momentSystem.allMoments]
     relaxationRates = [sp.Symbol('omega')] * len(stencil)
     return MomentRelaxationLatticeModel(stencil, momentSystem.allMoments, equilibriumMoments,
                                         relaxationRates, compressible, forceModel)
@@ -24,7 +25,7 @@ def makeTRT(stencil, order=2, compressible=False, forceModel=None):
     momentSystem = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
-    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
+    equilibriumMoments = [m.discreteMoment(tuple(discreteEquilibrium), mom, stencil) for mom in momentSystem.allMoments]
 
     lambda_e, lambda_o = sp.symbols("lambda_e lambda_o")
     relaxationRates = [lambda_e if m.isEven(moment) else lambda_o for moment in momentSystem.allMoments]
@@ -36,7 +37,7 @@ def makeMRT(stencil, order=2, compressible=False, forceModel=None):
     momentSystem = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
-    equilibriumMoments = [m.discreteMoment(discreteEquilibrium, mom, stencil) for mom in momentSystem.allMoments]
+    equilibriumMoments = [m.discreteMoment(tuple(discreteEquilibrium), mom, stencil) for mom in momentSystem.allMoments]
     if not momentSystem.hasMomentGroups:
         raise NotImplementedError("No moment grouping available for this lattice model")
 
@@ -75,8 +76,8 @@ class LbmCollisionRule:
         return LbmCollisionRule(newUpdateEquations, self.subexpressions+newSubexpressions, self.latticeModel, ordering)
 
     def newWithSubstitutions(self, substitutionDict, newOrder=None):
-        newSubexpressions = [e.subs(substitutionDict) for e in self.subexpressions]
-        newUpdateEquations = [e.subs(substitutionDict) for e in self.updateEquations]
+        newSubexpressions = [fastSubs(e, substitutionDict) for e in self.subexpressions]
+        newUpdateEquations = [fastSubs(e, substitutionDict) for e in self.updateEquations]
         ordering = self.updateEquationDirections if newOrder is not None else newOrder
         return LbmCollisionRule(newUpdateEquations, newSubexpressions, self.latticeModel, ordering)
 
@@ -172,7 +173,7 @@ class LatticeModel:
     def setCollisionDOFs(self, replacementDict):
         """Replace relaxation rate symbols by passing a dictionary from symbol name to new value"""
         substitutions = [(sp.Symbol(key), value) for key, value in replacementDict.items()]
-        self._relaxationRates = [rr.subs(substitutions) for rr in self._relaxationRates]
+        self._relaxationRates = [fastSubs(rr, substitutions) for rr in self._relaxationRates]
 
     def getCollisionRule(self):
         raise NotImplemented("This method has to be implemented in subclass")
