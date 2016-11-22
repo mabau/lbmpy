@@ -58,7 +58,7 @@ def createDefaultMomentSpaceSimplificationStrategy():
     s.addSimplificationRule(replaceDensityAndVelocity)
     s.addSimplificationRule(replaceCommonQuadraticAndConstantTerm)
     s.addSimplificationRule(factorRhoAfterFactoringRelaxationTimes)
-    s.addSimplificationRule(replaceExistingSubexpressions)
+    s.addSimplificationRule(subexpressionSubstitutionInUpdateEquations)
     return s
 
 
@@ -70,8 +70,13 @@ def sympyCSE(lbmUpdateRule):
 
     modifiedSubexpressions = newEq[:len(lbmUpdateRule.subexpressions)]
     modifiedUpdateEquations = newEq[len(lbmUpdateRule.subexpressions):]
-    return LbmCollisionRule(modifiedUpdateEquations, replacementEqs + modifiedSubexpressions,
-                            lbmUpdateRule.updateEquationDirections)
+
+    newSubexpressions = replacementEqs + modifiedSubexpressions
+    topologicallySortedPairs = sp.cse_main.reps_toposort([[e.lhs, e.rhs] for e in newSubexpressions])
+    newSubexpressions = [sp.Eq(a[0], a[1]) for a in topologicallySortedPairs]
+
+    return LbmCollisionRule(modifiedUpdateEquations, newSubexpressions,
+                            lbmUpdateRule.latticeModel, lbmUpdateRule.updateEquationDirections)
 
 
 def factorRhoAfterFactoringRelaxationTimes(lbmUpdateRule):
@@ -87,12 +92,26 @@ def factorRhoAfterFactoringRelaxationTimes(lbmUpdateRule):
     return lbmUpdateRule.newWithSubexpressions(result, [])
 
 
-def replaceExistingSubexpressions(lbmUpdateRule):
+def subexpressionSubstitutionInExistingSubexpressions(lbmUpdateRule):
+    result = []
+    for outerCtr, s in enumerate(lbmUpdateRule.subexpressions):
+        newRhs = s.rhs
+        for innerCtr in range(outerCtr):
+            subExpr = lbmUpdateRule.subexpressions[innerCtr]
+            newRhs = trafos.replaceAdditive(newRhs, subExpr.lhs, subExpr.rhs, requiredMatchReplacement=1.0)
+            newRhs = newRhs.subs(subExpr.rhs, subExpr.lhs)
+        result.append(sp.Eq(s.lhs, newRhs))
+
+    return LbmCollisionRule(lbmUpdateRule.updateEquations, result,
+                            lbmUpdateRule.latticeModel, lbmUpdateRule.updateEquationDirections)
+
+
+def subexpressionSubstitutionInUpdateEquations(lbmUpdateRule):
     result = []
     for s in lbmUpdateRule.updateEquations:
         newRhs = s.rhs
         for subExpr in lbmUpdateRule.subexpressions:
-            newRhs = trafos.replaceAdditive(newRhs, subExpr.lhs, subExpr.rhs, len(subExpr.rhs.args))
+            newRhs = trafos.replaceAdditive(newRhs, subExpr.lhs, subExpr.rhs, requiredMatchReplacement=1.0)
         result.append(sp.Eq(s.lhs, newRhs))
     return lbmUpdateRule.newWithSubexpressions(result, [])
 
@@ -140,7 +159,7 @@ def replaceDensityAndVelocity(lbmUpdateRule):
     for s in lbmUpdateRule.updateEquations:
         newRhs = s.rhs
         for replacement in substitutions:
-            newRhs = trafos.replaceAdditive(newRhs, replacement.lhs, replacement.rhs, len(replacement.rhs.args) // 2)
+            newRhs = trafos.replaceAdditive(newRhs, replacement.lhs, replacement.rhs, requiredMatchReplacement=0.5)
         result.append(sp.Eq(s.lhs, newRhs))
     return lbmUpdateRule.newWithSubexpressions(result, [])
 
@@ -155,7 +174,7 @@ def replaceCommonQuadraticAndConstantTerm(lbmUpdateRule):
         f_eq_common = sp.Eq(sp.Symbol('f_eq_common'), f_eq_common)
         result = []
         for s in lbmUpdateRule.updateEquations:
-            newRhs = trafos.replaceAdditive(s.rhs, f_eq_common.lhs, f_eq_common.rhs, len(f_eq_common.rhs.args) // 2)
+            newRhs = trafos.replaceAdditive(s.rhs, f_eq_common.lhs, f_eq_common.rhs, requiredMatchReplacement=0.5)
             result.append(sp.Eq(s.lhs, newRhs))
         return lbmUpdateRule.newWithSubexpressions(result, [f_eq_common])
     else:

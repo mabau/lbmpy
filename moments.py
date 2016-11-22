@@ -35,7 +35,7 @@ def __createMomentGeneratingFunction(function, symbols, newSymbols):
     return sp.simplify(result)
 
 
-def __continuousCumulantOrMoment(function, exponents, symbols, cumulant):
+def continuousCumulantOrMoment(function, exponents, symbols, cumulant):
     dim = len(exponents)
 
     if not symbols:
@@ -77,7 +77,7 @@ def continuousMoment(function, moment, symbols=None):
                      defaults to v_0, v_1, ...
     """
     if type(moment) is tuple:
-        return __continuousCumulantOrMoment(function, moment, symbols, False)
+        return continuousCumulantOrMoment(function, moment, symbols, False)
     else:
         contMom = 0
         for term, coeff in moment.as_coefficients_dict().items():
@@ -91,7 +91,7 @@ def continuousCumulant(function, exponents, symbols=None):
     """
     Computes cumulant of given function ( for parameters see function continuousMoment )
     """
-    return __continuousCumulantOrMoment(function, exponents, symbols, True)
+    return continuousCumulantOrMoment(function, exponents, symbols, True)
 
 
 # ------------------------------ Discrete (Exponent Tuples) ------------------------------------------------------------

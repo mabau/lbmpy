@@ -29,6 +29,7 @@ def createStreamCollideUpdateRule(lm, numpyField=None, srcFieldName="src", dstFi
             simplificationStrategy.addSimplificationRule(simplifications.cseInOpposingDirections)
     else:
         simplificationStrategy = simplifications.Strategy()
+        simplificationStrategy.addSimplificationRule(simplifications.subexpressionSubstitutionInExistingSubexpressions)
         simplificationStrategy.addSimplificationRule(simplifications.sympyCSE)
 
     collisionRule = lm.getCollisionRule()

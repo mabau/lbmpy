@@ -119,11 +119,10 @@ class LbmCollisionRule:
 
 
 class LatticeModel:
-    def __init__(self, stencil, relaxationRates, compressible, forceModel=None):
+    def __init__(self, stencil, compressible, forceModel=None):
         self._stencil = stencil
         self._compressible = compressible
         self._forceModel = forceModel
-        self._relaxationRates = relaxationRates
 
     @property
     def stencil(self):
@@ -158,22 +157,12 @@ class LatticeModel:
         return [sp.Symbol("d_%d" % (i,)) for i in range(Q)]
 
     @property
-    def relaxationRates(self):
-        """Sequence of len(stencil) relaxation rates (may be symbolic or constant)"""
-        return self._relaxationRates
-
-    @property
     def symbolicDensity(self):
         return util.getSymbolicDensity()
 
     @property
     def symbolicVelocity(self):
         return util.getSymbolicVelocityVector(self.dim)
-
-    def setCollisionDOFs(self, replacementDict):
-        """Replace relaxation rate symbols by passing a dictionary from symbol name to new value"""
-        substitutions = [(sp.Symbol(key), value) for key, value in replacementDict.items()]
-        self._relaxationRates = [fastSubs(rr, substitutions) for rr in self._relaxationRates]
 
     def getCollisionRule(self):
         raise NotImplemented("This method has to be implemented in subclass")
@@ -182,9 +171,10 @@ class LatticeModel:
 class MomentRelaxationLatticeModel(LatticeModel):
 
     def __init__(self, stencil, moments, equilibriumMoments, relaxationRates, compressible, forceModel=None):
-        super(MomentRelaxationLatticeModel, self).__init__(stencil, relaxationRates, compressible, forceModel)
+        super(MomentRelaxationLatticeModel, self).__init__(stencil, compressible, forceModel)
         self._moments = moments
         self._equilibriumMoments = sp.Matrix(equilibriumMoments)
+        self._relaxationRates = relaxationRates
 
     @property
     def momentMatrix(self):
@@ -193,6 +183,16 @@ class MomentRelaxationLatticeModel(LatticeModel):
     @property
     def weights(self):
         return getWeights(self._stencil)
+
+    @property
+    def relaxationRates(self):
+        """Sequence of len(stencil) relaxation rates (may be symbolic or constant)"""
+        return self._relaxationRates
+
+    def setCollisionDOFs(self, replacementDict):
+        """Replace relaxation rate symbols by passing a dictionary from symbol name to new value"""
+        substitutions = {sp.Symbol(key): value for key, value in replacementDict.items()}
+        self._relaxationRates = [fastSubs(rr, substitutions) for rr in self._relaxationRates]
 
     def getCollisionRule(self):
         relaxationMatrix = sp.diag(*self._relaxationRates)
@@ -217,3 +217,4 @@ class MomentRelaxationLatticeModel(LatticeModel):
         subExpressions = rhoSubexprs + [rhoEq] + uSubexprs + uEqs
 
         return LbmCollisionRule(collisionEqs, subExpressions, self)
+

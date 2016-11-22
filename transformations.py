@@ -61,7 +61,7 @@ def countNumberOfOperations(term):
     return result
 
 
-def replaceAdditive(expr, replacement, subExpression, minimalMatchingTerms):
+def replaceAdditive(expr, replacement, subExpression, requiredMatchReplacement=0.5, requiredMatchOriginal=None):
     """
     Transformation for replacing a given subexpression inside a sum
 
@@ -82,28 +82,51 @@ def replaceAdditive(expr, replacement, subExpression, minimalMatchingTerms):
     :param expr: input expression
     :param replacement: expression that is inserted for subExpression (if found)
     :param subExpression: expression to replace
-    :param minimalMatchingTerms: how many sum-terms have to match to do the replacement
-    :return:
+    :param requiredMatchReplacement:
+        - if float: the percentage of terms of the subExpression that has to be matched in order to replace
+        - if integer: the total number of terms that has to be matched in order to replace
+        - None: is equal to integer 1
+        - if both match parameters are given, both restrictions have to be fulfilled (i.e. logical AND)
+    :param requiredMatchOriginal:
+        - if float: the percentage of terms of the original addition expression that has to be matched
+        - if integer: the total number of terms that has to be matched in order to replace
+        - None: is equal to integer 1
+    :return: new expression with replacement
     """
-    if minimalMatchingTerms <= 0:
-        minimalMatchingTerms = 1
+    def normalizeMatchParameter(matchParameter, expressingLength):
+        if matchParameter is None:
+            return 1
+        elif isinstance(matchParameter, float):
+            assert 0 <= matchParameter <= 1
+            res = int(matchParameter * expressingLength)
+            return max(res, 1)
+        elif isinstance(matchParameter, int):
+            assert matchParameter > 0
+            return matchParameter
+        raise ValueError("Invalid parameter")
+
+    normalizedReplacementMatch = normalizeMatchParameter(requiredMatchReplacement, len(subExpression.args))
 
     def visit(currentExpr):
         if currentExpr.is_Add:
+            exprMaxLength = max(len(currentExpr.args), len(subExpression.args))
+            normalizedCurrentExprMatch = normalizeMatchParameter(requiredMatchOriginal, exprMaxLength)
             exprCoeffs = currentExpr.as_coefficients_dict()
             subexprCoeffDict = subExpression.as_coefficients_dict()
             intersection = set(subexprCoeffDict.keys()).intersection(set(exprCoeffs))
-            if len(intersection) >= minimalMatchingTerms:
+            if len(intersection) >= max(normalizedReplacementMatch, normalizedCurrentExprMatch):
                 # find common factor
                 factors = defaultdict(lambda: 0)
+                skips = 0
                 for commonSymbol in subexprCoeffDict.keys():
                     if commonSymbol not in exprCoeffs:
+                        skips += 1
                         continue
                     factor = exprCoeffs[commonSymbol] / subexprCoeffDict[commonSymbol]
                     factors[sp.simplify(factor)] += 1
 
                 commonFactor = max(factors.items(), key=operator.itemgetter(1))[0]
-                if factors[commonFactor] >= minimalMatchingTerms:
+                if factors[commonFactor] >= max(normalizedCurrentExprMatch, normalizedReplacementMatch):
                     return currentExpr - commonFactor * subExpression + commonFactor * replacement
 
         # if no subexpression was found

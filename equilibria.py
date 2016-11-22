@@ -47,7 +47,8 @@ def standardDiscreteEquilibrium(stencil, rho=None, u=None, order=2, c_s_sq=None,
     :param rho: sympy symbol for the density - defaults to symbols('rho')
     :param u: list with the length of stencil dimensionality with symbols for velocity,
     :param order: highest order of velocity terms (for hydrodynamics order 2 is sufficient)
-    :param c_s_sq: square of speed of sound - if not specified it is chosen as 1/3
+    :param c_s_sq: square of speed of sound - if not specified the symbolic value "c_s**2" is used
+    :param compressible: compressibility
     """
     e = stencil
     w = getWeights(stencil)
