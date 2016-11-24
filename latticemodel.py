@@ -189,6 +189,11 @@ class MomentRelaxationLatticeModel(LatticeModel):
         """Sequence of len(stencil) relaxation rates (may be symbolic or constant)"""
         return self._relaxationRates
 
+    @property
+    def allRelaxationRatesFixed(self):
+        symbols = [rt for rt in self._relaxationRates if isinstance(rt, sp.Symbol)]
+        return len(symbols) == 0
+
     def setCollisionDOFs(self, replacementDict):
         """Replace relaxation rate symbols by passing a dictionary from symbol name to new value"""
         substitutions = {sp.Symbol(key): value for key, value in replacementDict.items()}

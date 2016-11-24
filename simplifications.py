@@ -217,28 +217,36 @@ def cseInOpposingDirections(lbmUpdateRule):
 
         updateRules = [updateRule, inverseRule]
 
-        for relaxationRate in relaxationRates:
-            terms = [updateRule.rhs.coeff(relaxationRate) for updateRule in updateRules]
-            resultOfCommonFactor = [trafos.extractMostCommonFactor(t) for t in terms]
-            commonFactors = [r[0] for r in resultOfCommonFactor]
-            termsWithoutFactor = [r[1] for r in resultOfCommonFactor]
-
-            if commonFactors[0] == commonFactors[1] and commonFactors[0] != 1:
-                newCoefficient = commonFactors[0] * relaxationRate
-                if newCoefficient not in newCoefficientSubstitutions:
-                    newCoefficientSubstitutions[newCoefficient] = next(replacementSymbolGenerator)
-                newCoefficient = newCoefficientSubstitutions[newCoefficient]
-                handledTerms = termsWithoutFactor
-            else:
-                newCoefficient = relaxationRate
-                handledTerms = terms
-
-            foundSubexpressions, newTerms = sp.cse(handledTerms, symbols=replacementSymbolGenerator,
+        if latticeModel.allRelaxationRatesFixed:
+            foundSubexpressions, newTerms = sp.cse(updateRules, symbols=replacementSymbolGenerator,
                                                    order='None', optimizations=[])
             substitutions += [sp.Eq(f[0], f[1]) for f in foundSubexpressions]
 
-            updateRules = [sp.Eq(ur.lhs, ur.rhs.subs(relaxationRate*oldTerm, newCoefficient*newTerm))
-                           for ur, newTerm, oldTerm in zip(updateRules, newTerms, terms)]
+            updateRules = newTerms
+        else:
+            for relaxationRate in relaxationRates:
+                terms = [updateRule.rhs.coeff(relaxationRate) for updateRule in updateRules]
+                resultOfCommonFactor = [trafos.extractMostCommonFactor(t) for t in terms]
+                commonFactors = [r[0] for r in resultOfCommonFactor]
+                termsWithoutFactor = [r[1] for r in resultOfCommonFactor]
+
+                if commonFactors[0] == commonFactors[1] and commonFactors[0] != 1:
+                    newCoefficient = commonFactors[0] * relaxationRate
+                    if newCoefficient not in newCoefficientSubstitutions:
+                        newCoefficientSubstitutions[newCoefficient] = next(replacementSymbolGenerator)
+                    newCoefficient = newCoefficientSubstitutions[newCoefficient]
+                    handledTerms = termsWithoutFactor
+                else:
+                    newCoefficient = relaxationRate
+                    handledTerms = terms
+
+                foundSubexpressions, newTerms = sp.cse(handledTerms, symbols=replacementSymbolGenerator,
+                                                       order='None', optimizations=[])
+                substitutions += [sp.Eq(f[0], f[1]) for f in foundSubexpressions]
+
+                updateRules = [sp.Eq(ur.lhs, ur.rhs.subs(relaxationRate*oldTerm, newCoefficient*newTerm))
+                               for ur, newTerm, oldTerm in zip(updateRules, newTerms, terms)]
+
         result += updateRules
         handledDirections += [direction, inverseDir]
 

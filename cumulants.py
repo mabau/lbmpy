@@ -60,7 +60,7 @@ def cumulantsFromPdfs(stencil, pdfSymbols=None, cumulantSymbols=None):
             for cumulantSymbol, idx in zip(cumulantSymbols, indices)]
 
 
-@functools.lru_cache(maxsize=8)
+@diskcache
 def cumulantsFromRawMoments(stencil, momentSymbols=None, cumulantSymbols=None):
     dim = len(stencil[0])
     indices = list(momentsUpToComponentOrder(2, dim=dim))
