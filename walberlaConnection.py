@@ -1,11 +1,12 @@
 from waLBerla import lbm
 import lbmpy.forcemodels as forcemodels
 from pystencils.cpu.kernelcreation import addOpenMP
+from lbmpy.cumulantlatticemodel import CumulantRelaxationLatticeModel, CorrectedD3Q27Collision
 
 
 def convertWalberlaToLbmpyLatticeModel(lm):
     from lbmpy.latticemodel import makeSRT, makeTRT, makeMRT
-    stencil = lm.directions
+    stencil = tuple(lm.directions)
 
     def getForce():
         dim = len(stencil[0])
@@ -30,6 +31,9 @@ def convertWalberlaToLbmpyLatticeModel(lm):
         return makeTRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder, forceModel=forceModel)
     elif type(lm.collisionModel) == lbm.collisionModels.D3Q19MRT:
         return makeMRT(stencil, compressible=lm.compressible, order=lm.equilibriumAccuracyOrder, forceModel=forceModel)
+    elif type(lm.collisionModel) == lbm.collisionModels.D3Q27Cumulant:
+        coll = CorrectedD3Q27Collision(lm.collisionModel.relaxationRates)
+        return CumulantRelaxationLatticeModel(stencil, coll)
     else:
         raise ValueError("Unknown lattice model")
 
@@ -79,11 +83,14 @@ def makeLbmpySweepFromWalberlaLatticeModel(walberlaLatticeModel, blocks, pdfFiel
     elif type(walberlaLatticeModel.collisionModel) == lbm.collisionModels.TRT:
         params = {'lambda_o': walberlaLatticeModel.collisionModel.lambda_d,
                   'lambda_e': walberlaLatticeModel.collisionModel.lambda_e, }
-    elif type(walberlaLatticeModel.collisionModel == lbm.collisionModels.D3Q19MRT):
+    elif type(walberlaLatticeModel.collisionModel) == lbm.collisionModels.D3Q19MRT:
         s = walberlaLatticeModel.collisionModel.relaxationRates
         params = {}
         for i in [1, 2, 4, 9, 10, 16]:
             params["s_%d" % (i,)] = s[i]
+    elif type(walberlaLatticeModel.collisionModel) == lbm.collisionModels.D3Q27Cumulant:
+        params = {}
+        pass
     else:
         raise ValueError("Unknown lattice model")
 

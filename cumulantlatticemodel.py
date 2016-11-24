@@ -129,7 +129,7 @@ class CumulantRelaxationLatticeModel(LatticeModel):
         for u_i, idx in zip(self.symbolicVelocity, velIndices):
             cumulantSymbols[moments.index(idx)] = u_i
         cumulantSymbols = tuple(cumulantSymbols)
-        cumFromPdf = cumulantsFromPdfs(self.stencil, pdfSymbols, cumulantSymbols)
+        cumFromPdf = cumulantsFromPdfs(tuple(self.stencil), pdfSymbols, cumulantSymbols)
 
         rhoSubexprs, rhoEq, uSubexprs, uEqs = getDensityVelocityExpressions(self.stencil, self.pdfSymbols,
                                                                             self.compressible)
@@ -151,7 +151,7 @@ class CumulantRelaxationLatticeModel(LatticeModel):
             subExpressions += [sp.Eq(s, cp) for s, cp in zip(postcollisionSymbols, collidedValues)]
             collidedValues = postcollisionSymbols
 
-        momFromCum = rawMomentsFromCumulants(self.stencil, cumulantSymbols, momentSymbols)
+        momFromCum = rawMomentsFromCumulants(tuple(self.stencil), cumulantSymbols, momentSymbols)
         substitutions = {cumulantSymbol: collidedValue
                          for cumulantSymbol, collidedValue in zip(cumulantSymbols, collidedValues)}
         collidedMoments = [fastSubs(rawMomentEq.rhs, substitutions) for rawMomentEq in momFromCum]
