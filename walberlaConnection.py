@@ -44,7 +44,7 @@ def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src'
     from pystencils.cpu.cpujit import buildCTypeArgumentList, compileAndLoad
     swapFields = {}
 
-    func = compileAndLoad(kernelFunctionNode)
+    func = compileAndLoad(kernelFunctionNode)[kernelFunctionNode.functionName]
     func.restype = None
 
     def f(**kwargs):
@@ -64,7 +64,7 @@ def makeWalberlaSourceDestinationSweep(kernelFunctionNode, sourceFieldName='src'
             kwargs[sourceFieldName] = kwargs[sourceFieldName][:, :, 1, :]
             kwargs[destinationFieldName] = kwargs[destinationFieldName][:, :, 1, :]
 
-        args = buildCTypeArgumentList(kernelFunctionNode, kwargs)
+        args = buildCTypeArgumentList(kernelFunctionNode.parameters, kwargs)
         func(*args)
         src.swapDataPointers(dst)
 
