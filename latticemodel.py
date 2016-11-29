@@ -100,20 +100,20 @@ class LbmCollisionRule:
         for s in self.updateEquations:  # [-1:]:
             printFunction(s)
 
-    def displayRepresentative(self, printFunction=print, representativeDirections=None):
+    def displayRepresentative(self, printFunction=print, directions=None):
         """Prints the update rules for C, W, NW and for 3D models TNW
         :param printFunction: function that is used for printing, for IPython notebooks IPython.display can be useful
-        :param representativeDirections: can be a list of directions, to print only these directions
+        :param directions: can be a list of directions, to print only these directions
                                          if None, the default directions are printed
         """
-        if representativeDirections is None:
+        if directions is None:
             if self.latticeModel.dim == 2:
-                representativeDirections = [(0, 0), (1, 0), (1, 1)]
+                directions = [(0, 0), (1, 0), (1, 1)]
             elif self.latticeModel.dim == 3:
-                representativeDirections = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 1, 1)]
+                directions = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 1, 1)]
             else:
                 raise NotImplementedError("Only 2D and 3D models supported")
-        indices = [self.updateEquationDirections.index(i) for i in representativeDirections]
+        indices = [self.updateEquationDirections.index(i) for i in directions]
         for i in indices:
             printFunction(self.updateEquations[i])
 

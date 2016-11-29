@@ -6,6 +6,20 @@ from pystencils import Field
 
 # --------------------------------- Field Access patterns --------------------------------------------------------------
 
+def streamPullSourceDestination(lbmCollisionRule, srcField, dstField):
+    lm = lbmCollisionRule.latticeModel
+
+    pdfSrcSymbols = lm.pdfSymbols
+    pdfDstSymbols = lm.pdfDestinationSymbols
+    substitutions = {}
+
+    for idx, offset in enumerate(lm.stencil):
+        inverseIdx = tuple([-d for d in offset])
+        substitutions[pdfSrcSymbols[idx]] = srcField[inverseIdx](idx)
+        substitutions[pdfDstSymbols[idx]] = dstField(idx)
+
+    return lbmCollisionRule.newWithSubstitutions(substitutions)
+
 
 def streamPullWithSourceAndDestinationFields(lbmCollisionRule, numpyField=None, srcFieldName="src", dstFieldName="dst",
                                              genericLayout='numpy', genericFieldType=np.float64):
@@ -31,17 +45,7 @@ def streamPullWithSourceAndDestinationFields(lbmCollisionRule, numpyField=None, 
     else:
         src = Field.createFromNumpyArray(srcFieldName, numpyField, indexDimensions=1)
         dst = Field.createFromNumpyArray(dstFieldName, numpyField, indexDimensions=1)
-
-    pdfSrcSymbols = lm.pdfSymbols
-    pdfDstSymbols = lm.pdfDestinationSymbols
-    substitutions = {}
-
-    for idx, offset in enumerate(lm.stencil):
-        inverseIdx = tuple([-d for d in offset])
-        substitutions[pdfSrcSymbols[idx]] = src[inverseIdx](idx)
-        substitutions[pdfDstSymbols[idx]] = dst(idx)
-
-    return lbmCollisionRule.newWithSubstitutions(substitutions)
+    return streamPullSourceDestination(lbmCollisionRule, src, dst)
 
 
 # ---------------------------- Macroscopic value I/O to fields ---------------------------------------------------------
