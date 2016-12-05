@@ -39,7 +39,7 @@ getWeights.weights = {
 }
 
 
-@diskcache
+#@diskcache
 def standardDiscreteEquilibrium(stencil, rho=None, u=None, order=2, c_s_sq=None, compressible=True):
     """
     Returns the common quadratic LBM equilibrium as a list of sympy expressions
@@ -56,9 +56,9 @@ def standardDiscreteEquilibrium(stencil, rho=None, u=None, order=2, c_s_sq=None,
 
     D = len(e[0])
 
-    if not rho:
+    if rho is None:
         rho = getSymbolicDensity()
-    if not u:
+    if u is None:
         u = getSymbolicVelocityVector(D, "u")
 
     if not c_s_sq:

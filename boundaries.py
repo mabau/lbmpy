@@ -3,12 +3,14 @@ import itertools
 import numpy as np
 import sympy as sp
 
+from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 from lbmpy.stencils import getStencil
 from pystencils.backends.cbackend import CustomCppCode
 from pystencils.types import TypedSymbol
 from pystencils.field import Field
 from pystencils.ast import Node, Block, SympyAssignment, LoopOverCoordinate, KernelFunction
-from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses
+from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses, typingFromSympyInspection, \
+    typeAllEquations
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
 WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
@@ -66,7 +68,12 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     dirSymbol = TypedSymbol("dir", "int")
     cellLoopBody.append(SympyAssignment(dirSymbol, indexField[0](dim)))
 
-    cellLoopBody.append(boundaryFunctor(pdfField, dirSymbol, latticeModel))
+    boundaryEqList = boundaryFunctor(pdfField, dirSymbol, latticeModel)
+    typeInfos = typingFromSympyInspection(boundaryEqList, pdfField.dtype)
+    fieldsRead, fieldsWritten, assignments = typeAllEquations(boundaryEqList, typeInfos)
+
+    for be in assignments:
+        cellLoopBody.append(be)
 
     functionBody = Block([cellLoop])
     ast = KernelFunction(functionBody, [pdfField, indexField])
@@ -94,29 +101,59 @@ def createBoundaryIndexList(flagFieldArr, nrOfGhostLayers, stencil, boundaryMask
 
 def noSlip(pdfField, direction, latticeModel):
     neighbor = offsetFromDir(direction, latticeModel.dim)
-    current = tuple([0] * latticeModel.dim)
     inverseDir = invDir(direction)
-    return SympyAssignment(pdfField[neighbor](inverseDir), pdfField[current](direction))
+    return [sp.Eq(pdfField[neighbor](inverseDir), pdfField(direction))]
 
 
 def ubb(pdfField, direction, latticeModel, velocity):
     neighbor = offsetFromDir(direction, latticeModel.dim)
-    current = tuple([0] * latticeModel.dim)
     inverseDir = invDir(direction)
 
     velTerm = 6 * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
-    return SympyAssignment(pdfField[neighbor](inverseDir),
-                           pdfField[current](direction) - velTerm)
+    return [sp.Eq(pdfField[neighbor](inverseDir),
+                  pdfField(direction) - velTerm)]
 
+
+def fixedDensity(pdfField, direction, latticeModel, density):
+    from lbmpy.equilibria import standardDiscreteEquilibrium
+    neighbor = offsetFromDir(direction, latticeModel.dim)
+    inverseDir = invDir(direction)
+    stencil = latticeModel.stencil
+
+    if not latticeModel.compressible:
+        density -= 1
+
+    eqParams = {'stencil': stencil,
+                'order': 2,
+                'c_s_sq': sp.Rational(1, 3),
+                'compressible': latticeModel.compressible,
+                'rho': density}
+
+    u = sp.Matrix(latticeModel.symbolicVelocity)
+    symmetricEq = (standardDiscreteEquilibrium(u=u, **eqParams) + standardDiscreteEquilibrium(u=-u, **eqParams)) / 2
+
+    subExpr1, rhoExpr, subExpr2, uExprs = getDensityVelocityExpressions(stencil,
+                                                                        [pdfField(i) for i in range(len(stencil))],
+                                                                        latticeModel.compressible)
+    subExprs = subExpr1 + [rhoExpr] + subExpr2 + uExprs
+
+    conditions = [(eq_i, sp.Equality(direction, i)) for i, eq_i in enumerate(symmetricEq)] + [(0, True)]
+    eq_component = sp.Piecewise(*conditions)
+
+    return subExprs + [sp.Eq(pdfField[neighbor](inverseDir),
+                             2 * eq_component - pdfField(direction))]
 
 if __name__ == "__main__":
-    import lbmpy.collisionoperator as coll
-    lm = coll.makeSRT(getStencil("D3Q19"))
+    from lbmpy.latticemodel import makeSRT
+    from pystencils.cpu import generateC
+    import functools
+    lm = makeSRT(getStencil("D3Q19"))
     pdfField = Field.createGeneric("pdfField", lm.dim, indexDimensions=1)
 
     indexArr = np.array([[1, 1, 1, 1], [1, 2, 1,  1], [2, 1, 1, 1]], dtype=np.int32)
 
-    ast = generateBoundaryHandling(pdfField, indexArr, lm, noSlip)
+    pressureBoundary = functools.partial(fixedDensity, density=1.0)
+    ast = generateBoundaryHandling(pdfField, indexArr, lm, pressureBoundary)
 
-    print(ast.generateC())
+    print(generateC(ast))
 

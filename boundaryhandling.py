@@ -34,7 +34,14 @@ class BoundaryHandling:
 
     def setBoundary(self, name, indexExpr):
         if not isinstance(name, str):
-            name = name.__name__
+            function = name
+            if hasattr(function, '__name__'):
+                name = function.__name__
+            else:
+                name = function.name
+
+            if function not in self._boundaryFunctions:
+                self.addBoundary(function, name)
 
         flag = self.getFlag(name)
         self.flagField[indexExpr] = flag
