@@ -9,6 +9,68 @@ from lbmpy.equilibria import getWeights
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 
 
+def isHydrodynamic(idx):
+    return sum(idx) == 2
+
+
+def relaxationRateFromMagicNumber(hydrodynamicOmega, magicNumber):
+    half = sp.Rational(1, 2)
+    return 1 / (magicNumber / (1 / hydrodynamicOmega - half) + half)
+
+
+def relaxationRateFromFactor(hydrodynamicOmega, factor):
+    half = sp.Rational(1, 2)
+    return 1 / ((1 / hydrodynamicOmega - half) / factor + half)
+
+
+class TRTStyleRelaxation:
+    def __init__(self, omega, factorEven=1.0, factorOdd=sp.Rational(3, 16)):
+        self._omega = omega
+        self._factorEven = factorEven
+        self._factorOdd = factorOdd
+        self.addPostCollisionsAsSubexpressions = False
+
+    def __call__(self, preCollisionSymbols, indices):
+        pre = {a: b for a, b in zip(indices, preCollisionSymbols)}
+        post = {}
+        dim = len(indices[0])
+
+        omegaEven = relaxationRateFromFactor(self._omega, self._factorEven)
+        omegaOdd = relaxationRateFromMagicNumber(self._omega, self._factorOdd)
+
+        print(omegaEven, omegaOdd)
+        maxwellBoltzmann = maxwellBoltzmannEquilibrium(dim, c_s_sq=sp.Rational(1, 3))
+        for idx, value in pre.items():
+            isEven = sum(idx) % 2 == 0
+            if isHydrodynamic(idx):
+                relaxRate = self._omega
+            elif isEven:
+                relaxRate = omegaEven
+            else:
+                relaxRate = omegaOdd
+
+            post[idx] = pre[idx] + relaxRate * (continuousCumulant(maxwellBoltzmann, idx) - pre[idx])
+
+        return [post[idx] for idx in indices]
+
+
+class AllSameRelaxation:
+    def __init__(self, omega):
+        self._omega = omega
+        self.addPostCollisionsAsSubexpressions = False
+
+    def __call__(self, preCollisionSymbols, indices):
+        pre = {a: b for a, b in zip(indices, preCollisionSymbols)}
+        post = {}
+        dim = len(indices[0])
+
+        maxwellBoltzmann = maxwellBoltzmannEquilibrium(dim, c_s_sq=sp.Rational(1, 3))
+        for idx, value in pre.items():
+            post[idx] = pre[idx] + self._omega * (continuousCumulant(maxwellBoltzmann, idx) - pre[idx])
+
+        return [post[idx] for idx in indices]
+
+
 class SimpleBoltzmannRelaxation:
     def __init__(self, omega):
         self._omega = omega
@@ -19,21 +81,11 @@ class SimpleBoltzmannRelaxation:
         post = {}
         dim = len(indices[0])
 
-        # conserved quantities
-        for idx, value in pre.items():
-            if sum(idx) == 0 or sum(idx) == 1:
-                post[idx] = pre[idx]
-
-        # hydrodynamic relaxation
-        for idx in indices:
-            idxCounter = Counter(idx)
-            if len(idxCounter.keys() - set([0, 1])) == 0 and idxCounter[1] == 2:
-                post[idx] = (1 - self._omega) * pre[idx]
-
-        # set remaining values to their equilibrium value (i.e. relaxationRate=1)
         maxwellBoltzmann = maxwellBoltzmannEquilibrium(dim, c_s_sq=sp.Rational(1, 3))
         for idx, value in pre.items():
-            if idx not in post:
+            if isHydrodynamic(idx):
+                post[idx] = (1 - self._omega) * pre[idx]
+            else:
                 post[idx] = continuousCumulant(maxwellBoltzmann, idx)
 
         return [post[idx] for idx in indices]
