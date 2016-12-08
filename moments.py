@@ -383,8 +383,8 @@ class MomentSystem:
                 assert len(self.conservedMomentIds) == 4
 
             # Check non-conserved moments: in one group all moments should have the same order
-            for momentIdGroup in momentIdGroups[1:]:
-                assert len(set([getOrder(allMoments[i]) for i in momentIdGroup])) == 1
+            #for momentIdGroup in momentIdGroups[1:]:
+            #    assert len(set([getOrder(allMoments[i]) for i in momentIdGroup])) == 1
         else:
             self._momentIdGroups = defaultdict(list)
             for i, moment in enumerate(allMoments):
@@ -398,7 +398,6 @@ class MomentSystem:
             for i in range(maxOrder):
                 momentIdGroupsAsList[i] = self._momentIdGroups[i]
             self._momentIdGroups = momentIdGroupsAsList
-
 
     @property
     def symbols(self):

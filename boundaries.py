@@ -8,7 +8,7 @@ from lbmpy.stencils import getStencil
 from pystencils.backends.cbackend import CustomCppCode
 from pystencils.types import TypedSymbol
 from pystencils.field import Field
-from pystencils.ast import Node, Block, SympyAssignment, LoopOverCoordinate, KernelFunction
+from pystencils.ast import Block, SympyAssignment, LoopOverCoordinate, KernelFunction
 from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses, typingFromSympyInspection, \
     typeAllEquations
 
@@ -69,8 +69,14 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     cellLoopBody.append(SympyAssignment(dirSymbol, indexField[0](dim)))
 
     boundaryEqList = boundaryFunctor(pdfField, dirSymbol, latticeModel)
+    if type(boundaryEqList) is tuple:
+        boundaryEqList, additionalNodes = boundaryEqList
+    else:
+        additionalNodes = []
+
     typeInfos = typingFromSympyInspection(boundaryEqList, pdfField.dtype)
     fieldsRead, fieldsWritten, assignments = typeAllEquations(boundaryEqList, typeInfos)
+    fieldsAccessed = fieldsRead.union(fieldsWritten) - set([indexField])
 
     for be in assignments:
         cellLoopBody.append(be)
@@ -78,8 +84,17 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     functionBody = Block([cellLoop])
     ast = KernelFunction(functionBody, [pdfField, indexField])
 
+    if len(additionalNodes) > 0:
+        loops = ast.atoms(LoopOverCoordinate)
+        assert len(loops) == 1
+        loop = list(loops)[0]
+        for node in additionalNodes:
+            loop.body.append(node)
+
     functionBody.insertFront(LatticeModelInfo(latticeModel))
-    resolveFieldAccesses(ast, set(['indexField']), fieldToFixedCoordinates={pdfField.name: coordinateSymbols[:dim]})
+
+    fixedCoordinateMapping = {f.name: coordinateSymbols[:dim] for f in fieldsAccessed}
+    resolveFieldAccesses(ast, set(['indexField']), fieldToFixedCoordinates=fixedCoordinateMapping)
     moveConstantsBeforeLoop(ast)
     return ast
 

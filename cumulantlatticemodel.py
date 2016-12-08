@@ -23,11 +23,18 @@ def relaxationRateFromFactor(hydrodynamicOmega, factor):
     return 1 / ((1 / hydrodynamicOmega - half) / factor + half)
 
 
-class TRTStyleRelaxation:
-    def __init__(self, omega, factorEven=1.0, factorOdd=sp.Rational(3, 16)):
-        self._omega = omega
-        self._factorEven = factorEven
-        self._factorOdd = factorOdd
+class TRTStyle:
+
+    @staticmethod
+    def createFromFactors(omega, factorEven=1.0, factorOdd=sp.Rational(3, 16)):
+        omegaEven = relaxationRateFromFactor(omega, factorEven)
+        omegaOdd = relaxationRateFromMagicNumber(omega, factorOdd)
+        return TRTStyle(omega, omegaEven, omegaOdd)
+
+    def __init__(self, omegaHydrodynamic, omegaEven, omegaOdd):
+        self._omega = omegaHydrodynamic
+        self._omega_e = omegaEven
+        self._omega_o = omegaOdd
         self.addPostCollisionsAsSubexpressions = False
 
     def __call__(self, preCollisionSymbols, indices):
@@ -35,19 +42,15 @@ class TRTStyleRelaxation:
         post = {}
         dim = len(indices[0])
 
-        omegaEven = relaxationRateFromFactor(self._omega, self._factorEven)
-        omegaOdd = relaxationRateFromMagicNumber(self._omega, self._factorOdd)
-
-        print(omegaEven, omegaOdd)
         maxwellBoltzmann = maxwellBoltzmannEquilibrium(dim, c_s_sq=sp.Rational(1, 3))
         for idx, value in pre.items():
             isEven = sum(idx) % 2 == 0
             if isHydrodynamic(idx):
                 relaxRate = self._omega
             elif isEven:
-                relaxRate = omegaEven
+                relaxRate = self._omega_e
             else:
-                relaxRate = omegaOdd
+                relaxRate = self._omega_o
 
             post[idx] = pre[idx] + relaxRate * (continuousCumulant(maxwellBoltzmann, idx) - pre[idx])
 
@@ -198,6 +201,7 @@ class CumulantRelaxationLatticeModel(LatticeModel):
                            if moment not in velIndices and moment != densityIdx]
 
         collidedValues = self.cumulantCollision(cumulantSymbols, moments)
+        print(collidedValues)
         if self.cumulantCollision.addPostCollisionsAsSubexpressions:
             postcollisionSymbols = getDefaultIndexedSymbols(None, "cp", moments)
             subExpressions += [sp.Eq(s, cp) for s, cp in zip(postcollisionSymbols, collidedValues)]

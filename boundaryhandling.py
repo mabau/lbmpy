@@ -32,7 +32,7 @@ class BoundaryHandling:
     def getFlag(self, name):
         return 2 ** self._nameToIndex[name]
 
-    def setBoundary(self, name, indexExpr):
+    def setBoundary(self, name, indexExpr, clearOtherBoundaries=True):
         if not isinstance(name, str):
             function = name
             if hasattr(function, '__name__'):
@@ -44,7 +44,14 @@ class BoundaryHandling:
                 self.addBoundary(function, name)
 
         flag = self.getFlag(name)
-        self.flagField[indexExpr] = flag
+        if clearOtherBoundaries:
+            self.flagField[indexExpr] = flag
+        else:
+            # clear fluid flag
+            np.bitwise_and(self.flagField[indexExpr], np.invert(self._fluidFlag), self.flagField[indexExpr])
+            # add new boundary flag
+            np.bitwise_or(self.flagField[indexExpr], flag, self.flagField[indexExpr])
+
         self.invalidateIndexCache()
 
     def prepare(self):
@@ -55,9 +62,8 @@ class BoundaryHandling:
             ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._latticeModel, boundaryFunc)
             self._boundarySweeps.append(makePythonFunction(ast, {'indexField': idxField}))
 
-    def __call__(self, pdfField):
-        assert tuple(self._shapeWithGhostLayers) == tuple(pdfField.shape[:-1])
+    def __call__(self, **kwargs):
         if len(self._boundarySweeps) == 0:
             self.prepare()
         for boundarySweep in self._boundarySweeps:
-            boundarySweep(pdfs=pdfField)
+            boundarySweep(**kwargs)
