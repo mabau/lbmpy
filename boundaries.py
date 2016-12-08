@@ -5,7 +5,7 @@ import sympy as sp
 
 from lbmpy.stencils import getStencil
 from pystencils.backends.cbackend import CustomCppCode
-from pystencils.typedsymbol import TypedSymbol
+from pystencils.types import TypedSymbol
 from pystencils.field import Field
 from pystencils.ast import Node, Block, SympyAssignment, LoopOverCoordinate, KernelFunction
 from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses
