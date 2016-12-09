@@ -5,11 +5,12 @@ from lbmpy.equilibria import standardDiscreteEquilibrium
 from lbmpy.densityVelocityExpressions import getDensityVelocityExpressions
 
 
-def compileMacroscopicValuesGetter(latticeModel, pdfArr=None):
+def compileMacroscopicValuesGetter(latticeModel, pdfArr=None, macroscopicFieldLayout='numpy'):
     """
     Creates a function that computes density and/or velocity and stores it into given arrays
     :param latticeModel: lattice model (to get information about stencil, force velocity shift and compressibility)
     :param pdfArr: array to set can already be specified here, or later when the returned function is called
+    :param macroscopicFieldLayout: layout specification for Field.createGeneric
     :return: a function, which has three parameters:
         - pdfArray, can be omitted if pdf array was already passed while compiling
         - densityOut, if not None, density is written to that array
@@ -20,8 +21,8 @@ def compileMacroscopicValuesGetter(latticeModel, pdfArr=None):
     else:
         pdfField = Field.createFromNumpyArray('pdfs', pdfArr, indexDimensions=1)
 
-    rhoField = Field.createGeneric('rho', latticeModel.dim, indexDimensions=0)
-    velField = Field.createGeneric('vel', latticeModel.dim, indexDimensions=1)
+    rhoField = Field.createGeneric('rho', latticeModel.dim, indexDimensions=0, layout=macroscopicFieldLayout)
+    velField = Field.createGeneric('vel', latticeModel.dim, indexDimensions=1, layout=macroscopicFieldLayout)
 
     lm = latticeModel
     Q = len(lm.stencil)
