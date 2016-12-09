@@ -36,6 +36,48 @@ def findEntropyMaximizingOmega(stencil, relaxationRate, affinePart=None, linearP
     return result
 
 
+def splitUpdateEquationsInDeltasPlusRest(updateEqsRhs, relaxationRate):
+    deltas = [ue.expand().collect(relaxationRate).coeff(relaxationRate)
+              for ue in updateEqsRhs]
+    rest = [ue.expand().collect(relaxationRate) - relaxationRate * delta for ue, delta in zip(updateEqsRhs, deltas)]
+
+    return rest, deltas
+
+
+def findEntropyMaximizingOmega(omega_s, f_eq,  ds, dh):
+    dsdh = sum([ds_i * dh_i / f_eq_i for ds_i, dh_i, f_eq_i in zip(ds, dh, f_eq)])
+    dhdh = sum([dh_i * dh_i / f_eq_i for dh_i, f_eq_i in zip(dh, f_eq)])
+    return 1 - ((omega_s - 1) * dsdh / dhdh)
+
+
+def determineRelaxationRateByEntropyCondition(updateRule, omega_s, omega_h):
+    stencil = updateRule.latticeModel.stencil
+    Q = len(stencil)
+    fSymbols = updateRule.latticeModel.pdfSymbols
+
+    updateEqsRhs = [e.rhs for e in updateRule.updateEquations]
+    _, ds = splitUpdateEquationsInDeltasPlusRest(updateEqsRhs, omega_s)
+    _, dh = splitUpdateEquationsInDeltasPlusRest(updateEqsRhs, omega_h)
+    dsSymbols = [sp.Symbol("entropicDs_%d" % (i,)) for i in range(Q)]
+    dhSymbols = [sp.Symbol("entropicDh_%d" % (i,)) for i in range(Q)]
+    feqSymbols = [sp.Symbol("entropicFeq_%d" % (i,)) for i in range(Q)]
+
+    subexprs = [sp.Eq(a, b) for a, b in zip(dsSymbols, ds)] + \
+               [sp.Eq(a, b) for a, b in zip(dhSymbols, dh)] + \
+               [sp.Eq(a, f_i + ds_i + dh_i) for a, f_i, ds_i, dh_i in zip(feqSymbols, fSymbols, dsSymbols, dhSymbols)]
+
+    optimalOmegaH = findEntropyMaximizingOmega(omega_s, feqSymbols, dsSymbols, dhSymbols)
+
+    subexprs += [sp.Eq(omega_h, optimalOmegaH)]
+
+    newUpdateEquations = []
+    for updateEq in updateRule.updateEquations:
+        index = updateRule.latticeModel.pdfDestinationSymbols.index(updateEq.lhs)
+        newEq = sp.Eq(updateEq.lhs, fSymbols[index] + omega_s * dsSymbols[index] + omega_h * dhSymbols[index])
+        newUpdateEquations.append(newEq)
+    return updateRule.newWithSubexpressions(newUpdateEquations, subexprs)
+
+
 def decompositionByRelaxationRate(updateRule, relaxationRate):
     lm = updateRule.latticeModel
     stencil = lm.stencil
@@ -61,7 +103,7 @@ def decompositionByRelaxationRate(updateRule, relaxationRate):
     return affineTerms, linearTerms, quadraticTerms
 
 
-def determineRelaxationRateByEntropyCondition(updateRule, relaxationRate):
+def determineRelaxationRateByEntropyConditionWrong(updateRule, relaxationRate):
     affine, linear, quadratic = decompositionByRelaxationRate(updateRule, relaxationRate)
     for i in quadratic:
         if i != 0:

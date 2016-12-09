@@ -66,6 +66,11 @@ def addVelocityFieldOutput(lbmCollisionRule, velocityField, shiftForceIfNecessar
                             lm, lbmCollisionRule.updateEquationDirections)
 
 
+def addScalarOutput(lbmCollisionRule, symbol, outputField):
+    eq = sp.Eq(outputField(0), symbol)
+    return lbmCollisionRule.newWithSubexpressions(lbmCollisionRule.updateEquations, [eq])
+
+
 def addDensityFieldOutput(lbmCollisionRule, densityField):
     lm = lbmCollisionRule.latticeModel
     newEqs = [sp.Eq(densityField(0), lm.symbolicDensity)]
