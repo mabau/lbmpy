@@ -1,9 +1,14 @@
 import sympy as sp
 from lbmpy.equilibria import standardDiscreteEquilibrium, getWeights
+from pystencils.transformations import fastSubs
 
 
 def discreteEntropyFromWeights(function, weights):
     return -sum([f_i * sp.ln(f_i / w_i) for f_i, w_i in zip(function, weights)])
+
+
+def discreteApproxEntropyFromWeights(function, weights):
+    return -sum([f_i * ((f_i / w_i)-1) for f_i, w_i in zip(function, weights)])
 
 
 def discreteEntropy(function, stencil):
@@ -12,28 +17,7 @@ def discreteEntropy(function, stencil):
 
 def discreteApproxEntropy(function, stencil):
     weights = getWeights(stencil)
-    return -sum([f_i * ((f_i / w_i)-1) for f_i, w_i in zip(function, weights)])
-
-
-def findEntropyMaximizingOmega(stencil, relaxationRate, affinePart=None, linearPart=None):
-    Q = len(stencil)
-    symOffsets = [sp.Symbol("O_%d" % (i,)) for i in range(Q)]
-    symFactors = [sp.Symbol("F_%d" % (i,)) for i in range(Q)]
-
-    eqs = [symOffsets[i] + relaxationRate * symFactors[i] for i in range(Q)]
-
-    h = discreteApproxEntropy(eqs, stencil)
-    h_diff = sp.cancel(sp.diff(h, relaxationRate))
-
-    solveResult = sp.solve(h_diff, relaxationRate)
-    assert len(solveResult) == 1, "Could not solve for optimal omega" + str(len(solveResult))
-    result = sp.simplify(solveResult[0])
-    if affinePart:
-        result = result.subs({a: b for a, b in zip(symOffsets, affinePart)})
-    if linearPart:
-        result = result.subs({a: b for a, b in zip(symFactors, linearPart)})
-
-    return result
+    return discreteApproxEntropyFromWeights(function, weights)
 
 
 def splitUpdateEquationsInDeltasPlusRest(updateEqsRhs, relaxationRate):
@@ -103,27 +87,110 @@ def decompositionByRelaxationRate(updateRule, relaxationRate):
     return affineTerms, linearTerms, quadraticTerms
 
 
-def determineRelaxationRateByEntropyConditionWrong(updateRule, relaxationRate):
-    affine, linear, quadratic = decompositionByRelaxationRate(updateRule, relaxationRate)
-    for i in quadratic:
-        if i != 0:
-            raise NotImplementedError("Works only for methods where relaxation time occurs linearly")
+class RelaxationRatePolynomialDecomposition:
 
+    def __init__(self, collisionRule, freeRelaxationRates, fixedRelaxationRates):
+        self._collisionRule = collisionRule
+        self._freeRelaxationRates = freeRelaxationRates
+        self._fixedRelaxationRates = fixedRelaxationRates
+        self._allRelaxationRates = fixedRelaxationRates + freeRelaxationRates
+        for se in collisionRule.subexpressions:
+            for rr in freeRelaxationRates:
+                assert rr not in se.rhs.atoms(sp.Symbol), \
+                    "Decomposition not possible since free relaxation rates are already in subexpressions"
+
+    def symbolicRelaxationRateFactors(self, relaxationRate, power):
+        Q = len(self._collisionRule.latticeModel.stencil)
+        omegaIdx = self._allRelaxationRates.index(relaxationRate)
+        return [sp.Symbol("entFacOmega_%d_%d_%d" % (i, omegaIdx, power)) for i in range(Q)]
+
+    def relaxationRateFactors(self, relaxationRate):
+        updateEquations = self._collisionRule.updateEquations
+
+        result = []
+        for updateEquation in updateEquations:
+            factors = []
+            rhs = updateEquation.rhs
+            power = 0
+            while True:
+                power += 1
+                factor = rhs.coeff(relaxationRate ** power)
+                if factor != 0:
+                    if relaxationRate in factor.atoms(sp.Symbol):
+                        raise ValueError("Relaxation Rate decomposition failed - run simplification first")
+                    factors.append(factor)
+                else:
+                    break
+
+            result.append(factors)
+
+        return result
+
+    def constantExprs(self):
+        subsDict = {rr: 0 for rr in self._freeRelaxationRates}
+        subsDict.update({rr: 0 for rr in self._fixedRelaxationRates})
+        updateEquations = self._collisionRule.updateEquations
+        return [fastSubs(eq.rhs, subsDict) for eq in updateEquations]
+
+    def equilibriumExprs(self):
+        subsDict = {rr: 1 for rr in self._freeRelaxationRates}
+        subsDict.update({rr: 1 for rr in self._fixedRelaxationRates})
+        updateEquations = self._collisionRule.updateEquations
+        return [fastSubs(eq.rhs, subsDict) for eq in updateEquations]
+
+    def symbolicEquilibrium(self):
+        Q = len(self._collisionRule.latticeModel.stencil)
+        return [sp.Symbol("entFeq_%d" % (i,)) for i in range(Q)]
+
+
+def determineRelaxationRateByEntropyConditionIterative(updateRule, omega_s, omega_h,
+                                                       newtonIterations=2, initialValue=1):
     lm = updateRule.latticeModel
-    stencil = lm.stencil
-    Q = len(stencil)
-    affineSymbols = [sp.Symbol("entropicAffine_%d" % (i,)) for i in range(Q)]
-    linearSymbols = [sp.Symbol("entropicLinear_%d" % (i,)) for i in range(Q)]
+    decomp = RelaxationRatePolynomialDecomposition(updateRule, [omega_h], [omega_s])
 
-    newSubexpressions = [sp.Eq(a, b) for a, b in zip(affineSymbols, affine)] + \
-                        [sp.Eq(a, b) for a, b in zip(linearSymbols, linear)]
+    # compute and assign f_eq
+    #fEqEqs = [sp.Eq(a, b) for a, b in zip(decomp.symbolicEquilibrium(), decomp.equilibriumExprs())]
 
-    exprForRelaxationRate = findEntropyMaximizingOmega(stencil, relaxationRate, affineSymbols, linearSymbols)
-    newSubexpressions += [sp.Eq(relaxationRate, exprForRelaxationRate)]
-
+    # compute and assign relaxation rate factors
     newUpdateEquations = []
-    for updateEq in updateRule.updateEquations:
-        index = lm.pdfDestinationSymbols.index(updateEq.lhs)
-        newEq = sp.Eq(updateEq.lhs, affineSymbols[index] + relaxationRate * linearSymbols[index])
-        newUpdateEquations.append(newEq)
-    return updateRule.newWithSubexpressions(newUpdateEquations, newSubexpressions)
+    fEqEqs = []
+    rrFactorDefinitions = []
+    relaxationRates = [omega_s, omega_h]
+
+    for i, constantExpr in enumerate(decomp.constantExprs()):
+        updateEqRhs = constantExpr
+        fEqRhs = constantExpr
+        for rr in relaxationRates:
+            factors = decomp.relaxationRateFactors(rr)
+            for idx, f in enumerate(factors[i]):
+                power = idx + 1
+                symbolicFactor = decomp.symbolicRelaxationRateFactors(rr, power)[i]
+                rrFactorDefinitions.append(sp.Eq(symbolicFactor, f))
+                updateEqRhs += rr ** power * symbolicFactor
+                fEqRhs += symbolicFactor
+        newUpdateEquations.append(sp.Eq(lm.pdfDestinationSymbols[i], updateEqRhs))
+        fEqEqs.append(sp.Eq(decomp.symbolicEquilibrium()[i], fEqRhs))
+
+    # newton iterations to determine free omega
+    intermediateOmegas = [sp.Symbol("omega_iter_%i" % (i,)) for i in range(newtonIterations+1)]
+    intermediateOmegas[0] = initialValue
+    intermediateOmegas[-1] = omega_h
+
+    newtonIterationEquations = []
+    for omega_idx in range(len(intermediateOmegas)-1):
+        rhsOmega = intermediateOmegas[omega_idx]
+        lhsOmega = intermediateOmegas[omega_idx+1]
+        updateEqsRhs = [e.rhs for e in newUpdateEquations]
+        entropy = discreteApproxEntropyFromWeights(updateEqsRhs, [e.lhs for e in fEqEqs])
+        entropyDiff = sp.diff(entropy, omega_h)
+        entropySecondDiff = sp.diff(entropyDiff, omega_h)
+        entropyDiff = entropyDiff.subs(omega_h, rhsOmega)
+        entropySecondDiff = entropySecondDiff.subs(omega_h, rhsOmega)
+
+        newtonEq = sp.Eq(lhsOmega, rhsOmega - entropyDiff / entropySecondDiff)
+        newtonIterationEquations.append(newtonEq)
+
+    # final update equations
+    return updateRule.newWithSubexpressions(newUpdateEquations, rrFactorDefinitions + fEqEqs + newtonIterationEquations)
+
+
