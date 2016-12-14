@@ -1,5 +1,6 @@
 import sympy as sp
 from lbmpy.equilibria import standardDiscreteEquilibrium, getWeights
+from lbmpy.moments import momentsUpToComponentOrder
 from pystencils.transformations import fastSubs
 
 
@@ -194,3 +195,72 @@ def determineRelaxationRateByEntropyConditionIterative(updateRule, omega_s, omeg
     return updateRule.newWithSubexpressions(newUpdateEquations, rrFactorDefinitions + fEqEqs + newtonIterationEquations)
 
 
+def createEntropicCollisionRule(dim, name='KBC-N4', compressible=False, useNewtonIterations=False):
+    from functools import reduce
+    import itertools
+    import operator
+    from lbmpy.moments import MOMENT_SYMBOLS, momentsOfOrder, discreteMoment, exponentTuplesToPolynomials
+    from lbmpy.stencils import getStencil
+    from lbmpy.latticemodel import MomentRelaxationLatticeModel
+    from lbmpy.simplifications import createDefaultMomentSpaceSimplificationStrategy
+
+    def product(iterable):
+        return reduce(operator.mul, iterable, 1)
+
+    m = MOMENT_SYMBOLS[:dim]
+
+    conserved = [sp.Rational(1, 1)] + list(m)
+
+    shearTensorOffDiagonal = [product(t) for t in itertools.combinations(m, 2)]
+    shearTensorDiagonal = [m_i * m_i for m_i in m]
+    shearTensorTrace = sum(shearTensorDiagonal)
+    shearTensorTracefreeDiagonal = [d - shearTensorTrace/dim for d in shearTensorDiagonal]
+
+    energyTransportTensor = exponentTuplesToPolynomials([a for a in momentsOfOrder(3, dim, True) if 3 not in a])
+
+    explicitlyDefined = set(conserved + shearTensorOffDiagonal + shearTensorDiagonal + energyTransportTensor)
+    rest = list(set(exponentTuplesToPolynomials(momentsUpToComponentOrder(2, dim))) - explicitlyDefined)
+    assert len(rest) + len(explicitlyDefined) == 3**dim
+
+    # naming according to paper Karlin 2015: Entropic multirelaxation lattice Boltzmann models for turbulent flows
+    D = shearTensorOffDiagonal + shearTensorTracefreeDiagonal[:-1]
+    T = [shearTensorTrace]
+    Q = energyTransportTensor
+    if name == 'KBC-N1':
+        decomposition = [D, T+Q+rest]
+    elif name == 'KBC-N2':
+        decomposition = [D+T, Q+rest]
+    elif name == 'KBC-N3':
+        decomposition = [D+Q, T+rest]
+    elif name == 'KBC-N4':
+        decomposition = [D+T+Q, rest]
+    else:
+        raise ValueError("Unknown model. Supported models KBC-Nx")
+
+    omega_s, omega_h = sp.symbols("omega omega_h")
+    shearPart, restPart = decomposition
+    relaxationRates = [0] * len(conserved) + [omega_s] * len(shearPart) + [omega_h] * len(restPart)
+
+    stencil = getStencil("D2Q9") if dim == 2 else getStencil("D3Q27")
+    allMoments = conserved + shearPart + restPart
+
+    discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=2,
+                                                      compressible=compressible, c_s_sq=sp.Rational(1, 3))
+
+    equilibriumMoments = [discreteMoment(tuple(discreteEquilibrium), mom, stencil) for mom in allMoments]
+
+    lm = MomentRelaxationLatticeModel(stencil, allMoments, equilibriumMoments, relaxationRates, compressible)
+
+    simplify = createDefaultMomentSpaceSimplificationStrategy()
+    collisionRule = simplify(lm.getCollisionRule())
+
+    if useNewtonIterations:
+        collisionRule = determineRelaxationRateByEntropyConditionIterative(collisionRule, omega_s, omega_h, 4)
+    else:
+        collisionRule = determineRelaxationRateByEntropyCondition(collisionRule, omega_s, omega_h)
+
+    return collisionRule
+
+
+if __name__ == "__main__":
+    createEntropicCollisionRule(3).display()

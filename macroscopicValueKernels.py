@@ -1,4 +1,7 @@
 import sympy as sp
+
+from lbmpy.latticemodel import LbmCollisionRule
+from lbmpy.lbmgenerator import createStreamCollideUpdateRule
 from pystencils.field import Field
 from pystencils.cpu import createKernel, makePythonFunction
 from lbmpy.equilibria import standardDiscreteEquilibrium
@@ -46,7 +49,7 @@ def compileMacroscopicValuesGetter(latticeModel, pdfArr=None, macroscopicFieldLa
     def getter(pdfs=None, densityOut=None, velocityOut=None):
         if pdfs is not None and pdfArr is not None:
             assert pdfs.shape == pdfArr.shape and pdfs.strides == pdfArr.strides, \
-                "Pdf array not matching blueprint which was used to compile"
+                "Pdf array not matching blueprint which was used to compile" + str(pdfs.shape) + str(pdfArr.shape)
         if pdfs is None:
             assert pdfArr is not None, "Pdf array has to be passed either when compiling or when calling."
             pdfs = pdfArr
@@ -62,6 +65,32 @@ def compileMacroscopicValuesGetter(latticeModel, pdfArr=None, macroscopicFieldLa
             kernelRhoAndVel(pdfs=pdfs, rho=densityOut, vel=velocityOut)
 
     return getter
+
+
+def compileAdvancedVelocitySetter(latticeModel, velocityArray, pdfArr=None):
+    """
+    Advanced initialization of velocity field through iteration procedure according to
+    Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
+
+    Important: this procedure only works if a non-zero relaxation rate was used for the velocity moments!
+
+    :param latticeModel:
+    :param velocityArray: array with velocity field
+    :param pdfArr: optional array, to compile kernel with fixed layout and shape
+    :return: function, that has to be called multiple times, with a pdf field (src/dst) until convergence
+             similar to the normal streamCollide step, also with boundary handling
+    """
+    velocityField = Field.createFromNumpyArray('vel', velocityArray, indexDimensions=1)
+
+    # create normal LBM kernel and replace velocity by expressions of velocity field
+    collisionRule = createStreamCollideUpdateRule(latticeModel, pdfArr, doCSE=False)
+    replacements = {u_i: sp.Eq(u_i, velocityField(i)) for i, u_i in enumerate(latticeModel.symbolicVelocity)}
+
+    newSubExpressions = [replacements[eq.lhs] if eq.lhs in replacements else eq for eq in collisionRule.subexpressions]
+    newCollisionRule = LbmCollisionRule(collisionRule.updateEquations, newSubExpressions,
+                                        latticeModel, collisionRule.updateEquationDirections)
+    kernelAst = createKernel(newCollisionRule.equations)
+    return makePythonFunction(kernelAst, {'vel': velocityArray})
 
 
 def compileMacroscopicValuesSetter(latticeModel, density=1, velocity=0, equilibriumOrder=2, pdfArr=None):

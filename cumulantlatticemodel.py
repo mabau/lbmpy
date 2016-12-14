@@ -23,8 +23,16 @@ def relaxationRateFromFactor(hydrodynamicOmega, factor):
     return 1 / ((1 / hydrodynamicOmega - half) / factor + half)
 
 
-class TRTStyle:
+class LinearCombinationRelaxation:
+    def __init__(self, preCollisionSymbols, indices):
+        self._preCollisionSymbols = preCollisionSymbols
+        self._indices = indices
 
+    def addRelaxationRule(self, linearCombination, relaxationRate):
+        coeffDict = linearCombination.as_coeff_dict(self._preCollisionSymbols)
+
+
+class TRTStyle:
     @staticmethod
     def createFromFactors(omega, factorEven=1.0, factorOdd=sp.Rational(3, 16)):
         omegaEven = relaxationRateFromFactor(omega, factorEven)

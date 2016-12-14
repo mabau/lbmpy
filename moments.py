@@ -428,7 +428,7 @@ class MomentSystem:
 
     def getSymbolicRelaxationRates(self, ordering='lowestMomentId', namePrefix="s_"):
         assert self.hasMomentGroups
-        result = [0] * len(self._allMoments)
+        result = [1] * len(self._allMoments)
 
         if ordering == 'lowestMomentId':
             for momentIdGroup in self.nonConservedMomentGroupIds:
