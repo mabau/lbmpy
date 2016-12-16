@@ -195,7 +195,8 @@ def determineRelaxationRateByEntropyConditionIterative(updateRule, omega_s, omeg
     return updateRule.newWithSubexpressions(newUpdateEquations, rrFactorDefinitions + fEqEqs + newtonIterationEquations)
 
 
-def createEntropicCollisionRule(dim, name='KBC-N4', compressible=False, useNewtonIterations=False):
+def createEntropicCollisionRule(dim, name='KBC-N4', compressible=False,
+                                useNewtonIterations=False, velocityRelaxation=None, fixedOmega=None):
     from functools import reduce
     import itertools
     import operator
@@ -207,18 +208,19 @@ def createEntropicCollisionRule(dim, name='KBC-N4', compressible=False, useNewto
     def product(iterable):
         return reduce(operator.mul, iterable, 1)
 
-    m = MOMENT_SYMBOLS[:dim]
+    theMoment = MOMENT_SYMBOLS[:dim]
 
-    conserved = [sp.Rational(1, 1)] + list(m)
+    rho = [sp.Rational(1, 1)]
+    velocity = list(theMoment)
 
-    shearTensorOffDiagonal = [product(t) for t in itertools.combinations(m, 2)]
-    shearTensorDiagonal = [m_i * m_i for m_i in m]
+    shearTensorOffDiagonal = [product(t) for t in itertools.combinations(theMoment, 2)]
+    shearTensorDiagonal = [m_i * m_i for m_i in theMoment]
     shearTensorTrace = sum(shearTensorDiagonal)
     shearTensorTracefreeDiagonal = [d - shearTensorTrace/dim for d in shearTensorDiagonal]
 
     energyTransportTensor = exponentTuplesToPolynomials([a for a in momentsOfOrder(3, dim, True) if 3 not in a])
 
-    explicitlyDefined = set(conserved + shearTensorOffDiagonal + shearTensorDiagonal + energyTransportTensor)
+    explicitlyDefined = set(rho + velocity + shearTensorOffDiagonal + shearTensorDiagonal + energyTransportTensor)
     rest = list(set(exponentTuplesToPolynomials(momentsUpToComponentOrder(2, dim))) - explicitlyDefined)
     assert len(rest) + len(explicitlyDefined) == 3**dim
 
@@ -239,10 +241,15 @@ def createEntropicCollisionRule(dim, name='KBC-N4', compressible=False, useNewto
 
     omega_s, omega_h = sp.symbols("omega omega_h")
     shearPart, restPart = decomposition
-    relaxationRates = [0] * len(conserved) + [omega_s] * len(shearPart) + [omega_h] * len(restPart)
+
+    velRelaxation = omega_s if velocityRelaxation is None else velocityRelaxation
+    relaxationRates = [omega_s] + \
+                      [velRelaxation] * len(velocity) + \
+                      [omega_s] * len(shearPart) + \
+                      [omega_h] * len(restPart)
 
     stencil = getStencil("D2Q9") if dim == 2 else getStencil("D3Q27")
-    allMoments = conserved + shearPart + restPart
+    allMoments = rho + velocity + shearPart + restPart
 
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=2,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
@@ -258,6 +265,9 @@ def createEntropicCollisionRule(dim, name='KBC-N4', compressible=False, useNewto
         collisionRule = determineRelaxationRateByEntropyConditionIterative(collisionRule, omega_s, omega_h, 4)
     else:
         collisionRule = determineRelaxationRateByEntropyCondition(collisionRule, omega_s, omega_h)
+
+    if fixedOmega:
+        collisionRule = collisionRule.newWithSubstitutions({omega_s: fixedOmega})
 
     return collisionRule
 

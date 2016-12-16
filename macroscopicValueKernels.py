@@ -1,5 +1,6 @@
 import sympy as sp
 
+from lbmpy.fieldaccess import streamPullWithSourceAndDestinationFields
 from lbmpy.latticemodel import LbmCollisionRule
 from lbmpy.lbmgenerator import createStreamCollideUpdateRule
 from pystencils.field import Field
@@ -67,14 +68,14 @@ def compileMacroscopicValuesGetter(latticeModel, pdfArr=None, macroscopicFieldLa
     return getter
 
 
-def compileAdvancedVelocitySetter(latticeModel, velocityArray, pdfArr=None):
+def compileAdvancedVelocitySetter(collisionRule, velocityArray, pdfArr=None):
     """
     Advanced initialization of velocity field through iteration procedure according to
     Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
 
     Important: this procedure only works if a non-zero relaxation rate was used for the velocity moments!
 
-    :param latticeModel:
+    :param collisionRule: unsimplified collision rule
     :param velocityArray: array with velocity field
     :param pdfArr: optional array, to compile kernel with fixed layout and shape
     :return: function, that has to be called multiple times, with a pdf field (src/dst) until convergence
@@ -83,7 +84,11 @@ def compileAdvancedVelocitySetter(latticeModel, velocityArray, pdfArr=None):
     velocityField = Field.createFromNumpyArray('vel', velocityArray, indexDimensions=1)
 
     # create normal LBM kernel and replace velocity by expressions of velocity field
-    collisionRule = createStreamCollideUpdateRule(latticeModel, pdfArr, doCSE=False)
+    from lbmpy.simplifications import sympyCSE
+    latticeModel = collisionRule.latticeModel
+    collisionRule = sympyCSE(collisionRule)
+    collisionRule = streamPullWithSourceAndDestinationFields(collisionRule, pdfArr)
+
     replacements = {u_i: sp.Eq(u_i, velocityField(i)) for i, u_i in enumerate(latticeModel.symbolicVelocity)}
 
     newSubExpressions = [replacements[eq.lhs] if eq.lhs in replacements else eq for eq in collisionRule.subexpressions]

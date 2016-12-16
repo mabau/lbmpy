@@ -11,17 +11,21 @@ import lbmpy.util as util
 # ----------------      From standard discrete equilibrium -------------------------------------------------------------
 
 
-def makeSRT(stencil, order=2, compressible=False, forceModel=None):
+def makeSRT(stencil, order=2, compressible=False, forceModel=None, velocityRelaxationRate=None):
     momentSystem = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
     equilibriumMoments = [m.discreteMoment(tuple(discreteEquilibrium), mom, stencil) for mom in momentSystem.allMoments]
     relaxationRates = [sp.Symbol('omega')] * len(stencil)
+
+    if velocityRelaxationRate is not None:
+        for id in momentSystem.conservedMomentIds[1:]:
+            relaxationRates[id] = velocityRelaxationRate
     return MomentRelaxationLatticeModel(stencil, momentSystem.allMoments, equilibriumMoments,
                                         relaxationRates, compressible, forceModel)
 
 
-def makeTRT(stencil, order=2, compressible=False, forceModel=None):
+def makeTRT(stencil, order=2, compressible=False, forceModel=None, velocityRelaxationRate=None):
     momentSystem = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
@@ -29,11 +33,14 @@ def makeTRT(stencil, order=2, compressible=False, forceModel=None):
 
     lambda_e, lambda_o = sp.symbols("lambda_e lambda_o")
     relaxationRates = [lambda_e if m.isEven(moment) else lambda_o for moment in momentSystem.allMoments]
+    if velocityRelaxationRate is not None:
+        for id in momentSystem.conservedMomentIds[1:]:
+            relaxationRates[id] = velocityRelaxationRate
     return MomentRelaxationLatticeModel(stencil, momentSystem.allMoments, equilibriumMoments,
                                         relaxationRates, compressible, forceModel)
 
 
-def makeMRT(stencil, order=2, compressible=False, forceModel=None):
+def makeMRT(stencil, order=2, compressible=False, forceModel=None, velocityRelaxationRate=None):
     momentSystem = m.getDefaultOrthogonalMoments(stencil)
     discreteEquilibrium = standardDiscreteEquilibrium(stencil, order=order,
                                                       compressible=compressible, c_s_sq=sp.Rational(1, 3))
@@ -42,6 +49,9 @@ def makeMRT(stencil, order=2, compressible=False, forceModel=None):
         raise NotImplementedError("No moment grouping available for this lattice model")
 
     relaxationRates = momentSystem.getSymbolicRelaxationRates()
+    if velocityRelaxationRate is not None:
+        for id in momentSystem.conservedMomentIds[1:]:
+            relaxationRates[id] = velocityRelaxationRate
     return MomentRelaxationLatticeModel(stencil, momentSystem.allMoments, equilibriumMoments,
                                         relaxationRates, compressible, forceModel)
 
