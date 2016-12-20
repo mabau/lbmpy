@@ -214,10 +214,16 @@ class MomentRelaxationLatticeModel(LatticeModel):
         M = self.momentMatrix  # transform from physical to moment space
         pdfVector = sp.Matrix(self.pdfSymbols)
         collisionResult = M.inv() * relaxationMatrix * (self._equilibriumMoments - M * pdfVector)
+        #collisionResult = M.inv() * (M * pdfVector + relaxationMatrix * (self._equilibriumMoments - M * pdfVector))
+        print("more complex collision rule")
+
         if self.forceModel:
             collisionResult += sp.Matrix(self.forceModel(latticeModel=self))
         collisionEqs = [sp.Eq(dst_i, s+t)
                         for s, dst_i, t in zip(self.pdfSymbols, self.pdfDestinationSymbols, collisionResult)]
+        #collisionEqs = [sp.Eq(dst_i, t)
+        #                for dst_i, t in zip(self.pdfDestinationSymbols, collisionResult)]
+
 
         # get optimized calculation rules for density and velocity
         rhoSubexprs, rhoEq, uSubexprs, uEqs = getDensityVelocityExpressions(self.stencil, self.pdfSymbols,
