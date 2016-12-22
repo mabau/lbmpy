@@ -1,3 +1,7 @@
+"""
+
+"""
+
 import sympy as sp
 import functools
 from pystencils.sympyextensions import makeExponentialFuncArgumentSquares
@@ -16,6 +20,14 @@ def momentGeneratingFunction(function, symbols, symbolsInResult):
     :param symbolsInResult: a sequence forming the vector t
     :return: transformation result F: an expression that depends now on symbolsInResult
              (symbols have been integrated out)
+
+    .. note::
+         This function uses sympys symbolic integration mechanism, which may not work or take a large
+         amount of time for some functions.
+         Therefore this routine does some transformations/simplifications on the function first, which are
+         taylored to expressions of the form exp(polynomial) i.e. Maxwellian distributions, so that these kinds
+         of functions can be integrated quickly.
+
     """
     assert len(symbols) == len(symbolsInResult)
 
@@ -29,8 +41,9 @@ def momentGeneratingFunction(function, symbols, symbolsInResult):
     # other functions should not be affected by this transformation
     # Without this transformation the following assumptions are required for the u and v variables of Maxwell Boltzmann
     #  2D: real=True ( without assumption it will not work)
-    #  3D: no assumption ( with assumptions it will not work :P )
+    #  3D: no assumption ( with assumptions it will not work )
     function = makeExponentialFuncArgumentSquares(function, symbols)
+    function = function.collect(symbols)
 
     bounds = [(s_i, -sp.oo, sp.oo) for s_i in symbols]
     result = sp.integrate(function, *bounds)
@@ -70,12 +83,16 @@ def multiDifferentiation(generatingFunction, index, symbols):
     for t_i in symbols:
         r = r.subs(t_i, 0)
 
-    return sp.simplify(r)
+    return r
 
 
 @functools.lru_cache(maxsize=512)
 def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
-    t = [sp.Dummy() for i in range(3)]  # DoFs in generating function
+
+    dim = len(moment)
+    t = tuple([sp.Symbol("tmpvar_%d" % i,) for i in range(dim)])  # not using sp.Dummy here - since it prohibits caching
+    symbols = symbols[:dim]
+
     if type(moment) is tuple:
         return multiDifferentiation(generatingFunction(function, symbols, t), moment, t)
     else:

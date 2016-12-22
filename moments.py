@@ -11,7 +11,6 @@ This module provides functions to
 - orthogonalize moment bases
 
 
-
 Moment Representation
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -30,11 +29,16 @@ Example ::
     x, y, z = MOMENT_SYMBOLS
     secondOrderMoment = x*y + y*z
 
+
+Functions
+~~~~~~~~~
+
 """
 import sympy as sp
 import math
 import itertools
 import functools
+from copy import copy
 from collections import Counter
 
 MOMENT_SYMBOLS = sp.symbols("x y z")
@@ -141,26 +145,54 @@ def extendMomentsWithPermutations(exponentTuples):
 # ------------------------------ Representation Conversions ------------------------------------------------------------
 
 
-def exponentToPolynomialRepresentation(sequenceOfExponentTuples):
-    """Converts an iterable of exponent tuples to a list of corresponding polynomial moments"""
-    result = []
-    for tup in sequenceOfExponentTuples:
-        poly = 1
-        for sym, tupleEntry in zip(MOMENT_SYMBOLS[:len(tup)], tup):
-            poly *= sym ** tupleEntry
-        result.append(poly)
-    return result
+def exponentToPolynomialRepresentation(exponentTuple):
+    """
+    Converts an exponent tuple to corresponding polynomial representation
+
+    Example:
+        >>> exponentToPolynomialRepresentation( (2,1,3) )
+        x**2*y*z**3
+    """
+    poly = 1
+    for sym, tupleEntry in zip(MOMENT_SYMBOLS[:len(exponentTuple)], exponentTuple):
+        poly *= sym ** tupleEntry
+    return poly
 
 
-def polynomialToExponentRepresentation(sequenceOfPolynomials):
-    """Converts a sequence of polynomials to a sequence of pairs, where the first element is the coefficient
-    and the second element is the exponent tuple"""
-    for poly in sequenceOfPolynomials:
-        poly = poly.expand()
-        for coefficient, expr in poly.as_coefficients_dict().items():
-            if len(expr.atoms(sp.Symbol) - set(MOMENT_SYMBOLS)) > 0:
-                raise ValueError("Invalid moment polynomial: " + str(expr))
-            x_exp, y_exp, z_exp = sp.Wild('xexp'), sp.Wild('yexp'), sp.Wild('zc')
+def exponentsToPolynomialRepresentations(sequenceOfExponentTuples):
+    """Applies :func:`exponentToPolynomialRepresentation` to given sequence"""
+    return [exponentToPolynomialRepresentation(t) for t in sequenceOfExponentTuples]
+
+
+def polynomialToExponentRepresentation(polynomial, dim=3):
+    """
+    Converts a linear combination of moments in polynomial representation into exponent representation
+
+    :returns list of tuples where the first element is the coefficient and the second element is the exponent tuple
+
+    Example:
+        >>> x , y, z = MOMENT_SYMBOLS
+        >>> polynomialToExponentRepresentation(1 + (42 * x**2 * y**2 * z) )
+        [(1, (0, 0, 0)), (42, (2, 2, 1))]
+    """
+    assert dim <= 3
+    x, y, z = MOMENT_SYMBOLS
+    polynomial = polynomial.expand()
+    coeffExpTupleRepresentation = []
+    for expr, coefficient in polynomial.as_coefficients_dict().items():
+        if len(expr.atoms(sp.Symbol) - set(MOMENT_SYMBOLS)) > 0:
+            raise ValueError("Invalid moment polynomial: " + str(expr))
+        x_exp, y_exp, z_exp = sp.Wild('xexp'), sp.Wild('yexp'), sp.Wild('zc')
+        matchRes = expr.match(x**x_exp * y**y_exp * z**z_exp)
+        assert matchRes[x_exp].is_integer and matchRes[y_exp].is_integer and matchRes[z_exp].is_integer
+        expTuple = (int(matchRes[x_exp]), int(matchRes[y_exp]), int(matchRes[z_exp]),)
+        if dim < 3:
+            for i in range(dim, 3):
+                assert expTuple[i] == 0, "Used symbols in polynomial are not representable in that dimension"
+            expTuple = expTuple[:dim]
+        coeffExpTupleRepresentation.append((coefficient, expTuple))
+    return coeffExpTupleRepresentation
+
 
 # -------------------- Common Function working with exponent tuples and polynomial moments -----------------------------
 
@@ -170,11 +202,15 @@ def isEven(moment):
     A moment is considered even when under sign reversal nothing changes i.e. :math:`m(-x,-y,-z) = m(x,y,z)`
 
     For the exponent tuple representation that means that the exponent sum is even  e.g.
-
-    - :math:`x^2  y^2` is even
-    - :math:`x^2  y` is odd
-    - :math:`x` is odd
-    - :math:`1` is even
+        >>> x , y, z = MOMENT_SYMBOLS
+        >>> isEven(x**2 * y**2)
+        True
+        >>> isEven(x**2 * y)
+        False
+        >>> isEven((1,0,0))
+        False
+        >>> isEven(1)
+        True
     """
     if type(moment) is tuple:
         return sum(moment) % 2 == 0
@@ -182,7 +218,7 @@ def isEven(moment):
         opposite = moment
         for s in MOMENT_SYMBOLS:
             opposite = opposite.subs(s, -s)
-        return sp.simplify(moment - opposite) == 0
+        return sp.expand(moment - opposite) == 0
 
 
 def getOrder(moment):
@@ -190,10 +226,16 @@ def getOrder(moment):
     Computes polynomial order of given moment
 
     Examples:
-
-    - :math:`x^2  y + x` returns 3
-    - :math:`z^4 x^2` returns 6
+        >>> x , y, z = MOMENT_SYMBOLS
+        >>> getOrder(x**2 * y + x
+        3
+        >>> getOrder(z**4 * x**2)
+        6
+        >>> getOrder((2,1,0))
+        3
     """
+    if isinstance(moment, tuple):
+        return sum(moment)
     if len(moment.atoms(sp.Symbol)) == 0:
         return 0
     leadingCoefficient = sp.polys.polytools.LM(moment)
@@ -203,13 +245,18 @@ def getOrder(moment):
 
 @functools.lru_cache(maxsize=512)
 def discreteMoment(function, moment, stencil):
-    """Computes discrete moment of given distribution function
+    """
+    Computes discrete moment of given distribution function
+
+    .. math ::
+        \sum_{d \in stencil} p(d) f_i
+
+    where :math:`p(d)` is the moment polynomial where :math:`x, y, z` have been replaced with the components of the
+    stencil direction, and :math:`f_i` is the i'th entry in the passed function sequence
 
     :param function: list of distribution functions for each direction
     :param moment: can either be a exponent tuple, or a sympy polynomial expression
-                  e.g. first velocity moment can be either (1,0,0) or x
-                  or a third order moment: (0,1,2) or :math:`y  z^2`
-    :param stencil: list of directions
+    :param stencil: sequence of directions
     """
     assert len(stencil) == len(function)
     res = 0
@@ -224,11 +271,16 @@ def discreteMoment(function, moment, stencil):
                 weight = weight.subs(variable, e_i)
             res += weight * factor
 
-    return sp.simplify(res)
+    return res
 
 
 def momentMatrix(moments, stencil):
-    """Returns transformation matrix to moment space"""
+    """
+    Returns transformation matrix to moment space
+
+    each row corresponds to a moment, each column to a direction of the stencil
+    The entry i,j is the i'th moment polynomial evaluated at direction j
+    """
 
     if type(moments[0]) is tuple:
         def generator(row, column):
@@ -264,18 +316,17 @@ def gramSchmidt(moments, stencil, weights=None):
         weights = sp.diag(*weights)
 
     if type(moments[0]) is tuple:
-        moments = exponentTuplesToPolynomials(moments)
+        moments = exponentsToPolynomialRepresentations(moments)
     else:
-        from copy import copy
         moments = copy(moments)
 
     M = momentMatrix(moments, stencil).transpose()
     columnsOfM = [M.col(i) for i in range(M.cols)]
-    result = []
+    orthogonalizedVectors = []
     for i in range(len(columnsOfM)):
         currentElement = columnsOfM[i]
         for j in range(i):
-            prevElement = result[j]
+            prevElement = orthogonalizedVectors[j]
             denom = prevElement.dot(weights * prevElement)
             if denom == 0:
                 raise ValueError("Not an independent set of vectors given: "
@@ -283,8 +334,9 @@ def gramSchmidt(moments, stencil, weights=None):
             overlap = currentElement.dot(weights * prevElement) / denom
             currentElement -= overlap * prevElement
             moments[i] -= overlap * moments[j]
-        result.append(currentElement)
-    return result
+        orthogonalizedVectors.append(currentElement)
+
+    return moments
 
 
 def momentEqualityTable(stencil, discreteEq, momentsToCompare, maxOrder=4):
@@ -341,3 +393,4 @@ def momentEqualityTable(stencil, discreteEq, momentsToCompare, maxOrder=4):
           (matchedMoments, nonMatchedMoments, matchedMoments + nonMatchedMoments))
 
     return tableDisplay
+
