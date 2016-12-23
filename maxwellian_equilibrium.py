@@ -5,64 +5,40 @@ Additionally functions are provided to compute moments and cumulants of these di
 """
 
 import sympy as sp
-import functools
+from sympy import Rational as R
 from lbmpy.diskcache import diskcache
 
 
-@functools.lru_cache()
-def computeWeights1D(stencilWidth, c_s_sq):
-    """
-    Computes lattice weights for a symmetric 1D stencil with given stencil width.
+def getWeights(stencil):
+    Q = len(stencil)
 
-    :param stencilWidth: stencil width, i.e. the maximum absolute value of direction component
-                         e.g. stencilWidth=2 means direction -2, -1, 0, 1, 2
-    :param c_s_sq: speed of sound squared
-    :returns: dict mapping from integer offset to weight
-
-    >>> computeWeights1D(1, sp.Rational(1,3))
-    {-1: 1/6, 0: 2/3, 1: 1/6}
-    """
-    from lbmpy.moments import momentMatrix
-    # Create a 1D stencil with the given width
-    stencil = tuple([(i,) for i in range(-stencilWidth, stencilWidth+1)])
-    moments = tuple([(i,) for i in range(2*stencilWidth+1)])
-    contMoments = getMomentsOfContinuousMaxwellianEquilibrium(moments, rho=1, u=(0,), c_s_sq=c_s_sq, dim=1)
-    M = momentMatrix(moments, stencil)
-    weights = M.inv() * sp.Matrix(contMoments)
-    return {i: w_i for i, w_i in zip(range(-stencilWidth, stencilWidth + 1), weights)}
-
-
-@functools.lru_cache()
-def getWeights(stencil, c_s_sq):
-    """
-    Computes the weights for a stencil
-
-    The weight of a direction is determined by multiplying 1D weights i.e. there is a 1D weight associated
-    with entries -1, 0 and 1 (for one neighborhood stencils). These 1D weights are determined by the
-    continuous Maxwellian distribution.
-    The weight of the higher dimensional direction is
-    the product of the 1D weights, dependent on its entries. For example (1,-1,0) would be
-    :math:`w_{1} w_{-1} w_{0}`.
-    This product approach is described in detail in :cite:`karlin2015entropic`.
-
-    :param stencil: tuple of directions
-    :param c_s_sq:  speed of sound squared
-    :returns: list of weights, one for each direction
-    """
-    maxNeighborhood = 0
-    for d in stencil:
-        for e in d:
-            if abs(e) > maxNeighborhood:
-                maxNeighborhood = abs(e)
-    elementaryWeights = computeWeights1D(maxNeighborhood, c_s_sq)
-
-    result = []
-    for directionTuple in stencil:
-        weight = 1
-        for e in directionTuple:
-            weight *= elementaryWeights[e]
-        result.append(weight)
-    return result
+    def weightForDirection(direction):
+        absSum = sum([abs(d) for d in direction])
+        return getWeights.weights[Q][absSum]
+    return [weightForDirection(d) for d in stencil]
+getWeights.weights = {
+    9: {
+        0: R(4, 9),
+        1: R(1, 9),
+        2: R(1, 36),
+    },
+    15: {
+        0: R(2, 9),
+        1: R(1, 9),
+        3: R(1, 72),
+    },
+    19: {
+        0: R(1, 3),
+        1: R(1, 18),
+        2: R(1, 36),
+    },
+    27: {
+        0: R(8, 27),
+        1: R(2, 27),
+        2: R(1, 54),
+        3: R(1, 216),
+    }
+}
 
 
 @diskcache
@@ -77,7 +53,7 @@ def discreteMaxwellianEquilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.symb
     :param c_s_sq: square of speed of sound
     :param compressible: compressibility
     """
-    weights = getWeights(stencil, c_s_sq)
+    weights = getWeights(stencil)
     assert len(stencil) == len(weights)
 
     dim = len(stencil[0])
@@ -112,6 +88,25 @@ def discreteMaxwellianEquilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.symb
         res.append(sp.expand(fq * rhoOutside * w_q))
 
     return tuple(res)
+
+
+@diskcache
+def generateEquilibriumByMatchingMoments(stencil, moments, rho=sp.Symbol("rho"),
+                                         u=tuple(sp.symbols("u_0 u_1 u_2")), c_s_sq=sp.Symbol("c_s") ** 2, order=None):
+    """
+    Computes discrete equilibrium, by setting the discrete moments to values taken from the continuous Maxwellian.
+    The number of moments has to match the number of directions in the stencil. For documentation of other parameters
+    see :func:`getMomentsOfContinuousMaxwellianEquilibrium`
+    """
+    from lbmpy.moments import momentMatrix
+    dim = len(stencil[0])
+    Q = len(stencil)
+    assert len(moments) == Q, "Moment count(%d) does not match stencil size(%d)" % (len(moments), Q)
+    continuousMomentsVector = getMomentsOfContinuousMaxwellianEquilibrium(moments, rho, u, c_s_sq, dim, order)
+    continuousMomentsVector = sp.Matrix(continuousMomentsVector)
+    M = momentMatrix(moments, stencil)
+    assert M.rank() == Q, "Rank of moment matrix (%d) does not match stencil size (%d)" % (M.rank(), Q)
+    return M.inv() * continuousMomentsVector
 
 
 @diskcache
@@ -184,6 +179,8 @@ def getMomentsOfDiscreteMaxwellianEquilibrium(stencil,
     :param compressible: compressible or incompressible form
     """
     from lbmpy.moments import discreteMoment
+    if order is None:
+        order = 4
     mb = discreteMaxwellianEquilibrium(stencil, rho, u, order, c_s_sq, compressible)
     return tuple([discreteMoment(mb, moment, stencil).expand() for moment in moments])
 

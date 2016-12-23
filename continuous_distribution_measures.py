@@ -93,14 +93,15 @@ def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
     t = tuple([sp.Symbol("tmpvar_%d" % i,) for i in range(dim)])  # not using sp.Dummy here - since it prohibits caching
     symbols = symbols[:dim]
 
+    genFunc = generatingFunction(function, symbols, t)
     if type(moment) is tuple:
-        return multiDifferentiation(generatingFunction(function, symbols, t), moment, t)
+        return multiDifferentiation(genFunc, moment, t)
     else:
         result = 0
-        for term, coeff in moment.as_coefficients_dict().items():
+        for term, coefficient in moment.as_coefficients_dict().items():
             exponents = tuple([term.as_coeff_exponent(v_i)[1] for v_i in symbols])
-            cm = multiDifferentiation(generatingFunction(function, symbols, t), exponents, t)
-            result += coeff * cm
+            cm = multiDifferentiation(genFunc, exponents, t)
+            result += coefficient * cm
         return result
 
 
