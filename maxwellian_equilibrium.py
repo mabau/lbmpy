@@ -46,6 +46,7 @@ def discreteMaxwellianEquilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.symb
                                   c_s_sq=sp.Symbol("c_s") ** 2, compressible=True):
     """
     Returns the common discrete LBM equilibrium as a list of sympy expressions
+
     :param stencil: tuple of directions
     :param rho: sympy symbol for the density
     :param u: symbols for macroscopic velocity, only the first `dim` entries are used
@@ -116,6 +117,7 @@ def continuousMaxwellianEquilibrium(dim=3, rho=sp.Symbol("rho"),
                                     c_s_sq=sp.Symbol("c_s") ** 2):
     """
     Returns sympy expression of Maxwell Boltzmann distribution
+
     :param dim: number of space dimensions
     :param rho: sympy symbol for the density
     :param u: symbols for macroscopic velocity (expected value for velocity)
@@ -133,20 +135,20 @@ def continuousMaxwellianEquilibrium(dim=3, rho=sp.Symbol("rho"),
 
 
 @diskcache
-def getMomentsOfContinuousMaxwellianEquilibrium(moments, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
-                                                c_s_sq=sp.Symbol("c_s") ** 2,
-                                                dim=3, order=None):
+def getMomentsOfContinuousMaxwellianEquilibrium(moments, dim, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
+                                                c_s_sq=sp.Symbol("c_s") ** 2, order=None):
     """
     Computes moments of the continuous Maxwell Boltzmann equilibrium distribution
+
     :param moments: moments to compute, either in polynomial or exponent-tuple form
+    :param dim: dimension (2 or 3)
     :param rho: symbol or value for the density
     :param u: symbols or values for the macroscopic velocity
     :param c_s_sq: symbol for speed of sound squared, defaults to symbol c_s**2
-    :param dim: dimension (2 or 3)
     :param order: if this parameter is not None, terms that have a higher polynomial order in the macroscopic velocity
                   are removed
 
-    >>> getMomentsOfContinuousMaxwellianEquilibrium( ( (0,0,0), (1,0,0), (0,1,0), (0,0,1), (2,0,0) ) )
+    >>> getMomentsOfContinuousMaxwellianEquilibrium( ( (0,0,0), (1,0,0), (0,1,0), (0,0,1), (2,0,0) ), dim=3 )
     [rho, rho*u_0, rho*u_1, rho*u_2, rho*(c_s**2 + u_0**2)]
     """
     from pystencils.sympyextensions import removeHigherOrderTerms
@@ -170,6 +172,7 @@ def getMomentsOfDiscreteMaxwellianEquilibrium(stencil,
                                               c_s_sq=sp.Symbol("c_s") ** 2, order=None, compressible=True):
     """
     Compute moments of discrete maxwellian equilibrium
+
     :param stencil: stencil is required to compute moments of discrete function
     :param moments: moments in polynomial or exponent-tuple form
     :param rho: symbol or value for the density

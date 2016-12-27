@@ -6,12 +6,12 @@ Additionally functions are provided to compute cumulants from moments and vice v
 import functools
 import sympy as sp
 
-from lbmpy.diskcache import diskcache
 from lbmpy.moments import momentsUpToComponentOrder
 from lbmpy.continuous_distribution_measures import multiDifferentiation
 
 
 # ------------------------------------------- Internal Functions -------------------------------------------------------
+from pystencils.sympyextensions import fastSubs
 
 
 def __getIndexedSymbols(passedSymbols, prefix, indices):
@@ -57,13 +57,16 @@ def __cumulantRawMomentTransform(index, dependentVarDict, outerFunction, default
     :param centralized: if True the first order moments/cumulants are set to zero
     """
     dim = len(index)
+    subsDict = {}
 
     def createMomentSymbol(idx):
+        nonlocal subsDict
         idx = tuple(idx)
-        if dependentVarDict is None:
-            return sp.Symbol(defaultPrefix + "_" + "_".join(["%d"] * len(idx)) % idx)
-        else:
-            return dependentVarDict[idx]
+        resultSymbol = sp.Symbol(defaultPrefix + "_" + "_".join(["%d"] * len(idx)) % idx)
+        if dependentVarDict is not None and idx in dependentVarDict:
+            subsDict[resultSymbol] = dependentVarDict[idx]
+        return resultSymbol
+
     zerothMoment = createMomentSymbol((0,)*dim)
 
     def outerFunctionDerivative(n):
@@ -78,7 +81,7 @@ def __cumulantRawMomentTransform(index, dependentVarDict, outerFunction, default
             partitionList.append(i)
 
     if len(partitionList) == 0:  # special case for zero index
-        return outerFunction(zerothMoment)
+        return fastSubs(outerFunction(zerothMoment), subsDict)
 
     # implementation of Faa di Bruno's formula:
     result = 0
@@ -92,12 +95,12 @@ def __cumulantRawMomentTransform(index, dependentVarDict, outerFunction, default
         result += factor
 
     if centralized:
-        for i in dim:
+        for i in range(dim):
             index = [0] * dim
             index[i] = 1
             result = result.subs(createMomentSymbol(index), 0)
 
-    return result
+    return fastSubs(result, subsDict)
 
 
 @functools.lru_cache(maxsize=16)
@@ -114,26 +117,11 @@ def __getDiscreteCumulantGeneratingFunction(function, stencil, waveNumbers):
 # ------------------------------------------- Public Functions ---------------------------------------------------------
 
 
-def cumulantAsFunctionOfRawMoments(index, momentsDict=None):
-    return __cumulantRawMomentTransform(index, momentsDict, sp.log, 'm', False)
-
-
-def rawMomentAsFunctionOfCumulants(index, cumulantsDict=None):
-    return __cumulantRawMomentTransform(index, cumulantsDict, sp.exp, 'c', False)
-
-
-def cumulantAsFunctionOfCentralMoments(index, momentsDict=None):
-    return __cumulantRawMomentTransform(index, momentsDict, sp.log, 'm', True)
-
-
-def centralMomentAsFunctionOfCumulants(index, cumulantsDict=None):
-    return __cumulantRawMomentTransform(index, cumulantsDict, sp.exp, 'c', True)
-
-
 @functools.lru_cache(maxsize=64)
 def discreteCumulant(function, cumulant, stencil):
     """
     Computes cumulant of discrete function
+
     :param function: sequence of function components, has to have the same length as stencil
     :param cumulant: definition of cumulant, either as an index tuple, or as a polynomial
                      (similar to moment description)
@@ -159,43 +147,48 @@ def discreteCumulant(function, cumulant, stencil):
 
 
 @functools.lru_cache(maxsize=8)
-def cumulantsFromPdfs(stencil, cumulantIndices=None, pdfSymbols=None, cumulantSymbols=None):
+def cumulantsFromPdfs(stencil, cumulantIndices=None, pdfSymbols=None):
     """
-    Creates equations to transform pdfs to cumulant space
+    Transformation of pdfs (or other discrete function on a stencil) to cumulant space
 
     :param stencil:
     :param cumulantIndices: sequence of cumulant indices, could be tuples or polynomial representation
                             if left to default and a full stencil was passed,
                             the full set i.e. `momentsUpToComponentOrder(2)` is used
     :param pdfSymbols: symbolic values for pdf values, if not passed they default to :math:`f_0, f_1, ...`
-    :param cumulantSymbols: symbolic values for cumulants (left hand sides of returned equations)
-                            by default they are labeled :math:`c_{00}, c_{01}, c_{10}, ...`
-    :return: sequence of equations for each cumulant one, on the right hand sides only pdfSymbols are used
+    :return: dict mapping cumulant index to expression
     """
     dim = len(stencil[0])
     if cumulantIndices is None:
-        cumulantIndices = list(momentsUpToComponentOrder(2, dim=dim))
+        cumulantIndices = momentsUpToComponentOrder(2, dim=dim)
     assert len(stencil) == len(cumulantIndices), "Stencil has to have same length as cumulantIndices sequence"
-    cumulantSymbols = __getIndexedSymbols(cumulantSymbols, "c", cumulantIndices)
     pdfSymbols = __getIndexedSymbols(pdfSymbols, "f", range(len(stencil)))
-    return [sp.Eq(cumulantSymbol, discreteCumulant(tuple(pdfSymbols), idx, stencil))
-            for cumulantSymbol, idx in zip(cumulantSymbols, cumulantIndices)]
+    return {idx: discreteCumulant(tuple(pdfSymbols), idx, stencil) for idx in cumulantIndices}
 
 
-@diskcache
-def cumulantsFromRawMoments(stencil, indices=None, momentSymbols=None, cumulantSymbols=None):
+def cumulantAsFunctionOfRawMoments(index, momentsDict=None):
     """
-    Creates equations to transform from raw moment representation to cumulants
+    Returns an expression for the cumulant of given index as a function of raw moments
 
-    :param stencil:
-    :param indices: indices of raw moments/ cumulant symbols, by default the full set is used
-    :param momentSymbols: symbolic values for moments (symbols used for moments in equations)
-    :param cumulantSymbols: symbolic values for cumulants (left hand sides of the equations)
-    :return: equations to compute cumulants from raw moments
+    :param index: a tuple of same length as spatial dimensions, specifying the cumulant
+    :param momentsDict: a dictionary that maps moment indices to symbols/values. These values are used for
+                        the moments in the returned expression. If this parameter is None, default symbols are used.
     """
-    #TODO
+    return __cumulantRawMomentTransform(index, momentsDict, sp.log, 'm', False)
 
-@diskcache
-def rawMomentsFromCumulants(stencil, cumulantSymbols=None, momentSymbols=None):
-    #TODO
-    pass
+
+def rawMomentAsFunctionOfCumulants(index, cumulantsDict=None):
+    """
+    Inverse transformation of :func:`cumulantAsFunctionOfRawMoments`. All parameters are similar to this function.
+    """
+    return __cumulantRawMomentTransform(index, cumulantsDict, sp.exp, 'c', False)
+
+
+def cumulantAsFunctionOfCentralMoments(index, momentsDict=None):
+    """Same as :func:`cumulantAsFunctionOfRawMoments` but with central instead of raw moments."""
+    return __cumulantRawMomentTransform(index, momentsDict, sp.log, 'm', True)
+
+
+def centralMomentAsFunctionOfCumulants(index, cumulantsDict=None):
+    """Same as :func:`rawMomentAsFunctionOfCumulants` but with central instead of raw moments."""
+    return __cumulantRawMomentTransform(index, cumulantsDict, sp.exp, 'c', True)

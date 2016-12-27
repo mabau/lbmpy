@@ -5,6 +5,7 @@
 import sympy as sp
 import functools
 from pystencils.sympyextensions import makeExponentialFuncArgumentSquares
+from lbmpy.diskcache import diskcache
 
 
 @functools.lru_cache()
@@ -59,6 +60,7 @@ def cumulantGeneratingFunction(function, symbols, symbolsInResult):
     return sp.ln(momentGeneratingFunction(function, symbols, symbolsInResult))
 
 
+@diskcache
 def multiDifferentiation(generatingFunction, index, symbols):
     """
     Computes moment from moment-generating function or cumulant from cumulant-generating function,
@@ -89,14 +91,23 @@ def multiDifferentiation(generatingFunction, index, symbols):
 @functools.lru_cache(maxsize=512)
 def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
 
-    dim = len(moment)
-    t = tuple([sp.Symbol("tmpvar_%d" % i,) for i in range(dim)])  # not using sp.Dummy here - since it prohibits caching
-    symbols = symbols[:dim]
-
-    genFunc = generatingFunction(function, symbols, t)
     if type(moment) is tuple:
+        dim = len(moment)
+        # not using sp.Dummy here - since it prohibits caching
+        t = tuple([sp.Symbol("tmpvar_%d" % i, ) for i in range(dim)])
+        if not symbols:
+            symbols = sp.symbols("xvar yvar zvar")
+        symbols = symbols[:dim]
+        genFunc = generatingFunction(function, symbols, t)
         return multiDifferentiation(genFunc, moment, t)
     else:
+        assert symbols is not None, "When passing a polynomial as moment, also the moment symbols have to be passed"
+        dim = len(symbols)
+        # not using sp.Dummy here - since it prohibits caching
+        t = tuple([sp.Symbol("tmpvar_%d" % i, ) for i in range(dim)])
+        symbols = symbols[:dim]
+        genFunc = generatingFunction(function, symbols, t)
+
         result = 0
         for term, coefficient in moment.as_coefficients_dict().items():
             exponents = tuple([term.as_coeff_exponent(v_i)[1] for v_i in symbols])
@@ -105,18 +116,18 @@ def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
         return result
 
 
-def continuousMoment(function, moment, symbols):
+def continuousMoment(function, moment, symbols=None):
     """
     Computes moment of given function
 
     :param function: function to compute moments of
     :param moment: tuple or polynomial describing the moment
-    :param symbols: degrees of freedom of the function
+    :param symbols: if moment is given as polynomial, pass the moment symbols, i.e. the dof of the polynomial
     """
     return __continuousMomentOrCumulant(function, moment, symbols, momentGeneratingFunction)
 
 
-def continuousCumulant(function, moment, symbols):
+def continuousCumulant(function, moment, symbols=None):
     """
     Computes cumulant of continuous function
     for parameter description see :func:`continuousMoment`

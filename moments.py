@@ -41,6 +41,9 @@ import functools
 from copy import copy
 from collections import Counter
 
+from lbmpy.continuous_distribution_measures import continuousMoment
+from lbmpy_old.transformations import removeHigherOrderTerms
+
 MOMENT_SYMBOLS = sp.symbols("x y z")
 
 
@@ -126,12 +129,12 @@ def momentsOfOrder(order, dim=3, includePermutations=True):
 def momentsUpToOrder(order, dim=3, includePermutations=True):
     """All tuples of length 'dim' which sum is smaller than 'order' """
     singleMomentIterators = [momentsOfOrder(o, dim, includePermutations) for o in range(order + 1)]
-    return itertools.chain(*singleMomentIterators)
+    return tuple(itertools.chain(*singleMomentIterators))
 
 
 def momentsUpToComponentOrder(order, dim=3):
     """All tuples of length 'dim' where each entry is smaller or equal to 'order' """
-    return itertools.product(*[range(order + 1)] * dim)
+    return tuple(itertools.product(*[range(order + 1)] * dim))
 
 
 def extendMomentsWithPermutations(exponentTuples):
@@ -161,7 +164,7 @@ def exponentToPolynomialRepresentation(exponentTuple):
 
 def exponentsToPolynomialRepresentations(sequenceOfExponentTuples):
     """Applies :func:`exponentToPolynomialRepresentation` to given sequence"""
-    return [exponentToPolynomialRepresentation(t) for t in sequenceOfExponentTuples]
+    return tuple([exponentToPolynomialRepresentation(t) for t in sequenceOfExponentTuples])
 
 
 def polynomialToExponentRepresentation(polynomial, dim=3):
@@ -215,6 +218,7 @@ def isEven(moment):
     if type(moment) is tuple:
         return sum(moment) % 2 == 0
     else:
+        moment = sp.sympify(moment)
         opposite = moment
         for s in MOMENT_SYMBOLS:
             opposite = opposite.subs(s, -s)
@@ -227,7 +231,7 @@ def getOrder(moment):
 
     Examples:
         >>> x , y, z = MOMENT_SYMBOLS
-        >>> getOrder(x**2 * y + x
+        >>> getOrder(x**2 * y + x)
         3
         >>> getOrder(z**4 * x**2)
         6
@@ -316,9 +320,9 @@ def gramSchmidt(moments, stencil, weights=None):
         weights = sp.diag(*weights)
 
     if type(moments[0]) is tuple:
-        moments = exponentsToPolynomialRepresentations(moments)
+        moments = list(exponentsToPolynomialRepresentations(moments))
     else:
-        moments = copy(moments)
+        moments = list(copy(moments))
 
     M = momentMatrix(moments, stencil).transpose()
     columnsOfM = [M.col(i) for i in range(M.cols)]
@@ -339,19 +343,28 @@ def gramSchmidt(moments, stencil, weights=None):
     return moments
 
 
-def momentEqualityTable(stencil, discreteEq, momentsToCompare, maxOrder=4):
+def momentEqualityTable(stencil, discreteEquilibrium=None, continuousEquilibrium=None, maxOrder=4, truncateOrder=None):
     """
     Creates a table showing which moments of a discrete stencil/equilibrium coincide with the
     corresponding continuous moments
 
     :param stencil: list of stencil velocities
-    :param discreteEq: list of sympy expr to compute discrete equilibrium for each direction
-    :param momentsToCompare: expressions that moments are compared to (e.g. moments from continuous formulation)
-    :param maxOrder: compare moments up to this order
+    :param discreteEquilibrium: list of sympy expr to compute discrete equilibrium for each direction, if left
+                                to default the standard discrete Maxwellian equilibrium is used
+    :param continuousEquilibrium: continuous equilibrium, if left to default, the continuous Maxwellian is used
+    :param maxOrder: compare moments up to this order (number of rows in table)
+    :param truncateOrder: moments are considered equal if they match up to this order
     :return: Object to display in an Jupyter notebook
     """
     import ipy_table
     dim = len(stencil[0])
+
+    if discreteEquilibrium is None:
+        from lbmpy.maxwellian_equilibrium import discreteMaxwellianEquilibrium
+        discreteEquilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True)
+    if continuousEquilibrium is None:
+        from lbmpy.maxwellian_equilibrium import continuousMaxwellianEquilibrium
+        continuousEquilibrium = continuousMaxwellianEquilibrium(dim=dim, c_s_sq=sp.Rational(1, 3))
 
     table = []
     matchedMoments = 0
@@ -369,10 +382,13 @@ def momentEqualityTable(stencil, discreteEq, momentsToCompare, maxOrder=4):
     for order, moments in enumerate(momentsList):
         row = [' '] * nrOfColumns
         row[0] = '%d' % (order,)
-        for moment, colIdx, cm in zip(moments, range(1, len(row)), momentsToCompare):
+        for moment, colIdx in zip(moments, range(1, len(row))):
             multiplicity = momentMultiplicity(moment)
-            dm = discreteMoment(discreteEq, moment, stencil)
+            dm = discreteMoment(discreteEquilibrium, moment, stencil)
+            cm = continuousMoment(continuousEquilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
             difference = sp.simplify(dm - cm)
+            if truncateOrder:
+                difference = sp.simplify(removeHigherOrderTerms(difference, order=truncateOrder))
             if difference != 0:
                 colors[(order + 1, colIdx)] = 'Orange'
                 nonMatchedMoments += multiplicity
@@ -393,4 +409,3 @@ def momentEqualityTable(stencil, discreteEq, momentsToCompare, maxOrder=4):
           (matchedMoments, nonMatchedMoments, matchedMoments + nonMatchedMoments))
 
     return tableDisplay
-
