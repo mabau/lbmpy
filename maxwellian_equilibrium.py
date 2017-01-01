@@ -7,10 +7,14 @@ Additionally functions are provided to compute moments and cumulants of these di
 import sympy as sp
 from sympy import Rational as R
 from lbmpy.diskcache import diskcache
+import warnings
 
 
-def getWeights(stencil):
+def getWeights(stencil, c_s_sq):
     Q = len(stencil)
+
+    if c_s_sq != sp.Rational(1, 3):
+        warnings.warn("Weigths of discrete equilibrium are only valid if c_s^2 = 1/3")
 
     def weightForDirection(direction):
         absSum = sum([abs(d) for d in direction])
@@ -54,7 +58,7 @@ def discreteMaxwellianEquilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.symb
     :param c_s_sq: square of speed of sound
     :param compressible: compressibility
     """
-    weights = getWeights(stencil)
+    weights = getWeights(stencil, c_s_sq)
     assert len(stencil) == len(weights)
 
     dim = len(stencil[0])
@@ -127,7 +131,7 @@ def continuousMaxwellianEquilibrium(dim=3, rho=sp.Symbol("rho"),
     u = u[:dim]
     v = v[:dim]
 
-    velTerm = sum([(v_i - u_i) ** 2 for v_i, u_i in zip(v, u)])
+    velTerm = sum([(v_i - u_i) ** 2 for v_i, u_i in zip(v, u)]) + sp.Symbol("C") * sp.Symbol("z")
     return rho / (2 * sp.pi * c_s_sq) ** (sp.Rational(dim, 2)) * sp.exp(- velTerm / (2 * c_s_sq))
 
 
