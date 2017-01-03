@@ -55,26 +55,57 @@ def getEquationsForZerothAndFirstOrderMoment(stencil, symbolicPdfs, symbolicZero
     return EquationCollection(equations, subexpressions)
 
 
-def shiftMomentsForEquilibrium(dim, equationCollection, forceModel):
+def divideFirstOrderMomentsByRho(equationCollection, dim):
     """
-    :param equationCollection: assumes that equations[1:dim+1] are the velocities
-    :param forceModel:
-    :return:
+    Assumes that the equations of the passed equation collection are the following
+        - rho = f_0  + f_1 + ...
+        - u_0 = ...
+        - u_1 = ...
+    Returns a new equation collection where the u terms (first order moments) are divided by rho.
+    The dim parameter specifies the number of first order moments. All subsequent equations are just copied over.
     """
-    pass
+    oldEqs = equationCollection.mainEquations
+    rho = oldEqs[0].lhs
+    rhoInv = sp.Symbol("rhoInv")
+    newSubExpression = sp.Eq(rhoInv, 1 / rho)
+    newFirstOrderMomentEq = [sp.Eq(eq.lhs, eq.rhs * rhoInv) for eq in oldEqs[1:dim+1]]
+    newEqs = oldEqs[0] + newFirstOrderMomentEq + oldEqs[dim+1:]
+    return equationCollection.createNewWithAdditionalSubexpressions(newEqs, newSubExpression)
 
 
-def shiftMomentsForMacroscopicValues(equationCollection, forceModel):
+def addDensityOffset(equationCollection, offset=sp.Rational(1, 1)):
     """
-    :param equationCollection: assumes that equations[1:dim+1] are the velocities
-    :param forceModel:
-    :return:
+    Assumes that first equation is the density (zeroth moment). Changes the density equations by adding offset to it.
     """
-    pass
+    oldEqs = equationCollection.mainEquations
+    newDensity = sp.Eq(oldEqs[0].lhs, oldEqs[1].rhs + offset)
+    return equationCollection.createNewWithAdditionalSubexpressions([newDensity] + oldEqs[1:], [])
 
 
-def densityVelocityExpressionsForEquilibrium(stencil, symbolicPdfs, compressible,
-                                             symbolicDensity, symbolicVelocities):
+def applyForceModelShift(shiftMemberName, dim, equationCollection, forceModel, compressible):
+    """
+    Modifies the first order moment equations in equationCollection according to the force model shift.
+    It is applied if force model has a method named shiftMemberName. The equations 1: dim+1 of the passed
+    equation collection are assumed to be the velocity equations.
+    """
+    if forceModel is not None and hasattr(forceModel, shiftMemberName):
+        oldEqs = equationCollection.mainEquations
+        density = oldEqs[0].lhs if compressible else sp.Rational(1, 1)
+        oldVelEqs = oldEqs[1:dim + 1]
+        shiftFunc = getattr(forceModel, shiftMemberName)
+        shiftedVels = shiftFunc([eq.rhs for eq in oldVelEqs], density)
+        shiftedVelocityEqs = [sp.Eq(oldEq.lhs, shiftedVel) for oldEq, shiftedVel in zip(oldVelEqs, shiftedVels)]
+        newEqs = [oldEqs[0]] + shiftedVelocityEqs + oldEqs[dim + 1:]
+        return equationCollection.createNewWithAdditionalSubexpressions(newEqs, [])
+    else:
+        return equationCollection
+
+
+# --------------------------- Density / Velocity definitions with force shift ------------------------------------------
+
+
+def densityVelocityExpressionsForEquilibrium(stencil, symbolicPdfs, compressible, symbolicDensity,
+                                             symbolicVelocities, forceModel=None):
     """
     Returns an equation collection, containing equations to compute density, velocity and pressure from pdf values
     """
@@ -83,22 +114,20 @@ def densityVelocityExpressionsForEquilibrium(stencil, symbolicPdfs, compressible
     if compressible:
         eqColl = divideFirstOrderMomentsByRho(eqColl)
     if forceModel is not None:
-        shiftMomentsForEquilibrium(len(stencil[0]), eqColl, forceModel)
+        eqColl = applyForceModelShift('equilibriumVelocity', len(stencil[0]), eqColl, forceModel, compressible)
     return eqColl
 
 
-def densityVelocityExpressionsForOutput(stencil, symbolicPdfs, compressible,
-                                        symbolicDensity, symbolicVelocities):
+def densityVelocityExpressionsForOutput(stencil, symbolicPdfs, compressible, symbolicDensity,
+                                        symbolicVelocities, forceModel=None):
     """
     Returns an equation collection, containing equations to compute density, velocity and pressure from pdf values
     """
 
-    momentEqCollection = getEquationsForZerothAndFirstOrderMoment(stencil, symbolicPdfs,
-                                                                  symbolicDensity, symbolicVelocities)
     eqColl = getEquationsForZerothAndFirstOrderMoment(stencil, symbolicPdfs, symbolicDensity, symbolicVelocities)
     if compressible:
         eqColl = divideFirstOrderMomentsByRho(eqColl)
-        addDensityOffset()
+        eqColl = addDensityOffset(eqColl)
     if forceModel is not None:
-        shiftMomentsForEquilibrium(len(stencil[0]), eqColl, forceModel)
+        eqColl = applyForceModelShift('macroscopicVelocity', len(stencil[0]), eqColl, forceModel, compressible)
     return eqColl

@@ -1,7 +1,10 @@
 import sympy as sp
 from collections import namedtuple
 from lbmpy.methods.abstractlbmmethod import AbstractLbmMethod
+from lbmpy.methods.defaultMacroscopicValueEquations import densityVelocityExpressionsForEquilibrium, \
+    densityVelocityExpressionsForOutput
 from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix
+from pystencils.equationcollection import EquationCollection
 
 """
 Ways to create method:
@@ -28,13 +31,27 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
                                             and the following to the first order moments
         :param macroscopicValueComputations:
         """
-        assert MOMENT_SYMBOLS[0] in momentToRelaxationInfoDict.keys(), ""
-        pass
+        # Create moment matrix
+        #
+        super(MomentBasedLbmMethod, self).__init__(stencil)
+
+        if equilibriumValueComputation in ('defaultIncompressible', 'defaultCompressible'):
+            compressible = (equilibriumValueComputation == 'defaultCompressible')
+            symbolicDensity = sp.Symbol("rho")
+            symbolicVelocities = sp.Symbol("u_:%d" % ())
+            eqs = densityVelocityExpressionsForEquilibrium(self.stencil, self.preCollisionPdfSymbols, compressible,
+                                                           symbolicDensity, symbolicVelocities, forceModel)
+            self._equilibriumValueEquations = eqs
+        else:
+            assert isinstance(equilibriumValueComputation, EquationCollection)
+            self._equilibriumValueEquations = equilibriumValueComputation
 
     def getEquilibrium(self):
+        # set relaxation rates to one
         return
 
     def getCollisionRule(self):
+
         return
 
 
