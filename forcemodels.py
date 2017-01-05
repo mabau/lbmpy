@@ -16,11 +16,10 @@ class Simple:
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, abstractLbmMethod, **kwargs):
-        dim = len(stencil[0])
-        assert len(self._force) == dim
+    def __call__(self, lbmMethod, **kwargs):
+        assert len(self._force) == lbmMethod.dim
         return [3 * w_i * sum([d_i * f_i for d_i, f_i in zip(direction, self._force)])
-                for direction, w_i in zip(stencil, weights)]
+                for direction, w_i in zip(lbmMethod.stencil, lbmMethod.weights)]
 
 
 class Luo:
@@ -36,18 +35,18 @@ class Luo:
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, abstractLbmMethod, firstOrderMoments):
-        u = firstOrderMoments
+    def __call__(self, lbmMethod):
+        u = sp.Matrix(lbmMethod.firstOrderEquilibriumMomentSymbols)
         force = sp.Matrix(self._force)
 
         result = []
-        for direction, w_i in zip(stencil, weights):
+        for direction, w_i in zip(lbmMethod.stencil, lbmMethod.weights):
             direction = sp.Matrix(direction)
             result.append(3 * w_i * force.dot(direction - u + 3 * direction * direction.dot(u)))
         return result
 
-    def macroscopicVelocity(self, vel, density):
-        return defaultVelocityShift(vel, density, self._force)
+    def macroscopicVelocityShift(self, density):
+        return defaultVelocityShift(density, self._force)
 
 
 class Guo:
@@ -60,25 +59,26 @@ class Guo:
 
     Adapts the calculation of the macroscopic velocity as well as the equilibrium velocity (both shifted by F/2)!
     """
-    def __init__(self, force, viscosityRelaxationRate):
+    def __init__(self, force):
         self._force = force
-        self._viscosityRelaxationRate = viscosityRelaxationRate
 
-    def __call__(self, abstractLbmMethod):
+    def __call__(self, lbmMethod):
         luo = Luo(self._force)
-        correctionFactor = (1 - sp.Rational(1, 2) * self._viscosityRelaxationRate)
-        return [correctionFactor * t for t in luo(latticeModel)]
+        u = lbmMethod.firstOrderEquilibriumMomentSymbols
+        shearRelaxationRate = lbmMethod.getShearRelaxationRate()
+        correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
+        return [correctionFactor * t for t in luo(lbmMethod)]
 
-    def macroscopicVelocity(self, vel, density):
-        return defaultVelocityShift(vel, density, self._force)
+    def macroscopicVelocityShift(self, density):
+        return defaultVelocityShift(density, self._force)
 
-    def equilibriumVelocity(self, vel, density):
-        return defaultVelocityShift(vel, density, self._force)
+    def equilibriumVelocityShift(self, density):
+        return defaultVelocityShift(density, self._force)
 
 
 # --------------------------------  Helper functions  ------------------------------------------------------------------
 
 
-def defaultVelocityShift(velocity, density, force):
-    return [v_i + f_i / (2 * density) for v_i, f_i in zip(velocity, force)]
+def defaultVelocityShift(density, force):
+    return [f_i / (2 * density) for f_i in force]
 

@@ -247,6 +247,14 @@ def getOrder(moment):
     return sum([sp.degree(leadingCoefficient, gen=m) for m in symbolsInLeadingCoefficient])
 
 
+def isShearMoment(moment):
+    """Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y"""
+    if type(moment) is tuple:
+        moment = exponentToPolynomialRepresentation(moment)
+    return moment in isShearMoment.shearMoments
+isShearMoment.shearMoments = set([c[0] * c[1] for c in itertools.combinations(MOMENT_SYMBOLS, 2)])
+
+
 @functools.lru_cache(maxsize=512)
 def discreteMoment(function, moment, stencil):
     """
