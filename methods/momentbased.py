@@ -11,12 +11,10 @@ from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix, exponentsToPolynomialRep
 from pystencils.equationcollection import EquationCollection
 from pystencils.sympyextensions import commonDenominator
 
-
 RelaxationInfo = namedtuple('Relaxationinfo', ['equilibriumValue', 'relaxationRate'])
 
 
 class MomentBasedLbmMethod(AbstractLbmMethod):
-
     def __init__(self, stencil, momentToRelaxationInfoDict, conservedQuantityComputation, forceModel=None):
         """
         Moment based LBM is a class to represent the single (SRT), two (TRT) and multi relaxation time (MRT) methods.
@@ -63,7 +61,7 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
         undefinedEquilibriumSymbols = symbolsInEquilibriumMoments - conservedQuantities
 
         assert len(undefinedEquilibriumSymbols) == 0, "Undefined symbol(s) in equilibrium moment: %s" % \
-                                                      (undefinedEquilibriumSymbols, )
+                                                      (undefinedEquilibriumSymbols,)
 
         self._weights = None
 
@@ -94,11 +92,11 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
         return table.format(content=content, nb='style="border:none"')
 
     @property
-    def zerothOrderEquilibriumMomentSymbol(self,):
+    def zerothOrderEquilibriumMomentSymbol(self, ):
         return self._conservedQuantityComputation.definedSymbols(order=0)[1]
 
     @property
-    def firstOrderEquilibriumMomentSymbols(self,):
+    def firstOrderEquilibriumMomentSymbols(self, ):
         return self._conservedQuantityComputation.definedSymbols(order=1)[1]
 
     @property
@@ -158,6 +156,8 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
         M = self._momentMatrix
         m_eq = self._equilibriumMoments
 
+        relaxationRateSubExpressions, D = self._generateRelaxationMatrix(D)
+
         collisionRule = f + M.inv() * D * (m_eq - M * f)
         collisionEqs = [sp.Eq(lhs, rhs) for lhs, rhs in zip(self.postCollisionPdfSymbols, collisionRule)]
 
@@ -166,8 +166,35 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
         simplificationHints.update(self._conservedQuantityComputation.definedSymbols())
         simplificationHints['relaxationRates'] = D.atoms(sp.Symbol)
         simplificationHints['stencil'] = self.stencil
-        return EquationCollection(collisionEqs, eqValueEqs.subexpressions + eqValueEqs.mainEquations,
+
+        allSubexpressions = relaxationRateSubExpressions + eqValueEqs.subexpressions + eqValueEqs.mainEquations
+        return EquationCollection(collisionEqs, allSubexpressions,
                                   simplificationHints)
+
+    @staticmethod
+    def _generateRelaxationMatrix(relaxationMatrix):
+        """
+        For SRT and TRT the equations can be easier simplified if the relaxation times are symbols, not numbers.
+        This function replaces the numbers in the relaxation matrix with symbols in this case, and returns also
+         the subexpressions, that assign the number to the newly introduced symbol
+        """
+        rr = [relaxationMatrix[i, i] for i in range(relaxationMatrix.rows)]
+        uniqueRelaxationRates = set(rr)
+        if len(uniqueRelaxationRates) <= 2:
+            # special handling for SRT and TRT
+            subexpressions = {}
+            for rt in uniqueRelaxationRates:
+                rt = sp.sympify(rt)
+                if not isinstance(rt, sp.Symbol):
+                    rtSymbol = sp.Symbol("rt_%d" % (len(subexpressions),))
+                    subexpressions[rt] = rtSymbol
+
+            newRR = [subexpressions[sp.sympify(e)] if sp.sympify(e) in subexpressions else e
+                     for e in rr]
+            substitutions = [sp.Eq(e[1], e[0]) for e in subexpressions.items()]
+            return substitutions, sp.diag(*newRR)
+        else:
+            return [], relaxationMatrix
 
 
 # ------------------------------------ Helper Functions ----------------------------------------------------------------

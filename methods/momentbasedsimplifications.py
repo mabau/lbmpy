@@ -93,10 +93,13 @@ def replaceDensityAndVelocity(lbmCollisionEqs):
 
 def replaceCommonQuadraticAndConstantTerm(lbmCollisionEqs):
     """
+    A common quadratic term (f_eq_common) is extracted from the collision equation for center
+    and substituted in all equations
+
     Required simplification hints:
         - density: density symbol
         - velocity: sequence of velocity symbols
-        - relaxationRates:
+        - relaxationRates: set of symbolic relaxation rates
         - stencil:
     """
     sh = lbmCollisionEqs.simplificationHints
@@ -123,6 +126,10 @@ def replaceCommonQuadraticAndConstantTerm(lbmCollisionEqs):
 def cseInOpposingDirections(lbmCollisionEqs):
     """
     Looks for common subexpressions in terms for opposing directions (e.g. north & south, top & bottom )
+
+    Required simplification hints:
+        - relaxationRates: set of symbolic relaxation rates
+        - stencil:
     """
     sh = lbmCollisionEqs.simplificationHints
     assert 'stencil' in sh, "Needs simplification hint 'stencil': Sequence of discrete velocities"
@@ -214,6 +221,6 @@ def __getCommonQuadraticAndConstantTerms(lbmCollisionEqs):
 
     for u in sh['velocity']:
         weight = weight.subs(u, 0)
-    weight = weight / sh['rho']
+    weight = weight / sh['density']
     return t / weight
 
