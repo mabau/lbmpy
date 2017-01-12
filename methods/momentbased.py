@@ -163,7 +163,9 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
 
         eqValueEqs = self._conservedQuantityComputation.equilibriumInputEquationsFromPdfs(f)
         simplificationHints = eqValueEqs.simplificationHints
-        # TODO add own simplification hints here
+        simplificationHints.update(self._conservedQuantityComputation.definedSymbols())
+        simplificationHints['relaxationRates'] = D.atoms(sp.Symbol)
+        simplificationHints['stencil'] = self.stencil
         return EquationCollection(collisionEqs, eqValueEqs.subexpressions + eqValueEqs.mainEquations,
                                   simplificationHints)
 

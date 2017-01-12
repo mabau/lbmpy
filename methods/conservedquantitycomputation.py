@@ -224,11 +224,9 @@ def divideFirstOrderMomentsByRho(equationCollection, dim):
     """
     oldEqs = equationCollection.mainEquations
     rho = oldEqs[0].lhs
-    rhoInv = sp.Symbol("rhoInv")
-    newSubExpression = sp.Eq(rhoInv, 1 / rho)
-    newFirstOrderMomentEq = [sp.Eq(eq.lhs, eq.rhs * rhoInv) for eq in oldEqs[1:dim+1]]
+    newFirstOrderMomentEq = [sp.Eq(eq.lhs, eq.rhs / rho) for eq in oldEqs[1:dim+1]]
     newEqs = [oldEqs[0]] + newFirstOrderMomentEq + oldEqs[dim+1:]
-    return equationCollection.newWithAdditionalSubexpressions(newEqs, [newSubExpression])
+    return equationCollection.newWithAdditionalSubexpressions(newEqs, [])
 
 
 def addDensityOffset(equationCollection, offset=sp.Rational(1, 1)):
