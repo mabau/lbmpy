@@ -107,7 +107,7 @@ def generateEquilibriumByMatchingMoments(stencil, moments, rho=sp.Symbol("rho"),
     dim = len(stencil[0])
     Q = len(stencil)
     assert len(moments) == Q, "Moment count(%d) does not match stencil size(%d)" % (len(moments), Q)
-    continuousMomentsVector = getMomentsOfContinuousMaxwellianEquilibrium(moments, rho, u, c_s_sq, dim, order)
+    continuousMomentsVector = getMomentsOfContinuousMaxwellianEquilibrium(moments, dim, rho, u, c_s_sq, order)
     continuousMomentsVector = sp.Matrix(continuousMomentsVector)
     M = momentMatrix(moments, stencil)
     assert M.rank() == Q, "Rank of moment matrix (%d) does not match stencil size (%d)" % (M.rank(), Q)
@@ -131,7 +131,7 @@ def continuousMaxwellianEquilibrium(dim=3, rho=sp.Symbol("rho"),
     u = u[:dim]
     v = v[:dim]
 
-    velTerm = sum([(v_i - u_i) ** 2 for v_i, u_i in zip(v, u)]) + sp.Symbol("C") * sp.Symbol("z")
+    velTerm = sum([(v_i - u_i) ** 2 for v_i, u_i in zip(v, u)])
     return rho / (2 * sp.pi * c_s_sq) ** (sp.Rational(dim, 2)) * sp.exp(- velTerm / (2 * c_s_sq))
 
 

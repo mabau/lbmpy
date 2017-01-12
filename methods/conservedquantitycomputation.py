@@ -5,10 +5,9 @@ from pystencils.equationcollection import EquationCollection
 
 class AbstractConservedQuantityComputation(metaclass=abc.ABCMeta):
     """
+
     This class defines how conserved quantities are computed as functions of the pdfs.
-    Conserved quantities are used:
-        - for output
-        - as input to the equilibrium in the collision step
+    Conserved quantities are used for output and as input to the equilibrium in the collision step
 
     Depending on the method they might also be computed slightly different, e.g. due to a force model.
 
@@ -16,6 +15,9 @@ class AbstractConservedQuantityComputation(metaclass=abc.ABCMeta):
     In most cases the inputs can be used directly, but for some methods they have to be altered slightly.
     For example in zero centered hydrodynamic schemes with force model, the density has
     to be decreased by one, and the given velocity has to be shifted dependent on the force.
+
+    .. image:: moment_shift.svg
+
     """
 
     @abc.abstractproperty
@@ -55,6 +57,7 @@ class AbstractConservedQuantityComputation(metaclass=abc.ABCMeta):
         """
         Returns an equation collection that defines conserved quantities for output. These conserved quantities might
         be slightly different that the ones used as input for the equilibrium e.g. due to a force model.
+
         :param pdfs: values for the pdf entries
         :param outputQuantityNames: list of conserved quantity names, defining which parameters should be written out.
                                     See :func:`conservedQuantities`
@@ -152,6 +155,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
 
     def __repr__(self):
         return "ConservedValueComputation for %s" % (", " .join(self.conservedQuantities.keys()),)
+
 
 # -----------------------------------------  Helper functions ----------------------------------------------------------
 
