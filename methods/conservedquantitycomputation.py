@@ -136,12 +136,13 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         eqs += [sp.Eq(l, r) for l, r in zip(self._symbolsOrder1, firstOrderMoments)]
         return EquationCollection(eqs, [])
 
-    def outputEquationsFromPdfs(self, pdfs, outputQuantityNames):
-        outputQuantityNames = set(outputQuantityNames)
-
+    def outputEquationsFromPdfs(self, pdfs, outputQuantityNamesToSymbols):
         dim = len(self._stencil[0])
-        eqColl = getEquationsForZerothAndFirstOrderMoment(self._stencil, pdfs, self._symbolOrder0,
-                                                          self._symbolsOrder1[:dim])
+
+        symbolsToExtract = set()
+
+        eqColl = getEquationsForZerothAndFirstOrderMoment(self._stencil, pdfs, self._symbolOrder0, self._symbolsOrder1)
+
         if self._compressible:
             eqColl = divideFirstOrderMomentsByRho(eqColl, dim)
         else:
@@ -149,18 +150,18 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
 
         eqColl = applyForceModelShift('macroscopicVelocityShift', dim, eqColl, self._forceModel, self._compressible)
 
-        nameToSymbol = {'density': self._symbolOrder0,
-                        'velocity': self._symbolsOrder1}
+        mainEquations = []
+        if 'density' in outputQuantityNamesToSymbols:
+            densityOutputSymbol = outputQuantityNamesToSymbols['density']
+            mainEquations.append(sp.Eq(densityOutputSymbol, self._symbolOrder0))
+            symbolsToExtract.add(densityOutputSymbol)
+        if 'velocity' in outputQuantityNamesToSymbols:
+            velOutputSymbols = outputQuantityNamesToSymbols['velocity']
+            mainEquations += [sp.Eq(a, b) for a, b in zip(velOutputSymbols, self._symbolsOrder1)]
+            symbolsToExtract.update(velOutputSymbols)
 
-        symbolsToExtract = set()
-        for e in outputQuantityNames:
-            symbol = nameToSymbol[e]
-            if hasattr(symbol, "__len__"):
-                symbolsToExtract.update(symbol)
-            else:
-                symbolsToExtract.add(symbol)
-
-        return eqColl.extract(symbolsToExtract)
+        eqColl = eqColl.copy(mainEquations, eqColl.allEquations)
+        return eqColl.newWithoutUnusedSubexpressions()
 
     def __repr__(self):
         return "ConservedValueComputation for %s" % (", " .join(self.conservedQuantities.keys()),)
