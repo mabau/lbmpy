@@ -1,5 +1,12 @@
 import abc
 import sympy as sp
+from pystencils.equationcollection import EquationCollection
+
+
+class LbmCollisionRule(EquationCollection):
+    def __init__(self, lbmMethod, *args, **kwargs):
+        super(LbmCollisionRule, self).__init__(*args, **kwargs)
+        self.method = lbmMethod
 
 
 class AbstractLbmMethod(metaclass=abc.ABCMeta):
@@ -47,5 +54,6 @@ class AbstractLbmMethod(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def getCollisionRule(self):
-        """Returns an equation collection defining the collision operator."""
+        """Returns an LbmCollisionRule i.e. an equation collection with a reference to the method.
+         This collision rule defines the collision operator."""
 

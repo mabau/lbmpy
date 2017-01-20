@@ -151,7 +151,16 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
 
         nameToSymbol = {'density': self._symbolOrder0,
                         'velocity': self._symbolsOrder1}
-        return eqColl.extract({nameToSymbol[e] for e in outputQuantityNames})
+
+        symbolsToExtract = set()
+        for e in outputQuantityNames:
+            symbol = nameToSymbol[e]
+            if hasattr(symbol, "__len__"):
+                symbolsToExtract.update(symbol)
+            else:
+                symbolsToExtract.add(symbol)
+
+        return eqColl.extract(symbolsToExtract)
 
     def __repr__(self):
         return "ConservedValueComputation for %s" % (", " .join(self.conservedQuantities.keys()),)
@@ -226,7 +235,7 @@ def divideFirstOrderMomentsByRho(equationCollection, dim):
     rho = oldEqs[0].lhs
     newFirstOrderMomentEq = [sp.Eq(eq.lhs, eq.rhs / rho) for eq in oldEqs[1:dim+1]]
     newEqs = [oldEqs[0]] + newFirstOrderMomentEq + oldEqs[dim+1:]
-    return equationCollection.newWithAdditionalSubexpressions(newEqs, [])
+    return equationCollection.copy(newEqs)
 
 
 def addDensityOffset(equationCollection, offset=sp.Rational(1, 1)):
@@ -235,7 +244,7 @@ def addDensityOffset(equationCollection, offset=sp.Rational(1, 1)):
     """
     oldEqs = equationCollection.mainEquations
     newDensity = sp.Eq(oldEqs[0].lhs, oldEqs[0].rhs + offset)
-    return equationCollection.newWithAdditionalSubexpressions([newDensity] + oldEqs[1:], [])
+    return equationCollection.copy([newDensity] + oldEqs[1:])
 
 
 def applyForceModelShift(shiftMemberName, dim, equationCollection, forceModel, compressible, reverse=False):
@@ -254,7 +263,7 @@ def applyForceModelShift(shiftMemberName, dim, equationCollection, forceModel, c
             velOffsets = [-v for v in velOffsets]
         shiftedVelocityEqs = [sp.Eq(oldEq.lhs, oldEq.rhs + offset) for oldEq, offset in zip(oldVelEqs, velOffsets)]
         newEqs = [oldEqs[0]] + shiftedVelocityEqs + oldEqs[dim + 1:]
-        return equationCollection.newWithAdditionalSubexpressions(newEqs, [])
+        return equationCollection.copy(newEqs)
     else:
         return equationCollection
 

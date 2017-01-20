@@ -116,6 +116,15 @@ def momentMultiplicity(exponentTuple):
     return result
 
 
+def pickRepresentativeMoments(moments):
+    """Picks the representative i.e. of each permutation group only one is kept"""
+    toRemove = []
+    for m in moments:
+        permutations = list(momentPermutations(m))
+        toRemove += permutations[1:]
+    return set(moments) - set(toRemove)
+
+
 def momentPermutations(exponentTuple):
     """Returns all (unique) permutations of the given tuple"""
     return __uniquePermutations(exponentTuple)
@@ -351,6 +360,40 @@ def gramSchmidt(moments, stencil, weights=None):
     return moments
 
 
+def getDefaultMomentSetForStencil(stencil):
+    """
+    Returns a sequence of moments that are commonly used to construct a LBM equilibrium for the given stencil
+    """
+    from lbmpy.stencils import getStencil, stencilsHaveSameEntries
+
+    toPoly = exponentsToPolynomialRepresentations
+
+    if stencilsHaveSameEntries(stencil, getStencil("D2Q9")):
+        return toPoly(momentsUpToComponentOrder(2, dim=2))
+
+    all27Moments = momentsUpToComponentOrder(2, dim=3)
+    if stencilsHaveSameEntries(stencil, getStencil("D3Q27")):
+        return toPoly(all27Moments)
+    if stencilsHaveSameEntries(stencil, getStencil("D3Q19")):
+        nonMatchedMoments = [(1, 2, 2), (1, 1, 2), (2, 2, 2), (1, 1, 1)]
+        moments19 = set(all27Moments) - set(extendMomentsWithPermutations(nonMatchedMoments))
+        return toPoly(moments19)
+    if stencilsHaveSameEntries(stencil, getStencil("D3Q15")):
+        x, y, z = MOMENT_SYMBOLS
+        nonMatchedMoments = [(1, 2, 0), (2, 2, 0), (1, 1, 2), (1, 2, 2), (2, 2, 2)]
+        additionalMoments = (x**2 * y**2 + x**2 * z**2 + y**2 * z**2,
+                             x * (y**2 + z**2),
+                             y * (x**2 + z**2),
+                             z * (x**2 + y**2))
+        toRemove = set(extendMomentsWithPermutations(nonMatchedMoments))
+        return toPoly(set(all27Moments) - toRemove) + additionalMoments
+
+    raise NotImplementedError("No default moment system available for this stencil - define matched moments yourself")
+
+
+# ---------------------------------- Visualization ---------------------------------------------------------------------
+
+
 def momentEqualityTable(stencil, discreteEquilibrium=None, continuousEquilibrium=None, maxOrder=4, truncateOrder=None):
     """
     Creates a table showing which moments of a discrete stencil/equilibrium coincide with the
@@ -369,7 +412,8 @@ def momentEqualityTable(stencil, discreteEquilibrium=None, continuousEquilibrium
 
     if discreteEquilibrium is None:
         from lbmpy.maxwellian_equilibrium import discreteMaxwellianEquilibrium
-        discreteEquilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True)
+        discreteEquilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
+                                                            order=truncateOrder)
     if continuousEquilibrium is None:
         from lbmpy.maxwellian_equilibrium import continuousMaxwellianEquilibrium
         continuousEquilibrium = continuousMaxwellianEquilibrium(dim=dim, c_s_sq=sp.Rational(1, 3))
@@ -415,5 +459,58 @@ def momentEqualityTable(stencil, discreteEquilibrium=None, continuousEquilibrium
 
     print("Matched moments %d - non matched moments %d - total %d" %
           (matchedMoments, nonMatchedMoments, matchedMoments + nonMatchedMoments))
+
+    return tableDisplay
+
+
+def momentEqualityTableByStencil(nameToStencilDict, moments, truncateOrder=None):
+    """
+    Creates a table for display in IPython notebooks that shows which moments agree between continuous and
+    discrete equilibrium, group by stencils
+
+    :param nameToStencilDict: dict from stencil name to stencil
+    :param moments: sequence of moments to compare - assumes that permutations have similar properties
+                    so just one representative is shown labeled with its multiplicity
+    :param truncateOrder: compare up to this order
+    """
+    import ipy_table
+    from lbmpy.maxwellian_equilibrium import discreteMaxwellianEquilibrium
+    from lbmpy.maxwellian_equilibrium import continuousMaxwellianEquilibrium
+
+    stencilNames = []
+    stencils = []
+    for key, value in nameToStencilDict.items():
+        stencilNames.append(key)
+        stencils.append(value)
+
+    moments = list(pickRepresentativeMoments(moments))
+
+    colors = {}
+    for stencilIdx, stencil in enumerate(stencils):
+        dim = len(stencil[0])
+        discreteEquilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
+                                                            order=truncateOrder)
+        continuousEquilibrium = continuousMaxwellianEquilibrium(dim=dim, c_s_sq=sp.Rational(1, 3))
+
+        for momentIdx, moment in enumerate(moments):
+            moment = moment[:dim]
+            dm = discreteMoment(discreteEquilibrium, moment, stencil)
+            cm = continuousMoment(continuousEquilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
+            difference = sp.simplify(dm - cm)
+            if truncateOrder:
+                difference = sp.simplify(removeHigherOrderTerms(difference, order=truncateOrder))
+            colors[(momentIdx + 1, stencilIdx + 2)] = 'Orange' if difference != 0 else 'lightGreen'
+
+    table = []
+    headerRow = [' ', '#'] + stencilNames
+    table.append(headerRow)
+    for moment in moments:
+        row = [str(moment), str(momentMultiplicity(moment))] + [' '] * len(stencils)
+        table.append(row)
+
+    tableDisplay = ipy_table.make_table(table)
+    ipy_table.set_row_style(0, color='#ddd')
+    for cellIdx, color in colors.items():
+        ipy_table.set_cell_style(cellIdx[0], cellIdx[1], color=color)
 
     return tableDisplay

@@ -105,6 +105,13 @@ def isSymmetricStencil(stencil):
             return False
     return True
 
+
+def stencilsHaveSameEntries(s1, s2):
+    if len(s1) != len(s2):
+        return False
+    return len(set(s1) - set(s2)) == 0
+
+
 # -------------------------------------- Visualization -----------------------------------------------------------------
 
 

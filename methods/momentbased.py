@@ -2,14 +2,14 @@ import sympy as sp
 import collections
 from collections import namedtuple, OrderedDict, defaultdict
 
+from lbmpy.stencils import stencilsHaveSameEntries, getStencil
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
     getMomentsOfContinuousMaxwellianEquilibrium
-from lbmpy.methods.abstractlbmmethod import AbstractLbmMethod
+from lbmpy.methods.abstractlbmmethod import AbstractLbmMethod, LbmCollisionRule
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation, DensityVelocityComputation
-from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix, exponentsToPolynomialRepresentations, isShearMoment, \
-    momentsUpToComponentOrder, isEven, gramSchmidt, getOrder
-from pystencils.equationcollection import EquationCollection
-from pystencils.sympyextensions import commonDenominator
+from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix, isShearMoment, \
+    isEven, gramSchmidt, getOrder, getDefaultMomentSetForStencil
+from pystencils.sympyextensions import commonDenominator, replaceAdditive
 
 RelaxationInfo = namedtuple('Relaxationinfo', ['equilibriumValue', 'relaxationRate'])
 
@@ -92,6 +92,10 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
         return table.format(content=content, nb='style="border:none"')
 
     @property
+    def moments(self):
+        return self._moments
+
+    @property
     def zerothOrderEquilibriumMomentSymbol(self, ):
         return self._conservedQuantityComputation.definedSymbols(order=0)[1]
 
@@ -107,7 +111,12 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
 
     def _computeWeights(self):
         replacements = self._conservedQuantityComputation.defaultValues
-        eqColl = self.getEquilibrium().newWithSubstitutionsApplied(replacements).insertSubexpressions()
+        eqColl = self.getEquilibrium().copyWithSubstitutionsApplied(replacements).insertSubexpressions()
+        newMainEqs = [sp.Eq(e.lhs,
+                            replaceAdditive(e.rhs, 1, sum(self.preCollisionPdfSymbols), requiredMatchReplacement=1.0))
+                      for e in eqColl.mainEquations]
+        eqColl = eqColl.copy(newMainEqs)
+
         weights = []
         for eq in eqColl.mainEquations:
             value = eq.rhs.expand()
@@ -144,7 +153,7 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
         if self._forceModel is not None:
             forceModelTerms = self._forceModel(self)
             newEqs = [sp.Eq(eq.lhs, eq.rhs + fmt) for eq, fmt in zip(eqColl.mainEquations, forceModelTerms)]
-            eqColl = eqColl.newWithAdditionalSubexpressions(newEqs, [])
+            eqColl = eqColl.copy(newEqs)
         return eqColl
 
     @property
@@ -165,11 +174,10 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
         simplificationHints = eqValueEqs.simplificationHints
         simplificationHints.update(self._conservedQuantityComputation.definedSymbols())
         simplificationHints['relaxationRates'] = D.atoms(sp.Symbol)
-        simplificationHints['stencil'] = self.stencil
 
         allSubexpressions = relaxationRateSubExpressions + eqValueEqs.subexpressions + eqValueEqs.mainEquations
-        return EquationCollection(collisionEqs, allSubexpressions,
-                                  simplificationHints)
+        return LbmCollisionRule(self, collisionEqs, allSubexpressions,
+                                simplificationHints)
 
     @staticmethod
     def _generateRelaxationMatrix(relaxationMatrix):
@@ -257,8 +265,8 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     :return: :class:`lbmpy.methods.MomentBasedLbmMethod` instance
     """
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
-    assert len(momToRrDict) == len(
-        stencil), "The number of moments has to be the same as the number of stencil entries"
+    assert len(momToRrDict) == len(stencil), \
+        "The number of moments has to be the same as the number of stencil entries"
 
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
     eqMoments = getMomentsOfDiscreteMaxwellianEquilibrium(stencil, list(momToRrDict.keys()), c_s_sq=sp.Rational(1, 3),
@@ -281,8 +289,7 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
         stencil), "The number of moments has to be the same as the number of stencil entries"
     dim = len(stencil[0])
     densityVelocityComputation = DensityVelocityComputation(stencil, True, forceModel)
-    eqMoments = getMomentsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), stencil, dim,
-                                                            c_s_sq=sp.Rational(1, 3),
+    eqMoments = getMomentsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), dim, c_s_sq=sp.Rational(1, 3),
                                                             order=equilibriumAccuracyOrder)
     rrDict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
                           for mom, rr, eqMom in zip(momToRrDict.keys(), momToRrDict.values(), eqMoments)])
@@ -307,8 +314,7 @@ def createSRT(stencil, relaxationRate, compressible=False, forceModel=None, equi
     :param equilibriumAccuracyOrder: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
     :return: :class:`lbmpy.methods.MomentBasedLbmMethod` instance
     """
-    dim = len(stencil[0])
-    moments = exponentsToPolynomialRepresentations(momentsUpToComponentOrder(2, dim=dim))
+    moments = getDefaultMomentSetForStencil(stencil)
     rrDict = {m: relaxationRate for m in moments}
     return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, compressible, forceModel, equilibriumAccuracyOrder)
 
@@ -324,8 +330,7 @@ def createTRT(stencil, relaxationRateEvenMoments, relaxationRateOddMoments, comp
     two relaxation rates: one for even moments (determines viscosity) and one for odd moments.
     If unsure how to choose the odd relaxation rate, use the function :func:`lbmpy.methods.createTRTWithMagicNumber`.
     """
-    dim = len(stencil[0])
-    moments = exponentsToPolynomialRepresentations(momentsUpToComponentOrder(2, dim=dim))
+    moments = getDefaultMomentSetForStencil(stencil)
     rrDict = {m: relaxationRateEvenMoments if isEven(m) else relaxationRateOddMoments for m in moments}
     return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, compressible, forceModel, equilibriumAccuracyOrder)
 
@@ -363,18 +368,16 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, compressible=False,
     if relaxationRateGetter is None:
         relaxationRateGetter = defaultRelaxationRateNames()
 
-    Q = len(stencil)
-    D = len(stencil[0])
     x, y, z = MOMENT_SYMBOLS
     one = sp.Rational(1, 1)
 
     momentToRelaxationRateDict = OrderedDict()
-    if (D, Q) == (2, 9):
-        moments = exponentsToPolynomialRepresentations(momentsUpToComponentOrder(2, dim=D))
+    if stencilsHaveSameEntries(stencil, getStencil("D2Q9")):
+        moments = getDefaultMomentSetForStencil(stencil)
         orthogonalMoments = gramSchmidt(moments, stencil)
         orthogonalMomentsScaled = [e * commonDenominator(e) for e in orthogonalMoments]
         nestedMoments = list(sortMomentsIntoGroupsOfSameOrder(orthogonalMomentsScaled).values())
-    elif (D, Q) == (3, 15):
+    elif stencilsHaveSameEntries(stencil, getStencil("D3Q15")):
         sq = x ** 2 + y ** 2 + z ** 2
         nestedMoments = [
             [one, x, y, z],  # [0, 3, 5, 7]
@@ -384,7 +387,7 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, compressible=False,
             [(3 * sq - 5) * x, (3 * sq - 5) * y, (3 * sq - 5) * z],  # [4, 6, 8]
             [x * y * z]
         ]
-    elif (D, Q) == (3, 19):
+    elif stencilsHaveSameEntries(stencil, getStencil("D3Q19")):
         sq = x ** 2 + y ** 2 + z ** 2
         nestedMoments = [
             [one, x, y, z],  # [0, 3, 5, 7]
@@ -395,7 +398,7 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, compressible=False,
             [(2 * sq - 3) * (3 * x ** 2 - sq), (2 * sq - 3) * (y ** 2 - z ** 2)],  # [10, 12]
             [(y ** 2 - z ** 2) * x, (z ** 2 - x ** 2) * y, (x ** 2 - y ** 2) * z]  # [16, 17, 18]
         ]
-    elif (D, Q) == (3, 27):
+    elif stencilsHaveSameEntries(stencil, getStencil("D3Q27")):
         xsq, ysq, zsq = x ** 2, y ** 2, z ** 2
         allMoments = [
             sp.Rational(1, 1),  # 0
