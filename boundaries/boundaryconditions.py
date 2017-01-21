@@ -2,14 +2,14 @@ import sympy as sp
 from lbmpy.boundaries.boundaryhandling import offsetFromDir, weightOfDirection, invDir
 
 
-def noSlip(pdfField, direction, latticeModel):
-    neighbor = offsetFromDir(direction, latticeModel.dim)
+def noSlip(pdfField, direction, lbmMethod):
+    neighbor = offsetFromDir(direction, lbmMethod.dim)
     inverseDir = invDir(direction)
     return [sp.Eq(pdfField[neighbor](inverseDir), pdfField(direction))]
 
 
-def ubb(pdfField, direction, latticeModel, velocity):
-    neighbor = offsetFromDir(direction, latticeModel.dim)
+def ubb(pdfField, direction, lbmMethod, velocity):
+    neighbor = offsetFromDir(direction, lbmMethod.dim)
     inverseDir = invDir(direction)
 
     velTerm = 6 * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
