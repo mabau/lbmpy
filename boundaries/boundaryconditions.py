@@ -9,6 +9,8 @@ def noSlip(pdfField, direction, lbmMethod):
 
 
 def ubb(pdfField, direction, lbmMethod, velocity):
+    assert len(velocity) == lbmMethod.dim, \
+        "Dimension of velocity (%d) does not match dimension of LB method (%d)" %(len(velocity, lbmMethod.dim))
     neighbor = offsetFromDir(direction, lbmMethod.dim)
     inverseDir = invDir(direction)
 

@@ -144,12 +144,14 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
                                           "Can not determine their relaxation rate automatically")
 
     def getEquilibrium(self):
+        sp.factor
         D = sp.eye(len(self._relaxationRates))
         return self._getCollisionRuleWithRelaxationMatrix(D)
 
     def getCollisionRule(self):
         D = sp.diag(*self._relaxationRates)
-        eqColl = self._getCollisionRuleWithRelaxationMatrix(D)
+        relaxationRateSubExpressions, D = self._generateRelaxationMatrix(D)
+        eqColl = self._getCollisionRuleWithRelaxationMatrix(D, relaxationRateSubExpressions)
         if self._forceModel is not None:
             forceModelTerms = self._forceModel(self)
             newEqs = [sp.Eq(eq.lhs, eq.rhs + fmt) for eq, fmt in zip(eqColl.mainEquations, forceModelTerms)]
@@ -160,12 +162,10 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
     def conservedQuantityComputation(self):
         return self._conservedQuantityComputation
 
-    def _getCollisionRuleWithRelaxationMatrix(self, D):
+    def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=[]):
         f = sp.Matrix(self.preCollisionPdfSymbols)
         M = self._momentMatrix
         m_eq = self._equilibriumMoments
-
-        relaxationRateSubExpressions, D = self._generateRelaxationMatrix(D)
 
         collisionRule = f + M.inv() * D * (m_eq - M * f)
         collisionEqs = [sp.Eq(lhs, rhs) for lhs, rhs in zip(self.postCollisionPdfSymbols, collisionRule)]
@@ -175,7 +175,7 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
         simplificationHints.update(self._conservedQuantityComputation.definedSymbols())
         simplificationHints['relaxationRates'] = D.atoms(sp.Symbol)
 
-        allSubexpressions = relaxationRateSubExpressions + eqValueEqs.subexpressions + eqValueEqs.mainEquations
+        allSubexpressions = additionalSubexpressions + eqValueEqs.subexpressions + eqValueEqs.mainEquations
         return LbmCollisionRule(self, collisionEqs, allSubexpressions,
                                 simplificationHints)
 

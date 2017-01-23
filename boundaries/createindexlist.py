@@ -1,16 +1,15 @@
 import numpy as np
 import itertools
 
-#try:
-if True:
+try:
     import pyximport;
     pyximport.install()
     from lbmpy.boundaries.createindexlistcython import createBoundaryIndexList2D, createBoundaryIndexList3D
     cythonFuncsAvailable = True
-#except Exception:
-#    cythonFuncsAvailable = False
-#    createBoundaryIndexList2D = None
-#    createBoundaryIndexList3D = None
+except Exception:
+    cythonFuncsAvailable = False
+    createBoundaryIndexList2D = None
+    createBoundaryIndexList3D = None
 
 
 def _createBoundaryIndexListPython(flagFieldArr, nrOfGhostLayers, boundaryMask, fluidMask, stencil):

@@ -36,6 +36,7 @@ def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doO
     return s
 
 
+
 if __name__ == '__main__':
     from lbmpy.stencils import getStencil
     from lbmpy.methods.momentbased import createOrthogonalMRT

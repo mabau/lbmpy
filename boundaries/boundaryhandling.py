@@ -6,7 +6,7 @@ from pystencils.ast import Block, SympyAssignment, LoopOverCoordinate, KernelFun
 from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses, typingFromSympyInspection, \
     typeAllEquations
 from pystencils.cpu import makePythonFunction
-
+from lbmpy.boundaries.createindexlist import createBoundaryIndexList
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
 WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
@@ -41,16 +41,16 @@ class BoundaryHandling:
     def getFlag(self, name):
         return 2 ** self._nameToIndex[name]
 
-    def setBoundary(self, name, indexExpr, clearOtherBoundaries=True):
-        if not isinstance(name, str):
-            function = name
-            if hasattr(function, '__name__'):
-                name = function.__name__
-            else:
-                name = function.name
+    def setBoundary(self, function, indexExpr, clearOtherBoundaries=True):
+        if hasattr(function, '__name__'):
+            name = function.__name__
+        elif hasattr(function, 'name'):
+            name = function.name
+        else:
+            raise ValueError("Boundary function has to have a '__name__' or 'name' attribute")
 
-            if function not in self._boundaryFunctions:
-                self.addBoundary(function, name)
+        if function not in self._boundaryFunctions:
+            self.addBoundary(function, name)
 
         flag = self.getFlag(name)
         if clearOtherBoundaries:
@@ -66,8 +66,8 @@ class BoundaryHandling:
     def prepare(self):
         self.invalidateIndexCache()
         for boundaryIdx, boundaryFunc in enumerate(self._boundaryFunctions):
-            idxField = createBoundaryIndexList(self.flagField, self._ghostLayers, self._latticeModel.stencil,
-                                               2 ** boundaryIdx, self._fluidFlag)
+            idxField = createBoundaryIndexList(self.flagField, self._latticeModel.stencil,
+                                               2 ** boundaryIdx, self._fluidFlag, self._ghostLayers)
             ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._latticeModel, boundaryFunc)
             self._boundarySweeps.append(makePythonFunction(ast, {'indexField': idxField}))
 
@@ -99,14 +99,14 @@ def weightOfDirection(dirIdx):
 
 # ------------------------------------- Kernel Generation --------------------------------------------------------------
 
-class LatticeModelInfo(CustomCppCode):
-    def __init__(self, latticeModel):
-        stencil = latticeModel.stencil
-        symbolsDefined = set(offsetSymbols(latticeModel.dim) + [INV_DIR_SYMBOL, WEIGHTS_SYMBOL])
+class LbmMethodInfo(CustomCppCode):
+    def __init__(self, lbMethod):
+        stencil = lbMethod.stencil
+        symbolsDefined = set(offsetSymbols(lbMethod.dim) + [INV_DIR_SYMBOL, WEIGHTS_SYMBOL])
 
-        offsetSym = offsetSymbols(latticeModel.dim)
+        offsetSym = offsetSymbols(lbMethod.dim)
         code = "\n"
-        for i in range(latticeModel.dim):
+        for i in range(lbMethod.dim):
             offsetStr = ", ".join([str(d[i]) for d in stencil])
             code += "const int %s [] = { %s };\n" % (offsetSym[i].name, offsetStr)
 
@@ -116,9 +116,9 @@ class LatticeModelInfo(CustomCppCode):
             invDirs.append(str(stencil.index(inverseDir)))
 
         code += "static const int %s [] = { %s };\n" % (INV_DIR_SYMBOL.name, ", ".join(invDirs))
-        weights = [str(w.evalf()) for w in latticeModel.weights]
+        weights = [str(w.evalf()) for w in lbMethod.weights]
         code += "static const double %s [] = { %s };\n" % (WEIGHTS_SYMBOL.name, ",".join(weights))
-        super(LatticeModelInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
+        super(LbmMethodInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
 
 
 def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
@@ -158,7 +158,7 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
         for node in additionalNodes:
             loop.body.append(node)
 
-    functionBody.insertFront(LatticeModelInfo(latticeModel))
+    functionBody.insertFront(LbmMethodInfo(latticeModel))
 
     fixedCoordinateMapping = {f.name: coordinateSymbols[:dim] for f in fieldsAccessed}
     resolveFieldAccesses(ast, set(['indexField']), fieldToFixedCoordinates=fixedCoordinateMapping)
