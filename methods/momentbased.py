@@ -144,7 +144,6 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
                                           "Can not determine their relaxation rate automatically")
 
     def getEquilibrium(self):
-        sp.factor
         D = sp.eye(len(self._relaxationRates))
         return self._getCollisionRuleWithRelaxationMatrix(D)
 

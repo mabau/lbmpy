@@ -5,7 +5,8 @@ from pystencils.backends.cbackend import CustomCppCode
 from pystencils.ast import Block, SympyAssignment, LoopOverCoordinate, KernelFunction
 from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses, typingFromSympyInspection, \
     typeAllEquations
-from pystencils.cpu import makePythonFunction
+from pystencils.cpu import makePythonFunction as makePythonCpuFunction
+from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
@@ -13,7 +14,7 @@ WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
 
 
 class BoundaryHandling:
-    def __init__(self, symbolicPdfField, domainShape, latticeModel, ghostLayers=1):
+    def __init__(self, symbolicPdfField, domainShape, latticeModel, ghostLayers=1, target='cpu'):
         self._symbolicPdfField = symbolicPdfField
         self._shapeWithGhostLayers = [d + 2 * ghostLayers for d in domainShape]
         self._fluidFlag = 2 ** 31
@@ -23,6 +24,9 @@ class BoundaryHandling:
         self._boundaryFunctions = []
         self._nameToIndex = {}
         self._boundarySweeps = []
+        self._target = target
+        if target not in ('cpu', 'gpu'):
+            raise ValueError("Invalid target '%s' . Allowed values: 'cpu' or 'gpu'" % (target,))
 
     def addBoundary(self, boundaryFunction, name=None):
         if name is None:
@@ -69,7 +73,13 @@ class BoundaryHandling:
             idxField = createBoundaryIndexList(self.flagField, self._latticeModel.stencil,
                                                2 ** boundaryIdx, self._fluidFlag, self._ghostLayers)
             ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._latticeModel, boundaryFunc)
-            self._boundarySweeps.append(makePythonFunction(ast, {'indexField': idxField}))
+
+            if self._target == 'cpu':
+                self._boundarySweeps.append(makePythonCpuFunction(ast, {'indexField': idxField}))
+            elif self._target == 'gpu':
+                self._boundarySweeps.append(makePythonGpuFunction(ast, {'indexField': idxField}))
+            else:
+                assert False
 
     def __call__(self, **kwargs):
         if len(self._boundarySweeps) == 0:
