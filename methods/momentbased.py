@@ -5,7 +5,7 @@ from collections import namedtuple, OrderedDict, defaultdict
 from lbmpy.stencils import stencilsHaveSameEntries, getStencil
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
     getMomentsOfContinuousMaxwellianEquilibrium
-from lbmpy.methods.abstractlbmmethod import AbstractLbmMethod, LbmCollisionRule
+from lbmpy.methods.abstractlbmmethod import AbstractLbMethod, LbmCollisionRule
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation, DensityVelocityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix, isShearMoment, \
     isEven, gramSchmidt, getOrder, getDefaultMomentSetForStencil
@@ -14,7 +14,7 @@ from pystencils.sympyextensions import commonDenominator, replaceAdditive
 RelaxationInfo = namedtuple('Relaxationinfo', ['equilibriumValue', 'relaxationRate'])
 
 
-class MomentBasedLbmMethod(AbstractLbmMethod):
+class MomentBasedLbMethod(AbstractLbMethod):
     def __init__(self, stencil, momentToRelaxationInfoDict, conservedQuantityComputation, forceModel=None):
         """
         Moment based LBM is a class to represent the single (SRT), two (TRT) and multi relaxation time (MRT) methods.
@@ -31,7 +31,7 @@ class MomentBasedLbmMethod(AbstractLbmMethod):
                                              the symbols used in the equilibrium moments like e.g. density and velocity
         :param forceModel: force model instance, or None if no forcing terms are required
         """
-        super(MomentBasedLbmMethod, self).__init__(stencil)
+        super(MomentBasedLbMethod, self).__init__(stencil)
 
         assert isinstance(conservedQuantityComputation, AbstractConservedQuantityComputation)
 
@@ -272,7 +272,7 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
                                                           compressible=compressible, order=equilibriumAccuracyOrder)
     rrDict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
                           for mom, rr, eqMom in zip(momToRrDict.keys(), momToRrDict.values(), eqMoments)])
-    return MomentBasedLbmMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+    return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
 def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict, forceModel=None,
@@ -292,7 +292,7 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
                                                             order=equilibriumAccuracyOrder)
     rrDict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
                           for mom, rr, eqMom in zip(momToRrDict.keys(), momToRrDict.values(), eqMoments)])
-    return MomentBasedLbmMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+    return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
 # ------------------------------------ SRT / TRT/ MRT Creators ---------------------------------------------------------

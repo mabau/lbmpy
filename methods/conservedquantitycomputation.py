@@ -53,14 +53,14 @@ class AbstractConservedQuantityComputation(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def outputEquationsFromPdfs(self, pdfs, outputQuantityNames):
+    def outputEquationsFromPdfs(self, pdfs, outputQuantityNamesToSymbols):
         """
         Returns an equation collection that defines conserved quantities for output. These conserved quantities might
         be slightly different that the ones used as input for the equilibrium e.g. due to a force model.
 
         :param pdfs: values for the pdf entries
-        :param outputQuantityNames: list of conserved quantity names, defining which parameters should be written out.
-                                    See :func:`conservedQuantities`
+        :param outputQuantityNamesToSymbols: dict mapping of conserved quantity names (See :func:`conservedQuantities`)
+                                            to symbols or field accesses where they should be written to
         """
 
     @abc.abstractmethod

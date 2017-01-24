@@ -1,5 +1,5 @@
-from lbmpy.methods.abstractlbmmethod import AbstractLbmMethod
-from lbmpy.methods.momentbased import MomentBasedLbmMethod, RelaxationInfo
+from lbmpy.methods.abstractlbmmethod import AbstractLbMethod
+from lbmpy.methods.momentbased import MomentBasedLbMethod, RelaxationInfo
 from lbmpy.methods.momentbased import createSRT, createTRT, createTRTWithMagicNumber, createOrthogonalMRT, \
     createWithContinuousMaxwellianEqMoments, createWithDiscreteMaxwellianEqMoments
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation, DensityVelocityComputation

@@ -8,14 +8,14 @@ from pystencils.equationcollection.simplifications import applyOnAllEquations, \
 
 def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doOverallCse=False, splitInnerLoop=False):
     from pystencils.equationcollection import SimplificationStrategy
-    from lbmpy.methods import MomentBasedLbmMethod
+    from lbmpy.methods import MomentBasedLbMethod
     from lbmpy.methods.momentbasedsimplifications import replaceSecondOrderVelocityProducts, \
         factorDensityAfterFactoringRelaxationTimes, factorRelaxationRates, cseInOpposingDirections, \
         replaceCommonQuadraticAndConstantTerm, replaceDensityAndVelocity
 
     s = SimplificationStrategy()
 
-    if isinstance(lbmMethod, MomentBasedLbmMethod):
+    if isinstance(lbmMethod, MomentBasedLbMethod):
         expand = partial(applyOnAllEquations, operation=sp.expand)
         expand.__name__ = "expand"
 

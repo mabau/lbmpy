@@ -9,7 +9,7 @@ class LbmCollisionRule(EquationCollection):
         self.method = lbmMethod
 
 
-class AbstractLbmMethod(metaclass=abc.ABCMeta):
+class AbstractLbMethod(metaclass=abc.ABCMeta):
     """
     Abstract base class for all LBM methods
     """
