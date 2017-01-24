@@ -8,10 +8,6 @@ from lbmpy.methods.momentbased import createSRT, createTRT, createOrthogonalMRT
 import lbmpy.forcemodels as forceModels
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import createStreamPullKernel, createPdfArray
-from pystencils.cpu.kernelcreation import createKernel as createCpuKernel, addOpenMP
-from pystencils.gpucuda.kernelcreation import createCUDAKernel as createGpuKernel
-from pystencils.cpu import makePythonFunction as makePythonCpuFunction
-from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
 
 
 def _getParams(params, optParams):
@@ -56,6 +52,7 @@ def createLatticeBoltzmannFunction(optimizationParams={}, **kwargs):
 
     ast = createLatticeBoltzmannKernel(**params, optimizationParams=optParams)
     if params['target'] == 'cpu':
+        from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
         if 'openMP' in optParams:
             if isinstance(optParams['openMP'], bool) and optParams['openMP']:
                 addOpenMP(ast)
@@ -63,6 +60,7 @@ def createLatticeBoltzmannFunction(optimizationParams={}, **kwargs):
                 addOpenMP(ast, numThreads=optParams['openMP'])
         return makePythonCpuFunction(ast)
     elif params['target'] == 'gpu':
+        from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
         return makePythonGpuFunction(ast)
     else:
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
@@ -74,13 +72,15 @@ def createLatticeBoltzmannKernel(optimizationParams={}, **kwargs):
     updateRule = createLatticeBoltzmannUpdateRule(**params, optimizationParams=optimizationParams)
 
     if params['target'] == 'cpu':
+        from pystencils.cpu import createKernel
         if 'splitGroups' in updateRule.simplificationHints:
             splitGroups = updateRule.simplificationHints['splitGroups']
         else:
             splitGroups = ()
-        return createCpuKernel(updateRule.allEquations, splitGroups=splitGroups)
+        return createKernel(updateRule.allEquations, splitGroups=splitGroups)
     elif params['target'] == 'gpu':
-        return createGpuKernel(updateRule.allEquations)
+        from pystencils.gpucuda import createCUDAKernel
+        return createCUDAKernel(updateRule.allEquations)
     else:
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 

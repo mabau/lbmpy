@@ -5,8 +5,6 @@ from pystencils.backends.cbackend import CustomCppCode
 from pystencils.ast import Block, SympyAssignment, LoopOverCoordinate, KernelFunction
 from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses, typingFromSympyInspection, \
     typeAllEquations
-from pystencils.cpu import makePythonFunction as makePythonCpuFunction
-from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
@@ -75,8 +73,10 @@ class BoundaryHandling:
             ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._latticeModel, boundaryFunc)
 
             if self._target == 'cpu':
+                from pystencils.cpu import makePythonFunction as makePythonCpuFunction
                 self._boundarySweeps.append(makePythonCpuFunction(ast, {'indexField': idxField}))
             elif self._target == 'gpu':
+                from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
                 self._boundarySweeps.append(makePythonGpuFunction(ast, {'indexField': idxField}))
             else:
                 assert False

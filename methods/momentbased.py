@@ -5,7 +5,7 @@ from collections import namedtuple, OrderedDict, defaultdict
 from lbmpy.stencils import stencilsHaveSameEntries, getStencil
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
     getMomentsOfContinuousMaxwellianEquilibrium
-from lbmpy.methods.abstractlbmmethod import AbstractLbMethod, LbmCollisionRule
+from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation, DensityVelocityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix, isShearMoment, \
     isEven, gramSchmidt, getOrder, getDefaultMomentSetForStencil
@@ -143,9 +143,9 @@ class MomentBasedLbMethod(AbstractLbMethod):
                 raise NotImplementedError("Shear moments seem to be not relaxed separately - "
                                           "Can not determine their relaxation rate automatically")
 
-    def getEquilibrium(self):
+    def getEquilibrium(self, conservedQuantityEquations=None):
         D = sp.eye(len(self._relaxationRates))
-        return self._getCollisionRuleWithRelaxationMatrix(D)
+        return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations)
 
     def getCollisionRule(self):
         D = sp.diag(*self._relaxationRates)
@@ -161,7 +161,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
     def conservedQuantityComputation(self):
         return self._conservedQuantityComputation
 
-    def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=[]):
+    def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=[], conservedQuantityEquations=None):
         f = sp.Matrix(self.preCollisionPdfSymbols)
         M = self._momentMatrix
         m_eq = self._equilibriumMoments
@@ -169,12 +169,14 @@ class MomentBasedLbMethod(AbstractLbMethod):
         collisionRule = f + M.inv() * D * (m_eq - M * f)
         collisionEqs = [sp.Eq(lhs, rhs) for lhs, rhs in zip(self.postCollisionPdfSymbols, collisionRule)]
 
-        eqValueEqs = self._conservedQuantityComputation.equilibriumInputEquationsFromPdfs(f)
-        simplificationHints = eqValueEqs.simplificationHints
+        if conservedQuantityEquations is None:
+            conservedQuantityEquations = self._conservedQuantityComputation.equilibriumInputEquationsFromPdfs(f)
+
+        simplificationHints = conservedQuantityEquations.simplificationHints
         simplificationHints.update(self._conservedQuantityComputation.definedSymbols())
         simplificationHints['relaxationRates'] = D.atoms(sp.Symbol)
 
-        allSubexpressions = additionalSubexpressions + eqValueEqs.subexpressions + eqValueEqs.mainEquations
+        allSubexpressions = additionalSubexpressions + conservedQuantityEquations.allEquations
         return LbmCollisionRule(self, collisionEqs, allSubexpressions,
                                 simplificationHints)
 
