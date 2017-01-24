@@ -1,5 +1,6 @@
 import sympy as sp
 from collections import defaultdict
+from pystencils import Field
 
 
 def createLbmSplitGroups(lbmCollisionEqs):
@@ -18,16 +19,27 @@ def createLbmSplitGroups(lbmCollisionEqs):
     sh = lbmCollisionEqs.simplificationHints
     assert 'velocity' in sh, "Needs simplification hint 'velocity': Sequence of velocity symbols"
 
-    pdfSymbols = lbmCollisionEqs.method.preCollisionPdfSymbols
+    preCollisionSymbols = set(lbmCollisionEqs.method.preCollisionPdfSymbols)
+    nonCenterPostCollisionSymbols = set(lbmCollisionEqs.method.postCollisionPdfSymbols[1:])
+    postCollisionSymbols = set(lbmCollisionEqs.method.postCollisionPdfSymbols)
+
     stencil = lbmCollisionEqs.method.stencil
 
     importantSubExpressions = {e.lhs for e in lbmCollisionEqs.subexpressions
-                               if pdfSymbols.intersection(lbmCollisionEqs.getDependentSymbols([e.lhs]))}
-    for eq in lbmCollisionEqs.mainEquations[1:]:
+                               if preCollisionSymbols.intersection(lbmCollisionEqs.getDependentSymbols([e.lhs]))}
+
+    otherWrittenFields = []
+    for eq in lbmCollisionEqs.mainEquations:
+        if eq.lhs not in postCollisionSymbols and isinstance(eq.lhs, Field.Access):
+            otherWrittenFields.append(eq.lhs)
+        if eq.lhs not in nonCenterPostCollisionSymbols:
+            continue
         importantSubExpressions.intersection_update(eq.rhs.atoms(sp.Symbol))
 
-    subexpressionsToPreCompute = list(sh['velocity']) + list(importantSubExpressions)
-    splitGroups = [subexpressionsToPreCompute, ]
+    importantSubExpressions.update(sh['velocity'])
+
+    subexpressionsToPreCompute = list(importantSubExpressions)
+    splitGroups = [subexpressionsToPreCompute + otherWrittenFields, ]
 
     directionGroups = defaultdict(list)
     dim = len(stencil[0])
@@ -45,4 +57,5 @@ def createLbmSplitGroups(lbmCollisionEqs):
             directionGroups[direction].append(eq.lhs)
     splitGroups += directionGroups.values()
 
-    return splitGroups
+    lbmCollisionEqs.simplificationHints['splitGroups'] = splitGroups
+    return lbmCollisionEqs

@@ -380,20 +380,20 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, compressible=False,
         sq = x ** 2 + y ** 2 + z ** 2
         nestedMoments = [
             [one, x, y, z],  # [0, 3, 5, 7]
-            [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 10, 11, 12, 13]
             [sq - 1],  # [1]
             [3 * sq ** 2 - 6 * sq + 1],  # [2]
             [(3 * sq - 5) * x, (3 * sq - 5) * y, (3 * sq - 5) * z],  # [4, 6, 8]
+            [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 10, 11, 12, 13]
             [x * y * z]
         ]
     elif stencilsHaveSameEntries(stencil, getStencil("D3Q19")):
         sq = x ** 2 + y ** 2 + z ** 2
         nestedMoments = [
             [one, x, y, z],  # [0, 3, 5, 7]
-            [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 11, 13, 14, 15]
             [sq - 1],  # [1]
             [3 * sq ** 2 - 6 * sq + 1],  # [2]
             [(3 * sq - 5) * x, (3 * sq - 5) * y, (3 * sq - 5) * z],  # [4, 6, 8]
+            [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 11, 13, 14, 15]
             [(2 * sq - 3) * (3 * x ** 2 - sq), (2 * sq - 3) * (y ** 2 - z ** 2)],  # [10, 12]
             [(y ** 2 - z ** 2) * x, (z ** 2 - x ** 2) * y, (x ** 2 - y ** 2) * z]  # [16, 17, 18]
         ]

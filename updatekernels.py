@@ -1,5 +1,6 @@
 import numpy as np
 from pystencils import Field
+from pystencils.sympyextensions import fastSubs
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
 
 
@@ -18,7 +19,7 @@ def createLBMKernel(collisionRule, inputField, outputField, accessor):
     :return: LbmCollisionRule where pre- and post collision symbols have been replaced
     """
     method = collisionRule.method
-    preCollisionSymbols = method.preCollisionSymbols
+    preCollisionSymbols = method.preCollisionPdfSymbols
     postCollisionSymbols = method.postCollisionPdfSymbols
     substitutions = {}
 
@@ -29,7 +30,15 @@ def createLBMKernel(collisionRule, inputField, outputField, accessor):
         substitutions[preCollisionSymbols[idx]] = inputAccess
         substitutions[postCollisionSymbols[idx]] = outputAccess
 
-    return collisionRule.copyWithSubstitutionsApplied(substitutions)
+    result = collisionRule.copyWithSubstitutionsApplied(substitutions)
+
+    if 'splitGroups' in result.simplificationHints:
+        newSplitGroups = []
+        for splitGroup in result.simplificationHints['splitGroups']:
+            newSplitGroups.append([fastSubs(e, substitutions) for e in splitGroup])
+        result.simplificationHints['splitGroups'] = newSplitGroups
+
+    return result
 
 
 def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", dstFieldName="dst",
@@ -58,6 +67,36 @@ def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", d
         dst = Field.createFromNumpyArray(dstFieldName, numpyField, indexDimensions=1)
 
     return createLBMKernel(collisionRule, src, dst, StreamPullTwoFieldsAccessor)
+
+
+# ---------------------------------- Pdf array creation for various layouts --------------------------------------------
+
+def createPdfArray(size, numDirections, ghostLayers=1, layout='fzyx'):
+    """
+    Creates an empy numpy array for a pdf field with the specified memory layout.
+
+    Examples:
+        >>> createPdfArray((3, 4, 5), 9, layout='zyxf', ghostLayers=0).shape
+        (3, 4, 5, 9)
+        >>> createPdfArray((3, 4, 5), 9, layout='zyxf', ghostLayers=0).strides
+        (72, 216, 864, 8)
+        >>> createPdfArray((3, 4), 9, layout='zyxf', ghostLayers=1).shape
+        (5, 6, 9)
+        >>> createPdfArray((3, 4), 9, layout='zyxf', ghostLayers=1).strides
+        (72, 360, 8)
+    """
+    sizeWithGl = [s + 2 * ghostLayers for s in size]
+    if layout == "fzyx" or layout == 'f' or layout == 'reverseNumpy':
+        return np.empty(sizeWithGl + [numDirections], order='f')
+    elif layout == 'c' or layout == 'numpy':
+        return np.empty(sizeWithGl + [numDirections], order='c')
+    elif layout == 'zyxf':
+        res = np.empty(list(reversed(sizeWithGl)) + [numDirections], order='c')
+        res = res.swapaxes(0, 1)
+        if len(size) == 3:
+            res = res.swapaxes(1, 2)
+            res = res.swapaxes(0, 1)
+        return res
 
 
 # ------------------------------------------- Add output fields to kernel ----------------------------------------------

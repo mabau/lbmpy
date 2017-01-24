@@ -1,10 +1,12 @@
 from functools import partial
 import sympy as sp
+
+from lbmpy.innerloopsplit import createLbmSplitGroups
 from pystencils.equationcollection.simplifications import applyOnAllEquations, \
     subexpressionSubstitutionInMainEquations, sympyCSE, addSubexpressionsForDivisions
 
 
-def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doOverallCse=False):
+def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doOverallCse=False, splitInnerLoop=False):
     from pystencils.equationcollection import SimplificationStrategy
     from lbmpy.methods import MomentBasedLbmMethod
     from lbmpy.methods.momentbasedsimplifications import replaceSecondOrderVelocityProducts, \
@@ -25,6 +27,8 @@ def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doO
         s.add(replaceCommonQuadraticAndConstantTerm)
         s.add(factorDensityAfterFactoringRelaxationTimes)
         s.add(subexpressionSubstitutionInMainEquations)
+        if splitInnerLoop:
+            s.add(createLbmSplitGroups)
 
     if doCseInOpposingDirections:
         s.add(cseInOpposingDirections)
@@ -34,16 +38,3 @@ def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doO
     s.add(addSubexpressionsForDivisions)
 
     return s
-
-
-
-if __name__ == '__main__':
-    from lbmpy.stencils import getStencil
-    from lbmpy.methods.momentbased import createOrthogonalMRT
-
-    stencil = getStencil("D2Q9")
-    m = createOrthogonalMRT(stencil, compressible=True)
-    cr = m.getCollisionRule()
-
-    simp = createSimplificationStrategy(m)
-    simp(cr)
