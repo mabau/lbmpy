@@ -1,7 +1,7 @@
 import sympy as sp
-
-from lbmpy.simplificationfactory import createSimplificationStrategy
+from copy import deepcopy
 from pystencils.field import Field
+from lbmpy.simplificationfactory import createSimplificationStrategy
 
 
 def compileMacroscopicValuesGetter(lbMethod, outputQuantities, pdfArr=None, fieldLayout='numpy', target='cpu'):
@@ -75,6 +75,9 @@ def compileMacroscopicValuesSetter(lbMethod, quantitiesToSet, pdfArr=None, field
     :param lbMethod: instance of :class:`lbmpy.methods.AbstractLbMethod`
     :param quantitiesToSet: map from conserved quantity name to fixed value or numpy array
     :param pdfArr: optional numpy array for pdf field - used to get optimal loop structure for kernel
+    :param fieldLayout: layout of the pdf field if pdfArr was not given
+    :param target: 'cpu' or 'gpu'
+    :return: function taking pdf array as single argument and which sets the field to the given values
     """
     if pdfArr is not None:
         pdfField = Field.createFromNumpyArray('pdfs', pdfArr, indexDimensions=1)
@@ -82,22 +85,28 @@ def compileMacroscopicValuesSetter(lbMethod, quantitiesToSet, pdfArr=None, field
         pdfField = Field.createGeneric('pdfs', lbMethod.dim, indexDimensions=1, layout=fieldLayout)
 
     fixedKernelParameters = {}
+    cqc = lbMethod.conservedQuantityComputation
 
     valueMap = {}
     atLeastOneFieldInput = False
     for quantityName, value in quantitiesToSet.items():
         if hasattr(value, 'shape'):
             fixedKernelParameters[quantityName] = value
-            value = Field.createFromNumpyArray(quantityName, value)
             atLeastOneFieldInput = True
+            numComponents = cqc.conservedQuantities[quantityName]
+            field = Field.createFromNumpyArray(quantityName, value, indexDimensions=0 if numComponents <= 1 else 1)
+            if numComponents == 1:
+                value = field(0)
+            else:
+                value = [field(i) for i in range(numComponents)]
+
         valueMap[quantityName] = value
 
-    cqc = lbMethod.conservedQuantityComputation
     cqEquations = cqc.equilibriumInputEquationsFromInitValues(**valueMap)
 
     eq = lbMethod.getEquilibrium(conservedQuantityEquations=cqEquations)
     if atLeastOneFieldInput:
-        simplification = createSimplificationStrategy(eq)
+        simplification = createSimplificationStrategy(lbMethod)
         eq = simplification(eq)
     else:
         eq = eq.insertSubexpressions()
@@ -123,32 +132,37 @@ def compileMacroscopicValuesSetter(lbMethod, quantitiesToSet, pdfArr=None, field
     return setter
 
 
-def compileAdvancedVelocitySetter(collisionRule, velocityArray, pdfArr=None):
+def compileAdvancedVelocitySetter(lbMethod, velocityArray, velocityRelaxationRate=1.3, pdfArr=None):
     """
     Advanced initialization of velocity field through iteration procedure according to
     Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
 
-    Important: this procedure only works if a non-zero relaxation rate was used for the velocity moments!
-
-    :param collisionRule: unsimplified collision rule
+    :param lbMethod:
     :param velocityArray: array with velocity field
-    :param pdfArr: optional array, to compile kernel with fixed layout and shape
-    :return: function, that has to be called multiple times, with a pdf field (src/dst) until convergence
-             similar to the normal streamCollide step, also with boundary handling
+    :param velocityRelaxationRate: relaxation rate for the velocity moments - determines convergence behaviour
+                                   of the initialization scheme
+    :return: collision rule
     """
-    velocityField = Field.createFromNumpyArray('vel', velocityArray, indexDimensions=1)
+    velocityField = Field.createFromNumpyArray('velInput', velocityArray, indexDimensions=1)
 
-    # create normal LBM kernel and replace velocity by expressions of velocity field
-    from lbmpy_old.simplifications import sympyCSE
-    latticeModel = collisionRule.latticeModel
-    collisionRule = sympyCSE(collisionRule)
-    collisionRule = streamPullWithSourceAndDestinationFields(collisionRule, pdfArr)
+    cqc = lbMethod.conservedQuantityComputation
+    densitySymbol = cqc.definedSymbols(order=0)[1]
+    velocitySymbols = cqc.definedSymbols(order=1)[1]
 
-    replacements = {u_i: sp.Eq(u_i, velocityField(i)) for i, u_i in enumerate(latticeModel.symbolicVelocity)}
+    # density is computed from pdfs
+    eqInputFromPdfs = cqc.equilibriumInputEquationsFromPdfs(lbMethod.preCollisionPdfSymbols)
+    eqInputFromPdfs = eqInputFromPdfs.extract([densitySymbol])
+    # velocity is read from input field
+    velSymbols = [velocityField(i) for i in range(lbMethod.dim)]
+    eqInputFromField = cqc.equilibriumInputEquationsFromInitValues(velocity=velSymbols)
+    eqInputFromField = eqInputFromField.extract(velocitySymbols)
+    # then both are merged together
+    eqInput = eqInputFromPdfs.merge(eqInputFromField)
 
-    newSubExpressions = [replacements[eq.lhs] if eq.lhs in replacements else eq for eq in collisionRule.subexpressions]
-    newCollisionRule = LbmCollisionRule(collisionRule.updateEquations, newSubExpressions,
-                                        latticeModel, collisionRule.updateEquationDirections)
-    kernelAst = createKernel(newCollisionRule.equations)
-    return makePythonFunction(kernelAst, {'vel': velocityArray})
+    # set first order relaxation rate
+    lbMethod = deepcopy(lbMethod)
+    lbMethod.setFirstMomentRelaxationRate(velocityRelaxationRate)
+
+    return lbMethod.getCollisionRule(eqInput)
+
 

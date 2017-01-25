@@ -35,23 +35,14 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
         assert isinstance(conservedQuantityComputation, AbstractConservedQuantityComputation)
 
-        moments = []
-        relaxationRates = []
-        equilibriumMoments = []
-        for moment, relaxInfo in momentToRelaxationInfoDict.items():
-            moments.append(moment)
-            relaxationRates.append(relaxInfo.relaxationRate)
-            equilibriumMoments.append(relaxInfo.equilibriumValue)
-
         self._forceModel = forceModel
-        self._moments = moments
-        self._momentToRelaxationInfoDict = momentToRelaxationInfoDict
-        self._momentMatrix = momentMatrix(moments, self.stencil)
-        self._relaxationRates = sp.Matrix(relaxationRates)
-        self._equilibriumMoments = sp.Matrix(equilibriumMoments)
+        self._momentToRelaxationInfoDict = OrderedDict(momentToRelaxationInfoDict.items())
         self._conservedQuantityComputation = conservedQuantityComputation
 
-        symbolsInEquilibriumMoments = self._equilibriumMoments.atoms(sp.Symbol)
+        equilibriumMoments = []
+        for moment, relaxInfo in momentToRelaxationInfoDict.items():
+            equilibriumMoments.append(relaxInfo.equilibriumValue)
+        symbolsInEquilibriumMoments = sp.Matrix(equilibriumMoments).atoms(sp.Symbol)
         conservedQuantities = set()
         for v in self._conservedQuantityComputation.definedSymbols().values():
             if isinstance(v, collections.Sequence):
@@ -65,6 +56,14 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
         self._weights = None
 
+    def setFirstMomentRelaxationRate(self, relaxationRate):
+        for e in MOMENT_SYMBOLS[:self.dim]:
+            assert e in self._momentToRelaxationInfoDict, "First moments are not relaxed separately by this method"
+        for e in MOMENT_SYMBOLS[:self.dim]:
+            prevEntry = self._momentToRelaxationInfoDict[e]
+            newEntry = RelaxationInfo(prevEntry[0], relaxationRate)
+            self._momentToRelaxationInfoDict[e] = newEntry
+
     def _repr_html_(self):
         table = """
         <table style="border:none; width: 100%">
@@ -77,7 +76,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         </table>
         """
         content = ""
-        for rr, moment, eqValue in zip(self._relaxationRates, self._moments, self._equilibriumMoments):
+        for moment, (eqValue, rr) in self._momentToRelaxationInfoDict.items():
             vals = {
                 'rr': sp.latex(rr),
                 'moment': sp.latex(moment),
@@ -93,7 +92,15 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     @property
     def moments(self):
-        return self._moments
+        return tuple(self._momentToRelaxationInfoDict.keys())
+
+    @property
+    def momentEquilibriumValues(self):
+        return tuple([e.equilibriumValue for e in self._momentToRelaxationInfoDict.values()])
+
+    @property
+    def relaxationRates(self):
+        return tuple([e.relaxationRate for e in self._momentToRelaxationInfoDict.values()])
 
     @property
     def zerothOrderEquilibriumMomentSymbol(self, ):
@@ -144,13 +151,13 @@ class MomentBasedLbMethod(AbstractLbMethod):
                                           "Can not determine their relaxation rate automatically")
 
     def getEquilibrium(self, conservedQuantityEquations=None):
-        D = sp.eye(len(self._relaxationRates))
+        D = sp.eye(len(self.relaxationRates))
         return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations)
 
-    def getCollisionRule(self):
-        D = sp.diag(*self._relaxationRates)
+    def getCollisionRule(self, conservedQuantityEquations=None):
+        D = sp.diag(*self.relaxationRates)
         relaxationRateSubExpressions, D = self._generateRelaxationMatrix(D)
-        eqColl = self._getCollisionRuleWithRelaxationMatrix(D, relaxationRateSubExpressions)
+        eqColl = self._getCollisionRuleWithRelaxationMatrix(D, relaxationRateSubExpressions, conservedQuantityEquations)
         if self._forceModel is not None:
             forceModelTerms = self._forceModel(self)
             newEqs = [sp.Eq(eq.lhs, eq.rhs + fmt) for eq, fmt in zip(eqColl.mainEquations, forceModelTerms)]
@@ -163,8 +170,8 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=[], conservedQuantityEquations=None):
         f = sp.Matrix(self.preCollisionPdfSymbols)
-        M = self._momentMatrix
-        m_eq = self._equilibriumMoments
+        M = momentMatrix(self.moments, self.stencil)
+        m_eq = sp.Matrix(self.momentEquilibriumValues)
 
         collisionRule = f + M.inv() * D * (m_eq - M * f)
         collisionEqs = [sp.Eq(lhs, rhs) for lhs, rhs in zip(self.postCollisionPdfSymbols, collisionRule)]
@@ -316,7 +323,7 @@ def createSRT(stencil, relaxationRate, compressible=False, forceModel=None, equi
     :return: :class:`lbmpy.methods.MomentBasedLbmMethod` instance
     """
     moments = getDefaultMomentSetForStencil(stencil)
-    rrDict = {m: relaxationRate for m in moments}
+    rrDict = OrderedDict([(m, relaxationRate) for m in moments])
     return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, compressible, forceModel, equilibriumAccuracyOrder)
 
 
@@ -332,7 +339,7 @@ def createTRT(stencil, relaxationRateEvenMoments, relaxationRateOddMoments, comp
     If unsure how to choose the odd relaxation rate, use the function :func:`lbmpy.methods.createTRTWithMagicNumber`.
     """
     moments = getDefaultMomentSetForStencil(stencil)
-    rrDict = {m: relaxationRateEvenMoments if isEven(m) else relaxationRateOddMoments for m in moments}
+    rrDict = OrderedDict([(m, relaxationRateEvenMoments if isEven(m) else relaxationRateOddMoments) for m in moments])
     return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, compressible, forceModel, equilibriumAccuracyOrder)
 
 

@@ -4,6 +4,7 @@ ctypedef fused IntegerType:
     short
     int
     long
+    long long
     unsigned short
     unsigned int
     unsigned long

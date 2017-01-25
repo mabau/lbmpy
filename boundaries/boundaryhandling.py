@@ -12,13 +12,13 @@ WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
 
 
 class BoundaryHandling:
-    def __init__(self, symbolicPdfField, domainShape, latticeModel, ghostLayers=1, target='cpu'):
+    def __init__(self, symbolicPdfField, domainShape, lbMethod, ghostLayers=1, target='cpu'):
         self._symbolicPdfField = symbolicPdfField
         self._shapeWithGhostLayers = [d + 2 * ghostLayers for d in domainShape]
-        self._fluidFlag = 2 ** 31
+        self._fluidFlag = 2 ** 30
         self.flagField = np.full(self._shapeWithGhostLayers, self._fluidFlag, dtype=np.int32)
         self._ghostLayers = ghostLayers
-        self._latticeModel = latticeModel
+        self._lbMethod = lbMethod
         self._boundaryFunctions = []
         self._nameToIndex = {}
         self._boundarySweeps = []
@@ -30,8 +30,10 @@ class BoundaryHandling:
         if name is None:
             name = boundaryFunction.__name__
 
-        self._nameToIndex[name] = len(self._boundaryFunctions)
+        newIdx = len(self._boundaryFunctions)
+        self._nameToIndex[name] = newIdx
         self._boundaryFunctions.append(boundaryFunction)
+        return 2 ** newIdx
 
     def invalidateIndexCache(self):
         self._boundarySweeps = []
@@ -68,9 +70,9 @@ class BoundaryHandling:
     def prepare(self):
         self.invalidateIndexCache()
         for boundaryIdx, boundaryFunc in enumerate(self._boundaryFunctions):
-            idxField = createBoundaryIndexList(self.flagField, self._latticeModel.stencil,
+            idxField = createBoundaryIndexList(self.flagField, self._lbMethod.stencil,
                                                2 ** boundaryIdx, self._fluidFlag, self._ghostLayers)
-            ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._latticeModel, boundaryFunc)
+            ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundaryFunc)
 
             if self._target == 'cpu':
                 from pystencils.cpu import makePythonFunction as makePythonCpuFunction
@@ -131,8 +133,8 @@ class LbmMethodInfo(CustomCppCode):
         super(LbmMethodInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
 
 
-def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
-    dim = latticeModel.dim
+def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor):
+    dim = lbMethod.dim
 
     cellLoopBody = Block([])
     cellLoop = LoopOverCoordinate(cellLoopBody, coordinateToLoopOver=0, start=0, stop=indexArr.shape[0])
@@ -145,7 +147,7 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
     dirSymbol = TypedSymbol("dir", "int")
     cellLoopBody.append(SympyAssignment(dirSymbol, indexField[0](dim)))
 
-    boundaryEqList = boundaryFunctor(pdfField, dirSymbol, latticeModel)
+    boundaryEqList = boundaryFunctor(pdfField, dirSymbol, lbMethod)
     if type(boundaryEqList) is tuple:
         boundaryEqList, additionalNodes = boundaryEqList
     else:
@@ -168,7 +170,7 @@ def generateBoundaryHandling(pdfField, indexArr, latticeModel, boundaryFunctor):
         for node in additionalNodes:
             loop.body.append(node)
 
-    functionBody.insertFront(LbmMethodInfo(latticeModel))
+    functionBody.insertFront(LbmMethodInfo(lbMethod))
 
     fixedCoordinateMapping = {f.name: coordinateSymbols[:dim] for f in fieldsAccessed}
     resolveFieldAccesses(ast, set(['indexField']), fieldToFixedCoordinates=fixedCoordinateMapping)

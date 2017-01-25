@@ -57,7 +57,8 @@ def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", d
     """
     dim = collisionRule.method.dim
     if numpyField is not None:
-        assert len(numpyField.shape) == dim + 1
+        assert len(numpyField.shape) == dim + 1, "Field dimension mismatch: dimension is %s, should be %d" % \
+                                                 (len(numpyField.shape), dim + 1)
 
     if numpyField is None:
         src = Field.createGeneric(srcFieldName, dim, indexDimensions=1, layout=genericLayout, dtype=genericFieldType)

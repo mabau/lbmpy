@@ -5,19 +5,19 @@ from pystencils.sympyextensions import getSymmetricPart
 from lbmpy.boundaries.boundaryhandling import offsetFromDir, weightOfDirection, invDir
 
 
-def noSlip(pdfField, direction, lbmMethod):
+def noSlip(pdfField, direction, lbMethod):
     """No-Slip, simple bounce back boundary condition, enforcing zero velocity at obstacle"""
-    neighbor = offsetFromDir(direction, lbmMethod.dim)
+    neighbor = offsetFromDir(direction, lbMethod.dim)
     inverseDir = invDir(direction)
     return [sp.Eq(pdfField[neighbor](inverseDir), pdfField(direction))]
 
 
-def ubb(pdfField, direction, lbmMethod, velocity):
+def ubb(pdfField, direction, lbMethod, velocity):
     """Velocity bounce back boundary condition, enforcing specified velocity at obstacle"""
 
-    assert len(velocity) == lbmMethod.dim, \
-        "Dimension of velocity (%d) does not match dimension of LB method (%d)" % (len(velocity, lbmMethod.dim))
-    neighbor = offsetFromDir(direction, lbmMethod.dim)
+    assert len(velocity) == lbMethod.dim, \
+        "Dimension of velocity (%d) does not match dimension of LB method (%d)" % (len(velocity), lbMethod.dim)
+    neighbor = offsetFromDir(direction, lbMethod.dim)
     inverseDir = invDir(direction)
 
     velTerm = 6 * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
@@ -25,21 +25,21 @@ def ubb(pdfField, direction, lbmMethod, velocity):
                   pdfField(direction) - velTerm)]
 
 
-def fixedDensity(pdfField, direction, lbmMethod, density):
+def fixedDensity(pdfField, direction, lbMethod, density):
     """Boundary condition that fixes the density/pressure at the obstacle"""
 
     def removeAsymmetricPartOfMainEquations(eqColl, dofs):
         newMainEquations = [sp.Eq(e.lhs, getSymmetricPart(e.rhs, dofs)) for e in eqColl.mainEquations]
         return eqColl.copy(newMainEquations)
 
-    neighbor = offsetFromDir(direction, lbmMethod.dim)
+    neighbor = offsetFromDir(direction, lbMethod.dim)
     inverseDir = invDir(direction)
 
-    symmetricEq = removeAsymmetricPartOfMainEquations(lbmMethod.getEquilibrium())
-    simplification = createSimplificationStrategy(lbmMethod)
+    symmetricEq = removeAsymmetricPartOfMainEquations(lbMethod.getEquilibrium())
+    simplification = createSimplificationStrategy(lbMethod)
     symmetricEq = simplification(symmetricEq)
 
-    densitySymbol = lbmMethod.conservedQuantityComputation.definedSymbols()['density']
+    densitySymbol = lbMethod.conservedQuantityComputation.definedSymbols()['density']
 
     conditions = [(eq_i.rhs, sp.Equality(direction, i))
                   for i, eq_i in enumerate(symmetricEq.mainEquations)] + [(0, True)]

@@ -47,10 +47,12 @@ def _getParams(params, optParams):
     return paramsResult, optParamsResult
 
 
-def createLatticeBoltzmannFunction(optimizationParams={}, **kwargs):
+def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
     params, optParams = _getParams(kwargs, optimizationParams)
 
-    ast = createLatticeBoltzmannKernel(**params, optimizationParams=optParams)
+    if ast is None:
+        ast = createLatticeBoltzmannAst(**params, optimizationParams=optParams)
+
     if params['target'] == 'cpu':
         from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
         if 'openMP' in optParams:
@@ -58,18 +60,22 @@ def createLatticeBoltzmannFunction(optimizationParams={}, **kwargs):
                 addOpenMP(ast)
             elif isinstance(optParams['openMP'], int):
                 addOpenMP(ast, numThreads=optParams['openMP'])
-        return makePythonCpuFunction(ast)
+        res = makePythonCpuFunction(ast)
     elif params['target'] == 'gpu':
         from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
-        return makePythonGpuFunction(ast)
+        res = makePythonGpuFunction(ast)
     else:
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
+    res.method = ast.method
+    return res
 
-def createLatticeBoltzmannKernel(optimizationParams={}, **kwargs):
+
+def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
     params, optParams = _getParams(kwargs, optimizationParams)
 
-    updateRule = createLatticeBoltzmannUpdateRule(**params, optimizationParams=optimizationParams)
+    if updateRule is None:
+        updateRule = createLatticeBoltzmannUpdateRule(**params, optimizationParams=optimizationParams)
 
     if params['target'] == 'cpu':
         from pystencils.cpu import createKernel
@@ -77,26 +83,31 @@ def createLatticeBoltzmannKernel(optimizationParams={}, **kwargs):
             splitGroups = updateRule.simplificationHints['splitGroups']
         else:
             splitGroups = ()
-        return createKernel(updateRule.allEquations, splitGroups=splitGroups)
+        res = createKernel(updateRule.allEquations, splitGroups=splitGroups)
     elif params['target'] == 'gpu':
         from pystencils.gpucuda import createCUDAKernel
-        return createCUDAKernel(updateRule.allEquations)
+        res = createCUDAKernel(updateRule.allEquations)
     else:
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
+    res.method = updateRule.method
+    return res
 
-def createLatticeBoltzmannUpdateRule(optimizationParams={}, **kwargs):
+
+def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwargs):
     params, optParams = _getParams(kwargs, optimizationParams)
     stencil = getStencil(params['stencil'])
-    method = createLatticeBoltzmannCollisionRule(**params)
+
+    if lbMethod is None:
+        lbMethod = createLatticeBoltzmannMethod(**params)
 
     splitInnerLoop = 'split' in optParams and optParams['split']
 
     dirCSE = 'doCseInOpposingDirections'
     doCseInOpposingDirections = False if dirCSE not in optParams else optParams[dirCSE]
     doOverallCse = False if 'doOverallCse' not in optParams else optParams['doOverallCse']
-    simplification = createSimplificationStrategy(method, doCseInOpposingDirections, doOverallCse, splitInnerLoop)
-    collisionRule = simplification(method.getCollisionRule())
+    simplification = createSimplificationStrategy(lbMethod, doCseInOpposingDirections, doOverallCse, splitInnerLoop)
+    collisionRule = simplification(lbMethod.getCollisionRule())
 
     if 'fieldSize' in optParams and optParams['fieldSize']:
         npField = createPdfArray(optParams['fieldSize'], len(stencil), layout=optParams['fieldLayout'])
@@ -111,7 +122,7 @@ def createLatticeBoltzmannUpdateRule(optimizationParams={}, **kwargs):
     return updateRule
 
 
-def createLatticeBoltzmannCollisionRule(**params):
+def createLatticeBoltzmannMethod(**params):
     params, _ = _getParams(params, {})
 
     stencil = getStencil(params['stencil'])

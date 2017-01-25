@@ -30,10 +30,11 @@ def createBoundaryIndexList(flagField, stencil, boundaryMask, fluidMask, nrOfGho
     if cythonFuncsAvailable:
         stencil = np.array(stencil, dtype=np.int32)
         if len(flagField.shape) == 2:
-            return np.array(createBoundaryIndexList2D(flagField, nrOfGhostLayers, boundaryMask, fluidMask, stencil))
+            idxList = createBoundaryIndexList2D(flagField, nrOfGhostLayers, boundaryMask, fluidMask, stencil)
         elif len(flagField.shape) == 3:
-            return np.array(createBoundaryIndexList3D(flagField, nrOfGhostLayers, boundaryMask, fluidMask, stencil))
+            idxList = createBoundaryIndexList3D(flagField, nrOfGhostLayers, boundaryMask, fluidMask, stencil)
         else:
             raise ValueError("Flag field has to be a 2 or 3 dimensional numpy array")
+        return np.array(idxList, dtype=np.int32)
     else:
         return _createBoundaryIndexListPython(flagField, nrOfGhostLayers, boundaryMask, fluidMask, stencil)
