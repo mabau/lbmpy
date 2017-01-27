@@ -14,6 +14,51 @@ from pystencils.sympyextensions import commonDenominator, replaceAdditive
 RelaxationInfo = namedtuple('Relaxationinfo', ['equilibriumValue', 'relaxationRate'])
 
 
+def compareMomentBasedLbMethods(reference, other):
+    import ipy_table
+    table = []
+    captionRows = [len(table)]
+    table.append(['Shared Moment', 'ref', 'other', 'difference'])
+
+    referenceMoments = set(reference.moments)
+    otherMoments = set(other.moments)
+    for moment in referenceMoments.intersection(otherMoments):
+        referenceValue = reference.momentToRelaxationInfoDict[moment].equilibriumValue
+        otherValue = other.momentToRelaxationInfoDict[moment].equilibriumValue
+        diff = sp.simplify(referenceValue - otherValue)
+        table.append(["$%s$" % (sp.latex(moment), ),
+                      "$%s$" % (sp.latex(referenceValue), ),
+                      "$%s$" % (sp.latex(otherValue), ),
+                      "$%s$" % (sp.latex(diff),)])
+
+    onlyInRef = referenceMoments - otherMoments
+    if onlyInRef:
+        captionRows.append(len(table))
+        table.append(['Only in Ref', 'value', '', ''])
+        for moment in onlyInRef:
+            val = reference.momentToRelaxationInfoDict[moment].equilibriumValue
+            table.append(["$%s$" % (sp.latex(moment),),
+                          "$%s$" % (sp.latex(val),),
+                          " ", " "])
+
+    onlyInOther = otherMoments - referenceMoments
+    if onlyInOther:
+        captionRows.append(len(table))
+        table.append(['Only in Other', '', 'value', ''])
+        for moment in onlyInOther:
+            val = other.momentToRelaxationInfoDict[moment].equilibriumValue
+            table.append(["$%s$" % (sp.latex(moment),),
+                          " ",
+                          "$%s$" % (sp.latex(val),),
+                          " "])
+
+    tableDisplay = ipy_table.make_table(table)
+    for rowIdx in captionRows:
+        for col in range(4):
+            ipy_table.set_cell_style(rowIdx, col, color='#bbbbbb')
+    return tableDisplay
+
+
 class MomentBasedLbMethod(AbstractLbMethod):
     def __init__(self, stencil, momentToRelaxationInfoDict, conservedQuantityComputation, forceModel=None):
         """
@@ -55,6 +100,10 @@ class MomentBasedLbMethod(AbstractLbMethod):
                                                       (undefinedEquilibriumSymbols,)
 
         self._weights = None
+
+    @property
+    def momentToRelaxationInfoDict(self):
+        return self._momentToRelaxationInfoDict
 
     def setFirstMomentRelaxationRate(self, relaxationRate):
         for e in MOMENT_SYMBOLS[:self.dim]:
@@ -256,6 +305,22 @@ def relaxationRateFromMagicNumber(hydrodynamicRelaxationRate, magicNumber):
 
 # -------------------- Generic Creators by matching equilibrium moments ------------------------------------------------
 
+def compressibleToIncompressibleMomentValue(term, rho, u):
+    term = term.expand()
+    if term.func != sp.Add:
+        args = [term, ]
+    else:
+        args = term.args
+
+    res = 0
+    for t in args:
+        containedSymbols = t.atoms(sp.Symbol)
+        if rho in containedSymbols and len(containedSymbols.intersection(set(u))) > 0:
+            res += t / rho
+        else:
+            res += t
+    return res
+
 
 def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible=False, forceModel=None,
                                           equilibriumAccuracyOrder=2):
@@ -284,7 +349,7 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
-def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict, forceModel=None,
+def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible=False, forceModel=None,
                                             equilibriumAccuracyOrder=None):
     """
     Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
@@ -299,6 +364,12 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
     densityVelocityComputation = DensityVelocityComputation(stencil, True, forceModel)
     eqMoments = getMomentsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), dim, c_s_sq=sp.Rational(1, 3),
                                                             order=equilibriumAccuracyOrder)
+
+    if not compressible:
+        rho = densityVelocityComputation.definedSymbols(order=0)[1]
+        u = densityVelocityComputation.definedSymbols(order=1)[1]
+        eqMoments = [compressibleToIncompressibleMomentValue(em, rho, u) for em in eqMoments]
+
     rrDict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
                           for mom, rr, eqMom in zip(momToRrDict.keys(), momToRrDict.values(), eqMoments)])
     return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
