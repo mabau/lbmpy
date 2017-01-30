@@ -1,4 +1,6 @@
 import abc
+from collections import OrderedDict
+
 import sympy as sp
 from pystencils.equationcollection import EquationCollection
 
@@ -139,8 +141,6 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
     def outputEquationsFromPdfs(self, pdfs, outputQuantityNamesToSymbols):
         dim = len(self._stencil[0])
 
-        symbolsToExtract = set()
-
         eqColl = getEquationsForZerothAndFirstOrderMoment(self._stencil, pdfs, self._symbolOrder0, self._symbolsOrder1)
 
         if self._compressible:
@@ -151,14 +151,22 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         eqColl = applyForceModelShift('macroscopicVelocityShift', dim, eqColl, self._forceModel, self._compressible)
 
         mainEquations = []
+        eqs = OrderedDict([(eq.lhs, eq.rhs) for eq in eqColl.allEquations])
+
         if 'density' in outputQuantityNamesToSymbols:
             densityOutputSymbol = outputQuantityNamesToSymbols['density']
-            mainEquations.append(sp.Eq(densityOutputSymbol, self._symbolOrder0))
-            symbolsToExtract.add(densityOutputSymbol)
+            if densityOutputSymbol != self._symbolOrder0:
+                mainEquations.append(sp.Eq(densityOutputSymbol, self._symbolOrder0))
+            else:
+                mainEquations.append(sp.Eq(self._symbolOrder0, eqs[self._symbolOrder0]))
+                del eqs[self._symbolOrder0]
         if 'velocity' in outputQuantityNamesToSymbols:
             velOutputSymbols = outputQuantityNamesToSymbols['velocity']
-            mainEquations += [sp.Eq(a, b) for a, b in zip(velOutputSymbols, self._symbolsOrder1)]
-            symbolsToExtract.update(velOutputSymbols)
+            if tuple(velOutputSymbols) != tuple(self._symbolsOrder1):
+                mainEquations += [sp.Eq(a, b) for a, b in zip(velOutputSymbols, self._symbolsOrder1)]
+            else:
+                # TODO
+                pass
 
         eqColl = eqColl.copy(mainEquations, eqColl.allEquations)
         return eqColl.newWithoutUnusedSubexpressions()
@@ -271,3 +279,14 @@ def applyForceModelShift(shiftMemberName, dim, equationCollection, forceModel, c
 
 
 
+if __name__ == '__main__':
+    from lbmpy.creationfunctions import createLatticeBoltzmannMethod
+    from lbmpy.simplificationfactory import createSimplificationStrategy
+    from lbmpy.stencils import getStencil
+    from lbmpy_old.lbmgenerator import createStreamCollideUpdateRule
+    from lbmpy_old.latticemodel import makeSRT
+    import sympy as sp
+    methodNew = createLatticeBoltzmannMethod(compressible=True)
+    newSimp = createSimplificationStrategy(methodNew)
+    cqc = methodNew.conservedQuantityComputation
+    cqc.outputEquationsFromPdfs(sp.symbols("f_:9"), {'density': sp.Symbol("rho_out")})

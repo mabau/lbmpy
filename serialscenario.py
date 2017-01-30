@@ -18,6 +18,7 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
     # Create kernel
     lbmKernel = createLatticeBoltzmannFunction(**methodParameters, optimizationParams=optimizationParameters)
     method = lbmKernel.method
+
     assert D == method.dim, "Domain size and stencil do not match"
     Q = len(method.stencil)
 
@@ -38,7 +39,7 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
     densityArr = np.zeros(domainSizeWithGhostLayer)
     velocityArr = np.zeros(domainSizeWithGhostLayer + (D,))
     getMacroscopic = compileMacroscopicValuesGetter(method, ['density', 'velocity'], pdfArr=pdfSrc)
-    setMacroscopic = compileMacroscopicValuesSetter(method, {'density': 1.0, 'velocity': [0]*D}, pdfArr=pdfSrc)
+    setMacroscopic = compileMacroscopicValuesSetter(method, {'density': 1.0, 'velocity': [0] * D}, pdfArr=pdfSrc)
     setMacroscopic(pdfs=pdfSrc)
 
     # Run simulation
@@ -50,6 +51,7 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
             if boundaryHandling is not None:
                 boundaryHandling(pdfs=pdfSrc)
             lbmKernel(src=pdfSrc, dst=pdfDst)
+
             pdfSrc, pdfDst = pdfDst, pdfSrc
         getMacroscopic(pdfs=pdfSrc, density=densityArr, velocity=velocityArr)
         return pdfSrc, densityArr, velocityArr
@@ -64,6 +66,7 @@ def runLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParameters={},
         boundaryHandling.setBoundary(myUbb, sliceFromDirection('N', method.dim))
         for direction in ('W', 'E', 'S') if method.dim == 2 else ('W', 'E', 'S', 'T', 'B'):
             boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, method.dim))
+
     return runScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters)
 
 
@@ -74,11 +77,11 @@ def runForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None,
     if radius is not None:
         assert length is not None
         if dim == 3:
-            domainSize = (length, 2*radius+1, 2*radius+1)
+            domainSize = (length, 2 * radius + 1, 2 * radius + 1)
             roundChannel = True
         else:
             if domainSize is None:
-                domainSize = (length, 2*radius)
+                domainSize = (length, 2 * radius)
     else:
         roundChannel = False
 
@@ -108,5 +111,3 @@ def runForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None,
 
     return runScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters,
                        preUpdateFunctions=[periodicity])
-
-

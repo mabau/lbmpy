@@ -26,7 +26,7 @@ def _getParams(params, optParams):
     defaultOptimizationDescription = {
         'doCseInOpposingDirections': False,
         'doOverallCse': False,
-        'split': True,
+        'split': False,
 
         'fieldSize': None,
         'fieldLayout': 'reverseNumpy',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
@@ -80,6 +80,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
     if params['target'] == 'cpu':
         from pystencils.cpu import createKernel
         if 'splitGroups' in updateRule.simplificationHints:
+            print("splitting!")
             splitGroups = updateRule.simplificationHints['splitGroups']
         else:
             splitGroups = ()
@@ -91,6 +92,11 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
     res.method = updateRule.method
+    #TODO debug begin
+    from pystencils.cpu import generateC
+    from pystencils.display_utils import highlightCpp
+    print(generateC(res))
+    #TODO debug end
     return res
 
 

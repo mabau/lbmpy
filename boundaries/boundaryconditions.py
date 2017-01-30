@@ -20,6 +20,11 @@ def ubb(pdfField, direction, lbMethod, velocity):
     neighbor = offsetFromDir(direction, lbMethod.dim)
     inverseDir = invDir(direction)
 
+    # TODO adapt velocity to force
+    # TODO compute density
+
+    densitySymbol = lbMethod.conservedQuantityComputation.definedSymbols()['density']
+
     velTerm = 6 * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
     return [sp.Eq(pdfField[neighbor](inverseDir),
                   pdfField(direction) - velTerm)]
