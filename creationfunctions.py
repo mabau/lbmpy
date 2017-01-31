@@ -92,11 +92,6 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
     res.method = updateRule.method
-    #TODO debug begin
-    from pystencils.cpu import generateC
-    from pystencils.display_utils import highlightCpp
-    print(generateC(res))
-    #TODO debug end
     return res
 
 

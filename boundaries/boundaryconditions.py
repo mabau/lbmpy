@@ -21,13 +21,25 @@ def ubb(pdfField, direction, lbMethod, velocity):
     inverseDir = invDir(direction)
 
     # TODO adapt velocity to force
-    # TODO compute density
+    c_s_sq = sp.Rational(1, 3)
+    velTerm = 2 / c_s_sq * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
 
-    densitySymbol = lbMethod.conservedQuantityComputation.definedSymbols()['density']
-
-    velTerm = 6 * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
-    return [sp.Eq(pdfField[neighbor](inverseDir),
-                  pdfField(direction) - velTerm)]
+    # in conserved value computation
+    # rename what is currently called density to "virtualDensity"
+    # provide a new quantity density, which is constant in case of incompressible models
+    if lbMethod.conservedQuantityComputation._compressible:  # TODO
+        cqc = lbMethod.conservedQuantityComputation
+        densitySymbol = sp.Symbol("rho")
+        pdfFieldAccesses = [pdfField(i) for i in range(len(lbMethod.stencil))]
+        densityEquations = cqc.outputEquationsFromPdfs(pdfFieldAccesses, {'density': densitySymbol})
+        densitySymbol = lbMethod.conservedQuantityComputation.definedSymbols()['density']
+        result = densityEquations.allEquations
+        result += [sp.Eq(pdfField[neighbor](inverseDir),
+                         pdfField(direction) - velTerm * densitySymbol)]
+        return result
+    else:
+        return [sp.Eq(pdfField[neighbor](inverseDir),
+                      pdfField(direction) - velTerm)]
 
 
 def fixedDensity(pdfField, direction, lbMethod, density):

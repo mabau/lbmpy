@@ -1,62 +1,15 @@
 import sympy as sp
 import collections
-from collections import namedtuple, OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict
 
 from lbmpy.stencils import stencilsHaveSameEntries, getStencil
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
     getMomentsOfContinuousMaxwellianEquilibrium
-from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule
+from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation, DensityVelocityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix, isShearMoment, \
     isEven, gramSchmidt, getOrder, getDefaultMomentSetForStencil
 from pystencils.sympyextensions import commonDenominator, replaceAdditive
-
-RelaxationInfo = namedtuple('Relaxationinfo', ['equilibriumValue', 'relaxationRate'])
-
-
-def compareMomentBasedLbMethods(reference, other):
-    import ipy_table
-    table = []
-    captionRows = [len(table)]
-    table.append(['Shared Moment', 'ref', 'other', 'difference'])
-
-    referenceMoments = set(reference.moments)
-    otherMoments = set(other.moments)
-    for moment in referenceMoments.intersection(otherMoments):
-        referenceValue = reference.momentToRelaxationInfoDict[moment].equilibriumValue
-        otherValue = other.momentToRelaxationInfoDict[moment].equilibriumValue
-        diff = sp.simplify(referenceValue - otherValue)
-        table.append(["$%s$" % (sp.latex(moment), ),
-                      "$%s$" % (sp.latex(referenceValue), ),
-                      "$%s$" % (sp.latex(otherValue), ),
-                      "$%s$" % (sp.latex(diff),)])
-
-    onlyInRef = referenceMoments - otherMoments
-    if onlyInRef:
-        captionRows.append(len(table))
-        table.append(['Only in Ref', 'value', '', ''])
-        for moment in onlyInRef:
-            val = reference.momentToRelaxationInfoDict[moment].equilibriumValue
-            table.append(["$%s$" % (sp.latex(moment),),
-                          "$%s$" % (sp.latex(val),),
-                          " ", " "])
-
-    onlyInOther = otherMoments - referenceMoments
-    if onlyInOther:
-        captionRows.append(len(table))
-        table.append(['Only in Other', '', 'value', ''])
-        for moment in onlyInOther:
-            val = other.momentToRelaxationInfoDict[moment].equilibriumValue
-            table.append(["$%s$" % (sp.latex(moment),),
-                          " ",
-                          "$%s$" % (sp.latex(val),),
-                          " "])
-
-    tableDisplay = ipy_table.make_table(table)
-    for rowIdx in captionRows:
-        for col in range(4):
-            ipy_table.set_cell_style(rowIdx, col, color='#bbbbbb')
-    return tableDisplay
 
 
 class MomentBasedLbMethod(AbstractLbMethod):
@@ -76,13 +29,13 @@ class MomentBasedLbMethod(AbstractLbMethod):
                                              the symbols used in the equilibrium moments like e.g. density and velocity
         :param forceModel: force model instance, or None if no forcing terms are required
         """
-        super(MomentBasedLbMethod, self).__init__(stencil)
-
         assert isinstance(conservedQuantityComputation, AbstractConservedQuantityComputation)
+        super(MomentBasedLbMethod, self).__init__(stencil)
 
         self._forceModel = forceModel
         self._momentToRelaxationInfoDict = OrderedDict(momentToRelaxationInfoDict.items())
         self._conservedQuantityComputation = conservedQuantityComputation
+        self._weights = None
 
         equilibriumMoments = []
         for moment, relaxInfo in momentToRelaxationInfoDict.items():
@@ -99,11 +52,72 @@ class MomentBasedLbMethod(AbstractLbMethod):
         assert len(undefinedEquilibriumSymbols) == 0, "Undefined symbol(s) in equilibrium moment: %s" % \
                                                       (undefinedEquilibriumSymbols,)
 
-        self._weights = None
-
     @property
     def momentToRelaxationInfoDict(self):
         return self._momentToRelaxationInfoDict
+
+    @property
+    def conservedQuantityComputation(self):
+        return self._conservedQuantityComputation
+
+    @property
+    def moments(self):
+        return tuple(self._momentToRelaxationInfoDict.keys())
+
+    @property
+    def momentEquilibriumValues(self):
+        return tuple([e.equilibriumValue for e in self._momentToRelaxationInfoDict.values()])
+
+    @property
+    def relaxationRates(self):
+        return tuple([e.relaxationRate for e in self._momentToRelaxationInfoDict.values()])
+
+    @property
+    def zerothOrderEquilibriumMomentSymbol(self, ):
+        return self._conservedQuantityComputation.definedSymbols(order=0)[1]
+
+    @property
+    def firstOrderEquilibriumMomentSymbols(self, ):
+        return self._conservedQuantityComputation.definedSymbols(order=1)[1]
+
+    @property
+    def weights(self):
+        if self._weights is None:
+            self._weights = self._computeWeights()
+        return self._weights
+
+    def getShearRelaxationRate(self):
+        """
+        Assumes that all shear moments are relaxed with same rate - returns this rate
+        Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y
+        The shear relaxation rate determines the viscosity in hydrodynamic LBM schemes
+        """
+        relaxationRates = set()
+        for moment, relaxInfo in self._momentToRelaxationInfoDict.items():
+            if isShearMoment(moment):
+                relaxationRates.add(relaxInfo.relaxationRate)
+        if len(relaxationRates) == 1:
+            return relaxationRates.pop()
+        else:
+            if len(relaxationRates) > 1:
+                raise ValueError("Shear moments are relaxed with different relaxation times: %s" % (relaxationRates,))
+            else:
+                raise NotImplementedError("Shear moments seem to be not relaxed separately - "
+                                          "Can not determine their relaxation rate automatically")
+
+    def getEquilibrium(self, conservedQuantityEquations=None):
+        D = sp.eye(len(self.relaxationRates))
+        return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations)
+
+    def getCollisionRule(self, conservedQuantityEquations=None):
+        D = sp.diag(*self.relaxationRates)
+        relaxationRateSubExpressions, D = self._generateRelaxationMatrix(D)
+        eqColl = self._getCollisionRuleWithRelaxationMatrix(D, relaxationRateSubExpressions, conservedQuantityEquations)
+        if self._forceModel is not None:
+            forceModelTerms = self._forceModel(self)
+            newEqs = [sp.Eq(eq.lhs, eq.rhs + fmt) for eq, fmt in zip(eqColl.mainEquations, forceModelTerms)]
+            eqColl = eqColl.copy(newEqs)
+        return eqColl
 
     def setFirstMomentRelaxationRate(self, relaxationRate):
         for e in MOMENT_SYMBOLS[:self.dim]:
@@ -139,32 +153,6 @@ class MomentBasedLbMethod(AbstractLbMethod):
                          </tr>\n""".format(**vals)
         return table.format(content=content, nb='style="border:none"')
 
-    @property
-    def moments(self):
-        return tuple(self._momentToRelaxationInfoDict.keys())
-
-    @property
-    def momentEquilibriumValues(self):
-        return tuple([e.equilibriumValue for e in self._momentToRelaxationInfoDict.values()])
-
-    @property
-    def relaxationRates(self):
-        return tuple([e.relaxationRate for e in self._momentToRelaxationInfoDict.values()])
-
-    @property
-    def zerothOrderEquilibriumMomentSymbol(self, ):
-        return self._conservedQuantityComputation.definedSymbols(order=0)[1]
-
-    @property
-    def firstOrderEquilibriumMomentSymbols(self, ):
-        return self._conservedQuantityComputation.definedSymbols(order=1)[1]
-
-    @property
-    def weights(self):
-        if self._weights is None:
-            self._weights = self._computeWeights()
-        return self._weights
-
     def _computeWeights(self):
         replacements = self._conservedQuantityComputation.defaultValues
         eqColl = self.getEquilibrium().copyWithSubstitutionsApplied(replacements).insertSubexpressions()
@@ -180,44 +168,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
             weights.append(value)
         return weights
 
-    def getShearRelaxationRate(self):
-        """
-        Assumes that all shear moments are relaxed with same rate - returns this rate
-        Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y
-        The shear relaxation rate determines the viscosity in hydrodynamic LBM schemes
-        """
-        relaxationRates = set()
-        for moment, relaxInfo in self._momentToRelaxationInfoDict.items():
-            if isShearMoment(moment):
-                relaxationRates.add(relaxInfo.relaxationRate)
-        if len(relaxationRates) == 1:
-            return relaxationRates.pop()
-        else:
-            if len(relaxationRates) > 1:
-                raise ValueError("Shear moments are relaxed with different relaxation times: %s" % (relaxationRates,))
-            else:
-                raise NotImplementedError("Shear moments seem to be not relaxed separately - "
-                                          "Can not determine their relaxation rate automatically")
-
-    def getEquilibrium(self, conservedQuantityEquations=None):
-        D = sp.eye(len(self.relaxationRates))
-        return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations)
-
-    def getCollisionRule(self, conservedQuantityEquations=None):
-        D = sp.diag(*self.relaxationRates)
-        relaxationRateSubExpressions, D = self._generateRelaxationMatrix(D)
-        eqColl = self._getCollisionRuleWithRelaxationMatrix(D, relaxationRateSubExpressions, conservedQuantityEquations)
-        if self._forceModel is not None:
-            forceModelTerms = self._forceModel(self)
-            newEqs = [sp.Eq(eq.lhs, eq.rhs + fmt) for eq, fmt in zip(eqColl.mainEquations, forceModelTerms)]
-            eqColl = eqColl.copy(newEqs)
-        return eqColl
-
-    @property
-    def conservedQuantityComputation(self):
-        return self._conservedQuantityComputation
-
-    def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=[], conservedQuantityEquations=None):
+    def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=(), conservedQuantityEquations=None):
         f = sp.Matrix(self.preCollisionPdfSymbols)
         M = momentMatrix(self.moments, self.stencil)
         m_eq = sp.Matrix(self.momentEquilibriumValues)
@@ -232,7 +183,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         simplificationHints.update(self._conservedQuantityComputation.definedSymbols())
         simplificationHints['relaxationRates'] = D.atoms(sp.Symbol)
 
-        allSubexpressions = additionalSubexpressions + conservedQuantityEquations.allEquations
+        allSubexpressions = list(additionalSubexpressions) + conservedQuantityEquations.allEquations
         return LbmCollisionRule(self, collisionEqs, allSubexpressions,
                                 simplificationHints)
 
@@ -517,3 +468,50 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, compressible=False,
     return createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible, forceModel,
                                                  equilibriumAccuracyOrder)
 
+
+# ----------------------------------------- Comparison view for notebooks ----------------------------------------------
+
+
+def compareMomentBasedLbMethods(reference, other):
+    import ipy_table
+    table = []
+    captionRows = [len(table)]
+    table.append(['Shared Moment', 'ref', 'other', 'difference'])
+
+    referenceMoments = set(reference.moments)
+    otherMoments = set(other.moments)
+    for moment in referenceMoments.intersection(otherMoments):
+        referenceValue = reference.momentToRelaxationInfoDict[moment].equilibriumValue
+        otherValue = other.momentToRelaxationInfoDict[moment].equilibriumValue
+        diff = sp.simplify(referenceValue - otherValue)
+        table.append(["$%s$" % (sp.latex(moment), ),
+                      "$%s$" % (sp.latex(referenceValue), ),
+                      "$%s$" % (sp.latex(otherValue), ),
+                      "$%s$" % (sp.latex(diff),)])
+
+    onlyInRef = referenceMoments - otherMoments
+    if onlyInRef:
+        captionRows.append(len(table))
+        table.append(['Only in Ref', 'value', '', ''])
+        for moment in onlyInRef:
+            val = reference.momentToRelaxationInfoDict[moment].equilibriumValue
+            table.append(["$%s$" % (sp.latex(moment),),
+                          "$%s$" % (sp.latex(val),),
+                          " ", " "])
+
+    onlyInOther = otherMoments - referenceMoments
+    if onlyInOther:
+        captionRows.append(len(table))
+        table.append(['Only in Other', '', 'value', ''])
+        for moment in onlyInOther:
+            val = other.momentToRelaxationInfoDict[moment].equilibriumValue
+            table.append(["$%s$" % (sp.latex(moment),),
+                          " ",
+                          "$%s$" % (sp.latex(val),),
+                          " "])
+
+    tableDisplay = ipy_table.make_table(table)
+    for rowIdx in captionRows:
+        for col in range(4):
+            ipy_table.set_cell_style(rowIdx, col, color='#bbbbbb')
+    return tableDisplay

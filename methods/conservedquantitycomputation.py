@@ -165,10 +165,11 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             if tuple(velOutputSymbols) != tuple(self._symbolsOrder1):
                 mainEquations += [sp.Eq(a, b) for a, b in zip(velOutputSymbols, self._symbolsOrder1)]
             else:
-                # TODO
-                pass
+                for u_i in self._symbolsOrder1:
+                    mainEquations.append(sp.Eq(u_i, eqs[u_i]))
+                    del eqs[u_i]
 
-        eqColl = eqColl.copy(mainEquations, eqColl.allEquations)
+        eqColl = eqColl.copy(mainEquations, [sp.Eq(a, b) for a, b in eqs.items()])
         return eqColl.newWithoutUnusedSubexpressions()
 
     def __repr__(self):
@@ -275,8 +276,6 @@ def applyForceModelShift(shiftMemberName, dim, equationCollection, forceModel, c
         return equationCollection.copy(newEqs)
     else:
         return equationCollection
-
-
 
 
 if __name__ == '__main__':
