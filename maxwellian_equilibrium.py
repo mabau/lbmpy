@@ -171,8 +171,8 @@ def getMomentsOfContinuousMaxwellianEquilibrium(moments, dim, rho=sp.Symbol("rho
 
 
 @diskcache
-def getMomentsOfDiscreteMaxwellianEquilibrium(stencil,
-                                              moments, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
+def getMomentsOfDiscreteMaxwellianEquilibrium(stencil, moments,
+                                              rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
                                               c_s_sq=sp.Symbol("c_s") ** 2, order=None, compressible=True):
     """
     Compute moments of discrete maxwellian equilibrium
@@ -195,13 +195,30 @@ def getMomentsOfDiscreteMaxwellianEquilibrium(stencil,
 # -------------------------------- Equilibrium moments -----------------------------------------------------------------
 
 
-def getCumulantsOfContinuousMaxwellianEquilibrium(cumulants, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
-                                                  c_s_sq=sp.Symbol("c_s") ** 2, dim=3):
+def getCumulantsOfContinuousMaxwellianEquilibrium(cumulants, dim, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
+                                                  c_s_sq=sp.Symbol("c_s") ** 2, order=None):
     from lbmpy.moments import MOMENT_SYMBOLS
     from lbmpy.continuous_distribution_measures import continuousCumulant
+    from pystencils.sympyextensions import removeHigherOrderTerms
 
-    mb = continuousMaxwellianEquilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq)
-    result = [continuousCumulant(mb, cumulant, MOMENT_SYMBOLS[:dim]) for cumulant in cumulants]
+    # trick to speed up sympy integration (otherwise it takes multiple minutes, or aborts):
+    # use a positive, real symbol to represent c_s_sq -> then replace this symbol afterwards with the real c_s_sq
+    c_s_sq_helper = sp.Symbol("csqHelper", positive=True, real=True)
+    mb = continuousMaxwellianEquilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
+    result = [continuousCumulant(mb, cumulant, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq) for cumulant in cumulants]
+    if order is not None:
+        result = [removeHigherOrderTerms(r, order, u) for r in result]
 
     return result
+
+
+@diskcache
+def getCumulantsOfDiscreteMaxwellianEquilibrium(stencil, cumulants,
+                                                rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
+                                                c_s_sq=sp.Symbol("c_s") ** 2, order=None, compressible=True):
+    from lbmpy.cumulants import discreteCumulant
+    if order is None:
+        order = 4
+    mb = discreteMaxwellianEquilibrium(stencil, rho, u, order, c_s_sq, compressible)
+    return tuple([discreteCumulant(mb, cumulant, stencil).expand() for cumulant in cumulants])
 

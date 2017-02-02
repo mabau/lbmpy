@@ -31,7 +31,6 @@ def momentGeneratingFunction(function, symbols, symbolsInResult):
 
     """
     assert len(symbols) == len(symbolsInResult)
-
     for t_i, v_i in zip(symbolsInResult, symbols):
         function *= sp.exp(t_i * v_i)
 

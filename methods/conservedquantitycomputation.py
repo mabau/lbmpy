@@ -104,6 +104,14 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             return None
 
     @property
+    def zerothOrderMomentSymbol(self):
+        return self._symbolOrder0
+
+    @property
+    def firstOrderMomentSymbol(self):
+        return self._symbolsOrder1
+
+    @property
     def defaultValues(self):
         result = {self._symbolOrder0: 1}
         for s in self._symbolsOrder1:

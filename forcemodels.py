@@ -64,7 +64,6 @@ class Guo:
 
     def __call__(self, lbmMethod):
         luo = Luo(self._force)
-        u = lbmMethod.firstOrderEquilibriumMomentSymbols
         shearRelaxationRate = lbmMethod.getShearRelaxationRate()
         correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
         return [correctionFactor * t for t in luo(lbmMethod)]

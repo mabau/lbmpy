@@ -162,7 +162,8 @@ def cumulantsFromPdfs(stencil, cumulantIndices=None, pdfSymbols=None):
     if cumulantIndices is None:
         cumulantIndices = momentsUpToComponentOrder(2, dim=dim)
     assert len(stencil) == len(cumulantIndices), "Stencil has to have same length as cumulantIndices sequence"
-    pdfSymbols = __getIndexedSymbols(pdfSymbols, "f", range(len(stencil)))
+    if pdfSymbols is None:
+        pdfSymbols = __getIndexedSymbols(pdfSymbols, "f", range(len(stencil)))
     return {idx: discreteCumulant(tuple(pdfSymbols), idx, stencil) for idx in cumulantIndices}
 
 

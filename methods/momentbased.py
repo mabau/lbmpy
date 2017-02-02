@@ -4,7 +4,8 @@ from collections import OrderedDict, defaultdict
 
 from lbmpy.stencils import stencilsHaveSameEntries, getStencil
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
-    getMomentsOfContinuousMaxwellianEquilibrium
+    getMomentsOfContinuousMaxwellianEquilibrium, getCumulantsOfDiscreteMaxwellianEquilibrium, \
+    getCumulantsOfContinuousMaxwellianEquilibrium
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation, DensityVelocityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix, isShearMoment, \
@@ -74,11 +75,11 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     @property
     def zerothOrderEquilibriumMomentSymbol(self, ):
-        return self._conservedQuantityComputation.definedSymbols(order=0)[1]
+        return self._conservedQuantityComputation.zerothOrderMomentSymbol
 
     @property
     def firstOrderEquilibriumMomentSymbols(self, ):
-        return self._conservedQuantityComputation.definedSymbols(order=1)[1]
+        return self._conservedQuantityComputation.firstOrderMomentsSymbol
 
     @property
     def weights(self):
@@ -273,9 +274,12 @@ def compressibleToIncompressibleMomentValue(term, rho, u):
     return res
 
 
+from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
+
+
 def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible=False, forceModel=None,
-                                          equilibriumAccuracyOrder=2):
-    """
+                                          equilibriumAccuracyOrder=2, cumulant=False):
+    r"""
     Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
     relaxed against the moments of the discrete Maxwellian distribution.
 
@@ -283,9 +287,13 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     :param momentToRelaxationRateDict: dict that has as many entries as the stencil. Each moment, which can be
                                        represented by an exponent tuple or in polynomial form
                                        (see `lbmpy.moments`), is mapped to a relaxation rate.
-    :param compressible: using the compressible or incompressible discrete Maxwellian
+    :param compressible: incompressible LBM methods split the density into :math:`\rho = \rho_0 + \Delta \rho`
+         where :math:`\rho_0` is chosen as one, and the first moment of the pdfs is :math:`\Delta \rho` .
+         This approximates the incompressible Navier-Stokes equations better than the standard
+         compressible model.
     :param forceModel: force model instance, or None if no external forces
     :param equilibriumAccuracyOrder: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
+    :param cumulant: if True relax cumulants instead of moments
     :return: :class:`lbmpy.methods.MomentBasedLbmMethod` instance
     """
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
@@ -293,16 +301,27 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
         "The number of moments has to be the same as the number of stencil entries"
 
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
-    eqMoments = getMomentsOfDiscreteMaxwellianEquilibrium(stencil, list(momToRrDict.keys()), c_s_sq=sp.Rational(1, 3),
-                                                          compressible=compressible, order=equilibriumAccuracyOrder)
+
+    if cumulant:
+        eqValues = getCumulantsOfDiscreteMaxwellianEquilibrium(stencil, list(momToRrDict.keys()),
+                                                               c_s_sq=sp.Rational(1, 3), compressible=compressible,
+                                                               order=equilibriumAccuracyOrder)
+    else:
+        eqValues = getMomentsOfDiscreteMaxwellianEquilibrium(stencil, list(momToRrDict.keys()),
+                                                             c_s_sq=sp.Rational(1, 3), compressible=compressible,
+                                                             order=equilibriumAccuracyOrder)
+
     rrDict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
-                          for mom, rr, eqMom in zip(momToRrDict.keys(), momToRrDict.values(), eqMoments)])
-    return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+                          for mom, rr, eqMom in zip(momToRrDict.keys(), momToRrDict.values(), eqValues)])
+    if cumulant:
+        return CumulantBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+    else:
+        return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
 def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible=False, forceModel=None,
-                                            equilibriumAccuracyOrder=None):
-    """
+                                            equilibriumAccuracyOrder=2, cumulant=False):
+    r"""
     Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
     relaxed against the moments of the continuous Maxwellian distribution.
     For parameter description see :func:`lbmpy.methods.createWithDiscreteMaxwellianEqMoments`.
@@ -313,44 +332,50 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
         stencil), "The number of moments has to be the same as the number of stencil entries"
     dim = len(stencil[0])
     densityVelocityComputation = DensityVelocityComputation(stencil, True, forceModel)
-    eqMoments = getMomentsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), dim, c_s_sq=sp.Rational(1, 3),
-                                                            order=equilibriumAccuracyOrder)
+
+    if cumulant:
+        eqValues = getCumulantsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), dim,
+                                                                 c_s_sq=sp.Rational(1, 3),
+                                                                 order=equilibriumAccuracyOrder)
+    else:
+        eqValues = getMomentsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), dim, c_s_sq=sp.Rational(1, 3),
+                                                               order=equilibriumAccuracyOrder)
 
     if not compressible:
         rho = densityVelocityComputation.definedSymbols(order=0)[1]
         u = densityVelocityComputation.definedSymbols(order=1)[1]
-        eqMoments = [compressibleToIncompressibleMomentValue(em, rho, u) for em in eqMoments]
+        eqValues = [compressibleToIncompressibleMomentValue(em, rho, u) for em in eqValues]
 
     rrDict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
-                          for mom, rr, eqMom in zip(momToRrDict.keys(), momToRrDict.values(), eqMoments)])
-    return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+                          for mom, rr, eqMom in zip(momToRrDict.keys(), momToRrDict.values(), eqValues)])
+    if cumulant:
+        return CumulantBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+    else:
+        return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
 # ------------------------------------ SRT / TRT/ MRT Creators ---------------------------------------------------------
 
 
-def createSRT(stencil, relaxationRate, compressible=False, forceModel=None, equilibriumAccuracyOrder=2):
+def createSRT(stencil, relaxationRate, useContinuousMaxwellianEquilibrium=False, **kwargs):
     r"""
     Creates a single relaxation time (SRT) lattice Boltzmann model also known as BGK model.
 
     :param stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.getStencil`
     :param relaxationRate: relaxation rate (inverse of the relaxation time)
                            usually called :math:`\omega` in LBM literature
-    :param compressible: incompressible LBM methods split the density into :math:`\rho = \rho_0 + \Delta \rho`
-             where :math:`\rho_0` is chosen as one, and the first moment of the pdfs is :math:`\Delta \rho` .
-             This approximates the incompressible Navier-Stokes equations better than the standard
-             compressible model.
-    :param forceModel: force model instance, or None if no external forces
-    :param equilibriumAccuracyOrder: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
     :return: :class:`lbmpy.methods.MomentBasedLbmMethod` instance
     """
     moments = getDefaultMomentSetForStencil(stencil)
     rrDict = OrderedDict([(m, relaxationRate) for m in moments])
-    return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, compressible, forceModel, equilibriumAccuracyOrder)
+    if useContinuousMaxwellianEquilibrium:
+        return createWithContinuousMaxwellianEqMoments(stencil, rrDict,  **kwargs)
+    else:
+        return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, **kwargs)
 
 
-def createTRT(stencil, relaxationRateEvenMoments, relaxationRateOddMoments, compressible=False,
-              forceModel=None, equilibriumAccuracyOrder=2):
+def createTRT(stencil, relaxationRateEvenMoments, relaxationRateOddMoments,
+              useContinuousMaxwellianEquilibrium=False, **kwargs):
     """
     Creates a two relaxation time (TRT) lattice Boltzmann model, where even and odd moments are relaxed differently.
     In the SRT model the exact wall position of no-slip boundaries depends on the viscosity, the TRT method does not
@@ -362,21 +387,23 @@ def createTRT(stencil, relaxationRateEvenMoments, relaxationRateOddMoments, comp
     """
     moments = getDefaultMomentSetForStencil(stencil)
     rrDict = OrderedDict([(m, relaxationRateEvenMoments if isEven(m) else relaxationRateOddMoments) for m in moments])
-    return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, compressible, forceModel, equilibriumAccuracyOrder)
+    if useContinuousMaxwellianEquilibrium:
+        return createWithContinuousMaxwellianEqMoments(stencil, rrDict,  **kwargs)
+    else:
+        return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, **kwargs)
 
 
-def createTRTWithMagicNumber(stencil, relaxationRate, magicNumber=sp.Rational(3, 16), *args, **kwargs):
+def createTRTWithMagicNumber(stencil, relaxationRate, magicNumber=sp.Rational(3, 16), **kwargs):
     """
     Creates a two relaxation time (TRT) lattice Boltzmann method, where the relaxation time for odd moments is
     determines from the even moment relaxation time and a "magic number".
     For possible parameters see :func:`lbmpy.methods.createTRT`
     """
     rrOdd = relaxationRateFromMagicNumber(relaxationRate, magicNumber)
-    return createTRT(stencil, relaxationRateEvenMoments=relaxationRate, relaxationRateOddMoments=rrOdd, *args, **kwargs)
+    return createTRT(stencil, relaxationRateEvenMoments=relaxationRate, relaxationRateOddMoments=rrOdd, **kwargs)
 
 
-def createOrthogonalMRT(stencil, relaxationRateGetter=None, compressible=False,
-                        forceModel=None, equilibriumAccuracyOrder=2):
+def createOrthogonalMRT(stencil, relaxationRateGetter=None, useContinuousMaxwellianEquilibrium=False, **kwargs):
     r"""
     Returns a orthogonal multi-relaxation time model for the stencils D2Q9, D3Q15, D3Q19 and D3Q27.
     These MRT methods are just one specific version - there are many MRT methods possible for all these stencils
@@ -390,10 +417,6 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, compressible=False,
                                     - 0 for moments of order 0 and 1 (conserved)
                                     - :math:`\omega`: from moments of order 2 (rate that determines viscosity)
                                     - numbered :math:`\omega_i` for the rest
-
-    :param compressible: see :func:`lbmpy.methods.createWithDiscreteMaxwellianEqMoments`
-    :param forceModel:  see :func:`lbmpy.methods.createWithDiscreteMaxwellianEqMoments`
-    :param equilibriumAccuracyOrder:  see :func:`lbmpy.methods.createWithDiscreteMaxwellianEqMoments`
     """
     if relaxationRateGetter is None:
         relaxationRateGetter = defaultRelaxationRateNames()
@@ -465,8 +488,10 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, compressible=False,
         for m in momentList:
             momentToRelaxationRateDict[m] = rr
 
-    return createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible, forceModel,
-                                                 equilibriumAccuracyOrder)
+    if useContinuousMaxwellianEquilibrium:
+        return createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict, **kwargs)
+    else:
+        return createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, **kwargs)
 
 
 # ----------------------------------------- Comparison view for notebooks ----------------------------------------------

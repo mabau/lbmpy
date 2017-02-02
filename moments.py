@@ -514,3 +514,47 @@ def momentEqualityTableByStencil(nameToStencilDict, moments, truncateOrder=None)
         ipy_table.set_cell_style(cellIdx[0], cellIdx[1], color=color)
 
     return tableDisplay
+
+
+def extractMonomials(sequenceOfPolynomials, dim=3):
+    """
+    Returns a set of exponent tuples of all monomials contained in the given set of polynomials
+    :param sequenceOfPolynomials: sequence of polynomials in the MOMENT_SYMBOLS
+    :param dim: length of returned exponent tuples
+
+    >>> x, y, z = MOMENT_SYMBOLS
+    >>> extractMonomials([x**2 + y**2 + y, y + y**2])
+    {(0, 2, 0), (0, 1, 0), (2, 0, 0)}
+    >>> extractMonomials([x**2 + y**2 + y, y + y**2], dim=2)
+    {(0, 1), (2, 0), (0, 2)}
+    """
+    monomials = set()
+    for polynomial in sequenceOfPolynomials:
+        for factor, exponentTuple in polynomialToExponentRepresentation(polynomial):
+            monomials.add(exponentTuple[:dim])
+    return monomials
+
+
+def monomialToPolynomialTransformationMatrix(monomials, polynomials):
+    """
+    Returns a transformation matrix from a monomial to a polynomial representation
+    :param monomials: sequence of exponent tuples
+    :param polynomials: sequence of polynomials in the MOMENT_SYMBOLS
+
+    >>> x, y, z = MOMENT_SYMBOLS
+    >>> polys = [7 * x**2 + 3 * x + 2 * y **2, \
+                 9 * x**2 - 5 * x]
+    >>> mons = list(extractMonomials(polys, dim=2))
+    >>> monomialToPolynomialTransformationMatrix(mons, polys)
+    Matrix([
+    [7,  3, 2],
+    [9, -5, 0]])
+    """
+    dim = len(monomials[0])
+
+    result = sp.zeros(len(polynomials), len(monomials))
+    for polynomialIdx, polynomial in enumerate(polynomials):
+        for factor, exponentTuple in polynomialToExponentRepresentation(polynomial):
+            exponentTuple = exponentTuple[:dim]
+            result[polynomialIdx, monomials.index(exponentTuple)] = factor
+    return result
