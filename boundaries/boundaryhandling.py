@@ -2,7 +2,7 @@ import sympy as sp
 import numpy as np
 from pystencils import TypedSymbol, Field
 from pystencils.backends.cbackend import CustomCppCode
-from pystencils.ast import Block, SympyAssignment, LoopOverCoordinate, KernelFunction
+from pystencils.astnodes import Block, SympyAssignment, LoopOverCoordinate, KernelFunction
 from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses, typingFromSympyInspection, \
     typeAllEquations
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList

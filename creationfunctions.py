@@ -4,7 +4,7 @@ Factory functions for standard LBM methods
 import sympy as sp
 from copy import copy
 from lbmpy.stencils import getStencil
-from lbmpy.methods.momentbased import createSRT, createTRT, createOrthogonalMRT
+from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT
 import lbmpy.forcemodels as forceModels
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import createStreamPullKernel, createPdfArray
@@ -19,6 +19,8 @@ def _getParams(params, optParams):
         'compressible': False,
         'order': 2,
 
+        'useContinuousMaxwellianEquilibrium': False,
+        'cumulant': False,
         'forceModel': 'none',  # can be 'simple', 'luo' or 'guo'
         'force': (0, 0, 0),
     }
@@ -148,6 +150,8 @@ def createLatticeBoltzmannMethod(**params):
         'compressible': params['compressible'],
         'equilibriumAccuracyOrder': params['order'],
         'forceModel': forceModel,
+        'useContinuousMaxwellianEquilibrium': params['useContinuousMaxwellianEquilibrium'],
+        'cumulant': params['cumulant'],
     }
     methodName = params['method']
     relaxationRates = params['relaxationRates']

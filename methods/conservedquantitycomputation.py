@@ -108,7 +108,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         return self._symbolOrder0
 
     @property
-    def firstOrderMomentSymbol(self):
+    def firstOrderMomentSymbols(self):
         return self._symbolsOrder1
 
     @property

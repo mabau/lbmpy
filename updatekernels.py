@@ -1,4 +1,5 @@
 import numpy as np
+import sympy as sp
 from pystencils import Field
 from pystencils.sympyextensions import fastSubs
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
@@ -109,3 +110,9 @@ def addOutputFieldForConservedQuantities(collisionRule, conservedQuantitiesToOut
                                                                       conservedQuantitiesToOutputFieldDict)
     return collisionRule.merge(cqc)
 
+
+def writeQuantitiesToField(collisionRule, symbols, outputField):
+    if not hasattr(symbols, "__len__"):
+        symbols = [symbols]
+    eqs = [sp.Eq(outputField(i), s) for i, s in enumerate(symbols)]
+    return collisionRule.copy(collisionRule.mainEquations + eqs)
