@@ -8,7 +8,7 @@ from pystencils.sympyextensions import replaceAdditive
 
 
 class MomentBasedLbMethod(AbstractLbMethod):
-    def __init__(self, stencil, momentToRelaxationInfoDict, conservedQuantityComputation, forceModel=None):
+    def __init__(self, stencil, momentToRelaxationInfoDict, conservedQuantityComputation=None, forceModel=None):
         """
         Moment based LBM is a class to represent the single (SRT), two (TRT) and multi relaxation time (MRT) methods.
         These methods work by transforming the pdfs into moment space using a linear transformation. In the moment

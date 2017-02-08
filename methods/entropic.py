@@ -192,7 +192,6 @@ def determineRelaxationRateByEntropyConditionIterative(updateRule, omega_s, omeg
 
 
 def createKbcEntropicCollisionRule(dim, name='KBC-N4', useNewtonIterations=False, velocityRelaxation=None,
-                                   shearRelaxationRate=sp.Symbol("omega"),
                                    higherOrderRelaxationRate=sp.Symbol("omega_h"),
                                    fixedOmega=None, **kwargs):
     def product(iterable):
@@ -230,7 +229,7 @@ def createKbcEntropicCollisionRule(dim, name='KBC-N4', useNewtonIterations=False
     else:
         raise ValueError("Unknown model. Supported models KBC-Nx")
 
-    omega_s, omega_h = shearRelaxationRate, higherOrderRelaxationRate
+    omega_s, omega_h = sp.Symbol("omega"), higherOrderRelaxationRate
     shearPart, restPart = decomposition
 
     velRelaxation = omega_s if velocityRelaxation is None else velocityRelaxation
@@ -253,7 +252,7 @@ def createKbcEntropicCollisionRule(dim, name='KBC-N4', useNewtonIterations=False
         collisionRule = determineRelaxationRateByEntropyCondition(collisionRule, omega_s, omega_h)
 
     if fixedOmega:
-        collisionRule = collisionRule.newWithSubstitutions({omega_s: fixedOmega})
+        collisionRule = collisionRule.copyWithSubstitutionsApplied({omega_s: fixedOmega})
 
     return collisionRule
 

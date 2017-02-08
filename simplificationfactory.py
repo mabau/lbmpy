@@ -30,11 +30,12 @@ def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doO
         if splitInnerLoop:
             s.add(createLbmSplitGroups)
 
+    s.add(addSubexpressionsForDivisions)
+
     if doCseInOpposingDirections:
         s.add(cseInOpposingDirections)
     if doOverallCse:
         s.add(sympyCSE)
 
-    s.add(addSubexpressionsForDivisions)
 
     return s

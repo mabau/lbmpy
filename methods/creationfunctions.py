@@ -232,7 +232,7 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, useContinuousMaxwell
 # ----------------------------------------- Comparison view for notebooks ----------------------------------------------
 
 
-def compareMomentBasedLbMethods(reference, other):
+def compareMomentBasedLbMethods(reference, other, showDeviationsOnly=False):
     import ipy_table
     table = []
     captionRows = [len(table)]
@@ -244,10 +244,13 @@ def compareMomentBasedLbMethods(reference, other):
         referenceValue = reference.momentToRelaxationInfoDict[moment].equilibriumValue
         otherValue = other.momentToRelaxationInfoDict[moment].equilibriumValue
         diff = sp.simplify(referenceValue - otherValue)
-        table.append(["$%s$" % (sp.latex(moment), ),
-                      "$%s$" % (sp.latex(referenceValue), ),
-                      "$%s$" % (sp.latex(otherValue), ),
-                      "$%s$" % (sp.latex(diff),)])
+        if showDeviationsOnly and diff == 0:
+            pass
+        else:
+            table.append(["$%s$" % (sp.latex(moment), ),
+                          "$%s$" % (sp.latex(referenceValue), ),
+                          "$%s$" % (sp.latex(otherValue), ),
+                          "$%s$" % (sp.latex(diff),)])
 
     onlyInRef = referenceMoments - otherMoments
     if onlyInRef:

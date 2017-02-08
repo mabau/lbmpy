@@ -1,6 +1,6 @@
 import sympy as sp
 from copy import deepcopy
-from pystencils.field import Field
+from pystencils.field import Field, getLayoutFromNumpyArray
 from lbmpy.simplificationfactory import createSimplificationStrategy
 
 
@@ -30,6 +30,7 @@ def compileMacroscopicValuesGetter(lbMethod, outputQuantities, pdfArr=None, fiel
         pdfField = Field.createGeneric('pdfs', lbMethod.dim, indexDimensions=1, layout=fieldLayout)
     else:
         pdfField = Field.createFromNumpyArray('pdfs', pdfArr, indexDimensions=1)
+        fieldLayout = getLayoutFromNumpyArray(pdfArr, indexDimensionIds=[len(pdfField.shape)-1])
 
     outputMapping = {}
     for outputQuantity in outputQuantities:

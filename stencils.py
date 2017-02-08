@@ -114,6 +114,21 @@ def stencilsHaveSameEntries(s1, s2):
 
 # -------------------------------------- Visualization -----------------------------------------------------------------
 
+def visualizeStencil(stencil, **kwargs):
+    dim = len(stencil[0])
+    if dim == 2:
+        visualizeStencil2D(stencil, **kwargs)
+    else:
+        slicing = False
+        if 'slice' in kwargs:
+            slicing = kwargs['slice']
+            del kwargs['slice']
+
+        if slicing:
+            visualizeStencil3DBySlicing(stencil, **kwargs)
+        else:
+            visualizeStencil3D(stencil, **kwargs)
+
 
 def visualizeStencil2D(stencil, axes=None, data=None):
     """

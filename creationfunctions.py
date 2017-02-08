@@ -34,6 +34,7 @@ def _getParams(params, optParams):
         'fieldLayout': 'reverseNumpy',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
 
         'openMP': True,
+        'pdfArr': None,
     }
     unknownParams = [k for k in params.keys() if k not in defaultMethodDescription]
     unknownOptParams = [k for k in optParams.keys() if k not in defaultOptimizationDescription]
@@ -70,6 +71,7 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
     res.method = ast.method
+    res.ast = ast
     return res
 
 
@@ -116,11 +118,14 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
         npField = createPdfArray(optParams['fieldSize'], len(stencil), layout=optParams['fieldLayout'])
         updateRule = createStreamPullKernel(collisionRule, numpyField=npField)
     else:
-        layoutName = optParams['fieldLayout']
-        if layoutName == 'fzyx' or 'zyxf':
-            dim = len(stencil[0])
-            layoutName = tuple(reversed(range(dim)))
-        updateRule = createStreamPullKernel(collisionRule, genericLayout=layoutName)
+        if 'pdfArr' in optParams:
+            updateRule = createStreamPullKernel(collisionRule, numpyField=optParams['pdfArr'])
+        else:
+            layoutName = optParams['fieldLayout']
+            if layoutName == 'fzyx' or 'zyxf':
+                dim = len(stencil[0])
+                layoutName = tuple(reversed(range(dim)))
+            updateRule = createStreamPullKernel(collisionRule, genericLayout=layoutName)
 
     return updateRule
 

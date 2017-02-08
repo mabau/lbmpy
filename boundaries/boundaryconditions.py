@@ -52,7 +52,11 @@ def fixedDensity(pdfField, direction, lbMethod, density):
     neighbor = offsetFromDir(direction, lbMethod.dim)
     inverseDir = invDir(direction)
 
-    symmetricEq = removeAsymmetricPartOfMainEquations(lbMethod.getEquilibrium())
+    velocity = lbMethod.conservedQuantityComputation.definedSymbols()['velocity']
+    symmetricEq = removeAsymmetricPartOfMainEquations(lbMethod.getEquilibrium(), dofs=velocity)
+    substitutions = {sym: pdfField(i) for i, sym in enumerate(lbMethod.preCollisionPdfSymbols)}
+    symmetricEq = symmetricEq.copyWithSubstitutionsApplied(substitutions)
+
     simplification = createSimplificationStrategy(lbMethod)
     symmetricEq = simplification(symmetricEq)
 
