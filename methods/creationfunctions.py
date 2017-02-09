@@ -1,9 +1,13 @@
 import sympy as sp
 from collections import OrderedDict, defaultdict
+from functools import reduce
+import operator
+import itertools
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.momentbased import MomentBasedLbMethod
 from lbmpy.stencils import stencilsHaveSameEntries, getStencil
-from lbmpy.moments import isEven, gramSchmidt, getDefaultMomentSetForStencil, MOMENT_SYMBOLS, getOrder, isShearMoment
+from lbmpy.moments import isEven, gramSchmidt, getDefaultMomentSetForStencil, MOMENT_SYMBOLS, getOrder, isShearMoment, \
+    exponentsToPolynomialRepresentations, momentsOfOrder, momentsUpToComponentOrder
 from pystencils.sympyextensions import commonDenominator
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
@@ -66,7 +70,7 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
     assert len(momToRrDict) == len(
         stencil), "The number of moments has to be the same as the number of stencil entries"
     dim = len(stencil[0])
-    densityVelocityComputation = DensityVelocityComputation(stencil, True, forceModel)
+    densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
     if cumulant:
         eqValues = getCumulantsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), dim,
@@ -77,6 +81,8 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
                                                                order=equilibriumAccuracyOrder)
 
     if not compressible:
+        if not compressible and cumulant:
+            raise NotImplementedError("Incompressible cumulants not yet supported")
         rho = densityVelocityComputation.definedSymbols(order=0)[1]
         u = densityVelocityComputation.definedSymbols(order=1)[1]
         eqValues = [compressibleToIncompressibleMomentValue(em, rho, u) for em in eqValues]
@@ -99,6 +105,8 @@ def createSRT(stencil, relaxationRate, useContinuousMaxwellianEquilibrium=False,
     :param stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.getStencil`
     :param relaxationRate: relaxation rate (inverse of the relaxation time)
                            usually called :math:`\omega` in LBM literature
+    :param useContinuousMaxwellianEquilibrium: determines if the discrete or continuous maxwellian equilibrium is
+                           used to compute the equilibrium moments
     :return: :class:`lbmpy.methods.MomentBasedLbmMethod` instance
     """
     moments = getDefaultMomentSetForStencil(stencil)
@@ -138,6 +146,74 @@ def createTRTWithMagicNumber(stencil, relaxationRate, magicNumber=sp.Rational(3,
     return createTRT(stencil, relaxationRateEvenMoments=relaxationRate, relaxationRateOddMoments=rrOdd, **kwargs)
 
 
+def createKBCTypeTRT(dim, shearRelaxationRate, higherOrderRelaxationRate, methodName='KBC-N4',
+                     useContinuousMaxwellianEquilibrium=False, **kwargs):
+    """
+    Creates a method with two relaxation rates, one for lower order moments which determines the viscosity and
+    one for higher order moments. In entropic models this second relaxation rate is chosen subject to an entropy
+    condition. Which moments are relaxed by which rate is determined by the methodName
+
+    :param dim: 2 or 3, leads to stencil D2Q9 or D3Q27
+    :param shearRelaxationRate: relaxation rate that determines viscosity
+    :param higherOrderRelaxationRate: relaxation rate for higher order moments
+    :param methodName: string 'KBC-Nx' where x can be an number from 1 to 4, for details see
+                       "Karlin 2015: Entropic multirelaxation lattice Boltzmann models for turbulent flows"
+    :param useContinuousMaxwellianEquilibrium: determines if the discrete or continuous maxwellian equilibrium is
+                           used to compute the equilibrium moments
+    """
+    def product(iterable):
+        return reduce(operator.mul, iterable, 1)
+
+    theMoment = MOMENT_SYMBOLS[:dim]
+
+    rho = [sp.Rational(1, 1)]
+    velocity = list(theMoment)
+
+    shearTensorOffDiagonal = [product(t) for t in itertools.combinations(theMoment, 2)]
+    shearTensorDiagonal = [m_i * m_i for m_i in theMoment]
+    shearTensorTrace = sum(shearTensorDiagonal)
+    shearTensorTraceFreeDiagonal = [dim * d - shearTensorTrace for d in shearTensorDiagonal]
+
+    energyTransportTensor = list(exponentsToPolynomialRepresentations([a for a in momentsOfOrder(3, dim, True)
+                                                                       if 3 not in a]))
+
+    explicitlyDefined = set(rho + velocity + shearTensorOffDiagonal + shearTensorDiagonal + energyTransportTensor)
+    rest = list(set(exponentsToPolynomialRepresentations(momentsUpToComponentOrder(2, dim))) - explicitlyDefined)
+    assert len(rest) + len(explicitlyDefined) == 3**dim
+
+    # naming according to paper Karlin 2015: Entropic multirelaxation lattice Boltzmann models for turbulent flows
+    D = shearTensorOffDiagonal + shearTensorTraceFreeDiagonal[:-1]
+    T = [shearTensorTrace]
+    Q = energyTransportTensor
+    if methodName == 'KBC-N1':
+        decomposition = [D, T+Q+rest]
+    elif methodName == 'KBC-N2':
+        decomposition = [D+T, Q+rest]
+    elif methodName == 'KBC-N3':
+        decomposition = [D+Q, T+rest]
+    elif methodName == 'KBC-N4':
+        decomposition = [D+T+Q, rest]
+    else:
+        raise ValueError("Unknown model. Supported models KBC-Nx where x in (1,2,3,4)")
+
+    omega_s, omega_h = shearRelaxationRate, higherOrderRelaxationRate
+    shearPart, restPart = decomposition
+
+    relaxationRates = [omega_s] + \
+                      [omega_s] * len(velocity) + \
+                      [omega_s] * len(shearPart) + \
+                      [omega_h] * len(restPart)
+
+    stencil = getStencil("D2Q9") if dim == 2 else getStencil("D3Q27")
+    allMoments = rho + velocity + shearPart + restPart
+    momentToRr = OrderedDict((m, rr) for m, rr in zip(allMoments, relaxationRates))
+
+    if useContinuousMaxwellianEquilibrium:
+        return createWithContinuousMaxwellianEqMoments(stencil, momentToRr, cumulant=False, **kwargs)
+    else:
+        return createWithDiscreteMaxwellianEqMoments(stencil, momentToRr, cumulant=False, **kwargs)
+
+
 def createOrthogonalMRT(stencil, relaxationRateGetter=None, useContinuousMaxwellianEquilibrium=False, **kwargs):
     r"""
     Returns a orthogonal multi-relaxation time model for the stencils D2Q9, D3Q15, D3Q19 and D3Q27.
@@ -152,6 +228,8 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, useContinuousMaxwell
                                     - 0 for moments of order 0 and 1 (conserved)
                                     - :math:`\omega`: from moments of order 2 (rate that determines viscosity)
                                     - numbered :math:`\omega_i` for the rest
+    :param useContinuousMaxwellianEquilibrium: determines if the discrete or continuous maxwellian equilibrium is
+                                               used to compute the equilibrium moments
     """
     if relaxationRateGetter is None:
         relaxationRateGetter = defaultRelaxationRateNames()
@@ -241,8 +319,8 @@ def compareMomentBasedLbMethods(reference, other, showDeviationsOnly=False):
     referenceMoments = set(reference.moments)
     otherMoments = set(other.moments)
     for moment in referenceMoments.intersection(otherMoments):
-        referenceValue = reference.momentToRelaxationInfoDict[moment].equilibriumValue
-        otherValue = other.momentToRelaxationInfoDict[moment].equilibriumValue
+        referenceValue = reference.relaxationInfoDict[moment].equilibriumValue
+        otherValue = other.relaxationInfoDict[moment].equilibriumValue
         diff = sp.simplify(referenceValue - otherValue)
         if showDeviationsOnly and diff == 0:
             pass
@@ -257,7 +335,7 @@ def compareMomentBasedLbMethods(reference, other, showDeviationsOnly=False):
         captionRows.append(len(table))
         table.append(['Only in Ref', 'value', '', ''])
         for moment in onlyInRef:
-            val = reference.momentToRelaxationInfoDict[moment].equilibriumValue
+            val = reference.relaxationInfoDict[moment].equilibriumValue
             table.append(["$%s$" % (sp.latex(moment),),
                           "$%s$" % (sp.latex(val),),
                           " ", " "])
@@ -267,7 +345,7 @@ def compareMomentBasedLbMethods(reference, other, showDeviationsOnly=False):
         captionRows.append(len(table))
         table.append(['Only in Other', '', 'value', ''])
         for moment in onlyInOther:
-            val = other.momentToRelaxationInfoDict[moment].equilibriumValue
+            val = other.relaxationInfoDict[moment].equilibriumValue
             table.append(["$%s$" % (sp.latex(moment),),
                           " ",
                           "$%s$" % (sp.latex(val),),
@@ -336,3 +414,14 @@ def compressibleToIncompressibleMomentValue(term, rho, u):
         else:
             res += t
     return res
+
+
+if __name__ == '__main__':
+    from lbmpy.moments import *
+    from lbmpy.methods.creationfunctions import *
+    x, y, z = MOMENT_SYMBOLS
+    momentSelection = (sp.sympify(1), x, y, z, x ** 2, y ** 2, z ** 2)
+    relaxationDict = {m: sp.Symbol("omega") for m in momentSelection}
+    stencil = [(0, 0, 0), (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+    method = createWithContinuousMaxwellianEqMoments(stencil, relaxationDict)
+    method.weights

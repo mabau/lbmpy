@@ -100,6 +100,7 @@ def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
         genFunc = generatingFunction(function, symbols, t)
         return multiDifferentiation(genFunc, moment, t)
     else:
+        moment = sp.sympify(moment)
         assert symbols is not None, "When passing a polynomial as moment, also the moment symbols have to be passed"
         dim = len(symbols)
         # not using sp.Dummy here - since it prohibits caching

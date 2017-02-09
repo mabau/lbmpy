@@ -5,6 +5,7 @@ from pystencils.slicing import sliceFromDirection
 from lbmpy.creationfunctions import createLatticeBoltzmannFunction
 from lbmpy.macroscopicValueKernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
 from lbmpy.boundaries import BoundaryHandling, noSlip, ubb, fixedDensity
+from lbmpy.stencils import getStencil
 
 
 def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParameters, lbmKernel=None,
@@ -16,17 +17,16 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
     if 'stencil' not in methodParameters:
         methodParameters['stencil'] = 'D2Q9' if D == 2 else 'D3Q27'
 
+    Q = len(getStencil(methodParameters['stencil']))
+    pdfSrc = np.zeros(domainSizeWithGhostLayer + (Q,))
+    pdfDst = np.zeros_like(pdfSrc)
+
     # Create kernel
     if lbmKernel is None:
         lbmKernel = createLatticeBoltzmannFunction(**methodParameters, optimizationParams=optimizationParameters)
     method = lbmKernel.method
 
     assert D == method.dim, "Domain size and stencil do not match"
-    Q = len(method.stencil)
-
-    # Create pdf fields
-    pdfSrc = np.zeros(domainSizeWithGhostLayer + (Q,))
-    pdfDst = np.zeros_like(pdfSrc)
 
     # Boundary setup
     if boundarySetupFunction is not None:

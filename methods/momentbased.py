@@ -48,7 +48,11 @@ class MomentBasedLbMethod(AbstractLbMethod):
                                                       (undefinedEquilibriumSymbols,)
 
     @property
-    def momentToRelaxationInfoDict(self):
+    def forceModel(self):
+        return self._forceModel
+
+    @property
+    def relaxationInfoDict(self):
         return self._momentToRelaxationInfoDict
 
     @property
@@ -128,7 +132,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
             <tr {nb}>
                 <th {nb} >Moment</th>
                 <th {nb} >Eq. Value </th>
-                <th {nb} >Relaxation Time</th>
+                <th {nb} >Relaxation Rate</th>
             </tr>
             {content}
         </table>
@@ -159,7 +163,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         weights = []
         for eq in eqColl.mainEquations:
             value = eq.rhs.expand()
-            assert len(value.atoms(sp.Symbol)) == 0, "Failed to compute weights"
+            assert len(value.atoms(sp.Symbol)) == 0, "Failed to compute weights " + str(value)
             weights.append(value)
         return weights
 

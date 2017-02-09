@@ -19,7 +19,11 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         self._weights = None
 
     @property
-    def cumulantToRelaxationInfoDict(self):
+    def forceModel(self):
+        return self._forceModel
+
+    @property
+    def relaxationInfoDict(self):
         return self._cumulantToRelaxationInfoDict
 
     def setFirstMomentRelaxationRate(self, relaxationRate):
@@ -58,7 +62,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
             <tr {nb}>
                 <th {nb} >Cumulant</th>
                 <th {nb} >Eq. Value </th>
-                <th {nb} >Relaxation Time</th>
+                <th {nb} >Relaxation Rate</th>
             </tr>
             {content}
         </table>
