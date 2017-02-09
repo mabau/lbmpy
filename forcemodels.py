@@ -7,9 +7,9 @@ import sympy as sp
 
 
 class Simple:
-    """
+    r"""
     A simple force model which introduces the following additional force term in the
-    collision process: ::math:`3 * w_i * e_i * f_i` (often: force = rho * acceleration)
+    collision process :math:`3  w_i  e_i  f_i` (often: force = rho * acceleration)
     Should only be used with constant forces!
     Shifts the macroscopic velocity by F/2, but does not change the equilibrium velocity.
     """
@@ -23,12 +23,12 @@ class Simple:
 
 
 class Luo:
-    """
+    r"""
     Force model by Luo with the following forcing term
 
     .. math ::
 
-            F_i = w_i * \left( \frac{c_i - u}{c_s^2} + \frac{c_i * (c_i * u)}{c_s^4} \right) * F
+            F_i = w_i  \left( \frac{c_i - u}{c_s^2} + \frac{c_i  \left<c_i, u\right>}{c_s^4} \right)  F
 
     Shifts the macroscopic velocity by F/2, but does not change the equilibrium velocity.
     """
@@ -50,12 +50,12 @@ class Luo:
 
 
 class Guo:
-    """
+    r"""
      Force model by Guo with the following term:
 
     .. math ::
 
-        F_i = w_i * ( 1 - \frac{1}{2 * tau} ) * \left( \frac{c_i - u}{c_s^2} + \frac{c_i * (c_i * u)}{c_s^4} \right) * F
+        F_i = w_i  ( 1 - \frac{\omega}{2} )  \left( \frac{c_i - u}{c_s^2} + \frac{c_i \left<c_i, u\right>}{c_s^4} \right)  F
 
     Adapts the calculation of the macroscopic velocity as well as the equilibrium velocity (both shifted by F/2)!
     """

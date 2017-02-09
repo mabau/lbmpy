@@ -222,6 +222,9 @@ def __getCommonQuadraticAndConstantTerms(lbmCollisionEqs):
     for fa in pdfSymbols:
         t = t.subs(fa, 0)
 
+    if 'forceTerms' in sh:
+        t = t.subs({ft: 0 for ft in sh['forceTerms']})
+
     weight = t
 
     for u in sh['velocity']:

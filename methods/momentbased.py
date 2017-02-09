@@ -104,18 +104,16 @@ class MomentBasedLbMethod(AbstractLbMethod):
                 raise NotImplementedError("Shear moments seem to be not relaxed separately - "
                                           "Can not determine their relaxation rate automatically")
 
-    def getEquilibrium(self, conservedQuantityEquations=None):
+    def getEquilibrium(self, conservedQuantityEquations=None, includeForceTerms=True):
         D = sp.eye(len(self.relaxationRates))
-        return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations)
+        return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations,
+                                                          includeForceTerms=includeForceTerms)
 
     def getCollisionRule(self, conservedQuantityEquations=None):
         D = sp.diag(*self.relaxationRates)
         relaxationRateSubExpressions, D = self._generateRelaxationMatrix(D)
-        eqColl = self._getCollisionRuleWithRelaxationMatrix(D, relaxationRateSubExpressions, conservedQuantityEquations)
-        if self._forceModel is not None:
-            forceModelTerms = self._forceModel(self)
-            newEqs = [sp.Eq(eq.lhs, eq.rhs + fmt) for eq, fmt in zip(eqColl.mainEquations, forceModelTerms)]
-            eqColl = eqColl.copy(newEqs)
+        eqColl = self._getCollisionRuleWithRelaxationMatrix(D, relaxationRateSubExpressions,
+                                                            True, conservedQuantityEquations)
         return eqColl
 
     def setFirstMomentRelaxationRate(self, relaxationRate):
@@ -154,7 +152,9 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     def _computeWeights(self):
         replacements = self._conservedQuantityComputation.defaultValues
-        eqColl = self.getEquilibrium().copyWithSubstitutionsApplied(replacements).insertSubexpressions()
+        eqColl = self.getEquilibrium(includeForceTerms=False).copyWithSubstitutionsApplied(replacements)
+        eqColl = eqColl.insertSubexpressions()
+
         newMainEqs = [sp.Eq(e.lhs,
                             replaceAdditive(e.rhs, 1, sum(self.preCollisionPdfSymbols), requiredMatchReplacement=1.0))
                       for e in eqColl.mainEquations]
@@ -167,7 +167,8 @@ class MomentBasedLbMethod(AbstractLbMethod):
             weights.append(value)
         return weights
 
-    def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=(), conservedQuantityEquations=None):
+    def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=(), includeForceTerms=True,
+                                              conservedQuantityEquations=None):
         f = sp.Matrix(self.preCollisionPdfSymbols)
         M = momentMatrix(self.moments, self.stencil)
         m_eq = sp.Matrix(self.momentEquilibriumValues)
@@ -183,6 +184,17 @@ class MomentBasedLbMethod(AbstractLbMethod):
         simplificationHints['relaxationRates'] = D.atoms(sp.Symbol)
 
         allSubexpressions = list(additionalSubexpressions) + conservedQuantityEquations.allEquations
+
+        if self._forceModel is not None and includeForceTerms:
+            forceModelTerms = self._forceModel(self)
+            forceTermSymbols = sp.symbols("forceTerm_:%d" % (len(forceModelTerms,)))
+            forceSubexpressions = [sp.Eq(sym, forceModelTerm)
+                                   for sym, forceModelTerm in zip(forceTermSymbols, forceModelTerms)]
+            allSubexpressions += forceSubexpressions
+            collisionEqs = [sp.Eq(eq.lhs, eq.rhs + forceTermSymbol)
+                            for eq, forceTermSymbol in zip(collisionEqs, forceTermSymbols)]
+            simplificationHints['forceTerms'] = forceTermSymbols
+
         return LbmCollisionRule(self, collisionEqs, allSubexpressions,
                                 simplificationHints)
 
