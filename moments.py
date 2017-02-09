@@ -184,8 +184,8 @@ def polynomialToExponentRepresentation(polynomial, dim=3):
 
     Example:
         >>> x , y, z = MOMENT_SYMBOLS
-        >>> polynomialToExponentRepresentation(1 + (42 * x**2 * y**2 * z) )
-        [(1, (0, 0, 0)), (42, (2, 2, 1))]
+        >>> set(polynomialToExponentRepresentation(1 + (42 * x**2 * y**2 * z) )) == {(42, (2, 2, 1)), (1, (0, 0, 0))}
+        True
     """
     assert dim <= 3
     x, y, z = MOMENT_SYMBOLS

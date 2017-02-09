@@ -104,7 +104,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
                 raise NotImplementedError("Shear moments seem to be not relaxed separately - "
                                           "Can not determine their relaxation rate automatically")
 
-    def getEquilibrium(self, conservedQuantityEquations=None, includeForceTerms=True):
+    def getEquilibrium(self, conservedQuantityEquations=None, includeForceTerms=False):
         D = sp.eye(len(self.relaxationRates))
         return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations,
                                                           includeForceTerms=includeForceTerms)
