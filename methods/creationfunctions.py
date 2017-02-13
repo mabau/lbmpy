@@ -42,11 +42,11 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
     if cumulant:
-        eqValues = getCumulantsOfDiscreteMaxwellianEquilibrium(stencil, list(momToRrDict.keys()),
+        eqValues = getCumulantsOfDiscreteMaxwellianEquilibrium(stencil, tuple(momToRrDict.keys()),
                                                                c_s_sq=sp.Rational(1, 3), compressible=compressible,
                                                                order=equilibriumAccuracyOrder)
     else:
-        eqValues = getMomentsOfDiscreteMaxwellianEquilibrium(stencil, list(momToRrDict.keys()),
+        eqValues = getMomentsOfDiscreteMaxwellianEquilibrium(stencil, tuple(momToRrDict.keys()),
                                                              c_s_sq=sp.Rational(1, 3), compressible=compressible,
                                                              order=equilibriumAccuracyOrder)
 
@@ -73,11 +73,11 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
     if cumulant:
-        eqValues = getCumulantsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), dim,
+        eqValues = getCumulantsOfContinuousMaxwellianEquilibrium(tuple(momToRrDict.keys()), dim,
                                                                  c_s_sq=sp.Rational(1, 3),
                                                                  order=equilibriumAccuracyOrder)
     else:
-        eqValues = getMomentsOfContinuousMaxwellianEquilibrium(list(momToRrDict.keys()), dim, c_s_sq=sp.Rational(1, 3),
+        eqValues = getMomentsOfContinuousMaxwellianEquilibrium(tuple(momToRrDict.keys()), dim, c_s_sq=sp.Rational(1, 3),
                                                                order=equilibriumAccuracyOrder)
 
     if not compressible:
@@ -414,14 +414,3 @@ def compressibleToIncompressibleMomentValue(term, rho, u):
         else:
             res += t
     return res
-
-
-if __name__ == '__main__':
-    from lbmpy.moments import *
-    from lbmpy.methods.creationfunctions import *
-    x, y, z = MOMENT_SYMBOLS
-    momentSelection = (sp.sympify(1), x, y, z, x ** 2, y ** 2, z ** 2)
-    relaxationDict = {m: sp.Symbol("omega") for m in momentSelection}
-    stencil = [(0, 0, 0), (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
-    method = createWithContinuousMaxwellianEqMoments(stencil, relaxationDict)
-    method.weights
