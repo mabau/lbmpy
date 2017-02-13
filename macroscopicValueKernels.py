@@ -1,4 +1,3 @@
-import sympy as sp
 from copy import deepcopy
 from pystencils.field import Field, getLayoutFromNumpyArray
 from lbmpy.simplificationfactory import createSimplificationStrategy
@@ -30,14 +29,24 @@ def compileMacroscopicValuesGetter(lbMethod, outputQuantities, pdfArr=None, fiel
         pdfField = Field.createGeneric('pdfs', lbMethod.dim, indexDimensions=1, layout=fieldLayout)
     else:
         pdfField = Field.createFromNumpyArray('pdfs', pdfArr, indexDimensions=1)
-        fieldLayout = getLayoutFromNumpyArray(pdfArr, indexDimensionIds=[len(pdfField.shape)-1])
 
     outputMapping = {}
     for outputQuantity in outputQuantities:
         numberOfElements = cqc.conservedQuantities[outputQuantity]
         assert numberOfElements >= 1
-        outputField = Field.createGeneric(outputQuantity, lbMethod.dim, layout=fieldLayout,
-                                          indexDimensions=0 if numberOfElements <= 1 else 1)
+
+        indDims = 0 if numberOfElements <= 1 else 1
+        if pdfArr is None:
+            fieldLayout = getLayoutFromNumpyArray(pdfArr, indexDimensionIds=[len(pdfField.shape) - 1])
+            outputField = Field.createGeneric(outputQuantity, lbMethod.dim, layout=fieldLayout, indexDimensions=indDims)
+        else:
+            outputFieldShape = pdfArr.shape[:-1]
+            if indDims > 0:
+                outputFieldShape += (numberOfElements,)
+                fieldLayout = getLayoutFromNumpyArray(pdfArr)
+            else:
+                fieldLayout = getLayoutFromNumpyArray(pdfArr, indexDimensionIds=[len(pdfField.shape) - 1])
+            outputField = Field.createFixedSize(outputQuantity, outputFieldShape, indDims, pdfArr.dtype, fieldLayout)
 
         outputMapping[outputQuantity] = [outputField(i) for i in range(numberOfElements)]
         if len(outputMapping[outputQuantity]) == 1:

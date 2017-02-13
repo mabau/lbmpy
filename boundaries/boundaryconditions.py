@@ -12,7 +12,7 @@ def noSlip(pdfField, direction, lbMethod):
     return [sp.Eq(pdfField[neighbor](inverseDir), pdfField(direction))]
 
 
-def ubb(pdfField, direction, lbMethod, velocity):
+def ubb(pdfField, direction, lbMethod, velocity, adaptVelocityToForce=False):
     """Velocity bounce back boundary condition, enforcing specified velocity at obstacle"""
 
     assert len(velocity) == lbMethod.dim, \
@@ -20,7 +20,11 @@ def ubb(pdfField, direction, lbMethod, velocity):
     neighbor = offsetFromDir(direction, lbMethod.dim)
     inverseDir = invDir(direction)
 
-    # TODO adapt velocity to force
+    if adaptVelocityToForce:
+        cqc = lbMethod.conservedQuantityComputation
+        shiftedVelEqs = cqc.equilibriumInputEquationsFromInitValues(velocity=velocity)
+        velocity = [eq.rhs for eq in shiftedVelEqs.extract(cqc.firstOrderMomentSymbols).mainEquations]
+
     c_s_sq = sp.Rational(1, 3)
     velTerm = 2 / c_s_sq * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
 

@@ -140,6 +140,7 @@ def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor):
     cellLoop = LoopOverCoordinate(cellLoopBody, coordinateToLoopOver=0, start=0, stop=indexArr.shape[0])
 
     indexField = Field.createFromNumpyArray("indexField", indexArr, indexDimensions=1)
+    indexField.isIndexField = True
 
     coordinateSymbols = [TypedSymbol(name, "int") for name in ['x', 'y', 'z']]
     for d in range(dim):

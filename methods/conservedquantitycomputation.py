@@ -90,7 +90,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
     @property
     def conservedQuantities(self):
         return {'density': 1,
-                'velocity': 3}
+                'velocity': len(self._stencil[0])}
 
     def definedSymbols(self, order='all'):
         if order == 'all':

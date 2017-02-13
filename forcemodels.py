@@ -16,10 +16,14 @@ class Simple:
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, lbmMethod, **kwargs):
-        assert len(self._force) == lbmMethod.dim
-        return [3 * w_i * sum([d_i * f_i for d_i, f_i in zip(direction, self._force)])
-                for direction, w_i in zip(lbmMethod.stencil, lbmMethod.weights)]
+    def __call__(self, lbMethod, **kwargs):
+        assert len(self._force) == lbMethod.dim
+
+        def scalarProduct(a, b):
+            return sum(a_i * b_i for a_i, b_i in zip(a, b))
+
+        return [3 * w_i * scalarProduct(self._force, direction)
+                for direction, w_i in zip(lbMethod.stencil, lbMethod.weights)]
 
 
 class Luo:
@@ -35,12 +39,12 @@ class Luo:
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, lbmMethod):
-        u = sp.Matrix(lbmMethod.firstOrderEquilibriumMomentSymbols)
+    def __call__(self, lbMethod):
+        u = sp.Matrix(lbMethod.firstOrderEquilibriumMomentSymbols)
         force = sp.Matrix(self._force)
 
         result = []
-        for direction, w_i in zip(lbmMethod.stencil, lbmMethod.weights):
+        for direction, w_i in zip(lbMethod.stencil, lbMethod.weights):
             direction = sp.Matrix(direction)
             result.append(3 * w_i * force.dot(direction - u + 3 * direction * direction.dot(u)))
         return result
@@ -62,11 +66,11 @@ class Guo:
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, lbmMethod):
+    def __call__(self, lbMethod):
         luo = Luo(self._force)
-        shearRelaxationRate = lbmMethod.getShearRelaxationRate()
+        shearRelaxationRate = lbMethod.getShearRelaxationRate()
         correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
-        return [correctionFactor * t for t in luo(lbmMethod)]
+        return [correctionFactor * t for t in luo(lbMethod)]
 
     def macroscopicVelocityShift(self, density):
         return defaultVelocityShift(density, self._force)
