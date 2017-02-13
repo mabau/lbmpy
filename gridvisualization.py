@@ -1,7 +1,7 @@
 import matplotlib.patches as patches
 
 
-class Grid:
+class Grid(object):
     """Visualizes a 2D LBM grid with matplotlib by drawing cells and pdf arrows"""
 
     def __init__(self, xCells, yCells):

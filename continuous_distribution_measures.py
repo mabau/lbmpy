@@ -3,12 +3,11 @@
 """
 
 import sympy as sp
-import functools
 from pystencils.sympyextensions import makeExponentialFuncArgumentSquares
-from lbmpy.diskcache import diskcache
+from lbmpy.cache import diskcache, memorycache
 
 
-@functools.lru_cache()
+@memorycache()
 def momentGeneratingFunction(function, symbols, symbolsInResult):
     """
     Computes the moment generating function of a probability distribution. It is defined as:
@@ -87,7 +86,7 @@ def multiDifferentiation(generatingFunction, index, symbols):
     return r
 
 
-@functools.lru_cache(maxsize=512)
+@memorycache(maxsize=512)
 def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
 
     if type(moment) is tuple:

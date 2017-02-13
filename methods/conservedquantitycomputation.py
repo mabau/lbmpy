@@ -5,7 +5,7 @@ import sympy as sp
 from pystencils.equationcollection import EquationCollection
 
 
-class AbstractConservedQuantityComputation(metaclass=abc.ABCMeta):
+class AbstractConservedQuantityComputation(abc.ABCMeta('ABC', (object,), {})):
     """
 
     This class defines how conserved quantities are computed as functions of the pdfs.

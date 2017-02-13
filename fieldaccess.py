@@ -6,7 +6,7 @@ import abc
 # ------------------------------------------------ Interface -----------------------------------------------------------
 
 
-class PdfFieldAccessor:
+class PdfFieldAccessor(object):
     """
     Defines how data is read and written in an LBM time step.
 

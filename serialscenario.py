@@ -18,19 +18,20 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
         methodParameters['stencil'] = 'D2Q9' if D == 2 else 'D3Q27'
 
     Q = len(getStencil(methodParameters['stencil']))
-    pdfSrc = np.zeros(domainSizeWithGhostLayer + (Q,))
-    pdfDst = np.zeros_like(pdfSrc)
+    pdfArrays = [np.zeros(domainSizeWithGhostLayer + (Q,)),
+                 np.zeros(domainSizeWithGhostLayer + (Q,))]
 
     # Create kernel
     if lbmKernel is None:
-        lbmKernel = createLatticeBoltzmannFunction(**methodParameters, optimizationParams=optimizationParameters)
+        methodParameters['optimizationParams'] = optimizationParameters
+        lbmKernel = createLatticeBoltzmannFunction(**methodParameters)
     method = lbmKernel.method
 
     assert D == method.dim, "Domain size and stencil do not match"
 
     # Boundary setup
     if boundarySetupFunction is not None:
-        symPdfField = Field.createFromNumpyArray('pdfs', pdfSrc, indexDimensions=1)
+        symPdfField = Field.createFromNumpyArray('pdfs', pdfArrays[0], indexDimensions=1)
         boundaryHandling = BoundaryHandling(symPdfField, domainSize, lbmKernel.method)
         boundarySetupFunction(boundaryHandling=boundaryHandling, method=method)
         boundaryHandling.prepare()
@@ -38,25 +39,24 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
         boundaryHandling = None
 
     # Macroscopic value input/output
-    densityArr = np.zeros(domainSizeWithGhostLayer)
-    velocityArr = np.zeros(domainSizeWithGhostLayer + (D,))
-    getMacroscopic = compileMacroscopicValuesGetter(method, ['density', 'velocity'], pdfArr=pdfSrc)
-    setMacroscopic = compileMacroscopicValuesSetter(method, {'density': 1.0, 'velocity': [0] * D}, pdfArr=pdfSrc)
-    setMacroscopic(pdfs=pdfSrc)
+    densityArr = [np.zeros(domainSizeWithGhostLayer)]
+    velocityArr = [np.zeros(domainSizeWithGhostLayer + (D,))]
+    getMacroscopic = compileMacroscopicValuesGetter(method, ['density', 'velocity'], pdfArr=pdfArrays[0])
+    setMacroscopic = compileMacroscopicValuesSetter(method, {'density': 1.0, 'velocity': [0] * D}, pdfArr=pdfArrays[0])
+    setMacroscopic(pdfs=pdfArrays[0])
 
     # Run simulation
     def timeLoop(timeSteps):
-        nonlocal pdfSrc, pdfDst, densityArr, velocityArr
         for t in range(timeSteps):
             for f in preUpdateFunctions:
-                f(pdfSrc)
+                f(pdfArrays[0])
             if boundaryHandling is not None:
-                boundaryHandling(pdfs=pdfSrc)
-            lbmKernel(src=pdfSrc, dst=pdfDst)
+                boundaryHandling(pdfs=pdfArrays[0])
+            lbmKernel(src=pdfArrays[0], dst=pdfArrays[1])
 
-            pdfSrc, pdfDst = pdfDst, pdfSrc
-        getMacroscopic(pdfs=pdfSrc, density=densityArr, velocity=velocityArr)
-        return pdfSrc, densityArr, velocityArr
+            pdfArrays[0], pdfArrays[1] = pdfArrays[1], pdfArrays[0]
+        getMacroscopic(pdfs=pdfArrays[0], density=densityArr[0], velocity=velocityArr[0])
+        return pdfArrays[0], densityArr[0], velocityArr[0]
 
     timeLoop.kernel = lbmKernel
 
@@ -163,13 +163,3 @@ def runForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None,
     return runScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel,
                        preUpdateFunctions=[periodicity])
 
-if __name__ == '__main__':
-    import sympy as sp
-    from pystencils.display_utils import highlightCpp
-    from pystencils.cpu.cpujit import generateC
-    from lbmpy.serialscenario import runPressureGradientDrivenChannel
-    import lbmpy.plot2d as plt
-    timeloop = runPressureGradientDrivenChannel(radius=10, length=30, pressureDifference=0.001,
-                                                relaxationRates=[1.9],
-                                                dim=2)
-    pdfs, rho, vel = timeloop(20)

@@ -54,7 +54,8 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
     params, optParams = _getParams(kwargs, optimizationParams)
 
     if ast is None:
-        ast = createLatticeBoltzmannAst(**params, optimizationParams=optParams)
+        params['optimizationParams'] = optParams
+        ast = createLatticeBoltzmannAst(**params)
 
     if params['target'] == 'cpu':
         from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
@@ -79,7 +80,8 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
     params, optParams = _getParams(kwargs, optimizationParams)
 
     if updateRule is None:
-        updateRule = createLatticeBoltzmannUpdateRule(**params, optimizationParams=optimizationParams)
+        params['optimizationParams'] = optimizationParams
+        updateRule = createLatticeBoltzmannUpdateRule(**params)
 
     if params['target'] == 'cpu':
         from pystencils.cpu import createKernel
@@ -168,12 +170,11 @@ def createLatticeBoltzmannMethod(**params):
         assert len(relaxationRates) >= 2, "Not enough relaxation rates"
         method = createTRT(stencil, relaxationRates[0], relaxationRates[1], **commonParams)
     elif methodName.lower() == 'mrt':
-        nextRelaxationRate = 0
+        nextRelaxationRate = [0]
 
         def relaxationRateGetter(momentGroup):
-            nonlocal nextRelaxationRate
-            res = relaxationRates[nextRelaxationRate]
-            nextRelaxationRate += 1
+            res = relaxationRates[nextRelaxationRate[0]]
+            nextRelaxationRate[0] += 1
             return res
         method = createOrthogonalMRT(stencil, relaxationRateGetter, **commonParams)
     else:

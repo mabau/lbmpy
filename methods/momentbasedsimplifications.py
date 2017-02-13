@@ -1,7 +1,7 @@
 """
 This module holds special transformations for simplifying the collision equations of moment-based methods.
 All of these transformations operate on :class:`pystencils.equationcollection.EquationCollection` and need special
-simplification hints, which are set by the MomentBasedLbmMethod.
+simplification hints, which are set by the MomentBasedLbMethod.
 """
 import sympy as sp
 from pystencils.sympyextensions import replaceAdditive, replaceSecondOrderProducts, extractMostCommonFactor

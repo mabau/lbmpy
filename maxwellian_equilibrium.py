@@ -6,7 +6,7 @@ Additionally functions are provided to compute moments and cumulants of these di
 
 import sympy as sp
 from sympy import Rational as R
-from lbmpy.diskcache import diskcache
+from lbmpy.cache import diskcache
 import warnings
 
 

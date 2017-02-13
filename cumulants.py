@@ -3,12 +3,10 @@ This module provides functions to compute cumulants of discrete functions.
 Additionally functions are provided to compute cumulants from moments and vice versa
 """
 
-import functools
 import sympy as sp
-
 from lbmpy.moments import momentsUpToComponentOrder
 from lbmpy.continuous_distribution_measures import multiDifferentiation
-
+from lbmpy.cache import memorycache
 
 # ------------------------------------------- Internal Functions -------------------------------------------------------
 from pystencils.sympyextensions import fastSubs
@@ -60,7 +58,6 @@ def __cumulantRawMomentTransform(index, dependentVarDict, outerFunction, default
     subsDict = {}
 
     def createMomentSymbol(idx):
-        nonlocal subsDict
         idx = tuple(idx)
         resultSymbol = sp.Symbol(defaultPrefix + "_" + "_".join(["%d"] * len(idx)) % idx)
         if dependentVarDict is not None and idx in dependentVarDict:
@@ -103,7 +100,7 @@ def __cumulantRawMomentTransform(index, dependentVarDict, outerFunction, default
     return fastSubs(result, subsDict)
 
 
-@functools.lru_cache(maxsize=16)
+@memorycache(maxsize=16)
 def __getDiscreteCumulantGeneratingFunction(function, stencil, waveNumbers):
     assert len(stencil) == len(function)
 
@@ -117,7 +114,7 @@ def __getDiscreteCumulantGeneratingFunction(function, stencil, waveNumbers):
 # ------------------------------------------- Public Functions ---------------------------------------------------------
 
 
-@functools.lru_cache(maxsize=64)
+@memorycache(maxsize=64)
 def discreteCumulant(function, cumulant, stencil):
     """
     Computes cumulant of discrete function
@@ -146,7 +143,7 @@ def discreteCumulant(function, cumulant, stencil):
         return result
 
 
-@functools.lru_cache(maxsize=8)
+@memorycache(maxsize=8)
 def cumulantsFromPdfs(stencil, cumulantIndices=None, pdfSymbols=None):
     """
     Transformation of pdfs (or other discrete function on a stencil) to cumulant space

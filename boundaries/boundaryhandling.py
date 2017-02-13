@@ -11,7 +11,7 @@ INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
 WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
 
 
-class BoundaryHandling:
+class BoundaryHandling(object):
     def __init__(self, symbolicPdfField, domainShape, lbMethod, ghostLayers=1, target='cpu'):
         self._symbolicPdfField = symbolicPdfField
         self._shapeWithGhostLayers = [d + 2 * ghostLayers for d in domainShape]

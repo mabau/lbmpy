@@ -37,12 +37,12 @@ Functions
 import sympy as sp
 import math
 import itertools
-import functools
 from copy import copy
 from collections import Counter
 
 from lbmpy.continuous_distribution_measures import continuousMoment
-from lbmpy_old.transformations import removeHigherOrderTerms
+from lbmpy.cache import memorycache
+from pystencils.sympyextensions import removeHigherOrderTerms
 
 MOMENT_SYMBOLS = sp.symbols("x y z")
 
@@ -84,7 +84,8 @@ def __generateFixedSumTuples(tupleLength, tupleSum, allowedValues=None, ordered=
                 newSum = totalSum - i
                 if newSum < 0:
                     continue
-                yield from recursive_helper(currentList, newPosition, newSum)
+                for item in recursive_helper(currentList, newPosition, newSum):
+                    yield item
         else:
             if totalSum in allowedValues:
                 currentList[-1] = totalSum
@@ -132,7 +133,10 @@ def momentPermutations(exponentTuple):
 
 def momentsOfOrder(order, dim=3, includePermutations=True):
     """All tuples of length 'dim' which sum equals 'order'"""
-    yield from __generateFixedSumTuples(dim, order, ordered=not includePermutations)
+    for item in __generateFixedSumTuples(dim, order, ordered=not includePermutations):
+        assert(len(item) == dim)
+        assert(sum(item) == order)
+        yield item
 
 
 def momentsUpToOrder(order, dim=3, includePermutations=True):
@@ -264,7 +268,7 @@ def isShearMoment(moment):
 isShearMoment.shearMoments = set([c[0] * c[1] for c in itertools.combinations(MOMENT_SYMBOLS, 2)])
 
 
-@functools.lru_cache(maxsize=512)
+@memorycache(maxsize=512)
 def discreteMoment(function, moment, stencil):
     """
     Computes discrete moment of given distribution function

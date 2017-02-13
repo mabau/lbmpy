@@ -33,7 +33,7 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     :param forceModel: force model instance, or None if no external forces
     :param equilibriumAccuracyOrder: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
     :param cumulant: if True relax cumulants instead of moments
-    :return: :class:`lbmpy.methods.MomentBasedLbmMethod` instance
+    :return: :class:`lbmpy.methods.MomentBasedLbMethod` instance
     """
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
     assert len(momToRrDict) == len(stencil), \
@@ -107,7 +107,7 @@ def createSRT(stencil, relaxationRate, useContinuousMaxwellianEquilibrium=False,
                            usually called :math:`\omega` in LBM literature
     :param useContinuousMaxwellianEquilibrium: determines if the discrete or continuous maxwellian equilibrium is
                            used to compute the equilibrium moments
-    :return: :class:`lbmpy.methods.MomentBasedLbmMethod` instance
+    :return: :class:`lbmpy.methods.MomentBasedLbMethod` instance
     """
     moments = getDefaultMomentSetForStencil(stencil)
     rrDict = OrderedDict([(m, relaxationRate) for m in moments])
@@ -371,10 +371,9 @@ def sortMomentsIntoGroupsOfSameOrder(moments):
 
 
 def defaultRelaxationRateNames():
-    nextIndex = 0
+    nextIndex = [0]
 
     def result(momentList):
-        nonlocal nextIndex
         shearMomentInside = False
         allConservedMoments = True
         for m in momentList:
@@ -388,8 +387,8 @@ def defaultRelaxationRateNames():
         elif allConservedMoments:
             return 0
         else:
-            nextIndex += 1
-            return sp.Symbol("omega_%d" % (nextIndex,))
+            nextIndex[0] += 1
+            return sp.Symbol("omega_%d" % (nextIndex[0],))
 
     return result
 

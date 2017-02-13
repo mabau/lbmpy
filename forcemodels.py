@@ -6,7 +6,7 @@
 import sympy as sp
 
 
-class Simple:
+class Simple(object):
     r"""
     A simple force model which introduces the following additional force term in the
     collision process :math:`3  w_i  e_i  f_i` (often: force = rho * acceleration)
@@ -26,7 +26,7 @@ class Simple:
                 for direction, w_i in zip(lbMethod.stencil, lbMethod.weights)]
 
 
-class Luo:
+class Luo(object):
     r"""
     Force model by Luo with the following forcing term
 
@@ -53,7 +53,7 @@ class Luo:
         return defaultVelocityShift(density, self._force)
 
 
-class Guo:
+class Guo(object):
     r"""
      Force model by Guo with the following term:
 

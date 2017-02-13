@@ -86,7 +86,7 @@ def decompositionByRelaxationRate(updateRule, relaxationRate):
     return affineTerms, linearTerms, quadraticTerms
 
 
-class RelaxationRatePolynomialDecomposition:
+class RelaxationRatePolynomialDecomposition(object):
 
     def __init__(self, collisionRule, freeRelaxationRates, fixedRelaxationRates):
         self._collisionRule = collisionRule
