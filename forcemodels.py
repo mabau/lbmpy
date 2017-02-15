@@ -25,6 +25,9 @@ class Simple(object):
         return [3 * w_i * scalarProduct(self._force, direction)
                 for direction, w_i in zip(lbMethod.stencil, lbMethod.weights)]
 
+    def macroscopicVelocityShift(self, density):
+        return defaultVelocityShift(density, self._force)
+
 
 class Luo(object):
     r"""

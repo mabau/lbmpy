@@ -9,7 +9,7 @@ from lbmpy.stencils import getStencil
 
 
 def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParameters, lbmKernel=None,
-                preUpdateFunctions=[]):
+                initialVelocity=None, preUpdateFunctions=[]):
     ghostLayers = 1
     domainSizeWithGhostLayer = tuple([s + 2 * ghostLayers for s in domainSize])
     D = len(domainSize)
@@ -42,7 +42,11 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
     densityArr = [np.zeros(domainSizeWithGhostLayer)]
     velocityArr = [np.zeros(domainSizeWithGhostLayer + (D,))]
     getMacroscopic = compileMacroscopicValuesGetter(method, ['density', 'velocity'], pdfArr=pdfArrays[0])
-    setMacroscopic = compileMacroscopicValuesSetter(method, {'density': 1.0, 'velocity': [0] * D}, pdfArr=pdfArrays[0])
+
+    if initialVelocity is None:
+        initialVelocity = [0] * D
+    setMacroscopic = compileMacroscopicValuesSetter(method, {'density': 1.0, 'velocity': initialVelocity},
+                                                    pdfArr=pdfArrays[0])
     setMacroscopic(pdfs=pdfArrays[0])
 
     # Run simulation
@@ -121,7 +125,7 @@ def runPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None, r
 
 
 def runForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None, lbmKernel=None,
-                          optimizationParameters={}, **kwargs):
+                          optimizationParameters={}, initialVelocity=None, **kwargs):
     assert dim in (2, 3)
     kwargs['force'] = tuple([force, 0, 0][:dim])
 
@@ -161,5 +165,5 @@ def runForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None,
         kwargs['forceModel'] = 'guo'
 
     return runScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel,
-                       preUpdateFunctions=[periodicity])
+                       initialVelocity=initialVelocity, preUpdateFunctions=[periodicity])
 

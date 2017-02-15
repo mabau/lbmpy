@@ -17,12 +17,13 @@ def _getParams(params, optParams):
         'method': 'srt',  # can be srt, trt or mrt
         'relaxationRates': sp.symbols("omega_:10"),
         'compressible': False,
-        'order': 2,
+        'equilibriumAccuracyOrder': 2,
 
         'useContinuousMaxwellianEquilibrium': False,
         'cumulant': False,
         'forceModel': 'none',  # can be 'simple', 'luo' or 'guo'
         'force': (0, 0, 0),
+        'initialVelocity': None,
     }
 
     defaultOptimizationDescription = {
@@ -39,7 +40,7 @@ def _getParams(params, optParams):
     unknownParams = [k for k in params.keys() if k not in defaultMethodDescription]
     unknownOptParams = [k for k in optParams.keys() if k not in defaultOptimizationDescription]
     if unknownParams:
-        raise ValueError("Unknown parameter(s): " + ",".join(unknownParams))
+        raise ValueError("Unknown parameter(s): " + ", ".join(unknownParams))
     if unknownOptParams:
         raise ValueError("Unknown optimization parameter(s): " + ",".join(unknownOptParams))
 
@@ -155,7 +156,7 @@ def createLatticeBoltzmannMethod(**params):
 
     commonParams = {
         'compressible': params['compressible'],
-        'equilibriumAccuracyOrder': params['order'],
+        'equilibriumAccuracyOrder': params['equilibriumAccuracyOrder'],
         'forceModel': forceModel,
         'useContinuousMaxwellianEquilibrium': params['useContinuousMaxwellianEquilibrium'],
         'cumulant': params['cumulant'],

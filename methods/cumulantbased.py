@@ -26,6 +26,14 @@ class CumulantBasedLbMethod(AbstractLbMethod):
     def relaxationInfoDict(self):
         return self._cumulantToRelaxationInfoDict
 
+    @property
+    def zerothOrderEquilibriumMomentSymbol(self, ):
+        return self._conservedQuantityComputation.zerothOrderMomentSymbol
+
+    @property
+    def firstOrderEquilibriumMomentSymbols(self, ):
+        return self._conservedQuantityComputation.firstOrderMomentSymbols
+
     def setFirstMomentRelaxationRate(self, relaxationRate):
         for e in MOMENT_SYMBOLS[:self.dim]:
             assert e in self._cumulantToRelaxationInfoDict, "First cumulants are not relaxed separately by this method"
@@ -84,7 +92,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
 
     def getEquilibrium(self, conservedQuantityEquations=None):
         D = sp.eye(len(self.relaxationRates))
-        return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations, False, False, False)
+        return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations, False, False, False, False)
 
     def getCollisionRule(self, conservedQuantityEquations=None, momentSubexpressions=False,
                          preCollisionSubexpressions=True, postCollisionSubexpressions=False):
@@ -109,7 +117,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
 
     def _getCollisionRuleWithRelaxationMatrix(self, relaxationMatrix, conservedQuantityEquations=None,
                                               momentSubexpressions=False, preCollisionSubexpressions=True,
-                                              postCollisionSubexpressions=False):
+                                              postCollisionSubexpressions=False, includeForceTerms=True):
         def tupleToSymbol(exp, prefix):
             dim = len(exp)
             formatString = prefix + "_" + "_".join(["%d"]*dim)
@@ -176,6 +184,16 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         collidedMoments = [rawMomentAsFunctionOfCumulants(idx, cumulantDict) for idx in indices]
         result = momentTransformationMatrix.inv() * sp.Matrix(collidedMoments)
         mainEquations = [sp.Eq(sym, val) for sym, val in zip(self.postCollisionPdfSymbols, result)]
+
+        # 6) Add forcing terms
+        if self._forceModel is not None and includeForceTerms:
+            forceModelTerms = self._forceModel(self)
+            forceTermSymbols = sp.symbols("forceTerm_:%d" % (len(forceModelTerms,)))
+            forceSubexpressions = [sp.Eq(sym, forceModelTerm)
+                                   for sym, forceModelTerm in zip(forceTermSymbols, forceModelTerms)]
+            subexpressions += forceSubexpressions
+            mainEquations = [sp.Eq(eq.lhs, eq.rhs + forceTermSymbol)
+                             for eq, forceTermSymbol in zip(mainEquations, forceTermSymbols)]
 
         return LbmCollisionRule(self, mainEquations, subexpressions, simplificationHints={})
 
