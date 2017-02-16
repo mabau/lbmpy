@@ -127,9 +127,9 @@ class LbmMethodInfo(CustomCppCode):
             inverseDir = tuple([-i for i in direction])
             invDirs.append(str(stencil.index(inverseDir)))
 
-        code += "static const int %s [] = { %s };\n" % (INV_DIR_SYMBOL.name, ", ".join(invDirs))
+        code += "const int %s [] = { %s };\n" % (INV_DIR_SYMBOL.name, ", ".join(invDirs))
         weights = [str(w.evalf()) for w in lbMethod.weights]
-        code += "static const double %s [] = { %s };\n" % (WEIGHTS_SYMBOL.name, ",".join(weights))
+        code += "const double %s [] = { %s };\n" % (WEIGHTS_SYMBOL.name, ",".join(weights))
         super(LbmMethodInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
 
 

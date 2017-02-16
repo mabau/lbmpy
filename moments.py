@@ -385,10 +385,10 @@ def getDefaultMomentSetForStencil(stencil):
     if stencilsHaveSameEntries(stencil, getStencil("D3Q15")):
         x, y, z = MOMENT_SYMBOLS
         nonMatchedMoments = [(1, 2, 0), (2, 2, 0), (1, 1, 2), (1, 2, 2), (2, 2, 2)]
-        additionalMoments = (x**2 * y**2 + x**2 * z**2 + y**2 * z**2,
-                             x * (y**2 + z**2),
-                             y * (x**2 + z**2),
-                             z * (x**2 + y**2))
+        additionalMoments = (6 * (x**2 * y**2 + x**2 * z**2 + y**2 * z**2),
+                             3 * (x * (y**2 + z**2)),
+                             3 * (y * (x**2 + z**2)),
+                             3 * (z * (x**2 + y**2)))
         toRemove = set(extendMomentsWithPermutations(nonMatchedMoments))
         return toPoly(set(all27Moments) - toRemove) + additionalMoments
 

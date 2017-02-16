@@ -12,7 +12,6 @@ from lbmpy.updatekernels import createStreamPullKernel, createPdfArray
 
 def _getParams(params, optParams):
     defaultMethodDescription = {
-        'target': 'cpu',
         'stencil': 'D2Q9',
         'method': 'srt',  # can be srt, trt or mrt
         'relaxationRates': sp.symbols("omega_:10"),
@@ -34,6 +33,7 @@ def _getParams(params, optParams):
         'fieldSize': None,
         'fieldLayout': 'reverseNumpy',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
 
+        'target': 'cpu',
         'openMP': True,
         'pdfArr': None,
     }
@@ -58,7 +58,7 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
         params['optimizationParams'] = optParams
         ast = createLatticeBoltzmannAst(**params)
 
-    if params['target'] == 'cpu':
+    if optParams['target'] == 'cpu':
         from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
         if 'openMP' in optParams:
             if isinstance(optParams['openMP'], bool) and optParams['openMP']:
@@ -66,7 +66,7 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
             elif isinstance(optParams['openMP'], int):
                 addOpenMP(ast, numThreads=optParams['openMP'])
         res = makePythonCpuFunction(ast)
-    elif params['target'] == 'gpu':
+    elif optParams['target'] == 'gpu':
         from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
         res = makePythonGpuFunction(ast)
     else:
@@ -84,7 +84,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         params['optimizationParams'] = optimizationParams
         updateRule = createLatticeBoltzmannUpdateRule(**params)
 
-    if params['target'] == 'cpu':
+    if optParams['target'] == 'cpu':
         from pystencils.cpu import createKernel
         if 'splitGroups' in updateRule.simplificationHints:
             print("splitting!")
@@ -92,7 +92,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         else:
             splitGroups = ()
         res = createKernel(updateRule.allEquations, splitGroups=splitGroups)
-    elif params['target'] == 'gpu':
+    elif optParams['target'] == 'gpu':
         from pystencils.gpucuda import createCUDAKernel
         res = createCUDAKernel(updateRule.allEquations)
     else:

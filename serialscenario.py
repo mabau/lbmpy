@@ -10,6 +10,9 @@ from lbmpy.stencils import getStencil
 
 def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParameters, lbmKernel=None,
                 initialVelocity=None, preUpdateFunctions=[]):
+    if 'target' not in optimizationParameters:
+        optimizationParameters['target'] = 'cpu'
+
     ghostLayers = 1
     domainSizeWithGhostLayer = tuple([s + 2 * ghostLayers for s in domainSize])
     D = len(domainSize)
@@ -32,7 +35,8 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
     # Boundary setup
     if boundarySetupFunction is not None:
         symPdfField = Field.createFromNumpyArray('pdfs', pdfArrays[0], indexDimensions=1)
-        boundaryHandling = BoundaryHandling(symPdfField, domainSize, lbmKernel.method)
+        boundaryHandling = BoundaryHandling(symPdfField, domainSize, lbmKernel.method,
+                                            target=optimizationParameters['target'])
         boundarySetupFunction(boundaryHandling=boundaryHandling, method=method)
         boundaryHandling.prepare()
     else:
@@ -41,16 +45,21 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
     # Macroscopic value input/output
     densityArr = [np.zeros(domainSizeWithGhostLayer)]
     velocityArr = [np.zeros(domainSizeWithGhostLayer + (D,))]
-    getMacroscopic = compileMacroscopicValuesGetter(method, ['density', 'velocity'], pdfArr=pdfArrays[0])
+    getMacroscopic = compileMacroscopicValuesGetter(method, ['density', 'velocity'], pdfArr=pdfArrays[0], target='cpu')
 
     if initialVelocity is None:
         initialVelocity = [0] * D
     setMacroscopic = compileMacroscopicValuesSetter(method, {'density': 1.0, 'velocity': initialVelocity},
-                                                    pdfArr=pdfArrays[0])
+                                                    pdfArr=pdfArrays[0], target='cpu')
     setMacroscopic(pdfs=pdfArrays[0])
 
-    # Run simulation
-    def timeLoop(timeSteps):
+    if optimizationParameters['target'] == 'gpu':
+        import pycuda.gpuarray as gpuarray
+        pdfGpuArrays = [gpuarray.to_gpu(a) for a in pdfArrays]
+    else:
+        pdfGpuArrays = []
+
+    def cpuTimeLoop(timeSteps):
         for t in range(timeSteps):
             for f in preUpdateFunctions:
                 f(pdfArrays[0])
@@ -62,9 +71,31 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
         getMacroscopic(pdfs=pdfArrays[0], density=densityArr[0], velocity=velocityArr[0])
         return pdfArrays[0], densityArr[0], velocityArr[0]
 
-    timeLoop.kernel = lbmKernel
+    def gpuTimeLoop(timeSteps):
+        # Transfer data to gpu
+        for cpuArr, gpuArr in zip(pdfArrays, pdfGpuArrays):
+            gpuArr.set(cpuArr)
 
-    return timeLoop
+        for t in range(timeSteps):
+            for f in preUpdateFunctions:
+                f(pdfGpuArrays[0])
+            if boundaryHandling is not None:
+                boundaryHandling(pdfs=pdfGpuArrays[0])
+            lbmKernel(src=pdfGpuArrays[0], dst=pdfGpuArrays[1])
+
+            pdfGpuArrays[0], pdfGpuArrays[1] = pdfGpuArrays[1], pdfGpuArrays[0]
+
+        # Transfer data from gpu to cpu
+        for cpuArr, gpuArr in zip(pdfArrays, pdfGpuArrays):
+            gpuArr.get(cpuArr)
+
+        getMacroscopic(pdfs=pdfArrays[0], density=densityArr[0], velocity=velocityArr[0])
+        return pdfArrays[0], densityArr[0], velocityArr[0]
+
+    cpuTimeLoop.kernel = lbmKernel
+    gpuTimeLoop.kernel = lbmKernel
+
+    return gpuTimeLoop if optimizationParameters['target'] == 'gpu' else cpuTimeLoop
 
 
 def runLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParameters={}, lbmKernel=None, **kwargs):
