@@ -133,26 +133,16 @@ def compileMacroscopicValuesSetter(lbMethod, quantitiesToSet, pdfArr=None, field
     else:
         raise ValueError("Unknown target '%s'. Possible targets are 'cpu' and 'gpu'" % (target,))
 
-    def setter(pdfs):
+    def setter(pdfs, **kwargs):
         if pdfArr is not None:
             assert pdfs.shape == pdfArr.shape and pdfs.strides == pdfArr.strides, \
                 "Pdf array not matching blueprint which was used to compile" + str(pdfs.shape) + str(pdfArr.shape)
-        kernel(pdfs=pdfs)
+        kernel(pdfs=pdfs, **kwargs)
 
     return setter
 
 
-def compileAdvancedVelocitySetter(lbMethod, velocityArray, velocityRelaxationRate=1.3, pdfArr=None):
-    """
-    Advanced initialization of velocity field through iteration procedure according to
-    Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
-
-    :param lbMethod:
-    :param velocityArray: array with velocity field
-    :param velocityRelaxationRate: relaxation rate for the velocity moments - determines convergence behaviour
-                                   of the initialization scheme
-    :return: collision rule
-    """
+def createAdvancedVelocitySetterCollisionRule(lbMethod, velocityArray, velocityRelaxationRate=1.3):
     velocityField = Field.createFromNumpyArray('velInput', velocityArray, indexDimensions=1)
 
     cqc = lbMethod.conservedQuantityComputation
@@ -176,3 +166,26 @@ def compileAdvancedVelocitySetter(lbMethod, velocityArray, velocityRelaxationRat
     return lbMethod.getCollisionRule(eqInput)
 
 
+def compileAdvancedVelocitySetter(lbMethod, velocityArray, velocityRelaxationRate=1.3, pdfArr=None,
+                                  fieldLayout='numpy', optimizationParameters={}):
+    """
+    Advanced initialization of velocity field through iteration procedure according to
+    Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
+
+    :param lbMethod:
+    :param velocityArray: array with velocity field
+    :param velocityRelaxationRate: relaxation rate for the velocity moments - determines convergence behaviour
+                                   of the initialization scheme
+    :param pdfArr: optional numpy array for pdf field - used to get optimal loop structure for kernel
+    :param fieldLayout: layout of the pdf field if pdfArr was not given
+    :param optimizationParameters: dictionary with optimization hints
+    :return: stream-collide update function
+    """
+    from lbmpy.updatekernels import createStreamPullKernel
+    from lbmpy.simplificationfactory import createSimplificationStrategy
+    from lbmpy.creationfunctions import createLatticeBoltzmannAst, createLatticeBoltzmannFunction
+    collisionRule = createAdvancedVelocitySetterCollisionRule(lbMethod, velocityArray, velocityRelaxationRate)
+    simp = createSimplificationStrategy(collisionRule.method)
+    updateRule = createStreamPullKernel(simp(collisionRule), pdfArr, genericLayout=fieldLayout)
+    ast = createLatticeBoltzmannAst(updateRule, optimizationParameters)
+    return createLatticeBoltzmannFunction(ast, optimizationParameters)

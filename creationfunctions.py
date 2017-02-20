@@ -3,6 +3,9 @@ Factory functions for standard LBM methods
 """
 import sympy as sp
 from copy import copy
+
+from lbmpy.methods.creationfunctions import createKBCTypeTRT
+from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
 from lbmpy.stencils import getStencil
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT
 import lbmpy.forcemodels as forceModels
@@ -17,6 +20,8 @@ def _getParams(params, optParams):
         'relaxationRates': sp.symbols("omega_:10"),
         'compressible': False,
         'equilibriumAccuracyOrder': 2,
+        'entropic': False,
+        'entropicNewtonIterations': None,
 
         'useContinuousMaxwellianEquilibrium': False,
         'cumulant': False,
@@ -117,6 +122,16 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
     simplification = createSimplificationStrategy(lbMethod, doCseInOpposingDirections, doOverallCse, splitInnerLoop)
     collisionRule = simplification(lbMethod.getCollisionRule())
 
+    if params['entropic']:
+        if params['entropicNewtonIterations']:
+            if isinstance(params['entropicNewtonIterations'], bool):
+                iterations = 3
+            else:
+                iterations = params['entropicNewtonIterations']
+            collisionRule = addIterativeEntropyCondition(collisionRule, newtonIterations=iterations)
+        else:
+            collisionRule = addEntropyCondition(collisionRule)
+
     if 'fieldSize' in optParams and optParams['fieldSize']:
         npField = createPdfArray(optParams['fieldSize'], len(stencil), layout=optParams['fieldLayout'])
         updateRule = createStreamPullKernel(collisionRule, numpyField=npField)
@@ -178,6 +193,15 @@ def createLatticeBoltzmannMethod(**params):
             nextRelaxationRate[0] += 1
             return res
         method = createOrthogonalMRT(stencil, relaxationRateGetter, **commonParams)
+    elif methodName.lower().startswith('trt-kbc-n'):
+        if params['stencil'] == 'D2Q9':
+            dim = 2
+        elif params['stencil'] == 'D3Q27':
+            dim = 3
+        else:
+            raise NotImplementedError("KBC type TRT methods can only be constructed for D2Q9 and D3Q27 stencils")
+        methodNr = methodName[-1]
+        method = createKBCTypeTRT(dim, relaxationRates[0], relaxationRates[1], 'KBC-N' + methodNr, **commonParams)
     else:
         raise ValueError("Unknown method %s" % (methodName,))
 

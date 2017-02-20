@@ -31,15 +31,17 @@ def factorRelaxationRates(lbmCollisionEqs):
     """
     Factors collision equations by relaxation rates.
     Required simplification hints:
-        - relaxationRates: Sequence of relaxation rate symbols
+        - relaxationRates: Sequence of relaxation rates
     """
     sh = lbmCollisionEqs.simplificationHints
-    assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rate symbols"
+    assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rates"
+
+    relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)
 
     result = []
     for s in lbmCollisionEqs.mainEquations:
         newRhs = s.rhs
-        for rp in sh['relaxationRates']:
+        for rp in relaxationRates:
             newRhs = newRhs.collect(rp)
         result.append(sp.Eq(s.lhs, newRhs))
     return lbmCollisionEqs.copy(result)
@@ -59,11 +61,13 @@ def factorDensityAfterFactoringRelaxationTimes(lbmCollisionEqs):
     sh = lbmCollisionEqs.simplificationHints
     assert 'density' in sh, "Needs simplification hint 'density': Symbol for density"
     assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Set of symbolic relaxation rates"
+
+    relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)
     result = []
     rho = sh['density']
     for s in lbmCollisionEqs.mainEquations:
         newRhs = s.rhs
-        for rp in sh['relaxationRates']:
+        for rp in relaxationRates:
             coeff = newRhs.coeff(rp)
             newRhs = newRhs.subs(coeff, coeff.collect(rho))
         result.append(sp.Eq(s.lhs, newRhs))
@@ -101,13 +105,13 @@ def replaceCommonQuadraticAndConstantTerm(lbmCollisionEqs):
     Required simplification hints:
         - density: density symbol
         - velocity: sequence of velocity symbols
-        - relaxationRates: set of symbolic relaxation rates
+        - relaxationRates: Sequence of relaxation rates
         - stencil:
     """
     sh = lbmCollisionEqs.simplificationHints
     assert 'density' in sh, "Needs simplification hint 'density': Symbol for density"
     assert 'velocity' in sh, "Needs simplification hint 'velocity': Sequence of velocity symbols"
-    assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Set of symbolic relaxation rates"
+    assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rates"
 
     stencil = lbmCollisionEqs.method.stencil
     assert sum([abs(e) for e in stencil[0]]) == 0, "Works only if first stencil entry is the center direction"
@@ -131,15 +135,15 @@ def cseInOpposingDirections(lbmCollisionEqs):
     Looks for common subexpressions in terms for opposing directions (e.g. north & south, top & bottom )
 
     Required simplification hints:
-        - relaxationRates: set of symbolic relaxation rates
+        - relaxationRates: Sequence of relaxation rates
         - postCollisionPdfSymbols: sequence of symbols
     """
     sh = lbmCollisionEqs.simplificationHints
-    assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Set of symbolic relaxation rates"
+    assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rates"
 
     updateRules = lbmCollisionEqs.mainEquations
     stencil = lbmCollisionEqs.method.stencil
-    relaxationRates = sh['relaxationRates']
+    relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)
 
     replacementSymbolGenerator = lbmCollisionEqs.subexpressionSymbolNameGenerator
 
@@ -208,7 +212,7 @@ def __getCommonQuadraticAndConstantTerms(lbmCollisionEqs):
     It contains the quadratic and constant terms of the center update rule."""
     sh = lbmCollisionEqs.simplificationHints
     stencil = lbmCollisionEqs.method.stencil
-    relaxationRates = sh['relaxationRates']
+    relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)
 
     dim = len(stencil[0])
 
@@ -231,4 +235,3 @@ def __getCommonQuadraticAndConstantTerms(lbmCollisionEqs):
         weight = weight.subs(u, 0)
     weight = weight / sh['density']
     return t / weight
-

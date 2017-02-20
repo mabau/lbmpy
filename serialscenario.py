@@ -3,13 +3,13 @@ import numpy as np
 from pystencils import Field
 from pystencils.slicing import sliceFromDirection
 from lbmpy.creationfunctions import createLatticeBoltzmannFunction
-from lbmpy.macroscopicValueKernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
+from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
 from lbmpy.boundaries import BoundaryHandling, noSlip, ubb, fixedDensity
 from lbmpy.stencils import getStencil
 
 
-def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParameters, lbmKernel=None,
-                initialVelocity=None, preUpdateFunctions=[]):
+def createScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParameters, lbmKernel=None,
+                   initialVelocity=None, preUpdateFunctions=[]):
     if 'target' not in optimizationParameters:
         optimizationParameters['target'] = 'cpu'
 
@@ -98,7 +98,7 @@ def runScenario(domainSize, boundarySetupFunction, methodParameters, optimizatio
     return gpuTimeLoop if optimizationParameters['target'] == 'gpu' else cpuTimeLoop
 
 
-def runLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParameters={}, lbmKernel=None, **kwargs):
+def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParameters={}, lbmKernel=None, **kwargs):
     def boundarySetupFunction(boundaryHandling, method):
         myUbb = partial(ubb, velocity=[lidVelocity, 0, 0][:method.dim])
         myUbb.name = 'ubb'
@@ -106,11 +106,11 @@ def runLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParameters={},
         for direction in ('W', 'E', 'S') if method.dim == 2 else ('W', 'E', 'S', 'T', 'B'):
             boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, method.dim))
 
-    return runScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel)
+    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel)
 
 
-def runPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None, radius=None, length=None, lbmKernel=None,
-                                     optimizationParameters={}, **kwargs):
+def createPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None, radius=None, length=None,
+                                        lbmKernel=None, optimizationParameters={}, **kwargs):
     assert dim in (2, 3)
 
     if radius is not None:
@@ -152,11 +152,11 @@ def runPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None, r
     if 'forceModel' not in kwargs:
         kwargs['forceModel'] = 'guo'
 
-    return runScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel)
+    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel)
 
 
-def runForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None, lbmKernel=None,
-                          optimizationParameters={}, initialVelocity=None, **kwargs):
+def createForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None, lbmKernel=None,
+                             optimizationParameters={}, initialVelocity=None, boundarySetupFunctions=[], **kwargs):
     assert dim in (2, 3)
     kwargs['force'] = tuple([force, 0, 0][:dim])
 
@@ -186,6 +186,8 @@ def runForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None,
             else:
                 for direction in ('N', 'S', 'T', 'B'):
                     boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, method.dim))
+        for userFunction in boundarySetupFunctions:
+            userFunction(boundaryHandling, method)
 
     def periodicity(pdfArr):
         pdfArr[0, :, :] = pdfArr[-2, :, :]
@@ -195,6 +197,6 @@ def runForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None,
     if 'forceModel' not in kwargs:
         kwargs['forceModel'] = 'guo'
 
-    return runScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel,
-                       initialVelocity=initialVelocity, preUpdateFunctions=[periodicity])
+    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel,
+                          initialVelocity=initialVelocity, preUpdateFunctions=[periodicity])
 

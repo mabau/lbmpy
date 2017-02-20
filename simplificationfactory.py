@@ -2,6 +2,7 @@ from functools import partial
 import sympy as sp
 
 from lbmpy.innerloopsplit import createLbmSplitGroups
+from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from pystencils.equationcollection.simplifications import applyOnAllEquations, \
     subexpressionSubstitutionInMainEquations, sympyCSE, addSubexpressionsForDivisions
 
@@ -15,10 +16,10 @@ def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doO
 
     s = SimplificationStrategy()
 
-    if isinstance(lbmMethod, MomentBasedLbMethod):
-        expand = partial(applyOnAllEquations, operation=sp.expand)
-        expand.__name__ = "expand"
+    expand = partial(applyOnAllEquations, operation=sp.expand)
+    expand.__name__ = "expand"
 
+    if isinstance(lbmMethod, MomentBasedLbMethod):
         s.add(expand)
         s.add(replaceSecondOrderVelocityProducts)
         s.add(expand)
@@ -29,6 +30,9 @@ def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doO
         s.add(subexpressionSubstitutionInMainEquations)
         if splitInnerLoop:
             s.add(createLbmSplitGroups)
+    elif isinstance(lbmMethod, CumulantBasedLbMethod):
+        s.add(expand)
+        s.add(factorRelaxationRates)
 
     s.add(addSubexpressionsForDivisions)
 

@@ -209,9 +209,9 @@ def createKBCTypeTRT(dim, shearRelaxationRate, higherOrderRelaxationRate, method
     momentToRr = OrderedDict((m, rr) for m, rr in zip(allMoments, relaxationRates))
 
     if useContinuousMaxwellianEquilibrium:
-        return createWithContinuousMaxwellianEqMoments(stencil, momentToRr, cumulant=False, **kwargs)
+        return createWithContinuousMaxwellianEqMoments(stencil, momentToRr, **kwargs)
     else:
-        return createWithDiscreteMaxwellianEqMoments(stencil, momentToRr, cumulant=False, **kwargs)
+        return createWithDiscreteMaxwellianEqMoments(stencil, momentToRr, **kwargs)
 
 
 def createOrthogonalMRT(stencil, relaxationRateGetter=None, useContinuousMaxwellianEquilibrium=False, **kwargs):

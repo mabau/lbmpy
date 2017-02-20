@@ -195,7 +195,8 @@ class CumulantBasedLbMethod(AbstractLbMethod):
             mainEquations = [sp.Eq(eq.lhs, eq.rhs + forceTermSymbol)
                              for eq, forceTermSymbol in zip(mainEquations, forceTermSymbols)]
 
-        return LbmCollisionRule(self, mainEquations, subexpressions, simplificationHints={})
+        sh = {'relaxationRates': list(self.relaxationRates)}
+        return LbmCollisionRule(self, mainEquations, subexpressions, simplificationHints=sh)
 
 
 

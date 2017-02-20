@@ -179,9 +179,9 @@ class MomentBasedLbMethod(AbstractLbMethod):
         if conservedQuantityEquations is None:
             conservedQuantityEquations = self._conservedQuantityComputation.equilibriumInputEquationsFromPdfs(f)
 
-        simplificationHints = conservedQuantityEquations.simplificationHints
+        simplificationHints = conservedQuantityEquations.simplificationHints.copy()
         simplificationHints.update(self._conservedQuantityComputation.definedSymbols())
-        simplificationHints['relaxationRates'] = D.atoms(sp.Symbol)
+        simplificationHints['relaxationRates'] = [D[i, i] for i in range(D.rows)]
 
         allSubexpressions = list(additionalSubexpressions) + conservedQuantityEquations.allEquations
 
@@ -213,7 +213,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
             for rt in uniqueRelaxationRates:
                 rt = sp.sympify(rt)
                 if not isinstance(rt, sp.Symbol):
-                    rtSymbol = sp.Symbol("rt_%d" % (len(subexpressions),))
+                    rtSymbol = sp.Symbol("rr_%d" % (len(subexpressions),))
                     subexpressions[rt] = rtSymbol
 
             newRR = [subexpressions[sp.sympify(e)] if sp.sympify(e) in subexpressions else e

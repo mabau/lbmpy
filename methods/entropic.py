@@ -1,46 +1,38 @@
-from collections import OrderedDict
-from functools import reduce
-import itertools
-import operator
 import sympy as sp
-from lbmpy.methods.creationfunctions import createWithDiscreteMaxwellianEqMoments
 from pystencils.transformations import fastSubs
-from lbmpy.stencils import getStencil
-from lbmpy.simplificationfactory import createSimplificationStrategy
-from lbmpy.moments import momentsUpToComponentOrder, MOMENT_SYMBOLS, momentsOfOrder, \
-    exponentsToPolynomialRepresentations
 
 
-def discreteEntropy(function, f_eq):
-    return -sum([f_i * sp.ln(f_i / w_i) for f_i, w_i in zip(function, f_eq)])
+def addEntropyCondition(collisionRule):
+    """
+    Transforms an update rule with two relaxation rate into a single relaxation rate rule, where the second
+    rate is locally chosen to maximize an entropy condition. This function works for update rules which are
+    linear in the relaxation rate, as all moment-based methods are. Cumulant update rules don't work since they are
+    quadratic. For these, use :func:`addIterativeEntropyCondition`
 
+    The entropy is approximated such that the optimality condition can be written explicitly, no Newton iterations
+    have to be done.
 
-def discreteApproxEntropy(function, f_eq):
-    return -sum([f_i * ((f_i / w_i)-1) for f_i, w_i in zip(function, f_eq)])
+    :param collisionRule: collision rule with two relaxation times
+    :return: new collision rule which only one relaxation rate
+    """
+    omega_s, omega_h = _getRelaxationRates(collisionRule)
 
+    decomp = RelaxationRatePolynomialDecomposition(collisionRule, [omega_h], [omega_s])
+    dh = []
+    for entry in decomp.relaxationRateFactors(omega_h):
+        assert len(entry) == 1, "The non-iterative entropic procedure works only for moment based methods, which have" \
+                                "an update rule linear in the relaxation rate."
+        dh.append(entry[0])
+    ds = []
+    for entry in decomp.relaxationRateFactors(omega_s):
+        assert len(entry) == 1, "The non-iterative entropic procedure works only for moment based methods, which have" \
+                                "an update rule linear in the relaxation rate."
+        ds.append(entry[0])
 
-def splitUpdateEquationsInDeltasPlusRest(updateEqsRhs, relaxationRate):
-    deltas = [ue.expand().collect(relaxationRate).coeff(relaxationRate)
-              for ue in updateEqsRhs]
-    rest = [ue.expand().collect(relaxationRate) - relaxationRate * delta for ue, delta in zip(updateEqsRhs, deltas)]
-
-    return rest, deltas
-
-
-def findEntropyMaximizingOmega(omega_s, f_eq,  ds, dh):
-    dsdh = sum([ds_i * dh_i / f_eq_i for ds_i, dh_i, f_eq_i in zip(ds, dh, f_eq)])
-    dhdh = sum([dh_i * dh_i / f_eq_i for dh_i, f_eq_i in zip(dh, f_eq)])
-    return 1 - ((omega_s - 1) * dsdh / dhdh)
-
-
-def determineRelaxationRateByEntropyCondition(updateRule, omega_s, omega_h):
-    stencil = updateRule.method.stencil
+    stencil = collisionRule.method.stencil
     Q = len(stencil)
-    fSymbols = updateRule.method.preCollisionPdfSymbols
+    fSymbols = collisionRule.method.preCollisionPdfSymbols
 
-    updateEqsRhs = [e.rhs for e in updateRule.mainEquations]
-    _, ds = splitUpdateEquationsInDeltasPlusRest(updateEqsRhs, omega_s)
-    _, dh = splitUpdateEquationsInDeltasPlusRest(updateEqsRhs, omega_h)
     dsSymbols = [sp.Symbol("entropicDs_%d" % (i,)) for i in range(Q)]
     dhSymbols = [sp.Symbol("entropicDh_%d" % (i,)) for i in range(Q)]
     feqSymbols = [sp.Symbol("entropicFeq_%d" % (i,)) for i in range(Q)]
@@ -49,41 +41,109 @@ def determineRelaxationRateByEntropyCondition(updateRule, omega_s, omega_h):
                [sp.Eq(a, b) for a, b in zip(dhSymbols, dh)] + \
                [sp.Eq(a, f_i + ds_i + dh_i) for a, f_i, ds_i, dh_i in zip(feqSymbols, fSymbols, dsSymbols, dhSymbols)]
 
-    optimalOmegaH = findEntropyMaximizingOmega(omega_s, feqSymbols, dsSymbols, dhSymbols)
+    optimalOmegaH = _getEntropyMaximizingOmega(omega_s, feqSymbols, dsSymbols, dhSymbols)
 
     subexprs += [sp.Eq(omega_h, optimalOmegaH)]
 
     newUpdateEquations = []
-    for updateEq in updateRule.mainEquations:
-        index = updateRule.method.postCollisionPdfSymbols.index(updateEq.lhs)
+    for updateEq in collisionRule.mainEquations:
+        index = collisionRule.method.postCollisionPdfSymbols.index(updateEq.lhs)
         newEq = sp.Eq(updateEq.lhs, fSymbols[index] + omega_s * dsSymbols[index] + omega_h * dhSymbols[index])
         newUpdateEquations.append(newEq)
-    return updateRule.copy(newUpdateEquations, updateRule.subexpressions + subexprs)
+    return collisionRule.copy(newUpdateEquations, collisionRule.subexpressions + subexprs)
 
 
-def decompositionByRelaxationRate(updateRule, relaxationRate):
-    lm = updateRule.latticeModel
-    stencil = lm.stencil
+def addIterativeEntropyCondition(collisionRule, newtonIterations=3, initialValue=1):
+    """
+    More generic, but slower version of :func:`addEntropyCondition`
 
-    affineTerms = [0] * len(stencil)
-    linearTerms = [0] * len(stencil)
-    quadraticTerms = [0] * len(stencil)
+    A fixed number of Newton iterations is used to determine the maximum entropy relaxation rate.
 
-    for updateEquation in updateRule.updateEquations:
-        index = lm.pdfDestinationSymbols.index(updateEquation.lhs)
-        rhs = updateEquation.rhs
-        linearTerms[index] = rhs.coeff(relaxationRate)
-        quadraticTerms[index] = rhs.coeff(relaxationRate**2)
-        affineTerms[index] = rhs - relaxationRate * linearTerms[index] - relaxationRate**2 * quadraticTerms[index]
+    :param collisionRule: collision rule with two relaxation times
+    :param newtonIterations: (integer) number of newton iterations
+    :param initialValue: initial value of the relaxation rate
+    :return: new collision rule which only one relaxation rate
+    """
+    omega_s, omega_h = _getRelaxationRates(collisionRule)
 
-        if relaxationRate in affineTerms[index].atoms(sp.Symbol):
-            raise ValueError("Relaxation Rate decomposition failed (affine part) - run simplification first")
-        if relaxationRate in linearTerms[index].atoms(sp.Symbol):
-            raise ValueError("Relaxation Rate decomposition failed (linear part) - run simplification first")
-        if relaxationRate in quadraticTerms[index].atoms(sp.Symbol):
-            raise ValueError("Relaxation Rate decomposition failed (quadratic part) - run simplification first")
+    decomp = RelaxationRatePolynomialDecomposition(collisionRule, [omega_h], [omega_s])
 
-    return affineTerms, linearTerms, quadraticTerms
+    # compute and assign relaxation rate factors
+    newUpdateEquations = []
+    fEqEqs = []
+    rrFactorDefinitions = []
+    relaxationRates = [omega_s, omega_h]
+
+    for i, constantExpr in enumerate(decomp.constantExprs()):
+        updateEqRhs = constantExpr
+        fEqRhs = constantExpr
+        for rr in relaxationRates:
+            factors = decomp.relaxationRateFactors(rr)
+            for idx, f in enumerate(factors[i]):
+                power = idx + 1
+                symbolicFactor = decomp.symbolicRelaxationRateFactors(rr, power)[i]
+                rrFactorDefinitions.append(sp.Eq(symbolicFactor, f))
+                updateEqRhs += rr ** power * symbolicFactor
+                fEqRhs += symbolicFactor
+        newUpdateEquations.append(sp.Eq(collisionRule.method.postCollisionPdfSymbols[i], updateEqRhs))
+        fEqEqs.append(sp.Eq(decomp.symbolicEquilibrium()[i], fEqRhs))
+
+    # newton iterations to determine free omega
+    intermediateOmegas = [sp.Symbol("omega_iter_%i" % (i,)) for i in range(newtonIterations+1)]
+    intermediateOmegas[0] = initialValue
+    intermediateOmegas[-1] = omega_h
+
+    newtonIterationEquations = []
+    for omega_idx in range(len(intermediateOmegas)-1):
+        rhsOmega = intermediateOmegas[omega_idx]
+        lhsOmega = intermediateOmegas[omega_idx+1]
+        updateEqsRhs = [e.rhs for e in newUpdateEquations]
+        entropy = discreteApproxEntropy(updateEqsRhs, [e.lhs for e in fEqEqs])
+        entropyDiff = sp.diff(entropy, omega_h)
+        entropySecondDiff = sp.diff(entropyDiff, omega_h)
+        entropyDiff = entropyDiff.subs(omega_h, rhsOmega)
+        entropySecondDiff = entropySecondDiff.subs(omega_h, rhsOmega)
+
+        newtonEq = sp.Eq(lhsOmega, rhsOmega - entropyDiff / entropySecondDiff)
+        newtonIterationEquations.append(newtonEq)
+
+    # final update equations
+    newSubexpressions = collisionRule.subexpressions + rrFactorDefinitions + fEqEqs + newtonIterationEquations
+    return collisionRule.copy(newUpdateEquations, newSubexpressions)
+
+
+# --------------------------------- Helper Functions and Classes -------------------------------------------------------
+
+
+def discreteEntropy(function, reference):
+    r"""
+    Computes relative entropy between a function :math:`f` and a reference function :math:`r`,
+    which is chosen as the equilibrium for entropic methods
+
+    .. math ::
+        S = - \sum_i f_i \ln \frac{f_i}{r_i}
+    """
+    return -sum([f_i * sp.ln(f_i / r_i) for f_i, r_i in zip(function, reference)])
+
+
+def discreteApproxEntropy(function, reference):
+    r"""
+    Computes an approximation of the relative entropy between a function :math:`f` and a reference function :math:`r`,
+    which is chosen as the equilibrium for entropic methods. The non-approximated version is :func:`discreteEntropy`.
+
+    This approximation assumes that the argument of the logarithm is close to 1, i.e. that the function and reference
+    are close, then :math:`\ln \frac{f_i}{r_i} \approx  \frac{f_i}{r_i} - 1`
+
+    .. math ::
+        S = - \sum_i f_i \left( \frac{f_i}{r_i} - 1 \right)
+    """
+    return -sum([f_i * ((f_i / r_i)-1) for f_i, r_i in zip(function, reference)])
+
+
+def _getEntropyMaximizingOmega(omega_s, f_eq, ds, dh):
+    dsdh = sum([ds_i * dh_i / f_eq_i for ds_i, dh_i, f_eq_i in zip(ds, dh, f_eq)])
+    dhdh = sum([dh_i * dh_i / f_eq_i for dh_i, f_eq_i in zip(dh, f_eq)])
+    return 1 - ((omega_s - 1) * dsdh / dhdh)
 
 
 class RelaxationRatePolynomialDecomposition(object):
@@ -142,120 +202,20 @@ class RelaxationRatePolynomialDecomposition(object):
         return [sp.Symbol("entFeq_%d" % (i,)) for i in range(Q)]
 
 
-def determineRelaxationRateByEntropyConditionIterative(updateRule, omega_s, omega_h,
-                                                       newtonIterations=2, initialValue=1):
-    method = updateRule.method
-    decomp = RelaxationRatePolynomialDecomposition(updateRule, [omega_h], [omega_s])
+def _getRelaxationRates(collisionRule):
+    sh = collisionRule.simplificationHints
+    assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rates"
 
-    # compute and assign relaxation rate factors
-    newUpdateEquations = []
-    fEqEqs = []
-    rrFactorDefinitions = []
-    relaxationRates = [omega_s, omega_h]
+    relaxationRates = set(sh['relaxationRates'])
+    if len(relaxationRates) != 2:
+        raise ValueError("Entropic methods can only be created for methods with two relaxation rates.\n"
+                         "One free relaxation rate determining the viscosity and one to be determined by the "
+                         "entropy condition")
 
-    for i, constantExpr in enumerate(decomp.constantExprs()):
-        updateEqRhs = constantExpr
-        fEqRhs = constantExpr
-        for rr in relaxationRates:
-            factors = decomp.relaxationRateFactors(rr)
-            for idx, f in enumerate(factors[i]):
-                power = idx + 1
-                symbolicFactor = decomp.symbolicRelaxationRateFactors(rr, power)[i]
-                rrFactorDefinitions.append(sp.Eq(symbolicFactor, f))
-                updateEqRhs += rr ** power * symbolicFactor
-                fEqRhs += symbolicFactor
-        newUpdateEquations.append(sp.Eq(method.postCollisionPdfSymbols[i], updateEqRhs))
-        fEqEqs.append(sp.Eq(decomp.symbolicEquilibrium()[i], fEqRhs))
+    method = collisionRule.method
+    omega_s = method.getShearRelaxationRate()
+    assert omega_s in relaxationRates
 
-    # newton iterations to determine free omega
-    intermediateOmegas = [sp.Symbol("omega_iter_%i" % (i,)) for i in range(newtonIterations+1)]
-    intermediateOmegas[0] = initialValue
-    intermediateOmegas[-1] = omega_h
-
-    newtonIterationEquations = []
-    for omega_idx in range(len(intermediateOmegas)-1):
-        rhsOmega = intermediateOmegas[omega_idx]
-        lhsOmega = intermediateOmegas[omega_idx+1]
-        updateEqsRhs = [e.rhs for e in newUpdateEquations]
-        entropy = discreteApproxEntropy(updateEqsRhs, [e.lhs for e in fEqEqs])
-        entropyDiff = sp.diff(entropy, omega_h)
-        entropySecondDiff = sp.diff(entropyDiff, omega_h)
-        entropyDiff = entropyDiff.subs(omega_h, rhsOmega)
-        entropySecondDiff = entropySecondDiff.subs(omega_h, rhsOmega)
-
-        newtonEq = sp.Eq(lhsOmega, rhsOmega - entropyDiff / entropySecondDiff)
-        newtonIterationEquations.append(newtonEq)
-
-    # final update equations
-    newSubexpressions = updateRule.subexpressions + rrFactorDefinitions + fEqEqs + newtonIterationEquations
-    return updateRule.copy(newUpdateEquations, newSubexpressions)
-
-
-def createKbcEntropicCollisionRule(dim, name='KBC-N4', useNewtonIterations=False, velocityRelaxation=None,
-                                   higherOrderRelaxationRate=sp.Symbol("omega_h"),
-                                   fixedOmega=None, **kwargs):
-    def product(iterable):
-        return reduce(operator.mul, iterable, 1)
-
-    theMoment = MOMENT_SYMBOLS[:dim]
-
-    rho = [sp.Rational(1, 1)]
-    velocity = list(theMoment)
-
-    shearTensorOffDiagonal = [product(t) for t in itertools.combinations(theMoment, 2)]
-    shearTensorDiagonal = [m_i * m_i for m_i in theMoment]
-    shearTensorTrace = sum(shearTensorDiagonal)
-    shearTensorTracefreeDiagonal = [dim * d - shearTensorTrace for d in shearTensorDiagonal]
-
-    energyTransportTensor = list(exponentsToPolynomialRepresentations([a for a in momentsOfOrder(3, dim, True)
-                                                                       if 3 not in a]))
-
-    explicitlyDefined = set(rho + velocity + shearTensorOffDiagonal + shearTensorDiagonal + energyTransportTensor)
-    rest = list(set(exponentsToPolynomialRepresentations(momentsUpToComponentOrder(2, dim))) - explicitlyDefined)
-    assert len(rest) + len(explicitlyDefined) == 3**dim
-
-    # naming according to paper Karlin 2015: Entropic multirelaxation lattice Boltzmann models for turbulent flows
-    D = shearTensorOffDiagonal + shearTensorTracefreeDiagonal[:-1]
-    T = [shearTensorTrace]
-    Q = energyTransportTensor
-    if name == 'KBC-N1':
-        decomposition = [D, T+Q+rest]
-    elif name == 'KBC-N2':
-        decomposition = [D+T, Q+rest]
-    elif name == 'KBC-N3':
-        decomposition = [D+Q, T+rest]
-    elif name == 'KBC-N4':
-        decomposition = [D+T+Q, rest]
-    else:
-        raise ValueError("Unknown model. Supported models KBC-Nx")
-
-    omega_s, omega_h = sp.Symbol("omega"), higherOrderRelaxationRate
-    shearPart, restPart = decomposition
-
-    velRelaxation = omega_s if velocityRelaxation is None else velocityRelaxation
-    relaxationRates = [omega_s] + \
-                      [velRelaxation] * len(velocity) + \
-                      [omega_s] * len(shearPart) + \
-                      [omega_h] * len(restPart)
-
-    stencil = getStencil("D2Q9") if dim == 2 else getStencil("D3Q27")
-    allMoments = rho + velocity + shearPart + restPart
-    momentToRr = OrderedDict((m, rr) for m, rr in zip(allMoments, relaxationRates))
-    method = createWithDiscreteMaxwellianEqMoments(stencil, momentToRr, cumulant=False, **kwargs)
-
-    simplify = createSimplificationStrategy(method)
-    collisionRule = simplify(method.getCollisionRule())
-
-    if useNewtonIterations:
-        collisionRule = determineRelaxationRateByEntropyConditionIterative(collisionRule, omega_s, omega_h, 4)
-    else:
-        collisionRule = determineRelaxationRateByEntropyCondition(collisionRule, omega_s, omega_h)
-
-    if fixedOmega:
-        collisionRule = collisionRule.copyWithSubstitutionsApplied({omega_s: fixedOmega})
-
-    return collisionRule
-
-
-if __name__ == "__main__":
-    ur = createKbcEntropicCollisionRule(2, useNewtonIterations=False)
+    relaxationRatesWithoutOmegaS = relaxationRates - {omega_s}
+    omega_h = list(relaxationRatesWithoutOmegaS)[0]
+    return omega_s, omega_h
