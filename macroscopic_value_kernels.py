@@ -37,7 +37,6 @@ def compileMacroscopicValuesGetter(lbMethod, outputQuantities, pdfArr=None, fiel
 
         indDims = 0 if numberOfElements <= 1 else 1
         if pdfArr is None:
-            fieldLayout = getLayoutFromNumpyArray(pdfArr, indexDimensionIds=[len(pdfField.shape) - 1])
             outputField = Field.createGeneric(outputQuantity, lbMethod.dim, layout=fieldLayout, indexDimensions=indDims)
         else:
             outputFieldShape = pdfArr.shape[:-1]
@@ -142,7 +141,9 @@ def compileMacroscopicValuesSetter(lbMethod, quantitiesToSet, pdfArr=None, field
     return setter
 
 
-def createAdvancedVelocitySetterCollisionRule(lbMethod, velocityArray, velocityRelaxationRate=1.3):
+def createAdvancedVelocitySetterCollisionRule(collisionRule, velocityArray, velocityRelaxationRate=0.8):
+
+    lbMethod = collisionRule.method
     velocityField = Field.createFromNumpyArray('velInput', velocityArray, indexDimensions=1)
 
     cqc = lbMethod.conservedQuantityComputation
@@ -162,30 +163,44 @@ def createAdvancedVelocitySetterCollisionRule(lbMethod, velocityArray, velocityR
     # set first order relaxation rate
     lbMethod = deepcopy(lbMethod)
     lbMethod.setFirstMomentRelaxationRate(velocityRelaxationRate)
+    lbMethod.setZerothMomentRelaxationRate(0)
 
-    return lbMethod.getCollisionRule(eqInput)
+    simplificationStrategy = createSimplificationStrategy(lbMethod)
+    newCollisionRule = simplificationStrategy(lbMethod.getCollisionRule(eqInput))
+
+    # if the original collision rule used an entropy condition, the initialization should use one as well
+    # the simplification hints contain the entropy condition parameters
+    sh = collisionRule.simplificationHints
+    if 'entropic' in sh and sh['entropic']:
+        iterations = sh['entropicNewtonIterations']
+        if iterations:
+            from lbmpy.methods.entropic import addIterativeEntropyCondition
+            newCollisionRule = addIterativeEntropyCondition(newCollisionRule, newtonIterations=iterations)
+        else:
+            from lbmpy.methods.entropic import addEntropyCondition
+            newCollisionRule = addEntropyCondition(newCollisionRule)
+
+    return newCollisionRule
 
 
-def compileAdvancedVelocitySetter(lbMethod, velocityArray, velocityRelaxationRate=1.3, pdfArr=None,
-                                  fieldLayout='numpy', optimizationParameters={}):
+def compileAdvancedVelocitySetter(collisionRule, velocityArray, velocityRelaxationRate=0.8, pdfArr=None,
+                                  fieldLayout='numpy', optimizationParams={}):
     """
     Advanced initialization of velocity field through iteration procedure according to
     Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
 
-    :param lbMethod:
+    :param collisionRule:
     :param velocityArray: array with velocity field
     :param velocityRelaxationRate: relaxation rate for the velocity moments - determines convergence behaviour
                                    of the initialization scheme
     :param pdfArr: optional numpy array for pdf field - used to get optimal loop structure for kernel
     :param fieldLayout: layout of the pdf field if pdfArr was not given
-    :param optimizationParameters: dictionary with optimization hints
+    :param optimizationParams: dictionary with optimization hints
     :return: stream-collide update function
     """
     from lbmpy.updatekernels import createStreamPullKernel
-    from lbmpy.simplificationfactory import createSimplificationStrategy
     from lbmpy.creationfunctions import createLatticeBoltzmannAst, createLatticeBoltzmannFunction
-    collisionRule = createAdvancedVelocitySetterCollisionRule(lbMethod, velocityArray, velocityRelaxationRate)
-    simp = createSimplificationStrategy(collisionRule.method)
-    updateRule = createStreamPullKernel(simp(collisionRule), pdfArr, genericLayout=fieldLayout)
-    ast = createLatticeBoltzmannAst(updateRule, optimizationParameters)
-    return createLatticeBoltzmannFunction(ast, optimizationParameters)
+    newCollisionRule = createAdvancedVelocitySetterCollisionRule(collisionRule, velocityArray, velocityRelaxationRate)
+    updateRule = createStreamPullKernel(newCollisionRule, pdfArr, genericLayout=fieldLayout)
+    ast = createLatticeBoltzmannAst(updateRule, optimizationParams)
+    return createLatticeBoltzmannFunction(ast, optimizationParams)

@@ -68,7 +68,7 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
         if 'openMP' in optParams:
             if isinstance(optParams['openMP'], bool) and optParams['openMP']:
                 addOpenMP(ast)
-            elif isinstance(optParams['openMP'], int):
+            elif not isinstance(optParams['openMP'], bool) and isinstance(optParams['openMP'], int):
                 addOpenMP(ast, numThreads=optParams['openMP'])
         res = makePythonCpuFunction(ast)
     elif optParams['target'] == 'gpu':

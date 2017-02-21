@@ -8,10 +8,10 @@ from lbmpy.boundaries import BoundaryHandling, noSlip, ubb, fixedDensity
 from lbmpy.stencils import getStencil
 
 
-def createScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParameters, lbmKernel=None,
+def createScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParams, lbmKernel=None,
                    initialVelocity=None, preUpdateFunctions=[]):
-    if 'target' not in optimizationParameters:
-        optimizationParameters['target'] = 'cpu'
+    if 'target' not in optimizationParams:
+        optimizationParams['target'] = 'cpu'
 
     ghostLayers = 1
     domainSizeWithGhostLayer = tuple([s + 2 * ghostLayers for s in domainSize])
@@ -26,7 +26,7 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
 
     # Create kernel
     if lbmKernel is None:
-        methodParameters['optimizationParams'] = optimizationParameters
+        methodParameters['optimizationParams'] = optimizationParams
         lbmKernel = createLatticeBoltzmannFunction(**methodParameters)
     method = lbmKernel.method
 
@@ -36,7 +36,7 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
     if boundarySetupFunction is not None:
         symPdfField = Field.createFromNumpyArray('pdfs', pdfArrays[0], indexDimensions=1)
         boundaryHandling = BoundaryHandling(symPdfField, domainSize, lbmKernel.method,
-                                            target=optimizationParameters['target'])
+                                            target=optimizationParams['target'])
         boundarySetupFunction(boundaryHandling=boundaryHandling, method=method)
         boundaryHandling.prepare()
     else:
@@ -53,7 +53,7 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
                                                     pdfArr=pdfArrays[0], target='cpu')
     setMacroscopic(pdfs=pdfArrays[0])
 
-    if optimizationParameters['target'] == 'gpu':
+    if optimizationParams['target'] == 'gpu':
         import pycuda.gpuarray as gpuarray
         pdfGpuArrays = [gpuarray.to_gpu(a) for a in pdfArrays]
     else:
@@ -95,10 +95,10 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
     cpuTimeLoop.kernel = lbmKernel
     gpuTimeLoop.kernel = lbmKernel
 
-    return gpuTimeLoop if optimizationParameters['target'] == 'gpu' else cpuTimeLoop
+    return gpuTimeLoop if optimizationParams['target'] == 'gpu' else cpuTimeLoop
 
 
-def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParameters={}, lbmKernel=None, **kwargs):
+def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, lbmKernel=None, **kwargs):
     def boundarySetupFunction(boundaryHandling, method):
         myUbb = partial(ubb, velocity=[lidVelocity, 0, 0][:method.dim])
         myUbb.name = 'ubb'
@@ -106,11 +106,11 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParameters=
         for direction in ('W', 'E', 'S') if method.dim == 2 else ('W', 'E', 'S', 'T', 'B'):
             boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, method.dim))
 
-    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel)
+    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel)
 
 
 def createPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None, radius=None, length=None,
-                                        lbmKernel=None, optimizationParameters={}, **kwargs):
+                                        lbmKernel=None, optimizationParams={}, **kwargs):
     assert dim in (2, 3)
 
     if radius is not None:
@@ -152,11 +152,11 @@ def createPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None
     if 'forceModel' not in kwargs:
         kwargs['forceModel'] = 'guo'
 
-    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel)
+    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel)
 
 
 def createForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None, lbmKernel=None,
-                             optimizationParameters={}, initialVelocity=None, boundarySetupFunctions=[], **kwargs):
+                             optimizationParams={}, initialVelocity=None, boundarySetupFunctions=[], **kwargs):
     assert dim in (2, 3)
     kwargs['force'] = tuple([force, 0, 0][:dim])
 
@@ -197,6 +197,6 @@ def createForceDrivenChannel(dim, force, domainSize=None, radius=None, length=No
     if 'forceModel' not in kwargs:
         kwargs['forceModel'] = 'guo'
 
-    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParameters, lbmKernel=lbmKernel,
+    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel,
                           initialVelocity=initialVelocity, preUpdateFunctions=[periodicity])
 

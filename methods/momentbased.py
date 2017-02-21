@@ -116,6 +116,12 @@ class MomentBasedLbMethod(AbstractLbMethod):
                                                             True, conservedQuantityEquations)
         return eqColl
 
+    def setZerothMomentRelaxationRate(self, relaxationRate):
+        e = sp.Rational(1, 1)
+        prevEntry = self._momentToRelaxationInfoDict[e]
+        newEntry = RelaxationInfo(prevEntry[0], relaxationRate)
+        self._momentToRelaxationInfoDict[e] = newEntry
+
     def setFirstMomentRelaxationRate(self, relaxationRate):
         for e in MOMENT_SYMBOLS[:self.dim]:
             assert e in self._momentToRelaxationInfoDict, "First moments are not relaxed separately by this method"

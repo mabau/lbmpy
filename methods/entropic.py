@@ -50,7 +50,10 @@ def addEntropyCondition(collisionRule):
         index = collisionRule.method.postCollisionPdfSymbols.index(updateEq.lhs)
         newEq = sp.Eq(updateEq.lhs, fSymbols[index] + omega_s * dsSymbols[index] + omega_h * dhSymbols[index])
         newUpdateEquations.append(newEq)
-    return collisionRule.copy(newUpdateEquations, collisionRule.subexpressions + subexprs)
+    newCollisionRule = collisionRule.copy(newUpdateEquations, collisionRule.subexpressions + subexprs)
+    newCollisionRule.simplificationHints['entropic'] = True
+    newCollisionRule.simplificationHints['entropicNewtonIterations'] = None
+    return newCollisionRule
 
 
 def addIterativeEntropyCondition(collisionRule, newtonIterations=3, initialValue=1):
@@ -109,7 +112,10 @@ def addIterativeEntropyCondition(collisionRule, newtonIterations=3, initialValue
 
     # final update equations
     newSubexpressions = collisionRule.subexpressions + rrFactorDefinitions + fEqEqs + newtonIterationEquations
-    return collisionRule.copy(newUpdateEquations, newSubexpressions)
+    newCollisionRule = collisionRule.copy(newUpdateEquations, newSubexpressions)
+    newCollisionRule.simplificationHints['entropic'] = True
+    newCollisionRule.simplificationHints['entropicNewtonIterations'] = newtonIterations
+    return newCollisionRule
 
 
 # --------------------------------- Helper Functions and Classes -------------------------------------------------------
