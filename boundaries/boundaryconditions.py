@@ -56,7 +56,8 @@ def fixedDensity(pdfField, direction, lbMethod, density):
     neighbor = offsetFromDir(direction, lbMethod.dim)
     inverseDir = invDir(direction)
 
-    velocity = lbMethod.conservedQuantityComputation.definedSymbols()['velocity']
+    cqc = lbMethod.conservedQuantityComputation
+    velocity = cqc.definedSymbols()['velocity']
     symmetricEq = removeAsymmetricPartOfMainEquations(lbMethod.getEquilibrium(), dofs=velocity)
     substitutions = {sym: pdfField(i) for i, sym in enumerate(lbMethod.preCollisionPdfSymbols)}
     symmetricEq = symmetricEq.copyWithSubstitutionsApplied(substitutions)
@@ -64,12 +65,17 @@ def fixedDensity(pdfField, direction, lbMethod, density):
     simplification = createSimplificationStrategy(lbMethod)
     symmetricEq = simplification(symmetricEq)
 
-    densitySymbol = lbMethod.conservedQuantityComputation.definedSymbols()['density']
+    densitySymbol = cqc.definedSymbols()['density']
+
+    densityEq = cqc.equilibriumInputEquationsFromInitValues(density=density).insertSubexpressions().mainEquations[0]
+    assert densityEq.lhs == densitySymbol
+    transformedDensity = densityEq.rhs
 
     conditions = [(eq_i.rhs, sp.Equality(direction, i))
                   for i, eq_i in enumerate(symmetricEq.mainEquations)] + [(0, True)]
     eq_component = sp.Piecewise(*conditions)
 
-    subExprs = [sp.Eq(eq.lhs, density if eq.lhs == densitySymbol else eq.rhs) for eq in symmetricEq.subexpressions]
+    subExprs = [sp.Eq(eq.lhs, transformedDensity if eq.lhs == densitySymbol else eq.rhs)
+                for eq in symmetricEq.subexpressions]
     return subExprs + [sp.Eq(pdfField[neighbor](inverseDir), 2 * eq_component - pdfField(direction))]
 
