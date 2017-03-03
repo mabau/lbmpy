@@ -69,6 +69,9 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
 
             pdfArrays[0], pdfArrays[1] = pdfArrays[1], pdfArrays[0]
         getMacroscopic(pdfs=pdfArrays[0], density=densityArr[0], velocity=velocityArr[0])
+        #for vComp in range(velocityArr[0].shape[-1]):
+        #    v = velocityArr[0][..., vComp]
+        #    v[boundaryHandling.flagField != boundaryHandling._fluidFlag] = 0
         return pdfArrays[0], densityArr[0], velocityArr[0]
 
     def gpuTimeLoop(timeSteps):
@@ -112,7 +115,8 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, 
 
 
 def createPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None, radius=None, length=None,
-                                        lbmKernel=None, optimizationParams={}, kernelParams={}, **kwargs):
+                                        lbmKernel=None, optimizationParams={}, boundarySetupFunctions=[],
+                                        kernelParams={}, **kwargs):
     assert dim in (2, 3)
 
     if radius is not None:
@@ -149,6 +153,9 @@ def createPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None
             else:
                 for direction in ('N', 'S', 'T', 'B'):
                     boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, method.dim))
+
+        for userFunction in boundarySetupFunctions:
+            userFunction(boundaryHandling, method, domainSize)
 
     assert domainSize is not None
     return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel,
@@ -188,7 +195,7 @@ def createForceDrivenChannel(dim, force, domainSize=None, radius=None, length=No
                 for direction in ('N', 'S', 'T', 'B'):
                     boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, method.dim))
         for userFunction in boundarySetupFunctions:
-            userFunction(boundaryHandling, method)
+            userFunction(boundaryHandling, method, domainSize)
 
     def periodicity(pdfArr):
         pdfArr[0, :, :] = pdfArr[-2, :, :]

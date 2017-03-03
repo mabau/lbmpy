@@ -30,6 +30,9 @@ class BoundaryHandling(object):
         if name is None:
             name = boundaryFunction.__name__
 
+        if name in self._nameToIndex:
+            return 2 ** self._nameToIndex[name]
+
         newIdx = len(self._boundaryFunctions)
         self._nameToIndex[name] = newIdx
         self._boundaryFunctions.append(boundaryFunction)
@@ -45,7 +48,7 @@ class BoundaryHandling(object):
     def getFlag(self, name):
         return 2 ** self._nameToIndex[name]
 
-    def setBoundary(self, function, indexExpr, clearOtherBoundaries=True):
+    def setBoundary(self, function, indexExpr, maskArr=None):
         if hasattr(function, '__name__'):
             name = function.__name__
         elif hasattr(function, 'name'):
@@ -57,13 +60,12 @@ class BoundaryHandling(object):
             self.addBoundary(function, name)
 
         flag = self.getFlag(name)
-        if clearOtherBoundaries:
+
+        if maskArr is None:
             self.flagField[indexExpr] = flag
         else:
-            # clear fluid flag
-            np.bitwise_and(self.flagField[indexExpr], np.invert(self._fluidFlag), self.flagField[indexExpr])
-            # add new boundary flag
-            np.bitwise_or(self.flagField[indexExpr], flag, self.flagField[indexExpr])
+            flagFieldView = self.flagField[indexExpr]
+            flagFieldView[maskArr] = flag
 
         self.invalidateIndexCache()
 
