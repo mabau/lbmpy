@@ -28,10 +28,10 @@ def ubb(pdfField, direction, lbMethod, velocity, adaptVelocityToForce=False):
     c_s_sq = sp.Rational(1, 3)
     velTerm = 2 / c_s_sq * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
 
-    # in conserved value computation
+    # Better alternative: in conserved value computation
     # rename what is currently called density to "virtualDensity"
     # provide a new quantity density, which is constant in case of incompressible models
-    if lbMethod.conservedQuantityComputation._compressible:  # TODO
+    if not lbMethod.conservedQuantityComputation.zeroCenteredPdfs:
         cqc = lbMethod.conservedQuantityComputation
         densitySymbol = sp.Symbol("rho")
         pdfFieldAccesses = [pdfField(i) for i in range(len(lbMethod.stencil))]

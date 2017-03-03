@@ -1,8 +1,9 @@
 import sympy as sp
 from pystencils.transformations import fastSubs
+from lbmpy.methods.relaxationrates import getShearRelaxationRate
 
 
-def addEntropyCondition(collisionRule):
+def addEntropyCondition(collisionRule, omegaOutputField=None):
     """
     Transforms an update rule with two relaxation rate into a single relaxation rate rule, where the second
     rate is locally chosen to maximize an entropy condition. This function works for update rules which are
@@ -13,8 +14,12 @@ def addEntropyCondition(collisionRule):
     have to be done.
 
     :param collisionRule: collision rule with two relaxation times
+    :param omegaOutputField: pystencils field where computed omegas are stored
     :return: new collision rule which only one relaxation rate
     """
+    if collisionRule.method.conservedQuantityComputation.zeroCenteredPdfs:
+        raise NotImplementedError("Entropic Methods only implemented for models where pdfs are centered around 1")
+
     omega_s, omega_h = _getRelaxationRates(collisionRule)
 
     decomp = RelaxationRatePolynomialDecomposition(collisionRule, [omega_h], [omega_s])
@@ -25,8 +30,10 @@ def addEntropyCondition(collisionRule):
         dh.append(entry[0])
     ds = []
     for entry in decomp.relaxationRateFactors(omega_s):
-        assert len(entry) == 1, "The non-iterative entropic procedure works only for moment based methods, which have" \
+        assert len(entry) <= 1, "The non-iterative entropic procedure works only for moment based methods, which have" \
                                 "an update rule linear in the relaxation rate."
+        if len(entry) == 0:
+            entry.append(0)
         ds.append(entry[0])
 
     stencil = collisionRule.method.stencil
@@ -53,10 +60,15 @@ def addEntropyCondition(collisionRule):
     newCollisionRule = collisionRule.copy(newUpdateEquations, collisionRule.subexpressions + subexprs)
     newCollisionRule.simplificationHints['entropic'] = True
     newCollisionRule.simplificationHints['entropicNewtonIterations'] = None
+
+    if omegaOutputField:
+        from lbmpy.updatekernels import writeQuantitiesToField
+        newCollisionRule = writeQuantitiesToField(newCollisionRule, omega_h, omegaOutputField)
+
     return newCollisionRule
 
 
-def addIterativeEntropyCondition(collisionRule, newtonIterations=3, initialValue=1):
+def addIterativeEntropyCondition(collisionRule, newtonIterations=3, initialValue=1, omegaOutputField=None):
     """
     More generic, but slower version of :func:`addEntropyCondition`
 
@@ -65,8 +77,12 @@ def addIterativeEntropyCondition(collisionRule, newtonIterations=3, initialValue
     :param collisionRule: collision rule with two relaxation times
     :param newtonIterations: (integer) number of newton iterations
     :param initialValue: initial value of the relaxation rate
+    :param omegaOutputField: pystencils field where computed omegas are stored
     :return: new collision rule which only one relaxation rate
     """
+    if collisionRule.method.conservedQuantityComputation.zeroCenteredPdfs:
+        raise NotImplementedError("Entropic Methods only implemented for models where pdfs are centered around 1")
+
     omega_s, omega_h = _getRelaxationRates(collisionRule)
 
     decomp = RelaxationRatePolynomialDecomposition(collisionRule, [omega_h], [omega_s])
@@ -115,6 +131,11 @@ def addIterativeEntropyCondition(collisionRule, newtonIterations=3, initialValue
     newCollisionRule = collisionRule.copy(newUpdateEquations, newSubexpressions)
     newCollisionRule.simplificationHints['entropic'] = True
     newCollisionRule.simplificationHints['entropicNewtonIterations'] = newtonIterations
+
+    if omegaOutputField:
+        from lbmpy.updatekernels import writeQuantitiesToField
+        newCollisionRule = writeQuantitiesToField(newCollisionRule, omega_h, omegaOutputField)
+
     return newCollisionRule
 
 
@@ -219,7 +240,7 @@ def _getRelaxationRates(collisionRule):
                          "entropy condition")
 
     method = collisionRule.method
-    omega_s = method.getShearRelaxationRate()
+    omega_s = getShearRelaxationRate(method)
     assert omega_s in relaxationRates
 
     relaxationRatesWithoutOmegaS = relaxationRates - {omega_s}

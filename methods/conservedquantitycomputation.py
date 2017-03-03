@@ -104,6 +104,10 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             return None
 
     @property
+    def zeroCenteredPdfs(self):
+        return not self._compressible
+
+    @property
     def zerothOrderMomentSymbol(self):
         return self._symbolOrder0
 

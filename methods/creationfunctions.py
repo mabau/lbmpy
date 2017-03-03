@@ -1,19 +1,20 @@
 import sympy as sp
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 from functools import reduce
 import operator
 import itertools
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.momentbased import MomentBasedLbMethod
 from lbmpy.stencils import stencilsHaveSameEntries, getStencil
-from lbmpy.moments import isEven, gramSchmidt, getDefaultMomentSetForStencil, MOMENT_SYMBOLS, getOrder, isShearMoment, \
-    exponentsToPolynomialRepresentations, momentsOfOrder, momentsUpToComponentOrder
+from lbmpy.moments import isEven, gramSchmidt, getDefaultMomentSetForStencil, MOMENT_SYMBOLS, \
+    exponentsToPolynomialRepresentations, momentsOfOrder, momentsUpToComponentOrder, sortMomentsIntoGroupsOfSameOrder
 from pystencils.sympyextensions import commonDenominator
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
     getMomentsOfContinuousMaxwellianEquilibrium, getCumulantsOfDiscreteMaxwellianEquilibrium, \
     getCumulantsOfContinuousMaxwellianEquilibrium
+from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber, defaultRelaxationRateNames
 
 
 def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible=False, forceModel=None,
@@ -144,6 +145,18 @@ def createTRTWithMagicNumber(stencil, relaxationRate, magicNumber=sp.Rational(3,
     """
     rrOdd = relaxationRateFromMagicNumber(relaxationRate, magicNumber)
     return createTRT(stencil, relaxationRateEvenMoments=relaxationRate, relaxationRateOddMoments=rrOdd, **kwargs)
+
+
+def createRawMRT(stencil, relaxationRates, useContinuousMaxwellianEquilibrium=False, **kwargs):
+    """
+    Creates a MRT method using non-orthogonalized moments
+    """
+    moments = getDefaultMomentSetForStencil(stencil)
+    rrDict = OrderedDict(zip(moments, relaxationRates))
+    if useContinuousMaxwellianEquilibrium:
+        return createWithContinuousMaxwellianEqMoments(stencil, rrDict,  **kwargs)
+    else:
+        return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, **kwargs)
 
 
 def createKBCTypeTRT(dim, shearRelaxationRate, higherOrderRelaxationRate, methodName='KBC-N4',
@@ -359,43 +372,6 @@ def compareMomentBasedLbMethods(reference, other, showDeviationsOnly=False):
 
 
 # ------------------------------------ Helper Functions ----------------------------------------------------------------
-
-
-def sortMomentsIntoGroupsOfSameOrder(moments):
-    """Returns a dictionary mapping the order (int) to a list of moments with that order."""
-    result = defaultdict(list)
-    for i, moment in enumerate(moments):
-        order = getOrder(moment)
-        result[order].append(moment)
-    return result
-
-
-def defaultRelaxationRateNames():
-    nextIndex = [0]
-
-    def result(momentList):
-        shearMomentInside = False
-        allConservedMoments = True
-        for m in momentList:
-            if isShearMoment(m):
-                shearMomentInside = True
-            if not (getOrder(m) == 0 or getOrder(m) == 1):
-                allConservedMoments = False
-
-        if shearMomentInside:
-            return sp.Symbol("omega")
-        elif allConservedMoments:
-            return 0
-        else:
-            nextIndex[0] += 1
-            return sp.Symbol("omega_%d" % (nextIndex[0],))
-
-    return result
-
-
-def relaxationRateFromMagicNumber(hydrodynamicRelaxationRate, magicNumber):
-    omega = hydrodynamicRelaxationRate
-    return (4 - 2 * omega) / (4 * magicNumber * omega + 2 - omega)
 
 
 def compressibleToIncompressibleMomentValue(term, rho, u):

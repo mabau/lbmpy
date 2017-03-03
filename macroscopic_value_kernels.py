@@ -141,9 +141,8 @@ def compileMacroscopicValuesSetter(lbMethod, quantitiesToSet, pdfArr=None, field
     return setter
 
 
-def createAdvancedVelocitySetterCollisionRule(collisionRule, velocityArray, velocityRelaxationRate=0.8):
+def createAdvancedVelocitySetterCollisionRule(lbMethod, velocityArray, velocityRelaxationRate=0.8):
 
-    lbMethod = collisionRule.method
     velocityField = Field.createFromNumpyArray('velInput', velocityArray, indexDimensions=1)
 
     cqc = lbMethod.conservedQuantityComputation
@@ -163,33 +162,20 @@ def createAdvancedVelocitySetterCollisionRule(collisionRule, velocityArray, velo
     # set first order relaxation rate
     lbMethod = deepcopy(lbMethod)
     lbMethod.setFirstMomentRelaxationRate(velocityRelaxationRate)
-    lbMethod.setZerothMomentRelaxationRate(0)
 
     simplificationStrategy = createSimplificationStrategy(lbMethod)
     newCollisionRule = simplificationStrategy(lbMethod.getCollisionRule(eqInput))
 
-    # if the original collision rule used an entropy condition, the initialization should use one as well
-    # the simplification hints contain the entropy condition parameters
-    sh = collisionRule.simplificationHints
-    if 'entropic' in sh and sh['entropic']:
-        iterations = sh['entropicNewtonIterations']
-        if iterations:
-            from lbmpy.methods.entropic import addIterativeEntropyCondition
-            newCollisionRule = addIterativeEntropyCondition(newCollisionRule, newtonIterations=iterations)
-        else:
-            from lbmpy.methods.entropic import addEntropyCondition
-            newCollisionRule = addEntropyCondition(newCollisionRule)
-
     return newCollisionRule
 
 
-def compileAdvancedVelocitySetter(collisionRule, velocityArray, velocityRelaxationRate=0.8, pdfArr=None,
+def compileAdvancedVelocitySetter(method, velocityArray, velocityRelaxationRate=0.8, pdfArr=None,
                                   fieldLayout='numpy', optimizationParams={}):
     """
     Advanced initialization of velocity field through iteration procedure according to
     Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
 
-    :param collisionRule:
+    :param method:
     :param velocityArray: array with velocity field
     :param velocityRelaxationRate: relaxation rate for the velocity moments - determines convergence behaviour
                                    of the initialization scheme
@@ -200,7 +186,7 @@ def compileAdvancedVelocitySetter(collisionRule, velocityArray, velocityRelaxati
     """
     from lbmpy.updatekernels import createStreamPullKernel
     from lbmpy.creationfunctions import createLatticeBoltzmannAst, createLatticeBoltzmannFunction
-    newCollisionRule = createAdvancedVelocitySetterCollisionRule(collisionRule, velocityArray, velocityRelaxationRate)
+    newCollisionRule = createAdvancedVelocitySetterCollisionRule(method, velocityArray, velocityRelaxationRate)
     updateRule = createStreamPullKernel(newCollisionRule, pdfArr, genericLayout=fieldLayout)
     ast = createLatticeBoltzmannAst(updateRule, optimizationParams)
     return createLatticeBoltzmannFunction(ast, optimizationParams)

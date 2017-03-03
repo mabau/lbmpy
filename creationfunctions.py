@@ -4,7 +4,7 @@ Factory functions for standard LBM methods
 import sympy as sp
 from copy import copy
 
-from lbmpy.methods.creationfunctions import createKBCTypeTRT
+from lbmpy.methods.creationfunctions import createKBCTypeTRT, createRawMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
 from lbmpy.stencils import getStencil
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT
@@ -20,8 +20,10 @@ def _getParams(params, optParams):
         'relaxationRates': sp.symbols("omega_:10"),
         'compressible': False,
         'equilibriumAccuracyOrder': 2,
+
         'entropic': False,
         'entropicNewtonIterations': None,
+        'omegaOutputField': None,
 
         'useContinuousMaxwellianEquilibrium': False,
         'cumulant': False,
@@ -78,6 +80,7 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
     res.method = ast.method
+    res.updateRule = ast.updateRule
     res.ast = ast
     return res
 
@@ -104,6 +107,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
     res.method = updateRule.method
+    res.updateRule = updateRule
     return res
 
 
@@ -128,9 +132,10 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
                 iterations = 3
             else:
                 iterations = params['entropicNewtonIterations']
-            collisionRule = addIterativeEntropyCondition(collisionRule, newtonIterations=iterations)
+            collisionRule = addIterativeEntropyCondition(collisionRule, newtonIterations=iterations,
+                                                         omegaOutputField=params['omegaOutputField'])
         else:
-            collisionRule = addEntropyCondition(collisionRule)
+            collisionRule = addEntropyCondition(collisionRule, omegaOutputField=params['omegaOutputField'])
 
     if 'fieldSize' in optParams and optParams['fieldSize']:
         npField = createPdfArray(optParams['fieldSize'], len(stencil), layout=optParams['fieldLayout'])
@@ -193,6 +198,8 @@ def createLatticeBoltzmannMethod(**params):
             nextRelaxationRate[0] += 1
             return res
         method = createOrthogonalMRT(stencil, relaxationRateGetter, **commonParams)
+    elif methodName.lower() == 'mrt_raw':
+        method = createRawMRT(stencil, relaxationRates, **commonParams)
     elif methodName.lower().startswith('trt-kbc-n'):
         if params['stencil'] == 'D2Q9':
             dim = 2

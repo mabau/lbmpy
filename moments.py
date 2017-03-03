@@ -38,7 +38,7 @@ import sympy as sp
 import math
 import itertools
 from copy import copy
-from collections import Counter
+from collections import Counter, defaultdict
 
 from lbmpy.continuous_distribution_measures import continuousMoment
 from lbmpy.cache import memorycache
@@ -209,6 +209,14 @@ def polynomialToExponentRepresentation(polynomial, dim=3):
         coeffExpTupleRepresentation.append((coefficient, expTuple))
     return coeffExpTupleRepresentation
 
+
+def sortMomentsIntoGroupsOfSameOrder(moments):
+    """Returns a dictionary mapping the order (int) to a list of moments with that order."""
+    result = defaultdict(list)
+    for i, moment in enumerate(moments):
+        order = getOrder(moment)
+        result[order].append(moment)
+    return result
 
 # -------------------- Common Function working with exponent tuples and polynomial moments -----------------------------
 

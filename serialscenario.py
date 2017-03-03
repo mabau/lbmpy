@@ -9,7 +9,7 @@ from lbmpy.stencils import getStencil
 
 
 def createScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParams, lbmKernel=None,
-                   initialVelocity=None, preUpdateFunctions=[]):
+                   initialVelocity=None, preUpdateFunctions=[], kernelParams={}):
     if 'target' not in optimizationParams:
         optimizationParams['target'] = 'cpu'
 
@@ -65,7 +65,7 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
                 f(pdfArrays[0])
             if boundaryHandling is not None:
                 boundaryHandling(pdfs=pdfArrays[0])
-            lbmKernel(src=pdfArrays[0], dst=pdfArrays[1])
+            lbmKernel(src=pdfArrays[0], dst=pdfArrays[1], **kernelParams)
 
             pdfArrays[0], pdfArrays[1] = pdfArrays[1], pdfArrays[0]
         getMacroscopic(pdfs=pdfArrays[0], density=densityArr[0], velocity=velocityArr[0])
@@ -81,7 +81,7 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
                 f(pdfGpuArrays[0])
             if boundaryHandling is not None:
                 boundaryHandling(pdfs=pdfGpuArrays[0])
-            lbmKernel(src=pdfGpuArrays[0], dst=pdfGpuArrays[1])
+            lbmKernel(src=pdfGpuArrays[0], dst=pdfGpuArrays[1], **kernelParams)
 
             pdfGpuArrays[0], pdfGpuArrays[1] = pdfGpuArrays[1], pdfGpuArrays[0]
 
@@ -98,7 +98,8 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
     return gpuTimeLoop if optimizationParams['target'] == 'gpu' else cpuTimeLoop
 
 
-def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, lbmKernel=None, **kwargs):
+def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, lbmKernel=None,
+                          kernelParams={}, **kwargs):
     def boundarySetupFunction(boundaryHandling, method):
         myUbb = partial(ubb, velocity=[lidVelocity, 0, 0][:method.dim])
         myUbb.name = 'ubb'
@@ -106,11 +107,12 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, 
         for direction in ('W', 'E', 'S') if method.dim == 2 else ('W', 'E', 'S', 'T', 'B'):
             boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, method.dim))
 
-    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel)
+    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel,
+                          kernelParams=kernelParams)
 
 
 def createPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None, radius=None, length=None,
-                                        lbmKernel=None, optimizationParams={}, **kwargs):
+                                        lbmKernel=None, optimizationParams={}, kernelParams={}, **kwargs):
     assert dim in (2, 3)
 
     if radius is not None:
@@ -149,14 +151,13 @@ def createPressureGradientDrivenChannel(dim, pressureDifference, domainSize=None
                     boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, method.dim))
 
     assert domainSize is not None
-    if 'forceModel' not in kwargs:
-        kwargs['forceModel'] = 'guo'
-
-    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel)
+    return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel,
+                          kernelParams=kernelParams)
 
 
 def createForceDrivenChannel(dim, force, domainSize=None, radius=None, length=None, lbmKernel=None,
-                             optimizationParams={}, initialVelocity=None, boundarySetupFunctions=[], **kwargs):
+                             optimizationParams={}, initialVelocity=None, boundarySetupFunctions=[],
+                             kernelParams={}, **kwargs):
     assert dim in (2, 3)
     kwargs['force'] = tuple([force, 0, 0][:dim])
 
@@ -198,5 +199,6 @@ def createForceDrivenChannel(dim, force, domainSize=None, radius=None, length=No
         kwargs['forceModel'] = 'guo'
 
     return createScenario(domainSize, boundarySetupFunction, kwargs, optimizationParams, lbmKernel=lbmKernel,
-                          initialVelocity=initialVelocity, preUpdateFunctions=[periodicity])
+                          initialVelocity=initialVelocity, preUpdateFunctions=[periodicity],
+                          kernelParams=kernelParams)
 

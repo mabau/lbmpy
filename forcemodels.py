@@ -4,6 +4,7 @@
 
 """
 import sympy as sp
+from lbmpy.methods.relaxationrates import getShearRelaxationRate
 
 
 class Simple(object):
@@ -71,7 +72,8 @@ class Guo(object):
 
     def __call__(self, lbMethod):
         luo = Luo(self._force)
-        shearRelaxationRate = lbMethod.getShearRelaxationRate()
+
+        shearRelaxationRate = getShearRelaxationRate(lbMethod)
         correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
         return [correctionFactor * t for t in luo(lbMethod)]
 
