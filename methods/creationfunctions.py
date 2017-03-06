@@ -1,3 +1,5 @@
+from warnings import warn
+
 import sympy as sp
 from collections import OrderedDict
 from functools import reduce
@@ -7,7 +9,8 @@ from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.momentbased import MomentBasedLbMethod
 from lbmpy.stencils import stencilsHaveSameEntries, getStencil
 from lbmpy.moments import isEven, gramSchmidt, getDefaultMomentSetForStencil, MOMENT_SYMBOLS, \
-    exponentsToPolynomialRepresentations, momentsOfOrder, momentsUpToComponentOrder, sortMomentsIntoGroupsOfSameOrder
+    exponentsToPolynomialRepresentations, momentsOfOrder, momentsUpToComponentOrder, sortMomentsIntoGroupsOfSameOrder, \
+    getOrder
 from pystencils.sympyextensions import commonDenominator
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
@@ -43,6 +46,7 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
     if cumulant:
+        warn("Cumulant methods should be created with useContinuousMaxwellianEquilibrium=True")
         eqValues = getCumulantsOfDiscreteMaxwellianEquilibrium(stencil, tuple(momToRrDict.keys()),
                                                                c_s_sq=sp.Rational(1, 3), compressible=compressible,
                                                                order=equilibriumAccuracyOrder)
@@ -157,6 +161,55 @@ def createRawMRT(stencil, relaxationRates, useContinuousMaxwellianEquilibrium=Fa
         return createWithContinuousMaxwellianEqMoments(stencil, rrDict,  **kwargs)
     else:
         return createWithDiscreteMaxwellianEqMoments(stencil, rrDict, **kwargs)
+
+
+def createThreeRelaxationRateMRT(stencil, relaxationRates, useContinuousMaxwellianEquilibrium=False, **kwargs):
+    """
+    Creates a MRT with three relaxation times, one to control viscosity, one for bulk viscosity and one for all
+    higher order moments
+    """
+    def product(iterable):
+        return reduce(operator.mul, iterable, 1)
+
+    dim = len(stencil[0])
+    theMoment = MOMENT_SYMBOLS[:dim]
+
+    shearTensorOffDiagonal = [product(t) for t in itertools.combinations(theMoment, 2)]
+    shearTensorDiagonal = [m_i * m_i for m_i in theMoment]
+    shearTensorTrace = sum(shearTensorDiagonal)
+    shearTensorTraceFreeDiagonal = [dim * d - shearTensorTrace for d in shearTensorDiagonal]
+
+    rest = [defaultMoment for defaultMoment in getDefaultMomentSetForStencil(stencil) if getOrder(defaultMoment) != 2]
+
+    D = shearTensorOffDiagonal + shearTensorTraceFreeDiagonal[:-1]
+    T = [shearTensorTrace]
+    Q = rest
+
+    if 'magicNumber' in kwargs:
+        magicNumber = kwargs['magicNumber']
+    else:
+        magicNumber = sp.Rational(3, 16)
+
+    if len(relaxationRates) == 1:
+        relaxationRates = [relaxationRates[0],
+                           relaxationRateFromMagicNumber(relaxationRates[0], magicNumber=magicNumber),
+                           1]
+    elif len(relaxationRates) == 2:
+        relaxationRates = [relaxationRates[0],
+                           relaxationRateFromMagicNumber(relaxationRates[0], magicNumber=magicNumber),
+                           relaxationRates[1]]
+
+    relaxationRates = [relaxationRates[0]] * len(D) + \
+                      [relaxationRates[1]] * len(T) + \
+                      [relaxationRates[2]] * len(Q)
+
+    allMoments = D + T + Q
+    momentToRr = OrderedDict((m, rr) for m, rr in zip(allMoments, relaxationRates))
+
+    if useContinuousMaxwellianEquilibrium:
+        return createWithContinuousMaxwellianEqMoments(stencil, momentToRr,  **kwargs)
+    else:
+        return createWithDiscreteMaxwellianEqMoments(stencil, momentToRr, **kwargs)
 
 
 def createKBCTypeTRT(dim, shearRelaxationRate, higherOrderRelaxationRate, methodName='KBC-N4',

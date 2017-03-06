@@ -4,7 +4,7 @@ Factory functions for standard LBM methods
 import sympy as sp
 from copy import copy
 
-from lbmpy.methods.creationfunctions import createKBCTypeTRT, createRawMRT
+from lbmpy.methods.creationfunctions import createKBCTypeTRT, createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
 from lbmpy.stencils import getStencil
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT
@@ -200,6 +200,8 @@ def createLatticeBoltzmannMethod(**params):
         method = createOrthogonalMRT(stencil, relaxationRateGetter, **commonParams)
     elif methodName.lower() == 'mrt_raw':
         method = createRawMRT(stencil, relaxationRates, **commonParams)
+    elif methodName.lower() == 'mrt3':
+        method = createThreeRelaxationRateMRT(stencil, relaxationRates, **commonParams)
     elif methodName.lower().startswith('trt-kbc-n'):
         if params['stencil'] == 'D2Q9':
             dim = 2
