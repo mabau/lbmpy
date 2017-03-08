@@ -164,7 +164,7 @@ def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor):
         cellLoopBody.append(be)
 
     functionBody = Block([cellLoop])
-    ast = KernelFunction(functionBody, [pdfField, indexField])
+    ast = KernelFunction(functionBody, [indexField] + list(fieldsAccessed))
 
     if len(additionalNodes) > 0:
         loops = ast.atoms(LoopOverCoordinate)

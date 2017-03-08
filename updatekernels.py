@@ -75,7 +75,7 @@ def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", d
 
 def createPdfArray(size, numDirections, ghostLayers=1, layout='fzyx'):
     """
-    Creates an empy numpy array for a pdf field with the specified memory layout.
+    Creates an empty numpy array for a pdf field with the specified memory layout.
 
     Examples:
         >>> createPdfArray((3, 4, 5), 9, layout='zyxf', ghostLayers=0).shape

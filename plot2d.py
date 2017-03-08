@@ -1,12 +1,7 @@
 from matplotlib.pyplot import *
 
 
-def removeGhostLayers(field):
-    return field[1:-1, 1:-1]
-
-
 def vectorField(field, step=2, **kwargs):
-    field = removeGhostLayers(field)
     veln = field.swapaxes(0, 1)
     quiver(veln[::step, ::step, 0], veln[::step, ::step, 1], **kwargs)
 
@@ -19,7 +14,6 @@ def vectorFieldMagnitude(field, **kwargs):
 
 def scalarField(field, **kwargs):
     import numpy as np
-    field = removeGhostLayers(field)
     field = np.swapaxes(field, 0, 1)
     return imshow(field, origin='lower', **kwargs)
 
