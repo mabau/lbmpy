@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import sympy as sp
 from pystencils.transformations import fastSubs
 from lbmpy.methods.relaxationrates import getShearRelaxationRate
@@ -68,73 +70,83 @@ def addEntropyCondition(collisionRule, omegaOutputField=None):
     return newCollisionRule
 
 
-def addIterativeEntropyCondition(collisionRule, newtonIterations=3, initialValue=1, omegaOutputField=None):
+def addIterativeEntropyCondition(collisionRule, freeOmega=None, newtonIterations=3, initialValue=1,
+                                 omegaOutputField=None):
     """
     More generic, but slower version of :func:`addEntropyCondition`
 
     A fixed number of Newton iterations is used to determine the maximum entropy relaxation rate.
 
     :param collisionRule: collision rule with two relaxation times
+    :param freeOmega: relaxation rate which should be determined by entropy condition. If left to None, the
+                      relaxation rate is automatically detected, which works only if there are 2 relaxation times
     :param newtonIterations: (integer) number of newton iterations
     :param initialValue: initial value of the relaxation rate
     :param omegaOutputField: pystencils field where computed omegas are stored
     :return: new collision rule which only one relaxation rate
     """
+
     if collisionRule.method.conservedQuantityComputation.zeroCenteredPdfs:
         raise NotImplementedError("Entropic Methods only implemented for models where pdfs are centered around 1")
 
-    omega_s, omega_h = _getRelaxationRates(collisionRule)
+    if freeOmega is None:
+        _, freeOmega = _getRelaxationRates(collisionRule)
 
-    decomp = RelaxationRatePolynomialDecomposition(collisionRule, [omega_h], [omega_s])
+    decomp = RelaxationRatePolynomialDecomposition(collisionRule, [freeOmega], [])
 
-    # compute and assign relaxation rate factors
     newUpdateEquations = []
-    fEqEqs = []
-    rrFactorDefinitions = []
-    relaxationRates = [omega_s, omega_h]
 
+    # 1) decompose into constant + freeOmega * ent1 + freeOmega**2 * ent2
+    polynomialSubexpressions = []
+    rrPolynomials = []
     for i, constantExpr in enumerate(decomp.constantExprs()):
-        updateEqRhs = constantExpr
-        fEqRhs = constantExpr
-        for rr in relaxationRates:
-            factors = decomp.relaxationRateFactors(rr)
-            for idx, f in enumerate(factors[i]):
-                power = idx + 1
-                symbolicFactor = decomp.symbolicRelaxationRateFactors(rr, power)[i]
-                rrFactorDefinitions.append(sp.Eq(symbolicFactor, f))
-                updateEqRhs += rr ** power * symbolicFactor
-                fEqRhs += symbolicFactor
-        newUpdateEquations.append(sp.Eq(collisionRule.method.postCollisionPdfSymbols[i], updateEqRhs))
-        fEqEqs.append(sp.Eq(decomp.symbolicEquilibrium()[i], fEqRhs))
+        constantExprEq = sp.Eq(decomp.symbolicConstantExpr(i), constantExpr)
+        polynomialSubexpressions.append(constantExprEq)
+        rrPolynomial = constantExprEq.lhs
 
-    # newton iterations to determine free omega
+        factors = decomp.relaxationRateFactors(freeOmega)
+        for idx, f in enumerate(factors[i]):
+            power = idx + 1
+            symbolicFactor = decomp.symbolicRelaxationRateFactors(freeOmega, power)[i]
+            polynomialSubexpressions.append(sp.Eq(symbolicFactor, f))
+            rrPolynomial += freeOmega ** power * symbolicFactor
+        rrPolynomials.append(rrPolynomial)
+        newUpdateEquations.append(sp.Eq(collisionRule.method.postCollisionPdfSymbols[i], rrPolynomial))
+
+    # 2) get equilibrium from method and define subexpressions for it
+    eqTerms = [eq.rhs for eq in collisionRule.method.getEquilibrium().mainEquations]
+    eqSymbols = sp.symbols("entropicFeq_:%d" % (len(eqTerms,)))
+    eqSubexpressions = [sp.Eq(a, b) for a, b in zip(eqSymbols, eqTerms)]
+
+    # 3) find coefficients of entropy derivatives
+    entropyDiff = sp.diff(discreteApproxEntropy(rrPolynomials, eqSymbols), freeOmega)
+    coefficientsFirstDiff = [c.expand() for c in reversed(sp.poly(entropyDiff, freeOmega).all_coeffs())]
+    symCoeffDiff1 = sp.symbols("entropicDiffCoeff_:%d" % (len(coefficientsFirstDiff,)))
+    coefficientEqs = [sp.Eq(a, b) for a, b in zip(symCoeffDiff1, coefficientsFirstDiff)]
+    symCoeffDiff2 = [(i+1) * coeff for i, coeff in enumerate(symCoeffDiff1[1:])]
+
+    # 4) define Newtons method update iterations
+    newtonIterationEquations = []
     intermediateOmegas = [sp.Symbol("omega_iter_%i" % (i,)) for i in range(newtonIterations+1)]
     intermediateOmegas[0] = initialValue
-    intermediateOmegas[-1] = omega_h
-
-    newtonIterationEquations = []
+    intermediateOmegas[-1] = freeOmega
     for omega_idx in range(len(intermediateOmegas)-1):
         rhsOmega = intermediateOmegas[omega_idx]
         lhsOmega = intermediateOmegas[omega_idx+1]
-        updateEqsRhs = [e.rhs for e in newUpdateEquations]
-        entropy = discreteApproxEntropy(updateEqsRhs, [e.lhs for e in fEqEqs])
-        entropyDiff = sp.diff(entropy, omega_h)
-        entropySecondDiff = sp.diff(entropyDiff, omega_h)
-        entropyDiff = entropyDiff.subs(omega_h, rhsOmega)
-        entropySecondDiff = entropySecondDiff.subs(omega_h, rhsOmega)
-
-        newtonEq = sp.Eq(lhsOmega, rhsOmega - entropyDiff / entropySecondDiff)
+        diff1Poly = sum([coeff * rhsOmega**i for i, coeff in enumerate(symCoeffDiff1)])
+        diff2Poly = sum([coeff * rhsOmega**i for i, coeff in enumerate(symCoeffDiff2)])
+        newtonEq = sp.Eq(lhsOmega, rhsOmega - diff1Poly / diff2Poly)
         newtonIterationEquations.append(newtonEq)
 
-    # final update equations
-    newSubexpressions = collisionRule.subexpressions + rrFactorDefinitions + fEqEqs + newtonIterationEquations
-    newCollisionRule = collisionRule.copy(newUpdateEquations, newSubexpressions)
+    # 5) final update equations
+    newSubExprs = polynomialSubexpressions + eqSubexpressions + coefficientEqs + newtonIterationEquations
+    newCollisionRule = collisionRule.copy(newUpdateEquations, collisionRule.subexpressions + newSubExprs)
     newCollisionRule.simplificationHints['entropic'] = True
     newCollisionRule.simplificationHints['entropicNewtonIterations'] = newtonIterations
 
     if omegaOutputField:
         from lbmpy.updatekernels import writeQuantitiesToField
-        newCollisionRule = writeQuantitiesToField(newCollisionRule, omega_h, omegaOutputField)
+        newCollisionRule = writeQuantitiesToField(newCollisionRule, freeOmega, omegaOutputField)
 
     return newCollisionRule
 
@@ -212,6 +224,9 @@ class RelaxationRatePolynomialDecomposition(object):
 
         return result
 
+    def symbolicConstantExpr(self, i):
+        return sp.Symbol("entOffset_%d" % (i,))
+
     def constantExprs(self):
         subsDict = {rr: 0 for rr in self._freeRelaxationRates}
         subsDict.update({rr: 0 for rr in self._fixedRelaxationRates})
@@ -246,3 +261,17 @@ def _getRelaxationRates(collisionRule):
     relaxationRatesWithoutOmegaS = relaxationRates - {omega_s}
     omega_h = list(relaxationRatesWithoutOmegaS)[0]
     return omega_s, omega_h
+
+
+if __name__ == '__main__':
+    from lbmpy.creationfunctions import createLatticeBoltzmannUpdateRule as cLbm
+
+    ur = cLbm(method='trt', compressible=True)
+    # ur.method
+    eUr = addGenericEntropicCondition(ur, sp.Symbol("omega_1"))
+
+    #cLbm(stencil="D2Q9", method='mrt3',
+    #     relaxationRates=[sp.Symbol("t"), sp.Symbol("t"), sp.Symbol("a")], cumulant=True,
+    #     useContinuousMaxwellianEquilibrium=True, compressible=True, entropic=True,
+    #     entropicNewtonIterations=5)
+
