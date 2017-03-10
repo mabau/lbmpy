@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import sympy as sp
 from pystencils.transformations import fastSubs
 from lbmpy.methods.relaxationrates import getShearRelaxationRate

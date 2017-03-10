@@ -1,7 +1,7 @@
 from functools import partial
 import numpy as np
 from pystencils import Field
-from pystencils.slicing import sliceFromDirection
+from pystencils.slicing import sliceFromDirection, addGhostLayers, getPeriodicBoundaryFunctor
 from lbmpy.creationfunctions import createLatticeBoltzmannFunction
 from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
 from lbmpy.boundaries import BoundaryHandling, noSlip, ubb, fixedDensity
@@ -69,9 +69,6 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
 
             pdfArrays[0], pdfArrays[1] = pdfArrays[1], pdfArrays[0]
         getMacroscopic(pdfs=pdfArrays[0], density=densityArr[0], velocity=velocityArr[0])
-        #for vComp in range(velocityArr[0].shape[-1]):
-        #    v = velocityArr[0][..., vComp]
-        #    v[boundaryHandling.flagField != boundaryHandling._fluidFlag] = 0
         return pdfArrays[0], densityArr[0], velocityArr[0]
 
     def gpuTimeLoop(timeSteps):
@@ -99,6 +96,19 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
     gpuTimeLoop.kernel = lbmKernel
 
     return gpuTimeLoop if optimizationParams['target'] == 'gpu' else cpuTimeLoop
+
+
+def createFullyPeriodicFlow(initialVelocity, optimizationParams={}, lbmKernel=None, kernelParams={}, **kwargs):
+    domainSize = initialVelocity.shape
+    # extend velocity with ghost layer
+    initialVelocityWithGl = addGhostLayers(initialVelocity, indexDimensions=1, ghostLayers=1)
+
+    stencil = getStencil(kwargs['stencil'])
+    periodicity = getPeriodicBoundaryFunctor(stencil)
+
+    return createScenario(domainSize, None, kwargs, optimizationParams, lbmKernel=lbmKernel,
+                          initialVelocity=initialVelocityWithGl, kernelParams=kernelParams,
+                          preUpdateFunctions=[periodicity])
 
 
 def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, lbmKernel=None,
