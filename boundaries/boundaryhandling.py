@@ -2,9 +2,7 @@ import sympy as sp
 import numpy as np
 from pystencils import TypedSymbol, Field
 from pystencils.backends.cbackend import CustomCppCode
-from pystencils.astnodes import Block, SympyAssignment, LoopOverCoordinate, KernelFunction
-from pystencils.transformations import moveConstantsBeforeLoop, resolveFieldAccesses, typingFromSympyInspection, \
-    typeAllEquations
+from pystencils.cpu.kernelcreation import createIndexedKernel
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
@@ -74,6 +72,7 @@ class BoundaryHandling(object):
         for boundaryIdx, boundaryFunc in enumerate(self._boundaryFunctions):
             idxField = createBoundaryIndexList(self.flagField, self._lbMethod.stencil,
                                                2 ** boundaryIdx, self._fluidFlag, self._ghostLayers)
+            idxField = transformIndexListToStruct(idxField)
             ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundaryFunc)
 
             if self._target == 'cpu':
@@ -135,47 +134,28 @@ class LbmMethodInfo(CustomCppCode):
         super(LbmMethodInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
 
 
+def transformIndexListToStruct(arr):
+    #TODO create in correct form right away
+    dim = arr.shape[-1] -1
+    coordinateNames = ['x', 'y', 'z'][:dim]
+    dataTypeInfo = [(name, np.int) for name in coordinateNames] + [('dir', np.int)]
+    indexArrStruct = np.empty((arr.shape[0]), dtype=np.dtype(dataTypeInfo))
+    for idx, name in enumerate(coordinateNames):
+        indexArrStruct[name] = arr[:, idx]
+    indexArrStruct['dir'] = arr[:, -1]
+    return indexArrStruct
+
+
 def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor):
-    dim = lbMethod.dim
+    indexField = Field.createFromNumpyArray("indexField", indexArr)
 
-    cellLoopBody = Block([])
-    cellLoop = LoopOverCoordinate(cellLoopBody, coordinateToLoopOver=0, start=0, stop=indexArr.shape[0])
-
-    indexField = Field.createFromNumpyArray("indexField", indexArr, indexDimensions=1)
-    indexField.isIndexField = True
-
-    coordinateSymbols = [TypedSymbol(name, "int") for name in ['x', 'y', 'z']]
-    for d in range(dim):
-        cellLoopBody.append(SympyAssignment(coordinateSymbols[d], indexField[0](d)))
-    dirSymbol = TypedSymbol("dir", "int")
-    cellLoopBody.append(SympyAssignment(dirSymbol, indexField[0](dim)))
-
-    boundaryEqList = boundaryFunctor(pdfField, dirSymbol, lbMethod)
+    elements = [LbmMethodInfo(lbMethod)]
+    boundaryEqList = boundaryFunctor(pdfField, indexField[0]('dir'), lbMethod)
     if type(boundaryEqList) is tuple:
         boundaryEqList, additionalNodes = boundaryEqList
+        elements += boundaryEqList
+        elements += additionalNodes
     else:
-        additionalNodes = []
+        elements += boundaryEqList
+    return createIndexedKernel(elements, [indexField])
 
-    typeInfos = typingFromSympyInspection(boundaryEqList, pdfField.dtype)
-    fieldsRead, fieldsWritten, assignments = typeAllEquations(boundaryEqList, typeInfos)
-    fieldsAccessed = fieldsRead.union(fieldsWritten) - set([indexField])
-
-    for be in assignments:
-        cellLoopBody.append(be)
-
-    functionBody = Block([cellLoop])
-    ast = KernelFunction(functionBody, [indexField] + list(fieldsAccessed))
-
-    if len(additionalNodes) > 0:
-        loops = ast.atoms(LoopOverCoordinate)
-        assert len(loops) == 1
-        loop = list(loops)[0]
-        for node in additionalNodes:
-            loop.body.append(node)
-
-    functionBody.insertFront(LbmMethodInfo(lbMethod))
-
-    fixedCoordinateMapping = {f.name: coordinateSymbols[:dim] for f in fieldsAccessed}
-    resolveFieldAccesses(ast, set(['indexField']), fieldToFixedCoordinates=fixedCoordinateMapping)
-    moveConstantsBeforeLoop(ast)
-    return ast
