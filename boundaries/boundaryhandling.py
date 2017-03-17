@@ -72,7 +72,6 @@ class BoundaryHandling(object):
         for boundaryIdx, boundaryFunc in enumerate(self._boundaryFunctions):
             idxField = createBoundaryIndexList(self.flagField, self._lbMethod.stencil,
                                                2 ** boundaryIdx, self._fluidFlag, self._ghostLayers)
-            idxField = transformIndexListToStruct(idxField)
             ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundaryFunc)
 
             if self._target == 'cpu':
@@ -134,23 +133,13 @@ class LbmMethodInfo(CustomCppCode):
         super(LbmMethodInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
 
 
-def transformIndexListToStruct(arr):
-    #TODO create in correct form right away
-    dim = arr.shape[-1] -1
-    coordinateNames = ['x', 'y', 'z'][:dim]
-    dataTypeInfo = [(name, np.int) for name in coordinateNames] + [('dir', np.int)]
-    indexArrStruct = np.empty((arr.shape[0]), dtype=np.dtype(dataTypeInfo))
-    for idx, name in enumerate(coordinateNames):
-        indexArrStruct[name] = arr[:, idx]
-    indexArrStruct['dir'] = arr[:, -1]
-    return indexArrStruct
-
-
 def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor):
     indexField = Field.createFromNumpyArray("indexField", indexArr)
 
     elements = [LbmMethodInfo(lbMethod)]
-    boundaryEqList = boundaryFunctor(pdfField, indexField[0]('dir'), lbMethod)
+    dirSymbol = TypedSymbol("dir", indexArr.dtype.fields['dir'][0])
+    boundaryEqList = [sp.Eq(dirSymbol, indexField[0]('dir'))]
+    boundaryEqList += boundaryFunctor(pdfField, dirSymbol, lbMethod)
     if type(boundaryEqList) is tuple:
         boundaryEqList, additionalNodes = boundaryEqList
         elements += boundaryEqList
