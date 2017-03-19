@@ -2,7 +2,6 @@ import sympy as sp
 import numpy as np
 from pystencils import TypedSymbol, Field
 from pystencils.backends.cbackend import CustomCppCode
-from pystencils.cpu.kernelcreation import createIndexedKernel
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
@@ -72,14 +71,17 @@ class BoundaryHandling(object):
         for boundaryIdx, boundaryFunc in enumerate(self._boundaryFunctions):
             idxField = createBoundaryIndexList(self.flagField, self._lbMethod.stencil,
                                                2 ** boundaryIdx, self._fluidFlag, self._ghostLayers)
-            ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundaryFunc)
+            ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundaryFunc,
+                                           target=self._target)
 
             if self._target == 'cpu':
                 from pystencils.cpu import makePythonFunction as makePythonCpuFunction
                 self._boundarySweeps.append(makePythonCpuFunction(ast, {'indexField': idxField}))
             elif self._target == 'gpu':
                 from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
-                self._boundarySweeps.append(makePythonGpuFunction(ast, {'indexField': idxField}))
+                import pycuda.gpuarray as gpuarray
+                idxGpuField = gpuarray.to_gpu(idxField)
+                self._boundarySweeps.append(makePythonGpuFunction(ast, {'indexField': idxGpuField}))
             else:
                 assert False
 
@@ -133,7 +135,7 @@ class LbmMethodInfo(CustomCppCode):
         super(LbmMethodInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
 
 
-def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor):
+def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor, target='cpu'):
     indexField = Field.createFromNumpyArray("indexField", indexArr)
 
     elements = [LbmMethodInfo(lbMethod)]
@@ -146,5 +148,11 @@ def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor):
         elements += additionalNodes
     else:
         elements += boundaryEqList
-    return createIndexedKernel(elements, [indexField])
+
+    if target == 'cpu':
+        from pystencils.cpu import createIndexedKernel
+        return createIndexedKernel(elements, [indexField])
+    elif target == 'gpu':
+        from pystencils.gpucuda import createdIndexedCUDAKernel
+        return createdIndexedCUDAKernel(elements, [indexField])
 
