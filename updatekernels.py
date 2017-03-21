@@ -1,6 +1,7 @@
 import numpy as np
 import sympy as sp
 from pystencils import Field
+from pystencils.field import createNumpyArrayWithLayout
 from pystencils.sympyextensions import fastSubs
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
 
@@ -73,6 +74,7 @@ def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", d
 
 # ---------------------------------- Pdf array creation for various layouts --------------------------------------------
 
+
 def createPdfArray(size, numDirections, ghostLayers=1, layout='fzyx'):
     """
     Creates an empty numpy array for a pdf field with the specified memory layout.
@@ -88,17 +90,14 @@ def createPdfArray(size, numDirections, ghostLayers=1, layout='fzyx'):
         (72, 360, 8)
     """
     sizeWithGl = [s + 2 * ghostLayers for s in size]
+    dim = len(size)
     if layout == "fzyx" or layout == 'f' or layout == 'reverseNumpy':
-        return np.empty(sizeWithGl + [numDirections], order='f')
+        layout = tuple(reversed(range(dim+1)))
     elif layout == 'c' or layout == 'numpy':
-        return np.empty(sizeWithGl + [numDirections], order='c')
+        layout = tuple(range(dim+1))
     elif layout == 'zyxf':
-        res = np.empty(list(reversed(sizeWithGl)) + [numDirections], order='c')
-        res = res.swapaxes(0, 1)
-        if len(size) == 3:
-            res = res.swapaxes(1, 2)
-            res = res.swapaxes(0, 1)
-        return res
+        layout = tuple(reversed(range(dim))) + (dim,)
+    return createNumpyArrayWithLayout(sizeWithGl + [numDirections], layout)
 
 
 # ------------------------------------------- Add output fields to kernel ----------------------------------------------

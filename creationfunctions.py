@@ -3,6 +3,7 @@ Factory functions for standard LBM methods
 """
 import sympy as sp
 from copy import copy
+from functools import partial
 
 from lbmpy.methods.creationfunctions import createKBCTypeTRT, createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
@@ -13,7 +14,7 @@ from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import createStreamPullKernel, createPdfArray
 
 
-def _getParams(params, optParams):
+def updateWithDefaultParameters(params, optParams):
     defaultMethodDescription = {
         'stencil': 'D2Q9',
         'method': 'srt',  # can be srt, trt or mrt
@@ -43,6 +44,10 @@ def _getParams(params, optParams):
         'target': 'cpu',
         'openMP': True,
         'pdfArr': None,
+        'doublePrecision': True,
+
+        'gpuIndexing': 'block',
+        'gpuIndexingParams': {},
     }
     unknownParams = [k for k in params.keys() if k not in defaultMethodDescription]
     unknownOptParams = [k for k in optParams.keys() if k not in defaultOptimizationDescription]
@@ -59,7 +64,7 @@ def _getParams(params, optParams):
 
 
 def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
-    params, optParams = _getParams(kwargs, optimizationParams)
+    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
 
     if ast is None:
         params['optimizationParams'] = optParams
@@ -86,7 +91,7 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
 
 
 def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
-    params, optParams = _getParams(kwargs, optimizationParams)
+    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
 
     if updateRule is None:
         params['optimizationParams'] = optimizationParams
@@ -95,14 +100,21 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
     if optParams['target'] == 'cpu':
         from pystencils.cpu import createKernel
         if 'splitGroups' in updateRule.simplificationHints:
-            print("splitting!")
             splitGroups = updateRule.simplificationHints['splitGroups']
         else:
             splitGroups = ()
-        res = createKernel(updateRule.allEquations, splitGroups=splitGroups)
+        res = createKernel(updateRule.allEquations, splitGroups=splitGroups,
+                           typeForSymbol='double' if optParams['doublePrecision'] else 'float')
     elif optParams['target'] == 'gpu':
         from pystencils.gpucuda import createCUDAKernel
-        res = createCUDAKernel(updateRule.allEquations)
+        from pystencils.gpucuda.indexing import LineIndexing, BlockIndexing
+        assert optParams['gpuIndexing'] in ('line', 'block')
+        indexingCreator = LineIndexing if optParams['gpuIndexing'] == 'line' else BlockIndexing
+        if optParams['gpuIndexingParams']:
+            indexingCreator = partial(indexingCreator, **optParams['gpuIndexingParams'])
+        res = createCUDAKernel(updateRule.allEquations,
+                               typeForSymbol='double' if optParams['doublePrecision'] else 'float',
+                               indexingCreator=indexingCreator)
     else:
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
@@ -112,7 +124,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
 
 
 def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwargs):
-    params, optParams = _getParams(kwargs, optimizationParams)
+    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
     stencil = getStencil(params['stencil'])
 
     if lbMethod is None:
@@ -154,7 +166,7 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
 
 
 def createLatticeBoltzmannMethod(**params):
-    params, _ = _getParams(params, {})
+    params, _ = updateWithDefaultParameters(params, {})
 
     stencil = getStencil(params['stencil'])
     dim = len(stencil[0])

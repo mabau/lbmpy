@@ -12,6 +12,7 @@ class LbmCollisionRule(EquationCollection):
         super(LbmCollisionRule, self).__init__(*args, **kwargs)
         self.method = lbmMethod
 
+
 class AbstractLbMethod(abc.ABCMeta('ABC', (object,), {})):
     """
     Abstract base class for all LBM methods

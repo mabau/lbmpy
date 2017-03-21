@@ -1,28 +1,28 @@
 from functools import partial
 import numpy as np
 from pystencils import Field
+from pystencils.field import getLayoutOfArray, createNumpyArrayWithLayout
 from pystencils.slicing import sliceFromDirection, addGhostLayers, getPeriodicBoundaryFunctor
-from lbmpy.creationfunctions import createLatticeBoltzmannFunction
+from lbmpy.creationfunctions import createLatticeBoltzmannFunction, updateWithDefaultParameters
 from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
 from lbmpy.boundaries import BoundaryHandling, noSlip, ubb, fixedDensity
 from lbmpy.stencils import getStencil
+from lbmpy.updatekernels import createPdfArray
 
 
 def createScenario(domainSize, boundarySetupFunction, methodParameters, optimizationParams, lbmKernel=None,
                    initialVelocity=None, preUpdateFunctions=[], kernelParams={}):
-    if 'target' not in optimizationParams:
-        optimizationParams['target'] = 'cpu'
-
     ghostLayers = 1
     domainSizeWithGhostLayer = tuple([s + 2 * ghostLayers for s in domainSize])
     D = len(domainSize)
-
     if 'stencil' not in methodParameters:
         methodParameters['stencil'] = 'D2Q9' if D == 2 else 'D3Q27'
 
+    methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
+
     Q = len(getStencil(methodParameters['stencil']))
-    pdfArrays = [np.zeros(domainSizeWithGhostLayer + (Q,)),
-                 np.zeros(domainSizeWithGhostLayer + (Q,))]
+    pdfArrays = [createPdfArray(domainSize, Q, layout=optimizationParams['fieldLayout']),
+                 createPdfArray(domainSize, Q, layout=optimizationParams['fieldLayout'])]
 
     # Create kernel
     if lbmKernel is None:
@@ -43,8 +43,10 @@ def createScenario(domainSize, boundarySetupFunction, methodParameters, optimiza
         boundaryHandling = None
 
     # Macroscopic value input/output
-    densityArr = [np.zeros(domainSizeWithGhostLayer)]
-    velocityArr = [np.zeros(domainSizeWithGhostLayer + (D,))]
+    pdfArrLayout = getLayoutOfArray(pdfArrays[0])
+    pdfArrLayoutNoIdx = getLayoutOfArray(pdfArrays[0], indexDimensionIds=[D])
+    densityArr = [createNumpyArrayWithLayout(domainSizeWithGhostLayer, layout=pdfArrLayoutNoIdx)]
+    velocityArr = [createNumpyArrayWithLayout(list(domainSizeWithGhostLayer) + [D], layout=pdfArrLayout)]
     getMacroscopic = compileMacroscopicValuesGetter(method, ['density', 'velocity'], pdfArr=pdfArrays[0], target='cpu')
 
     if initialVelocity is None:

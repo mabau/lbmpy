@@ -1,5 +1,5 @@
 from copy import deepcopy
-from pystencils.field import Field, getLayoutFromNumpyArray
+from pystencils.field import Field, getLayoutOfArray
 from lbmpy.simplificationfactory import createSimplificationStrategy
 
 
@@ -42,9 +42,9 @@ def compileMacroscopicValuesGetter(lbMethod, outputQuantities, pdfArr=None, fiel
             outputFieldShape = pdfArr.shape[:-1]
             if indDims > 0:
                 outputFieldShape += (numberOfElements,)
-                fieldLayout = getLayoutFromNumpyArray(pdfArr)
+                fieldLayout = getLayoutOfArray(pdfArr)
             else:
-                fieldLayout = getLayoutFromNumpyArray(pdfArr, indexDimensionIds=[len(pdfField.shape) - 1])
+                fieldLayout = getLayoutOfArray(pdfArr, indexDimensionIds=[len(pdfField.shape) - 1])
             outputField = Field.createFixedSize(outputQuantity, outputFieldShape, indDims, pdfArr.dtype, fieldLayout)
 
         outputMapping[outputQuantity] = [outputField(i) for i in range(numberOfElements)]
