@@ -8,8 +8,10 @@ def vectorField(field, step=2, **kwargs):
 
 def vectorFieldMagnitude(field, **kwargs):
     from numpy.linalg import norm
-    field = norm(field, axis=2, ord=2)
-    return scalarField(field, **kwargs)
+    norm = norm(field, axis=2, ord=2)
+    if hasattr(field, 'mask'):
+        norm = np.ma.masked_array(norm, mask=field.mask[:,:,0])
+    return scalarField(norm, **kwargs)
 
 
 def scalarField(field, **kwargs):
@@ -32,9 +34,11 @@ def vectorFieldMagnitudeAnimation(runFunction, plotSetupFunction=lambda: None,
 
     def updatefig(*args):
         f = runFunction()
-        f = norm(f, axis=2, ord=2)
-        f = np.swapaxes(f, 0, 1)
-        im.set_array(f)
+        normed = norm(f, axis=2, ord=2)
+        if hasattr(f, 'mask'):
+            normed = np.ma.masked_array(normed, mask=f.mask[:, :, 0])
+        normed = np.swapaxes(normed, 0, 1)
+        im.set_array(normed)
         plotUpdateFunction()
         return im,
 

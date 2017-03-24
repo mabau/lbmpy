@@ -3,13 +3,31 @@ import numpy as np
 from pystencils import TypedSymbol, Field
 from pystencils.backends.cbackend import CustomCppCode
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList
+from pystencils.slicing import normalizeSlice
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
 WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
 
 
 class BoundaryHandling(object):
-    def __init__(self, symbolicPdfField, domainShape, lbMethod, ghostLayers=1, target='cpu'):
+    def __init__(self, pdfField, domainShape, lbMethod, ghostLayers=1, target='cpu'):
+        """
+        Class for managing boundary kernels
+
+        :param pdfField: either pdf numpy array (including ghost layers), or pystencils.Field
+        :param domainShape: domain size without ghost layers
+        :param lbMethod: lattice Boltzmann method
+        :param ghostLayers: number of ghost layers
+        :param target: either 'cpu' or 'gpu'
+        """
+        if isinstance(pdfField, np.ndarray):
+            symbolicPdfField = Field.createFromNumpyArray('pdfs', pdfField, indexDimensions=1)
+            assert pdfField.shape[:-1] == tuple(d + 2*ghostLayers for d in domainShape)
+        elif isinstance(pdfField, Field):
+            symbolicPdfField = pdfField
+        else:
+            raise ValueError("pdfField has to be either a numpy array or a pystencils.Field")
+
         self._symbolicPdfField = symbolicPdfField
         self._shapeWithGhostLayers = [d + 2 * ghostLayers for d in domainShape]
         self._fluidFlag = 2 ** 30
@@ -23,7 +41,48 @@ class BoundaryHandling(object):
         if target not in ('cpu', 'gpu'):
             raise ValueError("Invalid target '%s' . Allowed values: 'cpu' or 'gpu'" % (target,))
 
+    def setBoundary(self, function, indexExpr, maskArr=None, name=None):
+        """
+        Sets boundary in a rectangular region (slice)
+
+        :param function: boundary
+        :param indexExpr: slice expression, where boundary should be set, see :mod:`pystencils.slicing`
+        :param maskArr: optional boolean (masked) array specifying where the boundary should be set
+        :param name: name of the boundary
+        """
+        if name is None:
+            if hasattr(function, '__name__'):
+                name = function.__name__
+            elif hasattr(function, 'name'):
+                name = function.name
+            else:
+                raise ValueError("Boundary function has to have a '__name__' or 'name' attribute "
+                                 "if name is not specified")
+
+        if function not in self._boundaryFunctions:
+            self.addBoundary(function, name)
+
+        flag = self.getFlag(name)
+
+        indexExpr = normalizeSlice(indexExpr, self._shapeWithGhostLayers)
+        if maskArr is None:
+            self.flagField[indexExpr] = flag
+        else:
+            flagFieldView = self.flagField[indexExpr]
+            flagFieldView[maskArr] = flag
+
+        self.invalidateIndexCache()
+
     def addBoundary(self, boundaryFunction, name=None):
+        """
+        Adds a boundary condition, i.e. reserves a flog in the flag field and returns that flag
+        If a boundary with that name already exists, the existing flag is returned.
+        This flag can be logicalled or'ed to the boundaryHandling.flagField
+
+        :param boundaryFunction: boundary condition function, see :mod:`lbmpy.boundaries.boundaryconditions`
+        :param name: boundaries with different name are considered different. If not given
+                     ```boundaryFunction.__name__`` is used
+        """
         if name is None:
             name = boundaryFunction.__name__
 
@@ -45,27 +104,6 @@ class BoundaryHandling(object):
     def getFlag(self, name):
         return 2 ** self._nameToIndex[name]
 
-    def setBoundary(self, function, indexExpr, maskArr=None):
-        if hasattr(function, '__name__'):
-            name = function.__name__
-        elif hasattr(function, 'name'):
-            name = function.name
-        else:
-            raise ValueError("Boundary function has to have a '__name__' or 'name' attribute")
-
-        if function not in self._boundaryFunctions:
-            self.addBoundary(function, name)
-
-        flag = self.getFlag(name)
-
-        if maskArr is None:
-            self.flagField[indexExpr] = flag
-        else:
-            flagFieldView = self.flagField[indexExpr]
-            flagFieldView[maskArr] = flag
-
-        self.invalidateIndexCache()
-
     def prepare(self):
         self.invalidateIndexCache()
         for boundaryIdx, boundaryFunc in enumerate(self._boundaryFunctions):
@@ -86,6 +124,8 @@ class BoundaryHandling(object):
                 assert False
 
     def __call__(self, **kwargs):
+        if len(self._boundaryFunctions) == 0:
+            return
         if len(self._boundarySweeps) == 0:
             self.prepare()
         for boundarySweep in self._boundarySweeps:

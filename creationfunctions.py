@@ -1,14 +1,144 @@
-"""
-Factory functions for standard LBM methods
+r"""
+Creating LBM kernels
+====================
+
+
+Terminology and creation pipeline
+---------------------------------
+
+Kernel functions are created in three steps:
+
+1. *Method*:
+         the method defines the collision process. Currently there are two big categories:
+         moment and cumulant based methods. A method defines how each moment or cumulant is relaxed by
+         storing the equilibrium value and the relaxation rate for each moment/cumulant.
+2. *Collision/Update Rule*:
+         Methods can generate a "collision rule" which is an equation collection that define the
+         post collision values as a function of the pre-collision values. On these equation collection
+         simplifications are applied to reduce the number of floating point operations.
+         At this stage an entropic optimization step can also be added to determine one relaxation rate by an
+         entropy condition.
+         Then a streaming rule is added which transforms the collision rule into an update rule.
+         The streaming step depends on the pdf storage (source/destination, AABB pattern, EsoTwist).
+         Currently only the simple source/destination  pattern is supported.
+3. *AST*:
+        The abstract syntax tree describes the structure of the kernel, including loops and conditionals.
+        The ast can be modified e.g. to add OpenMP pragmas, reorder loops or apply other optimizations.
+4. *Function*:
+        This step compiles the AST into an executable function, either for CPU or GPUs. This function
+        behaves like a normal Python function and runs one LBM time step.
+
+The function :func:`createLatticeBoltzmannFunction` runs the whole pipeline, the other functions in this module
+execute this pipeline only up to a certain step. Each function optionally also takes the result of the previous step.
+
+For example, to modify the AST one can run::
+
+    ast = createLatticeBoltzmannAst(...)
+    # modify ast here
+    func = createLatticeBoltzmannFunction(ast=ast, ...)
+
+
+Parameters
+----------
+
+The following list describes common parameters for the creation functions. They have to be passed as keyword parameters.
+
+
+Method parameters
+^^^^^^^^^^^^^^^^^
+
+General:
+
+- ``stencil='D2Q9'``: stencil name e.g. 'D2Q9', 'D3Q19'. See :func:`pystencils.stencils.getStencil` for details
+- ``method='srt'``: name of lattice Boltzmann method. This determines the selection and relaxation pattern of
+  moments/cumulants, i.e. which moment/cumulant basis is chosen, and which of the basis vectors are relaxed together
+    - ``srt``: single relaxation time (:func:`lbmpy.methods.createSRT`)
+    - ``trt``: two relaxation time, first relaxation rate is for even moments and determines the viscosity (as in SRT),
+      the second relaxation rate is used for relaxing odd moments, and controls the bulk viscosity.
+      (:func:`lbmpy.methods.createTRT`)
+    - ``mrt``: orthogonal multi relaxation time model, number of relaxation rates depends on the stencil
+      (:func:`lbmpy.methods.createOrthogonalMRT`)
+    - ``mrt3``: three relaxation time method, where shear moments are relaxed with first relaxation rate (and therefore
+      determine viscosity, second rate relaxes the shear tensor trace (determines bulk viscosity) and last rate relaxes
+      all other, higher order moments. If two relaxation rates are chosen the same this is equivalent to a KBC type
+      relaxation (:func:`lbmpy.methods.createThreeRelaxationRateMRT`)
+    - ``mrt_raw``: non-orthogonal MRT where all relaxation rates can be specified independently i.e. there are as many
+      relaxation rates as stencil entries. Look at the generated method in Jupyter to see which moment<->relaxation rate
+      mapping (:func:`lbmpy.methods.createRawMRT`)
+    - ``trt-kbc-n<N>`` where <N> is 1,2,3 or 4. Special two-relaxation method. This is not the entropic method
+      yet, only the relaxation pattern. To get the entropic method, see parameters below!
+      (:func:`lbmpy.methods.createKBCTypeTRT`)
+- ``relaxationRates``: sequence of relaxation rates, number depends on selected method. If you specify more rates than
+  method needs, the additional rates are ignored.
+- ``compressible=False``: affects the selection of equilibrium moments. Both options approximate the *incompressible*
+  Navier Stokes Equations. However when chosen as False, the approximation is better, the standard LBM derivation is
+  compressible.
+- ``equilibriumAccuracyOrder=2``: order in velocity, at which the equilibrium moment/cumulant approximation is
+  truncated. Order 2 is sufficient to approximate Navier-Stokes
+- ``forceModel=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'``. For details see
+  :mod:`lbmpy.forcemodels`
+- ``useContinuousMaxwellianEquilibrium=True``: way to compute equilibrium moments/cumulants, if False the standard
+  discretized LBM equilibrium is used, otherwise the equilibrium moments are computed from the continuous Maxwellian.
+  This makes only a difference if sparse stencils are used e.g. D2Q9 and D3Q27 are not affected, D319 and DQ15 are
+- ``cumulant=False``: use cumulants instead of moments
+- ``initialVelocity=None``: initial velocity in domain, can either be a tuple (x,y,z) velocity to set a constant
+  velocity everywhere, or a numpy array with the same size of the domain, with a last coordinate of shape dim to set
+  velocities on cell level
+
+Entropic methods:
+
+- ``entropic=False``: In case there are two distinct relaxation rate in a method, one of them (usually the one, not
+  determining the viscosity) can be automatically chosen w.r.t an entropy condition. For details see
+  :mod:`lbmpy.methods.entropic`
+- ``entropicNewtonIterations=None``: For moment methods the entropy optimum can be calculated in closed form.
+  For cumulant methods this is not possible, in that case it is computed using Newton iterations. This parameter can be
+  used to force Newton iterations and specify how many should be done
+- ``omegaOutputField=None``: you can pass a pystencils Field here, where the calculated free relaxation
+  rate is written to
+
+
+Optimization Parameters
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Simplifications / Transformations:
+
+- ``doCseInOpposingDirections=False``: run common subexpression elimination for opposing stencil directions
+- ``doOverallCse=False``: run common subexpression elimination after all other simplifications have been executed
+- ``split=False``: split innermost loop, to handle only 2 directions per loop. This reduces the number of parallel
+  load/store streams and thus speeds up the kernel on most architectures
+
+
+Field size information:
+
+- ``pdfArr``: pass a numpy array here to create kernels with fixed size and create the loop nest according to layout
+  of this array
+- ``fieldSize``: create kernel for fixed field size
+- ``fieldLayout='c'``:   ``'c'`` or ``'numpy'`` for standard numpy layout, ``'reverseNumpy'`` or ``'f'`` for fortran
+  layout, this does not apply when pdfArr was given, then the same layout as pdfArr is used
+
+GPU:
+
+- ``target='cpu'``: ``'cpu'`` or ``'gpu'``, last option requires a CUDA enabled graphics card
+  and installed *pycuda* package
+- ``gpuIndexing='block'``: determines mapping of CUDA threads to cells. Can be either ``'block'`` or ``'line'``
+- ``gpuIndexingParams='block'``: parameters passed to init function of gpu indexing.
+  For ``'block'`` indexing one can e.g. specify the block size ``{'blockSize' : (128, 4, 1)}``
+
+Other:
+
+- ``openMP=True``: only applicable for cpu simulations. Can be a boolean to turn multi threading on/off, or an integer
+  specifying the number of threads. If True is specified OpenMP chooses the number of threads
+- ``doublePrecision=True``:  by default simulations run with double precision floating point numbers, by setting this
+  parameter to False, single precision is used, which is much faster, especially on GPUs
 """
 import sympy as sp
 from copy import copy
 from functools import partial
 
-from lbmpy.methods.creationfunctions import createKBCTypeTRT, createRawMRT, createThreeRelaxationRateMRT
+from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
+    createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
 from lbmpy.stencils import getStencil
-from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT
 import lbmpy.forcemodels as forceModels
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import createStreamPullKernel, createPdfArray
@@ -22,15 +152,15 @@ def updateWithDefaultParameters(params, optParams):
         'compressible': False,
         'equilibriumAccuracyOrder': 2,
 
+        'forceModel': 'none',  # can be 'simple', 'luo' or 'guo'
+        'force': (0, 0, 0),
+        'useContinuousMaxwellianEquilibrium': True,
+        'cumulant': False,
+        'initialVelocity': None,
+
         'entropic': False,
         'entropicNewtonIterations': None,
         'omegaOutputField': None,
-
-        'useContinuousMaxwellianEquilibrium': False,
-        'cumulant': False,
-        'forceModel': 'none',  # can be 'simple', 'luo' or 'guo'
-        'force': (0, 0, 0),
-        'initialVelocity': None,
     }
 
     defaultOptimizationDescription = {
@@ -39,7 +169,7 @@ def updateWithDefaultParameters(params, optParams):
         'split': False,
 
         'fieldSize': None,
-        'fieldLayout': 'reverseNumpy',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
+        'fieldLayout': 'c',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
 
         'target': 'cpu',
         'openMP': True,
@@ -140,7 +270,7 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
 
     if params['entropic']:
         if params['entropicNewtonIterations']:
-            if isinstance(params['entropicNewtonIterations'], bool):
+            if isinstance(params['entropicNewtonIterations'], bool) or params['cumulant']:
                 iterations = 3
             else:
                 iterations = params['entropicNewtonIterations']
