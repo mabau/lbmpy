@@ -110,9 +110,9 @@ Simplifications / Transformations:
 
 Field size information:
 
-- ``pdfArr``: pass a numpy array here to create kernels with fixed size and create the loop nest according to layout
+- ``pdfArr=None``: pass a numpy array here to create kernels with fixed size and create the loop nest according to layout
   of this array
-- ``fieldSize``: create kernel for fixed field size
+- ``fieldSize=None``: create kernel for fixed field size
 - ``fieldLayout='c'``:   ``'c'`` or ``'numpy'`` for standard numpy layout, ``'reverseNumpy'`` or ``'f'`` for fortran
   layout, this does not apply when pdfArr was given, then the same layout as pdfArr is used
 
