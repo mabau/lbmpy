@@ -67,7 +67,7 @@ class Scenario(object):
                                                   target=optimizationParams['target'])
 
         self._preUpdateFunctions = preUpdateFunctions
-        self._kernelParams = kernelParams
+        self.kernelParams = kernelParams
         self._pdfGpuArrays = []
 
         if initialVelocity is None:
@@ -179,7 +179,7 @@ class Scenario(object):
                 f(pdfArrays[0])
             if self._boundaryHandling is not None:
                 self._boundaryHandling(pdfs=pdfArrays[0])
-            self._lbmKernel(src=pdfArrays[0], dst=pdfArrays[1], **self._kernelParams)
+            self._lbmKernel(src=pdfArrays[0], dst=pdfArrays[1], **self.kernelParams)
 
             pdfArrays[0], pdfArrays[1] = pdfArrays[1], pdfArrays[0]  # swap
 
@@ -208,12 +208,10 @@ def createFullyPeriodicFlow(initialVelocity, optimizationParams={}, lbmKernel=No
     """
     Creates a fully periodic setup with prescribed velocity field
     """
-    domainSize = initialVelocity.shape
-
-    stencil = getStencil(kwargs['stencil'])
-    periodicity = getPeriodicBoundaryFunctor(stencil)
-
-    return Scenario(domainSize, kwargs, optimizationParams, lbmKernel, initialVelocity, kernelParams, [periodicity])
+    domainSize = initialVelocity.shape[:-1]
+    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel, initialVelocity, kernelParams)
+    scenario.boundaryHandling.setPeriodicity(True, True, True)
+    return scenario
 
 
 def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, lbmKernel=None,
@@ -307,16 +305,14 @@ def createForceDrivenChannel(dim, force, domainSize=None, radius=None, length=No
     else:
         roundChannel = False
 
-    def periodicity(pdfArr):
-        pdfArr[0, :, :] = pdfArr[-2, :, :]
-        pdfArr[-1, :, :] = pdfArr[1, :, :]
+    if 'forceModel' not in kwargs:
+        kwargs['forceModel'] = 'guo'
 
     scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel,
-                        initialVelocity=initialVelocity, preUpdateFunctions=[periodicity],
-                        kernelParams=kernelParams)
+                        initialVelocity=initialVelocity, kernelParams=kernelParams)
 
     boundaryHandling = scenario.boundaryHandling
-
+    boundaryHandling.setPeriodicity(True, False, False)
     if dim == 2:
         for direction in ('N', 'S'):
             boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, dim))
@@ -339,3 +335,21 @@ def createForceDrivenChannel(dim, force, domainSize=None, radius=None, length=No
         kwargs['forceModel'] = 'guo'
 
     return scenario
+
+if __name__ == '__main__':
+    from lbmpy.scenarios import createForceDrivenChannel
+    from lbmpy.boundaries.geometry import BlackAndWhiteImageBoundary
+    from pystencils.slicing import makeSlice
+    from lbmpy.boundaries import noSlip
+    import numpy as np
+    domainSize = (10, 10)
+    scenario = createForceDrivenChannel(dim=2, method='srt', force=0.000002,
+                                        domainSize=domainSize,
+                                        relaxationRates=[1.92], forceModel='guo',
+                                        compressible=True,
+                                        optimizationParams={'target': 'gpu'})
+    imageSetup = BlackAndWhiteImageBoundary("/home/staff/bauer/opensource.png",
+                                            noSlip, targetSlice=makeSlice[2:-2, 1:-2])
+    imageSetup(scenario.boundaryHandling, scenario.method, domainSize)
+    scenario.boundaryHandling.prepare()
+    scenario.run(1)
