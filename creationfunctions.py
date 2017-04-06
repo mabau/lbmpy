@@ -42,6 +42,7 @@ General:
   truncated. Order 2 is sufficient to approximate Navier-Stokes
 - ``forceModel=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'``. For details see
   :mod:`lbmpy.forcemodels`
+- ``force=(0,0,0)``: either constant force or a symbolic expression depending on field value
 - ``useContinuousMaxwellianEquilibrium=True``: way to compute equilibrium moments/cumulants, if False the standard
   discretized LBM equilibrium is used, otherwise the equilibrium moments are computed from the continuous Maxwellian.
   This makes only a difference if sparse stencils are used e.g. D2Q9 and D3Q27 are not affected, D319 and DQ15 are

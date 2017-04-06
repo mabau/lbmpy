@@ -68,7 +68,7 @@ def compileMacroscopicValuesGetter(lbMethod, outputQuantities, pdfArr=None, fiel
         if pdfArr is not None:
             assert pdfs.shape == pdfArr.shape and pdfs.strides == pdfArr.strides, \
                 "Pdf array not matching blueprint which was used to compile" + str(pdfs.shape) + str(pdfArr.shape)
-        if not set(outputQuantities) == set(kwargs.keys()):
+        if not set(outputQuantities).issubset(kwargs.keys()):
             raise ValueError("You have to specify the output field for each of the following quantities: %s"
                              % (str(outputQuantities),))
         kernel(pdfs=pdfs, **kwargs)

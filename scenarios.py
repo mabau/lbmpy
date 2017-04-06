@@ -38,7 +38,7 @@ from lbmpy.updatekernels import createPdfArray
 # ---------------------------------------- Example Scenarios -----------------------------------------------------------
 
 
-def createFullyPeriodicFlow(initialVelocity, optimizationParams={}, lbmKernel=None, **kwargs):
+def createFullyPeriodicFlow(initialVelocity, optimizationParams={}, lbmKernel=None, kernelParams={}, **kwargs):
     """
     Creates a fully periodic setup with prescribed velocity field
 
@@ -46,16 +46,18 @@ def createFullyPeriodicFlow(initialVelocity, optimizationParams={}, lbmKernel=No
                             array determines the domain size.
     :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
+    :param kernelParams: additional parameters passed to the sweep
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
     domainSize = initialVelocity.shape[:-1]
-    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel, initialVelocity)
+    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel, initialVelocity, kernelParams=kernelParams)
     scenario.boundaryHandling.setPeriodicity(True, True, True)
     return scenario
 
 
-def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, lbmKernel=None, **kwargs):
+def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, lbmKernel=None,
+                          kernelParams={}, **kwargs):
     """
     Creates a lid driven cavity scenario
 
@@ -63,10 +65,11 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, 
     :param lidVelocity: x velocity of lid in lattice coordinates.
     :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
+    :param kernelParams: additional parameters passed to the sweep
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
-    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel)
+    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel, kernelParams=kernelParams)
 
     myUbb = partial(ubb, velocity=[lidVelocity, 0, 0][:scenario.method.dim])
     myUbb.name = 'ubb'
@@ -79,7 +82,7 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, 
 
 
 def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, length=None, initialVelocity=None,
-                             optimizationParams={}, lbmKernel=None, **kwargs):
+                             optimizationParams={}, lbmKernel=None, kernelParams={}, **kwargs):
     """
     Creates a channel flow in x direction, which is driven by a constant force along the x axis
 
@@ -93,6 +96,7 @@ def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, le
     :param initialVelocity: initial velocity, either array to specify velocity for each cell or tuple for constant
     :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
+    :param kernelParams: additional parameters passed to the sweep
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
@@ -120,7 +124,7 @@ def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, le
         kwargs['forceModel'] = 'guo'
 
     scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel,
-                        initialVelocity=initialVelocity)
+                        initialVelocity=initialVelocity, kernelParams=kernelParams)
 
     boundaryHandling = scenario.boundaryHandling
     boundaryHandling.setPeriodicity(True, False, False)
@@ -147,7 +151,8 @@ def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, le
 
 
 def createPressureGradientDrivenChannel(pressureDifference, domainSize=None, dim=2, radius=None, length=None,
-                                        initialVelocity=None, optimizationParams={}, lbmKernel=None, **kwargs):
+                                        initialVelocity=None, optimizationParams={},
+                                        lbmKernel=None, kernelParams={}, **kwargs):
     """
     Creates a channel flow in x direction, which is driven by two pressure boundaries.
     Consider using :func:`createForceDrivenChannel` which does not have artifacts an inflow and outflow.
@@ -162,6 +167,7 @@ def createPressureGradientDrivenChannel(pressureDifference, domainSize=None, dim
     :param initialVelocity: initial velocity, either array to specify velocity for each cell or tuple for constant
     :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
+    :param kernelParams: additional parameters passed to the sweep
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
@@ -186,7 +192,8 @@ def createPressureGradientDrivenChannel(pressureDifference, domainSize=None, dim
 
     assert dim in (2, 3)
 
-    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel, initialVelocity=initialVelocity)
+    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel,
+                        initialVelocity=initialVelocity, kernelParams=kernelParams)
     boundaryHandling = scenario.boundaryHandling
     pressureBoundaryInflow = partial(fixedDensity, density=1.0 + pressureDifference)
     pressureBoundaryInflow.__name__ = "Inflow"
@@ -234,11 +241,11 @@ class Scenario(object):
                             with first axes shaped like the domain, and the last dimension of size #dimensions
     :param preUpdateFunctions: list of functions that are called before the LBM kernel. They get the pdf array as
                                only argument. Can be used for custom boundary conditions, periodicity, etc.
-
+    :param kernelParams: additional parameters passed to the sweep
     """
 
     def __init__(self, domainSize, methodParameters, optimizationParams, lbmKernel=None,
-                 initialVelocity=None, preUpdateFunctions=[]):
+                 initialVelocity=None, preUpdateFunctions=[], kernelParams={}):
         ghostLayers = 1
         domainSizeWithGhostLayer = tuple([s + 2 * ghostLayers for s in domainSize])
         D = len(domainSize)
@@ -275,7 +282,7 @@ class Scenario(object):
                                                   target=optimizationParams['target'])
 
         self._preUpdateFunctions = preUpdateFunctions
-        self.kernelParams = {}
+        self.kernelParams = kernelParams
         self._pdfGpuArrays = []
         self.timeStepsRun = 0
         self.domainSize = domainSize
@@ -285,7 +292,7 @@ class Scenario(object):
 
         setMacroscopic = compileMacroscopicValuesSetter(self.method, {'density': 1.0, 'velocity': initialVelocity},
                                                         pdfArr=self._pdfArrays[0], target='cpu')
-        setMacroscopic(pdfs=self._pdfArrays[0])
+        setMacroscopic(pdfs=self._pdfArrays[0], **self.kernelParams)
 
         if optimizationParams['target'] == 'gpu':
             import pycuda.gpuarray as gpuarray
@@ -398,14 +405,15 @@ class Scenario(object):
             for f in self._preUpdateFunctions:
                 f(pdfArrays[0])
             if self._boundaryHandling is not None:
-                self._boundaryHandling(pdfs=pdfArrays[0])
+                self._boundaryHandling(pdfs=pdfArrays[0], **self.kernelParams)
             self._lbmKernel(src=pdfArrays[0], dst=pdfArrays[1], **self.kernelParams)
 
             pdfArrays[0], pdfArrays[1] = pdfArrays[1], pdfArrays[0]  # swap
 
     def _cpuTimeloop(self, timeSteps):
         self._timeloop(self._pdfArrays, timeSteps)
-        self._getMacroscopic(pdfs=self._pdfArrays[0], density=self._density, velocity=self._velocity)
+        self._getMacroscopic(pdfs=self._pdfArrays[0], density=self._density, velocity=self._velocity,
+                             **self.kernelParams)
 
     def _gpuTimeloop(self, timeSteps):
         # Transfer data to gpu
@@ -418,4 +426,5 @@ class Scenario(object):
         for cpuArr, gpuArr in zip(self._pdfArrays, self._pdfGpuArrays):
             gpuArr.get(cpuArr)
 
-        self._getMacroscopic(pdfs=self._pdfArrays[0], density=self._density, velocity=self._velocity)
+        self._getMacroscopic(pdfs=self._pdfArrays[0], density=self._density, velocity=self._velocity,
+                             **self.kernelParams)
