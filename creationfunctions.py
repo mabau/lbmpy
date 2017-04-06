@@ -2,42 +2,6 @@ r"""
 Creating LBM kernels
 ====================
 
-
-Terminology and creation pipeline
----------------------------------
-
-Kernel functions are created in three steps:
-
-1. *Method*:
-         the method defines the collision process. Currently there are two big categories:
-         moment and cumulant based methods. A method defines how each moment or cumulant is relaxed by
-         storing the equilibrium value and the relaxation rate for each moment/cumulant.
-2. *Collision/Update Rule*:
-         Methods can generate a "collision rule" which is an equation collection that define the
-         post collision values as a function of the pre-collision values. On these equation collection
-         simplifications are applied to reduce the number of floating point operations.
-         At this stage an entropic optimization step can also be added to determine one relaxation rate by an
-         entropy condition.
-         Then a streaming rule is added which transforms the collision rule into an update rule.
-         The streaming step depends on the pdf storage (source/destination, AABB pattern, EsoTwist).
-         Currently only the simple source/destination  pattern is supported.
-3. *AST*:
-        The abstract syntax tree describes the structure of the kernel, including loops and conditionals.
-        The ast can be modified e.g. to add OpenMP pragmas, reorder loops or apply other optimizations.
-4. *Function*:
-        This step compiles the AST into an executable function, either for CPU or GPUs. This function
-        behaves like a normal Python function and runs one LBM time step.
-
-The function :func:`createLatticeBoltzmannFunction` runs the whole pipeline, the other functions in this module
-execute this pipeline only up to a certain step. Each function optionally also takes the result of the previous step.
-
-For example, to modify the AST one can run::
-
-    ast = createLatticeBoltzmannAst(...)
-    # modify ast here
-    func = createLatticeBoltzmannFunction(ast=ast, ...)
-
-
 Parameters
 ----------
 
@@ -69,7 +33,8 @@ General:
       yet, only the relaxation pattern. To get the entropic method, see parameters below!
       (:func:`lbmpy.methods.createKBCTypeTRT`)
 - ``relaxationRates``: sequence of relaxation rates, number depends on selected method. If you specify more rates than
-  method needs, the additional rates are ignored.
+  method needs, the additional rates are ignored. For SRT and TRT models it is possible ot define a single
+  ``relaxationRate`` instead of a list, the second rate for TRT is then determined via magic number.
 - ``compressible=False``: affects the selection of equilibrium moments. Both options approximate the *incompressible*
   Navier Stokes Equations. However when chosen as False, the approximation is better, the standard LBM derivation is
   compressible.
@@ -130,6 +95,44 @@ Other:
   specifying the number of threads. If True is specified OpenMP chooses the number of threads
 - ``doublePrecision=True``:  by default simulations run with double precision floating point numbers, by setting this
   parameter to False, single precision is used, which is much faster, especially on GPUs
+
+
+
+
+Terminology and creation pipeline
+---------------------------------
+
+Kernel functions are created in three steps:
+
+1. *Method*:
+         the method defines the collision process. Currently there are two big categories:
+         moment and cumulant based methods. A method defines how each moment or cumulant is relaxed by
+         storing the equilibrium value and the relaxation rate for each moment/cumulant.
+2. *Collision/Update Rule*:
+         Methods can generate a "collision rule" which is an equation collection that define the
+         post collision values as a function of the pre-collision values. On these equation collection
+         simplifications are applied to reduce the number of floating point operations.
+         At this stage an entropic optimization step can also be added to determine one relaxation rate by an
+         entropy condition.
+         Then a streaming rule is added which transforms the collision rule into an update rule.
+         The streaming step depends on the pdf storage (source/destination, AABB pattern, EsoTwist).
+         Currently only the simple source/destination  pattern is supported.
+3. *AST*:
+        The abstract syntax tree describes the structure of the kernel, including loops and conditionals.
+        The ast can be modified e.g. to add OpenMP pragmas, reorder loops or apply other optimizations.
+4. *Function*:
+        This step compiles the AST into an executable function, either for CPU or GPUs. This function
+        behaves like a normal Python function and runs one LBM time step.
+
+The function :func:`createLatticeBoltzmannFunction` runs the whole pipeline, the other functions in this module
+execute this pipeline only up to a certain step. Each function optionally also takes the result of the previous step.
+
+For example, to modify the AST one can run::
+
+    ast = createLatticeBoltzmannAst(...)
+    # modify ast here
+    func = createLatticeBoltzmannFunction(ast=ast, ...)
+
 """
 import sympy as sp
 from copy import copy
@@ -138,6 +141,7 @@ from functools import partial
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
     createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
+from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber
 from lbmpy.stencils import getStencil
 import lbmpy.forcemodels as forceModels
 from lbmpy.simplificationfactory import createSimplificationStrategy
@@ -179,6 +183,12 @@ def updateWithDefaultParameters(params, optParams):
         'gpuIndexing': 'block',
         'gpuIndexingParams': {},
     }
+    if 'relaxationRate' in params:
+        if 'relaxationRates' not in params:
+            params['relaxationRates'] = [params['relaxationRate'],
+                                         relaxationRateFromMagicNumber(params['relaxationRate'])]
+            del params['relaxationRate']
+
     unknownParams = [k for k in params.keys() if k not in defaultMethodDescription]
     unknownOptParams = [k for k in optParams.keys() if k not in defaultOptimizationDescription]
     if unknownParams:

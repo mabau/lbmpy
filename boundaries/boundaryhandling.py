@@ -5,13 +5,20 @@ from lbmpy.stencils import getStencil
 from pystencils import TypedSymbol, Field
 from pystencils.backends.cbackend import CustomCppCode
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList
-from pystencils.slicing import normalizeSlice
+from pystencils.slicing import normalizeSlice, makeSlice
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
 WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
 
 
 class BoundaryHandling(object):
+    class BoundaryInfo(object):
+        def __init__(self, name, flag, function, kernel):
+            self.name = name
+            self.flag = flag
+            self.function = function
+            self.kernel = kernel
+
     def __init__(self, pdfField, domainShape, lbMethod, ghostLayers=1, target='cpu'):
         """
         Class for managing boundary kernels
@@ -32,13 +39,16 @@ class BoundaryHandling(object):
 
         self._symbolicPdfField = symbolicPdfField
         self._shapeWithGhostLayers = [d + 2 * ghostLayers for d in domainShape]
-        self._fluidFlag = 2 ** 30
+        self._fluidFlag = 2 ** 0
         self.flagField = np.full(self._shapeWithGhostLayers, self._fluidFlag, dtype=np.int32)
         self._ghostLayers = ghostLayers
         self._lbMethod = lbMethod
-        self._boundaryFunctions = []
-        self._nameToIndex = {}
-        self._boundarySweeps = []
+
+        self._boundaryInfos = []
+        self._nameToBoundary = {}
+        self._periodicityKernels = []
+
+        self._dirty = False
         self._periodicity = [False, False, False]
         self._target = target
         if target not in ('cpu', 'gpu'):
@@ -46,34 +56,59 @@ class BoundaryHandling(object):
 
     @property
     def periodicity(self):
+        """List that indicates for x,y (z) coordinate if domain is periodic in that direction"""
         return self._periodicity
 
-    def setPeriodicity(self, x=False, y=False, z=False):
-        self._periodicity = [x, y, z]
-        self.invalidateIndexCache()
+    @property
+    def fluidFlag(self):
+        """Flag that is set where the lattice Boltzmann update should happen"""
+        return self._fluidFlag
 
-    def setBoundary(self, function, indexExpr, maskArr=None, name=None):
+    def getFlag(self, name):
+        """Flag that represents the boundary with given name. Raises KeyError if no such boundary exists."""
+        return self._nameToBoundary[name].flag
+
+    def getBoundaryNames(self):
+        """List of names of all registered boundary conditions"""
+        return [b.name for b in self._boundaryInfos]
+
+    def setPeriodicity(self, x=False, y=False, z=False):
+        """Enable periodic boundary conditions at the border of the domain"""
+        self._periodicity = [x, y, z]
+        self._compilePeriodicityKernels()
+
+    def hasBoundary(self, name):
+        """Returns boolean indicating if a boundary with that name exists"""
+        return name in self._nameToBoundary
+
+    def setBoundary(self, function, indexExpr=None, maskArr=None, name=None):
         """
         Sets boundary in a rectangular region (slice)
 
-        :param function: boundary
+        :param function: boundary function or the string 'fluid' to remove boundary conditions
         :param indexExpr: slice expression, where boundary should be set, see :mod:`pystencils.slicing`
         :param maskArr: optional boolean (masked) array specifying where the boundary should be set
         :param name: name of the boundary
         """
-        if name is None:
-            if hasattr(function, '__name__'):
-                name = function.__name__
-            elif hasattr(function, 'name'):
-                name = function.name
-            else:
-                raise ValueError("Boundary function has to have a '__name__' or 'name' attribute "
-                                 "if name is not specified")
+        if indexExpr is None:
+            indexExpr = [slice(None, None, None)] * len(self.flagField.shape)
+        if function == 'fluid':
+            flag = self._fluidFlag
+        else:
+            if name is None:
+                if hasattr(function, '__name__'):
+                    name = function.__name__
+                elif hasattr(function, 'name'):
+                    name = function.name
+                else:
+                    raise ValueError("Boundary function has to have a '__name__' or 'name' attribute "
+                                     "if name is not specified")
 
-        if function not in self._boundaryFunctions:
-            self.addBoundary(function, name)
+            if not self.hasBoundary(name):
+                self.addBoundary(function, name)
 
-        flag = self.getFlag(name)
+            flag = self.getFlag(name)
+            assert flag != self._fluidFlag
 
         indexExpr = normalizeSlice(indexExpr, self._shapeWithGhostLayers)
         if maskArr is None:
@@ -81,8 +116,7 @@ class BoundaryHandling(object):
         else:
             flagFieldView = self.flagField[indexExpr]
             flagFieldView[maskArr] = flag
-
-        self.invalidateIndexCache()
+        self._dirty = True
 
     def addBoundary(self, boundaryFunction, name=None):
         """
@@ -97,45 +131,69 @@ class BoundaryHandling(object):
         if name is None:
             name = boundaryFunction.__name__
 
-        if name in self._nameToIndex:
-            return 2 ** self._nameToIndex[name]
+        if self.hasBoundary(name):
+            return self._boundaryInfos[name].flag
 
-        newIdx = len(self._boundaryFunctions)
-        self._nameToIndex[name] = newIdx
-        self._boundaryFunctions.append(boundaryFunction)
-        return 2 ** newIdx
+        newIdx = len(self._boundaryInfos) + 1  # +1 because 2**0 is reserved for fluid flag
+        boundaryInfo = self.BoundaryInfo(name, 2 ** newIdx, boundaryFunction, None)
+        self._boundaryInfos.append(boundaryInfo)
+        self._nameToBoundary[name] = boundaryInfo
+        self._dirty = True
+        return boundaryInfo.flag
 
-    def invalidateIndexCache(self):
-        self._boundarySweeps = []
+    def indices(self, dx=1.0, includeGhostLayers=False):
+        if not includeGhostLayers:
+            params = [np.arange(start=-1, stop=s-1) * dx for s in self.flagField.shape]
+        else:
+            params = [np.arange(s) * dx for s in self.flagField.shape]
+        return np.meshgrid(*params, indexing='ij')
+
+    def __call__(self, **kwargs):
+        """Run the boundary handling, all keyword args are passed through to the boundary sweeps"""
+        if self._dirty:
+            self.prepare()
+        for boundary in self._boundaryInfos:
+            boundary.kernel(**kwargs)
+        for k in self._periodicityKernels:
+            k(**kwargs)
 
     def clear(self):
+        """Removes all boundaries and fills the domain with fluid"""
         np.fill(self._fluidFlag)
-        self.invalidateIndexCache()
-
-    def getFlag(self, name):
-        return 2 ** self._nameToIndex[name]
+        self._dirty = False
+        self._boundaryInfos = []
+        self._nameToBoundary = {}
 
     def prepare(self):
-        self.invalidateIndexCache()
-        for boundaryIdx, boundaryFunc in enumerate(self._boundaryFunctions):
+        """Fills data structures to speed up the boundary handling and compiles all boundary kernels.
+        This is automatically done when first called. With this function this can be triggered before running."""
+        for boundary in self._boundaryInfos:
+            assert boundary.flag != self._fluidFlag
             idxField = createBoundaryIndexList(self.flagField, self._lbMethod.stencil,
-                                               2 ** boundaryIdx, self._fluidFlag, self._ghostLayers)
-            ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundaryFunc,
+                                               boundary.flag, self._fluidFlag, self._ghostLayers)
+            ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundary.function,
                                            target=self._target)
 
             if self._target == 'cpu':
                 from pystencils.cpu import makePythonFunction as makePythonCpuFunction
-                self._boundarySweeps.append(makePythonCpuFunction(ast, {'indexField': idxField}))
+                boundary.kernel = makePythonCpuFunction(ast, {'indexField': idxField})
             elif self._target == 'gpu':
                 from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
                 import pycuda.gpuarray as gpuarray
                 idxGpuField = gpuarray.to_gpu(idxField)
-                self._boundarySweeps.append(makePythonGpuFunction(ast, {'indexField': idxGpuField}))
+                boundary.kernel = makePythonGpuFunction(ast, {'indexField': idxGpuField})
             else:
                 assert False
-        self._addPeriodicityHandlers()
+        self._dirty = False
 
-    def _addPeriodicityHandlers(self):
+    def invalidateIndexCache(self):
+        """Invalidates the cache for optimization data structures. When setting boundaries the cache is automatically
+        invalidated, so there is no need to call this function manually, as long as the flag field is not manually
+        modified."""
+        self._dirty = True
+
+    def _compilePeriodicityKernels(self):
+        self._periodicityKernels = []
         dim = len(self.flagField.shape)
         if dim == 2:
             stencil = getStencil("D2Q9")
@@ -147,7 +205,7 @@ class BoundaryHandling(object):
         filteredStencil = []
         for direction in stencil:
             useDirection = True
-            if direction == (0,0) or direction == (0,0,0):
+            if direction == (0, 0) or direction == (0, 0, 0):
                 useDirection = False
             for component, periodicity in zip(direction, self._periodicity):
                 if not periodicity and component != 0:
@@ -158,21 +216,15 @@ class BoundaryHandling(object):
         if len(filteredStencil) > 0:
             if self._target == 'cpu':
                 from pystencils.slicing import getPeriodicBoundaryFunctor
-                self._boundarySweeps.append(getPeriodicBoundaryFunctor(filteredStencil, ghostLayers=1))
+                self._periodicityKernels.append(getPeriodicBoundaryFunctor(filteredStencil, ghostLayers=1))
             elif self._target == 'gpu':
                 from pystencils.gpucuda.periodicity import getPeriodicBoundaryFunctor
-                self._boundarySweeps.append(getPeriodicBoundaryFunctor(filteredStencil, self.flagField.shape,
-                                                                       indexDimensions=1,
-                                                                       indexDimShape=len(self._lbMethod.stencil),
-                                                                       ghostLayers=1))
+                self._periodicityKernels.append(getPeriodicBoundaryFunctor(filteredStencil, self.flagField.shape,
+                                                                           indexDimensions=1,
+                                                                           indexDimShape=len(self._lbMethod.stencil),
+                                                                           ghostLayers=1))
             else:
                 assert False
-
-    def __call__(self, **kwargs):
-        if len(self._boundarySweeps) == 0:
-            self.prepare()
-        for boundarySweep in self._boundarySweeps:
-            boundarySweep(**kwargs)
 
 
 # -------------------------------------- Helper Functions --------------------------------------------------------------
