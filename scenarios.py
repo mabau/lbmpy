@@ -8,7 +8,6 @@ It is a good starting point if you are new to lbmpy.
 >>> scenario = createForceDrivenChannel(dim=2, radius=10, length=20, force=1e-5,
 ...                                     method='srt', relaxationRate=1.9)
 >>> scenario.run(100)
->>> scenario.plotVelocity()
 
 All scenarios can be modified, for example you can create a simple channel first, then place an object in it:
 
