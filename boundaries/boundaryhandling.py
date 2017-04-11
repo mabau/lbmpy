@@ -13,11 +13,12 @@ WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
 
 class BoundaryHandling(object):
     class BoundaryInfo(object):
-        def __init__(self, name, flag, function, kernel):
+        def __init__(self, name, flag, function, kernel, ast):
             self.name = name
             self.flag = flag
             self.function = function
             self.kernel = kernel
+            self.ast = ast
 
     def __init__(self, pdfField, domainShape, lbMethod, ghostLayers=1, target='cpu'):
         """
@@ -135,7 +136,7 @@ class BoundaryHandling(object):
             return self._boundaryInfos[name].flag
 
         newIdx = len(self._boundaryInfos) + 1  # +1 because 2**0 is reserved for fluid flag
-        boundaryInfo = self.BoundaryInfo(name, 2 ** newIdx, boundaryFunction, None)
+        boundaryInfo = self.BoundaryInfo(name, 2 ** newIdx, boundaryFunction, None, None)
         self._boundaryInfos.append(boundaryInfo)
         self._nameToBoundary[name] = boundaryInfo
         self._dirty = True
@@ -173,7 +174,7 @@ class BoundaryHandling(object):
                                                boundary.flag, self._fluidFlag, self._ghostLayers)
             ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundary.function,
                                            target=self._target)
-
+            boundary.ast = ast
             if self._target == 'cpu':
                 from pystencils.cpu import makePythonFunction as makePythonCpuFunction
                 boundary.kernel = makePythonCpuFunction(ast, {'indexField': idxField})

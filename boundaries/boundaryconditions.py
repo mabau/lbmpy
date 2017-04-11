@@ -2,6 +2,7 @@ import sympy as sp
 
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from pystencils.sympyextensions import getSymmetricPart
+from pystencils import Field
 from lbmpy.boundaries.boundaryhandling import offsetFromDir, weightOfDirection, invDir
 
 
@@ -19,6 +20,8 @@ def ubb(pdfField, direction, lbMethod, velocity, adaptVelocityToForce=False):
         "Dimension of velocity (%d) does not match dimension of LB method (%d)" % (len(velocity), lbMethod.dim)
     neighbor = offsetFromDir(direction, lbMethod.dim)
     inverseDir = invDir(direction)
+
+    velocity = tuple(v_i.getShifted(*neighbor) if isinstance(v_i, Field.Access) else v_i for v_i in velocity)
 
     if adaptVelocityToForce:
         cqc = lbMethod.conservedQuantityComputation

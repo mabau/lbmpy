@@ -428,6 +428,7 @@ def compareMomentBasedLbMethods(reference, other, showDeviationsOnly=False):
 
 
 def compressibleToIncompressibleMomentValue(term, rho, u):
+    term = sp.sympify(term)
     term = term.expand()
     if term.func != sp.Add:
         args = [term, ]
