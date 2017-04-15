@@ -312,6 +312,15 @@ def createLatticeBoltzmannMethod(**params):
     stencil = getStencil(params['stencil'])
     dim = len(stencil[0])
 
+    forceIsZero = True
+    for f_i in params['force']:
+        if f_i != 0:
+            forceIsZero = False
+
+    noForceModel = 'forceModel' not in params or params['forceModel'] == 'none' or params['forceModel'] is None
+    if not forceIsZero and noForceModel:
+        params['forceModel'] = 'guo'
+
     if 'forceModel' in params:
         forceModelName = params['forceModel']
         if forceModelName.lower() == 'none':
