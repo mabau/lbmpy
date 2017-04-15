@@ -308,6 +308,45 @@ class Scenario(object):
         self.timeStepsRun += timeSteps
 
     @property
+    def numberOfCells(self):
+        result = 1
+        for d in self.domainSize:
+            result *= d
+        return result
+
+    def benchmark(self, timeForBenchmark=5, initTimeSteps=10, numberOfTimeStepsForEstimation=10):
+        """
+        Returns the number of MLUPS (million lattice update per second) for this scenario
+        
+        :param timeForBenchmark: number of seconds benchmark should take
+        :param initTimeSteps: number of time steps run initially for warm up, to get arrays into cache etc
+        :param numberOfTimeStepsForEstimation: time steps run before real benchmarks, to determine number of time steps
+                                               that approximately take 'timeForBenchmark'
+        :return: MLUP/s: number of cells updated per second times 1e-6 
+        """
+        from time import perf_counter
+
+        self.run(initTimeSteps)
+
+        # Run a few time step to get first estimate
+        start = perf_counter()
+        self.run(numberOfTimeStepsForEstimation)
+        duration = perf_counter() - start
+
+        # Run for approximately 'timeForBenchmark' seconds
+        durationOfTimeStep = duration / numberOfTimeStepsForEstimation
+        timeSteps = int(timeForBenchmark / durationOfTimeStep)
+        timeSteps = max(timeSteps, 6)
+
+        start = perf_counter()
+        self.run(timeSteps)
+        duration = perf_counter() - start
+        durationOfTimeStep = duration / timeSteps
+
+        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
+        return mlups
+
+    @property
     def velocity(self):
         """Velocity as numpy array"""
         mask = np.logical_not(np.bitwise_and(self.boundaryHandling.flagField, self.boundaryHandling._fluidFlag))
