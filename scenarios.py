@@ -307,6 +307,15 @@ class Scenario(object):
             self._cpuTimeloop(timeSteps)
         self.timeStepsRun += timeSteps
 
+    def benchmarkRun(self, timeSteps):
+        from time import perf_counter
+        start = perf_counter()
+        self.run(timeSteps)
+        duration = perf_counter() - start
+        durationOfTimeStep = duration / timeSteps
+        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
+        return mlups
+
     @property
     def numberOfCells(self):
         result = 1
@@ -337,14 +346,7 @@ class Scenario(object):
         durationOfTimeStep = duration / numberOfTimeStepsForEstimation
         timeSteps = int(timeForBenchmark / durationOfTimeStep)
         timeSteps = max(timeSteps, 6)
-
-        start = perf_counter()
-        self.run(timeSteps)
-        duration = perf_counter() - start
-        durationOfTimeStep = duration / timeSteps
-
-        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
-        return mlups
+        return self.benchmarkRun(timeSteps)
 
     @property
     def velocity(self):
