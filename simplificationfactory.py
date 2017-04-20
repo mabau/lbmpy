@@ -41,5 +41,4 @@ def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doO
     if doOverallCse:
         s.add(sympyCSE)
 
-
     return s

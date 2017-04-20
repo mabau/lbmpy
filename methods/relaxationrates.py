@@ -2,6 +2,17 @@ import sympy as sp
 from lbmpy.moments import isShearMoment, getOrder
 
 
+def relaxationRateFromLatticeViscosity(nu):
+    """Computes relaxation rate from lattice viscosity: :math:`\omega = \frac{1}{3\nu_L + \frac{1}{2}}`"""
+    return 1.0 / (3 * nu + 0.5)
+
+
+def latticeViscosityFromRelaxationRate(omega):
+    """Computes lattice viscosity from relaxation rate: 
+    :math:`\nu_L=\frac{1}{3}\left(\frac{1}{\omega}-\frac{1}{2}\right)`"""
+    return (1/omega - 1/2) / 3
+
+
 def relaxationRateFromMagicNumber(hydrodynamicRelaxationRate, magicNumber=sp.Rational(3, 16)):
     """
     Computes second TRT relaxation rate from magic number
