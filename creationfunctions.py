@@ -174,7 +174,7 @@ def updateWithDefaultParameters(params, optParams):
         'split': False,
 
         'fieldSize': None,
-        'fieldLayout': 'c',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
+        'fieldLayout': 'fzyx',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
 
         'target': 'cpu',
         'openMP': True,
