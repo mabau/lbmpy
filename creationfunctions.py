@@ -213,11 +213,7 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
 
     if optParams['target'] == 'cpu':
         from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
-        if 'openMP' in optParams:
-            if isinstance(optParams['openMP'], bool) and optParams['openMP']:
-                addOpenMP(ast)
-            elif not isinstance(optParams['openMP'], bool) and isinstance(optParams['openMP'], int):
-                addOpenMP(ast, numThreads=optParams['openMP'])
+        addOpenMP(ast, numThreads=optParams['openMP'])
         res = makePythonCpuFunction(ast)
     elif optParams['target'] == 'gpu':
         from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction

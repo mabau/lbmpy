@@ -251,7 +251,6 @@ class Scenario(object):
         if 'stencil' not in methodParameters:
             methodParameters['stencil'] = 'D2Q9' if D == 2 else 'D3Q27'
 
-
         methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
 
         Q = len(getStencil(methodParameters['stencil']))
@@ -280,7 +279,8 @@ class Scenario(object):
                                                               pdfArr=self._pdfArrays[0], target='cpu')
 
         self._boundaryHandling = BoundaryHandling(self._pdfArrays[0], domainSize, self.method,
-                                                  target=optimizationParams['target'])
+                                                  target=optimizationParams['target'],
+                                                  openMP=optimizationParams['openMP'])
 
         self._preUpdateFunctions = preUpdateFunctions
         self.kernelParams = kernelParams

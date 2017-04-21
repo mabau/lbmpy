@@ -18,7 +18,8 @@ def _createBoundaryIndexListPython(flagFieldArr, nrOfGhostLayers, boundaryMask, 
 
     result = []
     gl = nrOfGhostLayers
-    for cell in itertools.product(*[range(gl, i-gl) for i in flagFieldArr.shape]):
+    for cell in itertools.product(*reversed([range(gl, i-gl) for i in flagFieldArr.shape])):
+        cell = cell[::-1]
         if not flagFieldArr[cell] & fluidMask:
             continue
         for dirIdx, direction in enumerate(stencil):

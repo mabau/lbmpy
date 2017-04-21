@@ -21,8 +21,8 @@ def createBoundaryIndexList2D(object[IntegerType, ndim=2] flagField,
     boundaryIndexList = []
     numDirections = stencil.shape[0]
 
-    for x in range(nrOfGhostLayers,xs-nrOfGhostLayers):
-        for y in range(nrOfGhostLayers,ys-nrOfGhostLayers):
+    for y in range(nrOfGhostLayers,ys-nrOfGhostLayers):
+        for x in range(nrOfGhostLayers,xs-nrOfGhostLayers):
             if flagField[x,y] & fluidMask:
                 for dirIdx in range(1, numDirections):
                     dx = stencil[dirIdx,0]
@@ -44,9 +44,12 @@ def createBoundaryIndexList3D(object[IntegerType, ndim=3] flagField,
     boundaryIndexList = []
     numDirections = stencil.shape[0]
 
-    for x in range(nrOfGhostLayers,xs-nrOfGhostLayers):
+    #for x in range(nrOfGhostLayers,xs-nrOfGhostLayers):
+    #    for y in range(nrOfGhostLayers,ys-nrOfGhostLayers):
+    #        for z in range(nrOfGhostLayers, zs-nrOfGhostLayers):
+    for z in range(nrOfGhostLayers, zs-nrOfGhostLayers):
         for y in range(nrOfGhostLayers,ys-nrOfGhostLayers):
-            for z in range(nrOfGhostLayers, zs-nrOfGhostLayers):
+            for x in range(nrOfGhostLayers,xs-nrOfGhostLayers):
                 if flagField[x, y, z] & fluidMask:
                     for dirIdx in range(1, numDirections):
                         dx = stencil[dirIdx,0]

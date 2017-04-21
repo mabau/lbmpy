@@ -20,7 +20,7 @@ class BoundaryHandling(object):
             self.kernel = kernel
             self.ast = ast
 
-    def __init__(self, pdfField, domainShape, lbMethod, ghostLayers=1, target='cpu'):
+    def __init__(self, pdfField, domainShape, lbMethod, ghostLayers=1, target='cpu', openMP=True):
         """
         Class for managing boundary kernels
 
@@ -52,6 +52,7 @@ class BoundaryHandling(object):
         self._dirty = False
         self._periodicity = [False, False, False]
         self._target = target
+        self.openMP = openMP
         if target not in ('cpu', 'gpu'):
             raise ValueError("Invalid target '%s' . Allowed values: 'cpu' or 'gpu'" % (target,))
 
@@ -75,6 +76,9 @@ class BoundaryHandling(object):
 
     def setPeriodicity(self, x=False, y=False, z=False):
         """Enable periodic boundary conditions at the border of the domain"""
+        for d in (x, y, z):
+            assert isinstance(d, bool)
+
         self._periodicity = [x, y, z]
         self._compilePeriodicityKernels()
 
@@ -160,7 +164,7 @@ class BoundaryHandling(object):
 
     def clear(self):
         """Removes all boundaries and fills the domain with fluid"""
-        np.fill(self._fluidFlag)
+        self.flagField.fill(self._fluidFlag)
         self._dirty = False
         self._boundaryInfos = []
         self._nameToBoundary = {}
@@ -176,7 +180,8 @@ class BoundaryHandling(object):
                                            target=self._target)
             boundary.ast = ast
             if self._target == 'cpu':
-                from pystencils.cpu import makePythonFunction as makePythonCpuFunction
+                from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
+                addOpenMP(ast, numThreads=self.openMP)
                 boundary.kernel = makePythonCpuFunction(ast, {'indexField': idxField})
             elif self._target == 'gpu':
                 from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
