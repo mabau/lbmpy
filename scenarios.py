@@ -251,14 +251,16 @@ class Scenario(object):
         if 'stencil' not in methodParameters:
             methodParameters['stencil'] = 'D2Q9' if D == 2 else 'D3Q27'
 
-        if isinstance(initialVelocity, np.ndarray):
-            initialVelocity = addGhostLayers(initialVelocity, indexDimensions=1, ghostLayers=1)
 
         methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
 
         Q = len(getStencil(methodParameters['stencil']))
         self._pdfArrays = [createPdfArray(domainSize, Q, layout=optimizationParams['fieldLayout']),
                            createPdfArray(domainSize, Q, layout=optimizationParams['fieldLayout'])]
+
+        if isinstance(initialVelocity, np.ndarray):
+            initialVelocity = addGhostLayers(initialVelocity, indexDimensions=1, ghostLayers=1,
+                                             layout=getLayoutOfArray(self._pdfArrays[0]))
 
         # Create kernel
         if lbmKernel is None:
