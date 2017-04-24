@@ -149,7 +149,7 @@ from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import createStreamPullKernel, createPdfArray
 
 
-def updateWithDefaultParameters(params, optParams):
+def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
     defaultMethodDescription = {
         'stencil': 'D2Q9',
         'method': 'srt',  # can be srt, trt or mrt
@@ -190,12 +190,13 @@ def updateWithDefaultParameters(params, optParams):
                                          relaxationRateFromMagicNumber(params['relaxationRate'])]
             del params['relaxationRate']
 
-    unknownParams = [k for k in params.keys() if k not in defaultMethodDescription]
-    unknownOptParams = [k for k in optParams.keys() if k not in defaultOptimizationDescription]
-    if unknownParams:
-        raise ValueError("Unknown parameter(s): " + ", ".join(unknownParams))
-    if unknownOptParams:
-        raise ValueError("Unknown optimization parameter(s): " + ",".join(unknownOptParams))
+    if failOnUnknownParameter:
+        unknownParams = [k for k in params.keys() if k not in defaultMethodDescription]
+        unknownOptParams = [k for k in optParams.keys() if k not in defaultOptimizationDescription]
+        if unknownParams:
+            raise ValueError("Unknown parameter(s): " + ", ".join(unknownParams))
+        if unknownOptParams:
+            raise ValueError("Unknown optimization parameter(s): " + ",".join(unknownOptParams))
 
     paramsResult = copy(defaultMethodDescription)
     paramsResult.update(params)
