@@ -9,7 +9,7 @@ from pystencils.sympyextensions import replaceAdditive, replaceSecondOrderProduc
 
 def replaceSecondOrderVelocityProducts(lbmCollisionEqs):
     """
-    Replaces mixed quadratic velocity terms like :math:`u_0 * u_1` by :math:`(u_0+u+1)^2 - u_0^2 - u_1^2`
+    Replaces mixed quadratic velocity terms like :math:`u_0 * u_1` by :math:`(u_0+u_1)^2 - u_0^2 - u_1^2`
     Required simplification hints:
         - velocity: sequence of velocity symbols
     """

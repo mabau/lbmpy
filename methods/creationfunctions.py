@@ -21,7 +21,7 @@ from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber, default
 
 
 def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible=False, forceModel=None,
-                                          equilibriumAccuracyOrder=2, cumulant=False):
+                                          equilibriumAccuracyOrder=2, cumulant=False, c_s_sq=sp.Rational(1, 3)):
     r"""
     Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
     relaxed against the moments of the discrete Maxwellian distribution.
@@ -37,6 +37,7 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     :param forceModel: force model instance, or None if no external forces
     :param equilibriumAccuracyOrder: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
     :param cumulant: if True relax cumulants instead of moments
+    :param c_s_sq: Speed of sound squared
     :return: :class:`lbmpy.methods.MomentBasedLbMethod` instance
     """
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
@@ -48,11 +49,11 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     if cumulant:
         warn("Cumulant methods should be created with useContinuousMaxwellianEquilibrium=True")
         eqValues = getCumulantsOfDiscreteMaxwellianEquilibrium(stencil, tuple(momToRrDict.keys()),
-                                                               c_s_sq=sp.Rational(1, 3), compressible=compressible,
+                                                               c_s_sq=c_s_sq, compressible=compressible,
                                                                order=equilibriumAccuracyOrder)
     else:
         eqValues = getMomentsOfDiscreteMaxwellianEquilibrium(stencil, tuple(momToRrDict.keys()),
-                                                             c_s_sq=sp.Rational(1, 3), compressible=compressible,
+                                                             c_s_sq=c_s_sq, compressible=compressible,
                                                              order=equilibriumAccuracyOrder)
 
     rrDict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
@@ -64,7 +65,7 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
 
 
 def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible=False, forceModel=None,
-                                            equilibriumAccuracyOrder=2, cumulant=False):
+                                            equilibriumAccuracyOrder=2, cumulant=False, c_s_sq=sp.Rational(1, 3)):
     r"""
     Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
     relaxed against the moments of the continuous Maxwellian distribution.
@@ -78,11 +79,10 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
     if cumulant:
-        eqValues = getCumulantsOfContinuousMaxwellianEquilibrium(tuple(momToRrDict.keys()), dim,
-                                                                 c_s_sq=sp.Rational(1, 3),
+        eqValues = getCumulantsOfContinuousMaxwellianEquilibrium(tuple(momToRrDict.keys()), dim, c_s_sq=c_s_sq,
                                                                  order=equilibriumAccuracyOrder)
     else:
-        eqValues = getMomentsOfContinuousMaxwellianEquilibrium(tuple(momToRrDict.keys()), dim, c_s_sq=sp.Rational(1, 3),
+        eqValues = getMomentsOfContinuousMaxwellianEquilibrium(tuple(momToRrDict.keys()), dim, c_s_sq=c_s_sq,
                                                                order=equilibriumAccuracyOrder)
 
     if not compressible:
