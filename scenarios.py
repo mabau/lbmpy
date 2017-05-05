@@ -37,21 +37,28 @@ from lbmpy.updatekernels import createPdfArray
 # ---------------------------------------- Example Scenarios -----------------------------------------------------------
 
 
-def createFullyPeriodicFlow(initialVelocity, optimizationParams={}, lbmKernel=None, kernelParams={}, **kwargs):
+def createFullyPeriodicFlow(initialVelocity, periodicityInKernel=False,
+                            optimizationParams={}, lbmKernel=None, kernelParams={}, **kwargs):
     """
     Creates a fully periodic setup with prescribed velocity field
 
     :param initialVelocity: numpy array that defines an initial velocity for each cell. The shape of this
                             array determines the domain size.
+    :param periodicityInKernel: don't use boundary handling for periodicity, but directly generate the kernel periodic 
     :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
     :param kernelParams: additional parameters passed to the sweep
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
+    optimizationParams = optimizationParams.copy()
     domainSize = initialVelocity.shape[:-1]
+    if periodicityInKernel:
+        optimizationParams['builtinPeriodicity'] = (True, True, True)
     scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel, initialVelocity, kernelParams=kernelParams)
-    scenario.boundaryHandling.setPeriodicity(True, True, True)
+
+    if not periodicityInKernel:
+        scenario.boundaryHandling.setPeriodicity(True, True, True)
     return scenario
 
 

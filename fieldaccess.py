@@ -1,9 +1,11 @@
+import sympy as sp
+import abc
 from lbmpy.stencils import inverseDirection
 from pystencils import Field
-import abc
 
 
 # ------------------------------------------------ Interface -----------------------------------------------------------
+from pystencils.astnodes import LoopOverCoordinate
 
 
 class PdfFieldAccessor(object):
@@ -44,6 +46,67 @@ class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
     @staticmethod
     def read(field, stencil):
         return [field[inverseDirection(d)](i) for i, d in enumerate(stencil)]
+
+    @staticmethod
+    def write(field, stencil):
+        return [field(i) for i in range(len(stencil))]
+
+
+class Pseudo2DTwoFieldsAccessor(PdfFieldAccessor):
+    """Useful if a 3D simulation of a domain with size (x,y,1) is done and the dimensions with size 1 
+    is periodic. In this case no periodicity exchange has to be done"""
+    def __init__(self, collapsedDim):
+        self._collapsedDim = collapsedDim
+
+    def read(self, field, stencil):
+        result = []
+        for i, d in enumerate(stencil):
+            direction = list(d)
+            direction[self._collapsedDim] = 0
+            result.append(field[inverseDirection(tuple(direction))](i))
+        return result
+
+    @staticmethod
+    def write(field, stencil):
+        return [field(i) for i in range(len(stencil))]
+
+
+class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
+    """Access scheme that builds periodicity into the kernel, by introducing a condition on every load,
+    such that at the borders the periodic value is loaded. The periodicity is specified as a tuple of booleans, one for
+    each direction. The second parameter `ghostLayers` specifies the number of assumed ghost layers of the field. 
+    For the periodic kernel itself no ghost layers are required, however other kernels might need them. 
+    """
+    def __init__(self, periodicity, ghostLayers=0):
+        self._periodicity = periodicity
+        self._ghostLayers = ghostLayers
+
+    def read(self, field, stencil):
+        result = []
+        for i, d in enumerate(stencil):
+            pullDirection = inverseDirection(d)
+            periodicPullDirection = []
+            for coordId, dirElement in enumerate(pullDirection):
+                if not self._periodicity[coordId]:
+                    periodicPullDirection.append(dirElement)
+                    continue
+
+                lowerLimit = self._ghostLayers
+                upperLimit = field.spatialShape[coordId] - 1 - self._ghostLayers
+                limitDiff = upperLimit - lowerLimit
+                loopCounter = LoopOverCoordinate.getLoopCounterSymbol(coordId)
+                if dirElement == 0:
+                    periodicPullDirection.append(0)
+                elif dirElement == 1:
+                    newDirElement = sp.Piecewise((dirElement, loopCounter < upperLimit), (-limitDiff, True))
+                    periodicPullDirection.append(newDirElement)
+                elif dirElement == -1:
+                    newDirElement = sp.Piecewise((dirElement, loopCounter > lowerLimit), (limitDiff, True))
+                    periodicPullDirection.append(newDirElement)
+                else:
+                    raise NotImplementedError("This accessor supports only nearest neighbor stencils")
+            result.append(field[tuple(periodicPullDirection)](i))
+        return result
 
     @staticmethod
     def write(field, stencil):

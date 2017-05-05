@@ -72,7 +72,10 @@ Simplifications / Transformations:
 - ``doOverallCse=False``: run common subexpression elimination after all other simplifications have been executed
 - ``split=False``: split innermost loop, to handle only 2 directions per loop. This reduces the number of parallel
   load/store streams and thus speeds up the kernel on most architectures
-
+- ``builtinPeriodicity=(False,False,False)``: instead of handling periodicity by copying ghost layers, the periodicity
+   is built into the kernel. This parameters specifies if the domain is periodic in (x,y,z) direction. Even if the
+   periodicity is built into the kernel, the fields have one ghost layer to be consistent with other functions. 
+    
 
 Field size information:
 
@@ -183,6 +186,8 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
 
         'gpuIndexing': 'block',
         'gpuIndexingParams': {},
+
+        'builtinPeriodicity': (False, False, False),
     }
     if 'relaxationRate' in params:
         if 'relaxationRates' not in params:
@@ -242,7 +247,8 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         else:
             splitGroups = ()
         res = createKernel(updateRule.allEquations, splitGroups=splitGroups,
-                           typeForSymbol='double' if optParams['doublePrecision'] else 'float')
+                           typeForSymbol='double' if optParams['doublePrecision'] else 'float',
+                           ghostLayers=1)
     elif optParams['target'] == 'gpu':
         from pystencils.gpucuda import createCUDAKernel
         from pystencils.gpucuda.indexing import LineIndexing, BlockIndexing
@@ -252,7 +258,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
             indexingCreator = partial(indexingCreator, **optParams['gpuIndexingParams'])
         res = createCUDAKernel(updateRule.allEquations,
                                typeForSymbol='double' if optParams['doublePrecision'] else 'float',
-                               indexingCreator=indexingCreator)
+                               indexingCreator=indexingCreator, ghostLayers=1)
     else:
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
@@ -289,16 +295,19 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
 
     if 'fieldSize' in optParams and optParams['fieldSize']:
         npField = createPdfArray(optParams['fieldSize'], len(stencil), layout=optParams['fieldLayout'])
-        updateRule = createStreamPullKernel(collisionRule, numpyField=npField)
+        updateRule = createStreamPullKernel(collisionRule, numpyField=npField,
+                                            builtinPeriodicity=optParams['builtinPeriodicity'])
     else:
         if 'pdfArr' in optParams:
-            updateRule = createStreamPullKernel(collisionRule, numpyField=optParams['pdfArr'])
+            updateRule = createStreamPullKernel(collisionRule, numpyField=optParams['pdfArr'],
+                                                builtinPeriodicity=optParams['builtinPeriodicity'])
         else:
             layoutName = optParams['fieldLayout']
             if layoutName == 'fzyx' or 'zyxf':
                 dim = len(stencil[0])
                 layoutName = tuple(reversed(range(dim)))
-            updateRule = createStreamPullKernel(collisionRule, genericLayout=layoutName)
+            updateRule = createStreamPullKernel(collisionRule, genericLayout=layoutName,
+                                                builtinPeriodicity=optParams['builtinPeriodicity'])
 
     return updateRule
 

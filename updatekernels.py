@@ -3,7 +3,7 @@ import sympy as sp
 from pystencils import Field
 from pystencils.field import createNumpyArrayWithLayout
 from pystencils.sympyextensions import fastSubs
-from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
+from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, Pseudo2DTwoFieldsAccessor, PeriodicTwoFieldsAccessor
 
 
 # -------------------------------------------- LBM Kernel Creation -----------------------------------------------------
@@ -44,7 +44,8 @@ def createLBMKernel(collisionRule, inputField, outputField, accessor):
 
 
 def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", dstFieldName="dst",
-                           genericLayout='numpy', genericFieldType=np.float64):
+                           genericLayout='numpy', genericFieldType=np.float64,
+                           builtinPeriodicity=(False, False, False)):
     """
     Implements a stream-pull scheme, where values are read from source and written to destination field
     :param collisionRule: a collision rule created by lbm method
@@ -55,6 +56,7 @@ def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", d
     :param genericLayout: if no numpyField is given to determine the layout, a variable sized field with the given
                           genericLayout is used
     :param genericFieldType: if no numpyField is given, this data type is used for the fields
+    :param builtinPeriodicity: periodicity that should be built into the kernel
     :return: lbm update rule, where generic pdf references are replaced by field accesses
     """
     dim = collisionRule.method.dim
@@ -69,7 +71,11 @@ def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", d
         src = Field.createFromNumpyArray(srcFieldName, numpyField, indexDimensions=1)
         dst = Field.createFromNumpyArray(dstFieldName, numpyField, indexDimensions=1)
 
-    return createLBMKernel(collisionRule, src, dst, StreamPullTwoFieldsAccessor)
+    accessor = StreamPullTwoFieldsAccessor
+
+    if any(builtinPeriodicity):
+        accessor = PeriodicTwoFieldsAccessor(builtinPeriodicity, ghostLayers=1)
+    return createLBMKernel(collisionRule, src, dst, accessor)
 
 
 # ---------------------------------- Pdf array creation for various layouts --------------------------------------------
