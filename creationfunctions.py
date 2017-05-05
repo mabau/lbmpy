@@ -191,8 +191,12 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
     }
     if 'relaxationRate' in params:
         if 'relaxationRates' not in params:
-            params['relaxationRates'] = [params['relaxationRate'],
-                                         relaxationRateFromMagicNumber(params['relaxationRate'])]
+            if 'entropic' in params and params['entropic']:
+                params['relaxationRates'] = [params['relaxationRate']]
+            else:
+                params['relaxationRates'] = [params['relaxationRate'],
+                                             relaxationRateFromMagicNumber(params['relaxationRate'])]
+
             del params['relaxationRate']
 
     if failOnUnknownParameter:

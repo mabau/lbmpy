@@ -24,6 +24,7 @@ at :mod:`lbmpy.creationfunctions`. The only mandatory keyword parameter is ``rel
 that defines the viscosity of the fluid (valid values being between 0 and 2).
 """
 import numpy as np
+import sympy as sp
 from functools import partial
 from pystencils.field import getLayoutOfArray, createNumpyArrayWithLayout
 from pystencils.slicing import sliceFromDirection, addGhostLayers, removeGhostLayers, normalizeSlice, makeSlice
@@ -270,6 +271,19 @@ class Scenario(object):
 
         # Create kernel
         if lbmKernel is None:
+            if methodParameters['entropic']:
+                newRelaxationRates = []
+                for rr in methodParameters['relaxationRates']:
+                    if not isinstance(rr, sp.Symbol):
+                        dummyVar = sp.Dummy()
+                        newRelaxationRates.append(dummyVar)
+                        kernelParams[dummyVar.name] = rr
+                    else:
+                        newRelaxationRates.append(rr)
+                if len(newRelaxationRates) < 2:
+                    newRelaxationRates.append(sp.Dummy())
+                methodParameters['relaxationRates'] = newRelaxationRates
+
             optimizationParams['pdfArr'] = self._pdfArrays[0]
             methodParameters['optimizationParams'] = optimizationParams
             self._lbmKernel = createLatticeBoltzmannFunction(**methodParameters)
