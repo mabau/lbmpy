@@ -65,9 +65,9 @@ def plotBoundaryHandling(boundaryHandling, boundaryNameToColor=None):
             'noSlip': '#000000'
         }
 
-    boundaryNames = ['fluid'] + boundaryHandling.getBoundaryNames()
-    flagValues = [boundaryHandling.fluidFlag] + [boundaryHandling.getFlag(n)
-                                                 for n in boundaryHandling.getBoundaryNames()]
+    boundaryNames = ['fluid'] + [b.name for b in boundaryHandling.getBoundaries()]
+    flagValues = [boundaryHandling.fluidFlag] + [boundaryHandling.getFlag(b)
+                                                 for b in boundaryHandling.getBoundaries()]
 
     defaultCycler = matplotlib.rcParams['axes.prop_cycle']
     colorValues = [fixedColors[name] if name in fixedColors else cycle['color']

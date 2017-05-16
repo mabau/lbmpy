@@ -11,9 +11,9 @@ It is a good starting point if you are new to lbmpy.
 
 All scenarios can be modified, for example you can create a simple channel first, then place an object in it:
 
->>> from lbmpy.boundaries import noSlip
+>>> from lbmpy.boundaries import NoSlip
 >>> from pystencils.slicing import makeSlice
->>> scenario.boundaryHandling.setBoundary(noSlip, makeSlice[0.3:0.4, 0.0:0.3])
+>>> scenario.boundaryHandling.setBoundary(NoSlip(), makeSlice[0.3:0.4, 0.0:0.3])
 
 Functions for scenario setup:
 -----------------------------
@@ -25,12 +25,11 @@ that defines the viscosity of the fluid (valid values being between 0 and 2).
 """
 import numpy as np
 import sympy as sp
-from functools import partial
 from pystencils.field import getLayoutOfArray, createNumpyArrayWithLayout
 from pystencils.slicing import sliceFromDirection, addGhostLayers, removeGhostLayers, normalizeSlice, makeSlice
 from lbmpy.creationfunctions import createLatticeBoltzmannFunction, updateWithDefaultParameters
 from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
-from lbmpy.boundaries import BoundaryHandling, noSlip, ubb, fixedDensity
+from lbmpy.boundaries import BoundaryHandling, NoSlip, NoSlipFullWay, UBB, FixedDensity
 from lbmpy.stencils import getStencil
 from lbmpy.updatekernels import createPdfArray
 
@@ -78,18 +77,17 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, 
     """
     scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel, kernelParams=kernelParams)
 
-    myUbb = partial(ubb, velocity=[lidVelocity, 0, 0][:scenario.method.dim])
-    myUbb.name = 'ubb'
+    myUbb = UBB(velocity=[lidVelocity, 0, 0][:scenario.method.dim])
     dim = scenario.method.dim
     scenario.boundaryHandling.setBoundary(myUbb, sliceFromDirection('N', dim))
     for direction in ('W', 'E', 'S') if scenario.method.dim == 2 else ('W', 'E', 'S', 'T', 'B'):
-        scenario.boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, dim))
+        scenario.boundaryHandling.setBoundary(NoSlip(), sliceFromDirection(direction, dim))
 
     return scenario
 
 
 def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, length=None, initialVelocity=None,
-                             optimizationParams={}, lbmKernel=None, kernelParams={}, **kwargs):
+                             optimizationParams={}, lbmKernel=None, kernelParams={}, halfWayBounceBack=True, **kwargs):
     """
     Creates a channel flow in x direction, which is driven by a constant force along the x axis
 
@@ -104,9 +102,12 @@ def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, le
     :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
     :param kernelParams: additional parameters passed to the sweep
+    :param halfWayBounceBack: determines wall boundary condition: if true half-way bounce back, if false full-way
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
+    wallBoundary = NoSlip() if halfWayBounceBack else NoSlipFullWay()
+
     if domainSize is not None:
         dim = len(domainSize)
     else:
@@ -137,18 +138,18 @@ def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, le
     boundaryHandling.setPeriodicity(True, False, False)
     if dim == 2:
         for direction in ('N', 'S'):
-            boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, dim))
+            boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
     elif dim == 3:
         if roundChannel:
-            noSlipIdx = boundaryHandling.addBoundary(noSlip)
+            wallIdx = boundaryHandling.addBoundary(wallBoundary)
             ff = boundaryHandling.flagField
             yMid = ff.shape[1] // 2
             zMid = ff.shape[2] // 2
             y, z = np.meshgrid(range(ff.shape[1]), range(ff.shape[2]))
-            ff[(y - yMid) ** 2 + (z - zMid) ** 2 > radius ** 2] = noSlipIdx
+            ff[(y - yMid) ** 2 + (z - zMid) ** 2 > radius ** 2] = wallIdx
         else:
             for direction in ('N', 'S', 'T', 'B'):
-                boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, dim))
+                boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
 
     assert domainSize is not None
     if 'forceModel' not in kwargs:
@@ -159,7 +160,7 @@ def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, le
 
 def createPressureGradientDrivenChannel(pressureDifference, domainSize=None, dim=2, radius=None, length=None,
                                         initialVelocity=None, optimizationParams={},
-                                        lbmKernel=None, kernelParams={}, **kwargs):
+                                        lbmKernel=None, kernelParams={}, halfWayBounceBack=True, **kwargs):
     """
     Creates a channel flow in x direction, which is driven by two pressure boundaries.
     Consider using :func:`createForceDrivenChannel` which does not have artifacts an inflow and outflow.
@@ -175,9 +176,12 @@ def createPressureGradientDrivenChannel(pressureDifference, domainSize=None, dim
     :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
     :param kernelParams: additional parameters passed to the sweep
+    :param halfWayBounceBack: determines wall boundary condition: if true half-way bounce back, if false full-way
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
+    wallBoundary = NoSlip() if halfWayBounceBack else NoSlipFullWay()
+
     if domainSize is not None:
         dim = len(domainSize)
     else:
@@ -202,20 +206,18 @@ def createPressureGradientDrivenChannel(pressureDifference, domainSize=None, dim
     scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel,
                         initialVelocity=initialVelocity, kernelParams=kernelParams)
     boundaryHandling = scenario.boundaryHandling
-    pressureBoundaryInflow = partial(fixedDensity, density=1.0 + pressureDifference)
-    pressureBoundaryInflow.__name__ = "Inflow"
+    pressureBoundaryInflow = FixedDensity(density=1.0 + pressureDifference)
 
-    pressureBoundaryOutflow = partial(fixedDensity, density=1.0)
-    pressureBoundaryOutflow.__name__ = "Outflow"
+    pressureBoundaryOutflow = FixedDensity(density=1.0)
     boundaryHandling.setBoundary(pressureBoundaryInflow, sliceFromDirection('W', dim))
     boundaryHandling.setBoundary(pressureBoundaryOutflow, sliceFromDirection('E', dim))
 
     if dim == 2:
         for direction in ('N', 'S'):
-            boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, dim))
+            boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
     elif dim == 3:
         if roundChannel:
-            noSlipIdx = boundaryHandling.addBoundary(noSlip)
+            noSlipIdx = boundaryHandling.addBoundary(wallBoundary)
             ff = boundaryHandling.flagField
             yMid = ff.shape[1] // 2
             zMid = ff.shape[2] // 2
@@ -223,7 +225,7 @@ def createPressureGradientDrivenChannel(pressureDifference, domainSize=None, dim
             ff[(y - yMid) ** 2 + (z - zMid) ** 2 > radius ** 2] = noSlipIdx
         else:
             for direction in ('N', 'S', 'T', 'B'):
-                boundaryHandling.setBoundary(noSlip, sliceFromDirection(direction, dim))
+                boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
 
     return scenario
 

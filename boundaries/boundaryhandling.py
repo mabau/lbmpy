@@ -13,10 +13,9 @@ WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
 
 class BoundaryHandling(object):
     class BoundaryInfo(object):
-        def __init__(self, name, flag, function, kernel, ast):
-            self.name = name
+        def __init__(self, flag, object, kernel, ast):
             self.flag = flag
-            self.function = function
+            self.object = object
             self.kernel = kernel
             self.ast = ast
 
@@ -24,29 +23,24 @@ class BoundaryHandling(object):
         """
         Class for managing boundary kernels
 
-        :param pdfField: either pdf numpy array (including ghost layers), or pystencils.Field
+        :param pdfField: pdf numpy array including ghost layers
         :param domainShape: domain size without ghost layers
         :param lbMethod: lattice Boltzmann method
         :param ghostLayers: number of ghost layers
         :param target: either 'cpu' or 'gpu'
         """
-        if isinstance(pdfField, np.ndarray):
-            symbolicPdfField = Field.createFromNumpyArray('pdfs', pdfField, indexDimensions=1)
-            assert pdfField.shape[:-1] == tuple(d + 2*ghostLayers for d in domainShape)
-        elif isinstance(pdfField, Field):
-            symbolicPdfField = pdfField
-        else:
-            raise ValueError("pdfField has to be either a numpy array or a pystencils.Field")
+        symbolicPdfField = Field.createFromNumpyArray('pdfs', pdfField, indexDimensions=1)
+        assert pdfField.shape[:-1] == tuple(d + 2*ghostLayers for d in domainShape)
 
         self._symbolicPdfField = symbolicPdfField
+        self._pdfField = pdfField
         self._shapeWithGhostLayers = [d + 2 * ghostLayers for d in domainShape]
         self._fluidFlag = 2 ** 0
         self.flagField = np.full(self._shapeWithGhostLayers, self._fluidFlag, dtype=np.int32)
         self._ghostLayers = ghostLayers
         self._lbMethod = lbMethod
 
-        self._boundaryInfos = []
-        self._nameToBoundary = {}
+        self._boundaryInfos = {}
         self._periodicityKernels = []
 
         self._dirty = False
@@ -66,13 +60,12 @@ class BoundaryHandling(object):
         """Flag that is set where the lattice Boltzmann update should happen"""
         return self._fluidFlag
 
-    def getFlag(self, name):
-        """Flag that represents the boundary with given name. Raises KeyError if no such boundary exists."""
-        return self._nameToBoundary[name].flag
+    def getFlag(self, boundaryObject):
+        """Flag that represents the given boundary."""
+        return self._boundaryInfos[boundaryObject].flag
 
-    def getBoundaryNames(self):
-        """List of names of all registered boundary conditions"""
-        return [b.name for b in self._boundaryInfos]
+    def getBoundaries(self):
+        return [b.object for b in self._boundaryInfos.values()]
 
     def setPeriodicity(self, x=False, y=False, z=False):
         """Enable periodic boundary conditions at the border of the domain"""
@@ -82,37 +75,24 @@ class BoundaryHandling(object):
         self._periodicity = [x, y, z]
         self._compilePeriodicityKernels()
 
-    def hasBoundary(self, name):
+    def hasBoundary(self, boundaryObject):
         """Returns boolean indicating if a boundary with that name exists"""
-        return name in self._nameToBoundary
+        return boundaryObject in self._boundaryInfos
 
-    def setBoundary(self, function, indexExpr=None, maskArr=None, name=None):
+    def setBoundary(self, boundaryObject, indexExpr=None, maskArr=None):
         """
         Sets boundary in a rectangular region (slice)
 
-        :param function: boundary function or the string 'fluid' to remove boundary conditions
+        :param boundaryObject: boundary condition object or the string 'fluid' to remove boundary conditions
         :param indexExpr: slice expression, where boundary should be set, see :mod:`pystencils.slicing`
         :param maskArr: optional boolean (masked) array specifying where the boundary should be set
-        :param name: name of the boundary
         """
         if indexExpr is None:
             indexExpr = [slice(None, None, None)] * len(self.flagField.shape)
-        if function == 'fluid':
+        if boundaryObject == 'fluid':
             flag = self._fluidFlag
         else:
-            if name is None:
-                if hasattr(function, '__name__'):
-                    name = function.__name__
-                elif hasattr(function, 'name'):
-                    name = function.name
-                else:
-                    raise ValueError("Boundary function has to have a '__name__' or 'name' attribute "
-                                     "if name is not specified")
-
-            if not self.hasBoundary(name):
-                self.addBoundary(function, name)
-
-            flag = self.getFlag(name)
+            flag = self.addBoundary(boundaryObject)
             assert flag != self._fluidFlag
 
         indexExpr = normalizeSlice(indexExpr, self._shapeWithGhostLayers)
@@ -123,26 +103,20 @@ class BoundaryHandling(object):
             flagFieldView[maskArr] = flag
         self._dirty = True
 
-    def addBoundary(self, boundaryFunction, name=None):
+    def addBoundary(self, boundaryObject):
         """
         Adds a boundary condition, i.e. reserves a flog in the flag field and returns that flag
-        If a boundary with that name already exists, the existing flag is returned.
+        If the boundary already exists, the existing flag is returned.
         This flag can be logicalled or'ed to the boundaryHandling.flagField
 
-        :param boundaryFunction: boundary condition function, see :mod:`lbmpy.boundaries.boundaryconditions`
-        :param name: boundaries with different name are considered different. If not given
-                     ```boundaryFunction.__name__`` is used
+        :param boundaryObject: boundary condition object, see :mod:`lbmpy.boundaries.boundaryconditions`
         """
-        if name is None:
-            name = boundaryFunction.__name__
-
-        if self.hasBoundary(name):
-            return self._boundaryInfos[name].flag
+        if boundaryObject in self._boundaryInfos:
+            return self._boundaryInfos[boundaryObject].flag
 
         newIdx = len(self._boundaryInfos) + 1  # +1 because 2**0 is reserved for fluid flag
-        boundaryInfo = self.BoundaryInfo(name, 2 ** newIdx, boundaryFunction, None, None)
-        self._boundaryInfos.append(boundaryInfo)
-        self._nameToBoundary[name] = boundaryInfo
+        boundaryInfo = self.BoundaryInfo(2 ** newIdx, boundaryObject, None, None)
+        self._boundaryInfos[boundaryObject] = boundaryInfo
         self._dirty = True
         return boundaryInfo.flag
 
@@ -157,7 +131,7 @@ class BoundaryHandling(object):
         """Run the boundary handling, all keyword args are passed through to the boundary sweeps"""
         if self._dirty:
             self.prepare()
-        for boundary in self._boundaryInfos:
+        for boundary in self._boundaryInfos.values():
             boundary.kernel(**kwargs)
         for k in self._periodicityKernels:
             k(**kwargs)
@@ -166,27 +140,47 @@ class BoundaryHandling(object):
         """Removes all boundaries and fills the domain with fluid"""
         self.flagField.fill(self._fluidFlag)
         self._dirty = False
-        self._boundaryInfos = []
-        self._nameToBoundary = {}
+        self._boundaryInfos = {}
 
     def prepare(self):
         """Fills data structures to speed up the boundary handling and compiles all boundary kernels.
         This is automatically done when first called. With this function this can be triggered before running."""
-        for boundary in self._boundaryInfos:
+        for boundary in self._boundaryInfos.values():
             assert boundary.flag != self._fluidFlag
-            idxField = createBoundaryIndexList(self.flagField, self._lbMethod.stencil,
+            idxArray = createBoundaryIndexList(self.flagField, self._lbMethod.stencil,
                                                boundary.flag, self._fluidFlag, self._ghostLayers)
-            ast = generateBoundaryHandling(self._symbolicPdfField, idxField, self._lbMethod, boundary.function,
-                                           target=self._target)
+
+            dim = self._lbMethod.dim
+
+            if boundary.object.additionalData:
+                coordinateNames = ["x", "y", "z"][:dim]
+                indexArrDtype = np.dtype([(name, np.int32) for name in coordinateNames] +
+                                         [('dir', np.int32)] +
+                                         [(i[0], i[1].numpyDtype) for i in boundary.object.additionalData])
+                extendedIdxField = np.empty(len(idxArray), dtype=indexArrDtype)
+                for prop in coordinateNames + ['dir']:
+                    extendedIdxField[prop] = idxArray[prop]
+
+                idxArray = extendedIdxField
+                if boundary.object.additionalDataInit:
+                    initKernelAst = generateIndexBoundaryKernel(self._symbolicPdfField, idxArray, self._lbMethod,
+                                                                boundary.object, target='cpu',
+                                                                createInitializationKernel=True)
+                    from pystencils.cpu import makePythonFunction as makePythonCpuFunction
+                    initKernel = makePythonCpuFunction(initKernelAst, {'indexField': idxArray, 'pdfs': self._pdfField})
+                    initKernel()
+
+            ast = generateIndexBoundaryKernel(self._symbolicPdfField, idxArray, self._lbMethod, boundary.object,
+                                              target=self._target)
             boundary.ast = ast
             if self._target == 'cpu':
                 from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
                 addOpenMP(ast, numThreads=self.openMP)
-                boundary.kernel = makePythonCpuFunction(ast, {'indexField': idxField})
+                boundary.kernel = makePythonCpuFunction(ast, {'indexField': idxArray})
             elif self._target == 'gpu':
                 from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
                 import pycuda.gpuarray as gpuarray
-                idxGpuField = gpuarray.to_gpu(idxField)
+                idxGpuField = gpuarray.to_gpu(idxArray)
                 boundary.kernel = makePythonGpuFunction(ast, {'indexField': idxGpuField})
             else:
                 assert False
@@ -276,19 +270,20 @@ class LbmMethodInfo(CustomCppCode):
         super(LbmMethodInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
 
 
-def generateBoundaryHandling(pdfField, indexArr, lbMethod, boundaryFunctor, target='cpu'):
+def generateIndexBoundaryKernel(pdfField, indexArr, lbMethod, boundaryFunctor, target='cpu',
+                                createInitializationKernel=False):
     indexField = Field.createFromNumpyArray("indexField", indexArr)
 
     elements = [LbmMethodInfo(lbMethod)]
     dirSymbol = TypedSymbol("dir", indexArr.dtype.fields['dir'][0])
     boundaryEqList = [sp.Eq(dirSymbol, indexField[0]('dir'))]
-    boundaryEqList += boundaryFunctor(pdfField, dirSymbol, lbMethod)
-    if type(boundaryEqList) is tuple:
-        boundaryEqList, additionalNodes = boundaryEqList
-        elements += boundaryEqList
-        elements += additionalNodes
+    if createInitializationKernel:
+        boundaryEqList += boundaryFunctor.additionalDataInit(pdfField=pdfField, directionSymbol=dirSymbol,
+                                                             lbMethod=lbMethod, indexField=indexField)
     else:
-        elements += boundaryEqList
+        boundaryEqList += boundaryFunctor(pdfField=pdfField, directionSymbol=dirSymbol, lbMethod=lbMethod,
+                                          indexField=indexField)
+    elements += boundaryEqList
 
     if target == 'cpu':
         from pystencils.cpu import createIndexedKernel
