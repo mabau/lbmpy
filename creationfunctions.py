@@ -341,6 +341,8 @@ def createLatticeBoltzmannMethod(**params):
             forceModel = forceModels.Luo(params['force'][:dim])
         elif forceModelName.lower() == 'guo':
             forceModel = forceModels.Guo(params['force'][:dim])
+        elif forceModelName.lower() == 'silva':
+            forceModel = forceModels.Silva(params['force'][:dim])
         else:
             raise ValueError("Unknown force model %s" % (forceModelName,))
     else:

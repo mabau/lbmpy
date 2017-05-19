@@ -30,6 +30,24 @@ class Simple(object):
         return defaultVelocityShift(density, self._force)
 
 
+class Silva(object):
+    def __init__(self, force):
+        self._force = force
+
+    def __call__(self, lbMethod, **kwargs):
+        simple = Simple(self._force)
+
+        shearRelaxationRate = getShearRelaxationRate(lbMethod)
+        correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
+        return [correctionFactor * t for t in simple(lbMethod)]
+
+    def macroscopicVelocityShift(self, density):
+        return defaultVelocityShift(density, self._force)
+
+    def equilibriumVelocityShift(self, density):
+        return defaultVelocityShift(density, self._force)
+
+
 class Luo(object):
     r"""
     Force model by Luo with the following forcing term
@@ -63,7 +81,7 @@ class Guo(object):
 
     .. math ::
 
-        F_i = w_i  ( 1 - \frac{\omega}{2} )  \left( \frac{c_i - u}{c_s^2} + \frac{c_i \left<c_i, u\right>}{c_s^4} \right)  F
+        F_i = w_i  ( 1 - \frac{\omega}{2} )  \left( \frac{c_i - u}{c_s^2} + \frac{c_i \left<c_i, u\right>}{c_s^4} \right) F
 
     Adapts the calculation of the macroscopic velocity as well as the equilibrium velocity (both shifted by F/2)!
     """
