@@ -395,9 +395,13 @@ def getDefaultMomentSetForStencil(stencil):
         additionalMoments = (6 * (x**2 * y**2 + x**2 * z**2 + y**2 * z**2),
                              3 * (x * (y**2 + z**2)),
                              3 * (y * (x**2 + z**2)),
-                             3 * (z * (x**2 + y**2)))
+                             3 * (z * (x**2 + y**2)),
+                            )
         toRemove = set(extendMomentsWithPermutations(nonMatchedMoments))
         return toPoly(set(all27Moments) - toRemove) + additionalMoments
+        #default7 = [sp.Rational(1, 1), x, y, z, x ** 2, y ** 2, z ** 2]
+        #diagonals = [(1, 2, 2), (1, 1, 2), (2, 2, 2), (1, 1, 1)]
+        #return default7 + list(toPoly(extendMomentsWithPermutations(diagonals)))
 
     raise NotImplementedError("No default moment system available for this stencil - define matched moments yourself")
 

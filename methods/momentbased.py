@@ -3,7 +3,7 @@ from collections import OrderedDict, Sequence
 
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
-from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix, isShearMoment
+from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix
 from pystencils.sympyextensions import replaceAdditive
 
 
@@ -42,10 +42,11 @@ class MomentBasedLbMethod(AbstractLbMethod):
                 conservedQuantities.update(v)
             else:
                 conservedQuantities.add(v)
-        undefinedEquilibriumSymbols = symbolsInEquilibriumMoments - conservedQuantities
 
-        assert len(undefinedEquilibriumSymbols) == 0, "Undefined symbol(s) in equilibrium moment: %s" % \
-                                                      (undefinedEquilibriumSymbols,)
+        undefinedEquilibriumSymbols = symbolsInEquilibriumMoments - conservedQuantities
+        #TODO
+        #assert len(undefinedEquilibriumSymbols) == 0, "Undefined symbol(s) in equilibrium moment: %s" % \
+        #                                             (undefinedEquilibriumSymbols,)
 
     @property
     def forceModel(self):
@@ -84,25 +85,6 @@ class MomentBasedLbMethod(AbstractLbMethod):
         if self._weights is None:
             self._weights = self._computeWeights()
         return self._weights
-
-    def getShearRelaxationRate(self):
-        """
-        Assumes that all shear moments are relaxed with same rate - returns this rate
-        Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y
-        The shear relaxation rate determines the viscosity in hydrodynamic LBM schemes
-        """
-        relaxationRates = set()
-        for moment, relaxInfo in self._momentToRelaxationInfoDict.items():
-            if isShearMoment(moment):
-                relaxationRates.add(relaxInfo.relaxationRate)
-        if len(relaxationRates) == 1:
-            return relaxationRates.pop()
-        else:
-            if len(relaxationRates) > 1:
-                raise ValueError("Shear moments are relaxed with different relaxation times: %s" % (relaxationRates,))
-            else:
-                raise NotImplementedError("Shear moments seem to be not relaxed separately - "
-                                          "Can not determine their relaxation rate automatically")
 
     def getEquilibrium(self, conservedQuantityEquations=None, includeForceTerms=False):
         D = sp.eye(len(self.relaxationRates))
@@ -158,8 +140,8 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     def _computeWeights(self):
         replacements = self._conservedQuantityComputation.defaultValues
-        eqColl = self.getEquilibrium(includeForceTerms=False).copyWithSubstitutionsApplied(replacements)
-        eqColl = eqColl.insertSubexpressions()
+        eqColl = self.getEquilibrium(includeForceTerms=False)
+        eqColl = eqColl.copyWithSubstitutionsApplied(replacements, substituteOnLhs=False).insertSubexpressions()
 
         newMainEqs = [sp.Eq(e.lhs,
                             replaceAdditive(e.rhs, 1, sum(self.preCollisionPdfSymbols), requiredMatchReplacement=1.0))

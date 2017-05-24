@@ -493,3 +493,6 @@ class Scenario(object):
 
         self._getMacroscopic(pdfs=self._pdfArrays[0], density=self._density, velocity=self._velocity,
                              **self.kernelParams)
+
+
+import pickle

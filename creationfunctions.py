@@ -159,6 +159,7 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
         'relaxationRates': sp.symbols("omega_:10"),
         'compressible': False,
         'equilibriumAccuracyOrder': 2,
+        'c_s_sq': sp.Rational(1, 3),
 
         'forceModel': 'none',  # can be 'simple', 'luo' or 'guo'
         'force': (0, 0, 0),
@@ -354,6 +355,7 @@ def createLatticeBoltzmannMethod(**params):
         'forceModel': forceModel,
         'useContinuousMaxwellianEquilibrium': params['useContinuousMaxwellianEquilibrium'],
         'cumulant': params['cumulant'],
+        'c_s_sq': params['c_s_sq'],
     }
     methodName = params['method']
     relaxationRates = params['relaxationRates']

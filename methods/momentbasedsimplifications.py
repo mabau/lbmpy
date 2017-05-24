@@ -116,6 +116,8 @@ def replaceCommonQuadraticAndConstantTerm(lbmCollisionEqs):
     stencil = lbmCollisionEqs.method.stencil
     assert sum([abs(e) for e in stencil[0]]) == 0, "Works only if first stencil entry is the center direction"
     f_eq_common = __getCommonQuadraticAndConstantTerms(lbmCollisionEqs)
+    if f_eq_common is None:
+        return lbmCollisionEqs
 
     if len(f_eq_common.args) > 1:
         f_eq_common = sp.Eq(sp.Symbol('f_eq_common'), f_eq_common)
@@ -234,4 +236,6 @@ def __getCommonQuadraticAndConstantTerms(lbmCollisionEqs):
     for u in sh['velocity']:
         weight = weight.subs(u, 0)
     weight = weight / sh['density']
+    if weight == 0:
+        return None
     return t / weight

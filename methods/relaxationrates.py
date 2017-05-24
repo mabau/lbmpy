@@ -37,6 +37,9 @@ def getShearRelaxationRate(method):
         if len(relaxationRates) > 1:
             raise ValueError("Shear moments are relaxed with different relaxation times: %s" % (relaxationRates,))
         else:
+            allRelaxationRates = set(v.relaxationRate for v in method.relaxationInfoDict.values())
+            if len(allRelaxationRates) == 1:
+                return list(allRelaxationRates)[0]
             raise NotImplementedError("Shear moments seem to be not relaxed separately - "
                                       "Can not determine their relaxation rate automatically")
 
