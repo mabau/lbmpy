@@ -245,6 +245,21 @@ def isEven(moment):
         return sp.expand(moment - opposite) == 0
 
 
+def getMomentIndices(momentExponentTuple):
+    """Returns indices for a given exponent tuple:
+    
+    Example:
+        >>> getMomentIndices((2,1,0))
+        [0, 0, 1]
+        >>> getMomentIndices((0,0,3))
+        [2, 2, 2]
+    """
+    result = []
+    for i, element in enumerate(momentExponentTuple):
+        result += [i] * element
+    return result
+
+
 def getOrder(moment):
     """
     Computes polynomial order of given moment

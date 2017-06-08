@@ -4,6 +4,7 @@ Additionally functions are provided to compute cumulants from moments and vice v
 """
 
 import sympy as sp
+from pystencils.sympyextensions import scalarProduct
 from lbmpy.moments import momentsUpToComponentOrder
 from lbmpy.continuous_distribution_measures import multiDifferentiation
 from lbmpy.cache import memorycache
@@ -103,9 +104,6 @@ def __cumulantRawMomentTransform(index, dependentVarDict, outerFunction, default
 @memorycache(maxsize=16)
 def __getDiscreteCumulantGeneratingFunction(function, stencil, waveNumbers):
     assert len(stencil) == len(function)
-
-    def scalarProduct(a, b):
-        return sum(a_i * b_i for a_i, b_i in zip(a, b))
 
     laplaceTrafo = sum([factor * sp.exp(scalarProduct(waveNumbers, e)) for factor, e in zip(function, stencil)])
     return sp.ln(laplaceTrafo)

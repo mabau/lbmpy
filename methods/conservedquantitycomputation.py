@@ -288,16 +288,3 @@ def applyForceModelShift(shiftMemberName, dim, equationCollection, forceModel, c
         return equationCollection.copy(newEqs)
     else:
         return equationCollection
-
-
-if __name__ == '__main__':
-    from lbmpy.creationfunctions import createLatticeBoltzmannMethod
-    from lbmpy.simplificationfactory import createSimplificationStrategy
-    from lbmpy.stencils import getStencil
-    from lbmpy_old.lbmgenerator import createStreamCollideUpdateRule
-    from lbmpy_old.latticemodel import makeSRT
-    import sympy as sp
-    methodNew = createLatticeBoltzmannMethod(compressible=True)
-    newSimp = createSimplificationStrategy(methodNew)
-    cqc = methodNew.conservedQuantityComputation
-    cqc.outputEquationsFromPdfs(sp.symbols("f_:9"), {'density': sp.Symbol("rho_out")})

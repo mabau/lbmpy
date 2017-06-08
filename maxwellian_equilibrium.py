@@ -192,6 +192,24 @@ def getMomentsOfDiscreteMaxwellianEquilibrium(stencil, moments,
     return tuple([discreteMoment(mb, moment, stencil).expand() for moment in moments])
 
 
+def compressibleToIncompressibleMomentValue(term, rho, u):
+    term = sp.sympify(term)
+    term = term.expand()
+    if term.func != sp.Add:
+        args = [term, ]
+    else:
+        args = term.args
+
+    res = 0
+    for t in args:
+        containedSymbols = t.atoms(sp.Symbol)
+        if rho in containedSymbols and len(containedSymbols.intersection(set(u))) > 0:
+            res += t / rho
+        else:
+            res += t
+    return res
+
+
 # -------------------------------- Equilibrium moments -----------------------------------------------------------------
 
 

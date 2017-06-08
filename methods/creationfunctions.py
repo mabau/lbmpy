@@ -16,7 +16,7 @@ from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputatio
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
     getMomentsOfContinuousMaxwellianEquilibrium, getCumulantsOfDiscreteMaxwellianEquilibrium, \
-    getCumulantsOfContinuousMaxwellianEquilibrium
+    getCumulantsOfContinuousMaxwellianEquilibrium, compressibleToIncompressibleMomentValue
 from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber, defaultRelaxationRateNames
 
 
@@ -423,23 +423,3 @@ def compareMomentBasedLbMethods(reference, other, showDeviationsOnly=False):
             ipy_table.set_cell_style(rowIdx, col, color='#bbbbbb')
     return tableDisplay
 
-
-# ------------------------------------ Helper Functions ----------------------------------------------------------------
-
-
-def compressibleToIncompressibleMomentValue(term, rho, u):
-    term = sp.sympify(term)
-    term = term.expand()
-    if term.func != sp.Add:
-        args = [term, ]
-    else:
-        args = term.args
-
-    res = 0
-    for t in args:
-        containedSymbols = t.atoms(sp.Symbol)
-        if rho in containedSymbols and len(containedSymbols.intersection(set(u))) > 0:
-            res += t / rho
-        else:
-            res += t
-    return res
