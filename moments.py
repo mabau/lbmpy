@@ -40,7 +40,6 @@ import itertools
 from copy import copy
 from collections import Counter, defaultdict
 
-from lbmpy.continuous_distribution_measures import continuousMoment
 from lbmpy.cache import memorycache
 from pystencils.sympyextensions import removeHigherOrderTerms
 
@@ -420,6 +419,8 @@ def momentEqualityTable(stencil, discreteEquilibrium=None, continuousEquilibrium
     :return: Object to display in an Jupyter notebook
     """
     import ipy_table
+    from lbmpy.continuous_distribution_measures import continuousMoment
+
     dim = len(stencil[0])
 
     if discreteEquilibrium is None:
@@ -488,6 +489,7 @@ def momentEqualityTableByStencil(nameToStencilDict, moments, truncateOrder=None)
     import ipy_table
     from lbmpy.maxwellian_equilibrium import discreteMaxwellianEquilibrium
     from lbmpy.maxwellian_equilibrium import continuousMaxwellianEquilibrium
+    from lbmpy.continuous_distribution_measures import continuousMoment
 
     stencilNames = []
     stencils = []

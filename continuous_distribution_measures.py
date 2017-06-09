@@ -5,6 +5,7 @@
 import sympy as sp
 from pystencils.sympyextensions import makeExponentialFuncArgumentSquares
 from lbmpy.cache import diskcache, memorycache
+from lbmpy.moments import polynomialToExponentRepresentation
 
 
 @memorycache()
@@ -88,30 +89,26 @@ def multiDifferentiation(generatingFunction, index, symbols):
 
 @memorycache(maxsize=512)
 def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
+    if type(moment) is tuple and not symbols:
+        symbols = sp.symbols("xvar yvar zvar")
+
+    dim = len(moment) if type(moment) is tuple else len(symbols)
+
+    # not using sp.Dummy here - since it prohibits caching
+    t = tuple([sp.Symbol("tmpvar_%d" % i, ) for i in range(dim)])
+    symbols = symbols[:dim]
+    genFunc = generatingFunction(function, symbols, t)
 
     if type(moment) is tuple:
-        dim = len(moment)
-        # not using sp.Dummy here - since it prohibits caching
-        t = tuple([sp.Symbol("tmpvar_%d" % i, ) for i in range(dim)])
-        if not symbols:
-            symbols = sp.symbols("xvar yvar zvar")
-        symbols = symbols[:dim]
-        genFunc = generatingFunction(function, symbols, t)
         return multiDifferentiation(genFunc, moment, t)
     else:
-        moment = sp.sympify(moment)
         assert symbols is not None, "When passing a polynomial as moment, also the moment symbols have to be passed"
-        dim = len(symbols)
-        # not using sp.Dummy here - since it prohibits caching
-        t = tuple([sp.Symbol("tmpvar_%d" % i, ) for i in range(dim)])
-        symbols = symbols[:dim]
-        genFunc = generatingFunction(function, symbols, t)
+        moment = sp.sympify(moment)
 
         result = 0
-        for term, coefficient in moment.as_coefficients_dict().items():
-            exponents = tuple([term.as_coeff_exponent(v_i)[1] for v_i in symbols])
-            cm = multiDifferentiation(genFunc, exponents, t)
-            result += coefficient * cm
+        for coefficient, exponents in polynomialToExponentRepresentation(moment, dim=dim):
+            result += coefficient * multiDifferentiation(genFunc, exponents, t)
+
         return result
 
 
