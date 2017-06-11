@@ -1,3 +1,4 @@
+import sympy as sp
 
 
 def getStencil(name, ordering='walberla'):
@@ -139,13 +140,14 @@ def visualizeStencil(stencil, **kwargs):
             visualizeStencil3D(stencil, **kwargs)
 
 
-def visualizeStencil2D(stencil, axes=None, data=None):
+def visualizeStencil2D(stencil, axes=None, data=None, textsize='12', **kwargs):
     """
     Creates a matplotlib 2D plot of the stencil
 
     :param stencil: sequence of directions
     :param axes: optional matplotlib axes
     :param data: data to annotate the directions with, if none given, the indices are used
+    :param textsize: size of annotation text
     """
     from matplotlib.patches import BoxStyle
     import matplotlib.pyplot as plt
@@ -166,8 +168,13 @@ def visualizeStencil2D(stencil, axes=None, data=None):
         if not(dir[0] == 0 and dir[1] == 0):
             axes.arrow(0, 0, dir[0], dir[1], head_width=0.08, head_length=head_length, color='k')
 
-        axes.text(dir[0]*text_offset, dir[1]*text_offset, str(annotation), verticalalignment='center', zorder=30,
-                  size='12', bbox=dict(boxstyle=text_box_style, facecolor='#00b6eb', alpha=0.85, linewidth=0))
+        if isinstance(annotation, sp.Basic):
+            annotation = "$" + sp.latex(annotation) + "$"
+        else:
+            annotation = str(annotation)
+        axes.text(dir[0]*text_offset, dir[1]*text_offset, annotation, verticalalignment='center', zorder=30,
+                  horizontalalignment='center',
+                  size=textsize, bbox=dict(boxstyle=text_box_style, facecolor='#00b6eb', alpha=0.85, linewidth=0))
 
     axes.set_axis_off()
     axes.set_aspect('equal')
@@ -175,7 +182,7 @@ def visualizeStencil2D(stencil, axes=None, data=None):
     axes.set_ylim([-text_offset * 1.1, text_offset * 1.1])
 
 
-def visualizeStencil3DBySlicing(stencil, sliceAxis=2, data=None):
+def visualizeStencil3DBySlicing(stencil, sliceAxis=2, data=None, **kwargs):
     """
     Visualizes a 3D, first-neighborhood stencil by plotting 3 slices along a given axis
 
@@ -202,12 +209,12 @@ def visualizeStencil3DBySlicing(stencil, sliceAxis=2, data=None):
         splittedData[splitIdx].append(i if data is None else data[i])
 
     for i in range(3):
-        visualizeStencil2D(splittedDirections[i], axes[i], splittedData[i])
+        visualizeStencil2D(splittedDirections[i], axes[i], splittedData[i], **kwargs)
     for i in [-1, 0, 1]:
         axes[i+1].set_title("Cut at %s=%d" % (axesNames[sliceAxis], i))
 
 
-def visualizeStencil3D(stencil, axes=None, data=None):
+def visualizeStencil3D(stencil, axes=None, data=None, textsize='8'):
     """
     Draws 3D stencil into a 3D coordinate system, parameters are similar to :func:`visualizeStencil2D`
     If data is None, no labels are drawn. To draw the labels as in the 2D case, use ``data=list(range(len(stencil)))``
@@ -260,10 +267,16 @@ def visualizeStencil3D(stencil, axes=None, data=None):
 
             a = Arrow3D([0, dir[0]], [0, dir[1]], [0, dir[2]], mutation_scale=20, lw=2, arrowstyle="-|>", color=color)
             axes.add_artist(a)
+
         if annotation:
+            if isinstance(annotation, sp.Basic):
+                annotation = "$" + sp.latex(annotation) + "$"
+            else:
+                annotation = str(annotation)
+
             axes.text(dir[0]*text_offset, dir[1]*text_offset, dir[2]*text_offset,
-                      str(annotation), verticalalignment='center', zorder=30,
-                      size='8', bbox=dict(boxstyle=text_box_style, facecolor='#777777', alpha=0.6, linewidth=0))
+                      annotation, verticalalignment='center', zorder=30,
+                      size=textsize, bbox=dict(boxstyle=text_box_style, facecolor='#777777', alpha=0.6, linewidth=0))
 
     axes.set_xlim([-text_offset*1.1, text_offset*1.1])
     axes.set_ylim([-text_offset * 1.1, text_offset * 1.1])

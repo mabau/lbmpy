@@ -27,6 +27,16 @@ def genericEquilibriumAnsatz(stencil, u=sp.symbols("u_:3")):
     return tuple(equilibrium)
 
 
+def genericEquilibriumAnsatzParameters(stencil):
+    degreesOfFreedom = set()
+    for direction in stencil:
+        speed = np.abs(direction).sum()
+        params = getParameterSymbols(speed)
+        degreesOfFreedom.update(params)
+    degreesOfFreedom.add(sp.Symbol("p"))
+    return sorted(list(degreesOfFreedom), key=lambda e: e.name)
+
+
 def matchGenericEquilibriumAnsatz(stencil, equilibrium, u=sp.symbols("u_:3")):
     """Given a quadratic equilibrium, the generic coefficients A,B,C,D are determined. 
     Returns a dict that maps these coefficients to their values. If the equilibrium does not have a
@@ -58,12 +68,13 @@ def momentConstraintEquations(stencil, equilibrium, momentToValueDict, u=sp.symb
     passed in momentToValueDict. This dict is expected to map moment tuples to values."""
     dim = len(stencil[0])
     u = u[:dim]
+    equilibrium = tuple(equilibrium)
     constraintEquations = set()
     for moment, desiredValue in momentToValueDict.items():
         genericMoment = discreteMoment(equilibrium, moment, stencil)
         equations = sp.poly(genericMoment - desiredValue, *u).coeffs()
         constraintEquations.update(equations)
-    return constraintEquations
+    return list(constraintEquations)
 
 
 def hydrodynamicMomentValues(upToOrder=3, dim=3, compressible=True):

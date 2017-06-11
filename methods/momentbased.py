@@ -91,6 +91,10 @@ class MomentBasedLbMethod(AbstractLbMethod):
         return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations,
                                                           includeForceTerms=includeForceTerms)
 
+    def getEquilibriumTerms(self):
+        equilibrium = self.getEquilibrium()
+        return sp.Matrix([eq.rhs for eq in equilibrium.mainEquations])
+
     def getCollisionRule(self, conservedQuantityEquations=None):
         D = sp.diag(*self.relaxationRates)
         relaxationRateSubExpressions, D = self._generateRelaxationMatrix(D)

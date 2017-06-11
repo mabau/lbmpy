@@ -119,6 +119,9 @@ class Diff(sp.Expr):
                 else:
                     constant *= factor
 
+        if isinstance(variable, sp.Symbol) and variable not in functions:
+            return 0
+
         if isinstance(variable, int) or variable.is_number:
             return 0
         else:
@@ -162,10 +165,12 @@ class Diff(sp.Expr):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-def expandUsingLinearity(expr, functions=None):
+def expandUsingLinearity(expr, functions=None, constants=None):
     """Expands all derivative nodes by applying Diff.splitLinear"""
     if functions is None:
         functions = expr.atoms(sp.Symbol)
+        if constants is not None:
+            functions.difference_update(constants)
 
     if isinstance(expr, Diff):
         arg = expandUsingLinearity(expr.arg, functions)
@@ -175,7 +180,11 @@ def expandUsingLinearity(expr, functions=None):
                 result += Diff(a, label=expr.label, ceIdx=expr.ceIdx).splitLinear(functions)
             return result
         else:
-            return Diff(arg, label=expr.label, ceIdx=expr.ceIdx).splitLinear(functions)
+            diff = Diff(arg, label=expr.label, ceIdx=expr.ceIdx)
+            if diff == 0:
+                return 0
+            else:
+                return diff.splitLinear(functions)
     else:
         newArgs = [expandUsingLinearity(e, functions) for e in expr.args]
         result = expr.func(*newArgs) if newArgs else expr

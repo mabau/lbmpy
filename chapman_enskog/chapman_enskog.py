@@ -72,6 +72,8 @@ class CeMoment(sp.Symbol):
     def __new_stage2__(cls, name, momentTuple, ceIdx=-1):
         obj = super(CeMoment, cls).__xnew__(cls, name)
         obj.momentTuple = momentTuple
+        while len(obj.momentTuple) < 3:
+            obj.momentTuple = obj.momentTuple + (0,)
         obj.ceIdx = ceIdx
         return obj
 
@@ -137,8 +139,11 @@ def substituteCollisionOperatorMoments(expr, lbMethod, collisionOpMomentName='\\
 
         momentSymbols = []
         for moment, (eqValue, rr) in lbMethod.relaxationInfoDict.items():
-            momentSymbols.append(-rr * sum(coeff * CeMoment(preCollisionMomentName, momentTuple, ceMoment.ceIdx)
-                                           for coeff, momentTuple in polynomialToExponentRepresentation(moment)))
+            if isinstance(moment, tuple):
+                momentSymbols.append(-rr * CeMoment(preCollisionMomentName, moment, ceMoment.ceIdx))
+            else:
+                momentSymbols.append(-rr * sum(coeff * CeMoment(preCollisionMomentName, momentTuple, ceMoment.ceIdx)
+                                               for coeff, momentTuple in polynomialToExponentRepresentation(moment)))
         momentSymbols = sp.Matrix(momentSymbols)
         postCollisionValue = discreteMoment(tuple(Minv * momentSymbols), momentTuple, lbMethod.stencil)
         subsDict[ceMoment] = postCollisionValue
@@ -203,112 +208,6 @@ def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('Cf', '\\Upsilon')), veloci
         return sum(handleProduct(t) for t in eqn.args)
 
 
-#def takeMoments(eqn, pdfName="f", pdfMomentName="\\Pi", collisionOpName="Cf", collisonOpMomentName="\\Upsilon",
-#                velocityName='c', maxPdfExpansion=5):
-#    pdfToMomentName = [[tuple(expandedSymbol(pdfName, superscript=i) for i in range(maxPdfExpansion)), pdfMomentName],
-#                       [(sp.Symbol(collisionOpName),), collisonOpMomentName]]
-#
-#    pdfSymbols = [a[0] for a in pdfToMomentName]
-#
-#    velocityTerms = tuple(expandedSymbol(velocityName, subscript=i) for i in range(3))
-#
-#    def determineFIndex(factor):
-#        FIndex = namedtuple("FIndex", ['momentName', 'ceIdx'])
-#        for symbolListId, pdfSymbolsElement in enumerate(pdfSymbols):
-#            try:
-#                return FIndex(pdfToMomentName[symbolListId][1], pdfSymbolsElement.index(factor))
-#            except ValueError:
-#                pass
-#        return None
-#
-#    def handleProduct(productTerm):
-#        fIndex = None
-#        derivativeTerm = None
-#        cIndices = []
-#        rest = 1
-#        for factor in normalizeProduct(productTerm):
-#            if isinstance(factor, Diff):
-#                assert fIndex is None
-#                fIndex = determineFIndex(factor.getArgRecursive())
-#                derivativeTerm = factor
-#            elif factor in velocityTerms:
-#                cIndices += [velocityTerms.index(factor)]
-#            else:
-#                newFIndex = determineFIndex(factor)
-#                if newFIndex is None:
-#                    rest *= factor
-#                else:
-#                    assert not(newFIndex and fIndex)
-#                    fIndex = newFIndex
-#
-#        momentTuple = [0] * len(velocityTerms)
-#        for cIdx in cIndices:
-#            momentTuple[cIdx] += 1
-#        momentTuple = tuple(momentTuple)
-#
-#        result = CeMoment(fIndex.momentName, momentTuple, fIndex.ceIdx)
-#        if derivativeTerm is not None:
-#            result = derivativeTerm.changeArgRecursive(result)
-#        result *= rest
-#        return result
-#
-#    functions = sum(pdfSymbols, ())
-#    eqn = expandUsingLinearity(eqn, functions).expand()
-#
-#    if eqn.func == sp.Mul:
-#        return handleProduct(eqn)
-#    else:
-#        assert eqn.func == sp.Add
-#        return sum(handleProduct(t) for t in eqn.args)
-
-
-def takeMomentsOld(eqn, pdfExpansionTerms, velocityTerms, momentSymbolName="\Pi"):
-    if isinstance(pdfExpansionTerms, str):
-        maxExpansion = 6
-        pdfExpansionTerms = tuple(expandedSymbol(pdfExpansionTerms, superscript=i) for i in range(maxExpansion))
-
-    if isinstance(velocityTerms, str):
-        velocityTerms = tuple(expandedSymbol(velocityTerms, subscript=i) for i in range(3))
-
-    def handleProduct(productTerm):
-        fIndex = None
-        derivativeTerm = None
-        cIndices = []
-        rest = 1
-        for factor in normalizeProduct(productTerm):
-            if isinstance(factor, Diff):
-                assert fIndex is None
-                arg = factor.getArgRecursive()
-                fIndex = pdfExpansionTerms.index(arg)
-                derivativeTerm = factor
-            elif factor in pdfExpansionTerms:
-                assert fIndex is None
-                fIndex = pdfExpansionTerms.index(factor)
-            elif factor in velocityTerms:
-                cIndices += [velocityTerms.index(factor)]
-            else:
-                rest *= factor
-
-        momentTuple = [0] * len(velocityTerms)
-        for cIdx in cIndices:
-            momentTuple[cIdx] += 1
-        momentTuple = tuple(momentTuple)
-
-        result = CeMoment(momentSymbolName, momentTuple, fIndex)
-        if derivativeTerm is not None:
-            result = derivativeTerm.changeArgRecursive(result)
-        result *= rest
-        return result
-
-    eqn = expandUsingLinearity(eqn, pdfExpansionTerms).expand()
-
-    if eqn.func == sp.Mul:
-        return handleProduct(eqn)
-    else:
-        assert eqn.func == sp.Add
-        return sum(handleProduct(t) for t in eqn.args)
-
-
 def timeDiffSelector(eq):
     return [d for d in eq.atoms(Diff) if d.label == sp.Symbol("t")]
 
@@ -341,7 +240,7 @@ def chainSolveAndSubstitute(eqSequence, unknownSelector, normalizingFunc=diffExp
         symbolsToSolveFor = unknownSelector(eq)
         if len(symbolsToSolveFor) == 0:
             continue
-        assert len(symbolsToSolveFor) <= 1, "Unknown Selector return multiple unknowns - expected <=1" + str(
+        assert len(symbolsToSolveFor) <= 1, "Unknown Selector return multiple unknowns - expected <=1\n" + str(
             symbolsToSolveFor)
         symbolToSolveFor = symbolsToSolveFor[0]
         solveRes = sp.solve(eq, symbolToSolveFor)
@@ -526,7 +425,7 @@ def computeHigherOrderMomentSubsDict(momentEquations):
 
 class ChapmanEnskogAnalysis(object):
 
-    def __init__(self, method):
+    def __init__(self, method, constants=None):
         cqc = method.conservedQuantityComputation
         self._method = method
         self._momentCache = LbMethodEqMoments(method)
@@ -543,11 +442,14 @@ class ChapmanEnskogAnalysis(object):
         momentsUntilOrder1 = [1] + list(c)
         momentsOrder2 = [c_i * c_j for c_i, c_j in productSymmetric(c, c)]
 
-        oEpsMoments1 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[1] * moment))
+        oEpsMoments1 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[1] * moment),
+                                             constants=constants)
                         for moment in momentsUntilOrder1]
-        oEpsMoments2 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[1] * moment))
+        oEpsMoments2 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[1] * moment),
+                                             constants=constants)
                         for moment in momentsOrder2]
-        oEpsSqMoments1 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[2] * moment))
+        oEpsSqMoments1 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[2] * moment),
+                                               constants=constants)
                           for moment in momentsUntilOrder1]
 
         self._equationsWithHigherOrderMoments = [self._ceRecombine(ord1 * self.epsilon + ord2 * self.epsilon ** 2)
@@ -587,7 +489,7 @@ class ChapmanEnskogAnalysis(object):
         return expr
 
     def getDynamicViscosity(self):
-        candidates = self._getShearViscosityCandidates()
+        candidates = self.getShearViscosityCandidates()
         if len(candidates) != 1:
             raise ValueError("Could not find expression for kinematic viscosity. "
                              "Probably method does not approximate Navier Stokes.")
@@ -599,18 +501,48 @@ class ChapmanEnskogAnalysis(object):
         else:
             return self.getDynamicViscosity()
 
-    def _getShearViscosityCandidates(self):
+    def getShearViscosityCandidates(self):
         result = set()
         dim = self._method.dim
         for i, j in productSymmetric(range(dim), range(dim), withDiagonal=False):
             result.add(-sp.cancel(self._sigmaWithoutErrorTerms[i, j] / (Diff(self.u[i], j) + Diff(self.u[j], i))))
         return result
 
-    def _getBulkViscosityCandidates(self):
+    def doesApproximateNavierStokes(self):
+        """Returns a set of equations that are required in order for the method to approximate Navier Stokes equations
+        up to second order"""
+        conditions = set([0])
+        dim = self._method.dim
+        assert dim > 1
+        # Check that shear viscosity does not depend on any u derivatives - create conditions (equations) that
+        # have to be fulfilled for this to be the case
+        viscosityReference = self._sigmaWithoutErrorTerms[0, 1].expand().coeff(Diff(self.u[0], 1))
+        for i, j in productSymmetric(range(dim), range(dim), withDiagonal=False):
+            term = self._sigmaWithoutErrorTerms[i, j]
+            equalCrossTermCondition = sp.expand(term.coeff(Diff(self.u[i], j)) - viscosityReference)
+            term = term.subs({Diff(self.u[i], j): 0,
+                              Diff(self.u[j], i): 0})
+
+            conditions.add(equalCrossTermCondition)
+            for k in range(dim):
+                symmetricTermCondition = term.coeff(Diff(self.u[k], k))
+                conditions.add(symmetricTermCondition)
+            term = term.subs({Diff(self.u[k], k): 0 for k in range(dim)})
+            conditions.add(term)
+
+        bulkCandidates = list(self.getBulkViscosityCandidates(-viscosityReference))
+        if len(bulkCandidates) > 0:
+            for i in range(1, len(bulkCandidates)):
+                conditions.add(bulkCandidates[0] - bulkCandidates[i])
+
+        return conditions
+
+    def getBulkViscosityCandidates(self, viscosity=None):
         sigma = self._sigmaWithoutErrorTerms
         assert self._sigmaWithHigherOrderMoments.is_square
         result = set()
-        viscosity = self.getDynamicViscosity()
+        if viscosity is None:
+            viscosity = self.getDynamicViscosity()
         for i in range(sigma.shape[0]):
             bulkTerm = sigma[i, i] + 2 * viscosity * Diff(self.u[i], i)
             bulkTerm = bulkTerm.expand()
@@ -625,7 +557,7 @@ class ChapmanEnskogAnalysis(object):
         return result
 
     def getBulkViscosity(self):
-        candidates = self._getBulkViscosityCandidates()
+        candidates = self.getBulkViscosityCandidates()
         if len(candidates) != 1:
             raise ValueError("Could not find expression for bulk viscosity. "
                              "Probably method does not approximate Navier Stokes.")
@@ -637,3 +569,4 @@ class ChapmanEnskogAnalysis(object):
         kinematicViscosity = self.getKinematicViscosity()
         solveRes = sp.solve(kinematicViscosity - nu, kinematicViscosity.atoms(sp.Symbol), dict=True)
         return solveRes[0]
+

@@ -1,7 +1,7 @@
 from warnings import warn
 
 import sympy as sp
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from functools import reduce
 import operator
 import itertools
@@ -10,7 +10,7 @@ from lbmpy.methods.momentbased import MomentBasedLbMethod
 from lbmpy.stencils import stencilsHaveSameEntries, getStencil
 from lbmpy.moments import isEven, gramSchmidt, getDefaultMomentSetForStencil, MOMENT_SYMBOLS, \
     exponentsToPolynomialRepresentations, momentsOfOrder, momentsUpToComponentOrder, sortMomentsIntoGroupsOfSameOrder, \
-    getOrder
+    getOrder, discreteMoment
 from pystencils.sympyextensions import commonDenominator
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
@@ -73,8 +73,7 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
     By using the continuous Maxwellian we automatically get a compressible model.
     """
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
-    assert len(momToRrDict) == len(
-        stencil), "The number of moments has to be the same as the number of stencil entries"
+    assert len(momToRrDict) == len(stencil), "The number of moments has to be the same as the number of stencil entries"
     dim = len(stencil[0])
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
@@ -98,6 +97,34 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
         return CumulantBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
     else:
         return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+
+
+def createWithGivenEqMoments(stencil, momentToEqValueDict, compressible=False, forceModel=None,
+                             momentToRelaxationRateDict=defaultdict(lambda: sp.Symbol("omega"))):
+    densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
+
+    rrDict = OrderedDict()
+    for moment in momentToEqValueDict.keys():
+        rrDict[moment] = RelaxationInfo(momentToEqValueDict[moment], momentToRelaxationRateDict[moment])
+    return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+
+
+def createFromEquilibrium(stencil, equilibrium, momentToRelaxationRateDict, compressible=False, forceModel=None):
+    r"""
+    Creates a moment-based LB method using a given equilibrium distribution function
+    :param stencil: see createWithDiscreteMaxwellianEqMoments
+    :param equilibrium: list of equilibrium terms, dependent on rho and u, one for each stencil direction
+    :param momentToRelaxationRateDict: relaxation rate for each moment
+    :param compressible: see createWithDiscreteMaxwellianEqMoments
+    :param forceModel: see createWithDiscreteMaxwellianEqMoments
+    """
+    momToRrDict = OrderedDict(momentToRelaxationRateDict)
+    assert len(momToRrDict) == len(stencil), "The number of moments has to be the same as the number of stencil entries"
+    densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
+
+    rrDict = OrderedDict([(mom, RelaxationInfo(discreteMoment(equilibrium, mom, stencil), rr))
+                          for mom, rr in zip(momToRrDict.keys(), momToRrDict.values())])
+    return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
 # ------------------------------------ SRT / TRT/ MRT Creators ---------------------------------------------------------
