@@ -100,6 +100,9 @@ class CeMoment(sp.Symbol):
             result += "}"
         return result
 
+    def __repr__(self):
+        return "%s_(%d)_%s" % (self.name, self.ceIdx, self.momentTuple)
+
 
 class LbMethodEqMoments:
     def __init__(self, lbMethod):
@@ -113,12 +116,14 @@ class LbMethodEqMoments:
         return self._momentCache[moment]
 
 
-def insertMoments(eqn, lbMethodMoments, useSolvabilityConditions=True):
+def insertMoments(eqn, lbMethodMoments, momentName="\\Pi", useSolvabilityConditions=True):
     subsDict = {}
     if useSolvabilityConditions:
-        subsDict.update({m: 0 for m in eqn.atoms(CeMoment) if m.ceIdx > 0 and sum(m.momentTuple) <= 1})
+        condition = lambda m:  m.ceIdx > 0 and sum(m.momentTuple) <= 1 and m.name == momentName
+        subsDict.update({m: 0 for m in eqn.atoms(CeMoment) if condition(m)})
 
-    subsDict.update({m: lbMethodMoments(m.momentTuple) for m in eqn.atoms(CeMoment) if m.ceIdx == 0})
+    condition = lambda m:  m.ceIdx == 0 and m.name == momentName
+    subsDict.update({m: lbMethodMoments(m.momentTuple) for m in eqn.atoms(CeMoment) if condition(m)})
     return eqn.subs(subsDict)
 
 
@@ -151,7 +156,7 @@ def substituteCollisionOperatorMoments(expr, lbMethod, collisionOpMomentName='\\
     return expr.subs(subsDict)
 
 
-def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('Cf', '\\Upsilon')), velocityName='c', maxExpansion=5):
+def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), velocityName='c', maxExpansion=5):
 
     pdfSymbols = [tuple(expandedSymbol(name, superscript=i) for i in range(maxExpansion))
                   for name, _ in pdfToMomentName]
@@ -285,7 +290,7 @@ def removeErrorTerms(expr):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="Cf", velocityName="c",
+def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="\Omega f", velocityName="c",
                                 dim=3, taylorOrder=2):
     dimLabels = [sp.Rational(i, 1) for i in range(dim)]
 
@@ -315,7 +320,7 @@ def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="C
 
 
 def useChapmanEnskogAnsatz(equation, timeDerivativeOrders=(1, 3), spatialDerivativeOrders=(1, 2),
-                           pdfs=(['f', 0, 3], ['Cf', 1, 3])):
+                           pdfs=(['f', 0, 3], ['\Omega f', 1, 3])):
 
     t, eps = sp.symbols("t epsilon")
 
@@ -441,6 +446,12 @@ class ChapmanEnskogAnalysis(object):
         c = sp.Matrix([expandedSymbol("c", subscript=i) for i in range(self._method.dim)])
         momentsUntilOrder1 = [1] + list(c)
         momentsOrder2 = [c_i * c_j for c_i, c_j in productSymmetric(c, c)]
+
+        symbolicRelaxationRates = [rr for rr in method.relaxationRates if isinstance(rr, sp.Symbol)]
+        if constants is None:
+            constants = set(symbolicRelaxationRates)
+        else:
+            constants.update(symbolicRelaxationRates)
 
         oEpsMoments1 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[1] * moment),
                                              constants=constants)
@@ -570,3 +581,7 @@ class ChapmanEnskogAnalysis(object):
         solveRes = sp.solve(kinematicViscosity - nu, kinematicViscosity.atoms(sp.Symbol), dict=True)
         return solveRes[0]
 
+if __name__ == '__main__':
+    from lbmpy.creationfunctions import createLatticeBoltzmannMethod
+    m = createLatticeBoltzmannMethod(stencil='D2Q9')
+    ce = ChapmanEnskogAnalysis(m)

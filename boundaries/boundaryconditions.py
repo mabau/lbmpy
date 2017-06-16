@@ -3,7 +3,7 @@ import sympy as sp
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from pystencils.sympyextensions import getSymmetricPart
 from pystencils import Field
-from lbmpy.boundaries.boundaryhandling import offsetFromDir, weightOfDirection, invDir
+from lbmpy.boundaries.boundary_kernel import offsetFromDir, weightOfDirection, invDir
 from pystencils.types import createTypeFromString
 
 

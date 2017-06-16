@@ -215,6 +215,25 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
     return paramsResult, optParamsResult
 
 
+def switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, kernelParams):
+    """
+    For entropic kernels the relaxation rate has to be a variable. If a constant was passed a
+    new dummy variable is inserted and the value of this variable is later on passed to the kernel
+    """
+    if methodParameters['entropic']:
+        newRelaxationRates = []
+        for rr in methodParameters['relaxationRates']:
+            if not isinstance(rr, sp.Symbol):
+                dummyVar = sp.Dummy()
+                newRelaxationRates.append(dummyVar)
+                kernelParams[dummyVar.name] = rr
+            else:
+                newRelaxationRates.append(rr)
+        if len(newRelaxationRates) < 2:
+            newRelaxationRates.append(sp.Dummy())
+        methodParameters['relaxationRates'] = newRelaxationRates
+
+
 def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
     params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
 

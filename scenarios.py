@@ -24,10 +24,10 @@ at :mod:`lbmpy.creationfunctions`. The only mandatory keyword parameter is ``rel
 that defines the viscosity of the fluid (valid values being between 0 and 2).
 """
 import numpy as np
-import sympy as sp
 from pystencils.field import getLayoutOfArray, createNumpyArrayWithLayout
 from pystencils.slicing import sliceFromDirection, addGhostLayers, removeGhostLayers, normalizeSlice, makeSlice
-from lbmpy.creationfunctions import createLatticeBoltzmannFunction, updateWithDefaultParameters
+from lbmpy.creationfunctions import createLatticeBoltzmannFunction, updateWithDefaultParameters, \
+    switchToSymbolicRelaxationRatesForEntropicMethods
 from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
 from lbmpy.boundaries import BoundaryHandling, NoSlip, NoSlipFullWay, UBB, FixedDensity
 from lbmpy.stencils import getStencil
@@ -273,19 +273,7 @@ class Scenario(object):
 
         # Create kernel
         if lbmKernel is None:
-            if methodParameters['entropic']:
-                newRelaxationRates = []
-                for rr in methodParameters['relaxationRates']:
-                    if not isinstance(rr, sp.Symbol):
-                        dummyVar = sp.Dummy()
-                        newRelaxationRates.append(dummyVar)
-                        kernelParams[dummyVar.name] = rr
-                    else:
-                        newRelaxationRates.append(rr)
-                if len(newRelaxationRates) < 2:
-                    newRelaxationRates.append(sp.Dummy())
-                methodParameters['relaxationRates'] = newRelaxationRates
-
+            switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, kernelParams)
             optimizationParams['pdfArr'] = self._pdfArrays[0]
             methodParameters['optimizationParams'] = optimizationParams
             self._lbmKernel = createLatticeBoltzmannFunction(**methodParameters)
@@ -376,7 +364,7 @@ class Scenario(object):
     @property
     def velocity(self):
         """Velocity as numpy array"""
-        mask = np.logical_not(np.bitwise_and(self.boundaryHandling.flagField, self.boundaryHandling._fluidFlag))
+        mask = np.logical_not(self._boundaryHandling.getMask('fluid'))
         mask = np.repeat(mask[..., np.newaxis], self.dim, axis=2)
         return removeGhostLayers(np.ma.masked_array(self._velocity, mask), indexDimensions=1)
 
@@ -392,7 +380,7 @@ class Scenario(object):
     @property
     def density(self):
         """Density as numpy array"""
-        mask = np.logical_not(np.bitwise_and(self.boundaryHandling.flagField, self.boundaryHandling._fluidFlag))
+        mask = np.logical_not(self._boundaryHandling.getMask('fluid'))
         return removeGhostLayers(np.ma.masked_array(self._density, mask))
 
     @property
@@ -494,5 +482,3 @@ class Scenario(object):
         self._getMacroscopic(pdfs=self._pdfArrays[0], density=self._density, velocity=self._velocity,
                              **self.kernelParams)
 
-
-import pickle
