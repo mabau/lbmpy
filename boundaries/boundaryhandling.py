@@ -15,9 +15,9 @@ class BoundaryHandling(GenericBoundaryHandling, PeriodicityHandling):
     def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, sliceNormalizationGhostLayers=1):
         mask = None
         if maskCallback is not None:
-            meshgridParams = [np.arange(start=-sliceNormalizationGhostLayers, stop=s-sliceNormalizationGhostLayers)
-                              for s in self.flagField.shape]
-            indices = np.meshgrid(*meshgridParams, indexing='ij')
+            gridParams = [np.arange(start=-sliceNormalizationGhostLayers, stop=s - sliceNormalizationGhostLayers) + 0.5
+                          for s in self.flagField.shape]
+            indices = np.meshgrid(*gridParams, indexing='ij')
             mask = maskCallback(*indices)
         return GenericBoundaryHandling.setBoundary(self, boundaryObject, indexExpr, mask)
 

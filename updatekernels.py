@@ -1,7 +1,7 @@
 import numpy as np
 import sympy as sp
 from pystencils import Field
-from pystencils.field import createNumpyArrayWithLayout
+from pystencils.field import createNumpyArrayWithLayout, layoutStringToTuple
 from pystencils.sympyextensions import fastSubs
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, Pseudo2DTwoFieldsAccessor, PeriodicTwoFieldsAccessor
 
@@ -97,12 +97,8 @@ def createPdfArray(size, numDirections, ghostLayers=1, layout='fzyx'):
     """
     sizeWithGl = [s + 2 * ghostLayers for s in size]
     dim = len(size)
-    if layout == "fzyx" or layout == 'f' or layout == 'reverseNumpy':
-        layout = tuple(reversed(range(dim+1)))
-    elif layout == 'c' or layout == 'numpy':
-        layout = tuple(range(dim+1))
-    elif layout == 'zyxf':
-        layout = tuple(reversed(range(dim))) + (dim,)
+    if isinstance(layout, str):
+        layout = layoutStringToTuple(dim+1)
     return createNumpyArrayWithLayout(sizeWithGl + [numDirections], layout)
 
 

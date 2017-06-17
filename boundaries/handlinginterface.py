@@ -83,7 +83,8 @@ class GenericBoundaryHandling(object):
         if self._dirty:
             self.prepare()
         for boundary in self._boundaryInfos.values():
-            boundary.kernel(**kwargs)
+            if boundary.kernel:
+                boundary.kernel(**kwargs)
 
     def getBoundaryIndexArray(self, boundaryObject):
         return self._boundaryInfos[boundaryObject].indexArray
@@ -111,6 +112,8 @@ class GenericBoundaryHandling(object):
             boundaryFlag = self._flagFieldInterface.getFlag(boundaryObject)
             idxArray = createBoundaryIndexList(self.flagField, self._lbMethod.stencil,
                                                boundaryFlag, fluidFlag, self.ghostLayers)
+            if len(idxArray) == 0:
+                continue
 
             if boundaryObject.additionalData:
                 coordinateNames = ["x", "y", "z"][:dim]
@@ -148,6 +151,9 @@ class GenericBoundaryHandling(object):
             self._boundaryInfos[boundaryObject] = boundaryInfo
 
         self._dirty = False
+
+    def reserveFlag(self, boundaryObject):
+        self._flagFieldInterface.getFlag(boundaryObject)
 
     def setBoundary(self, boundaryObject, indexExpr=None, maskArr=None):
         """
