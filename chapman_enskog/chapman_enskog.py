@@ -10,7 +10,7 @@ from lbmpy.chapman_enskog import DiffOperator, normalizeDiffOrder, chapmanEnskog
 
 from pystencils.sympyextensions import normalizeProduct
 from lbmpy.chapman_enskog import Diff, expandUsingLinearity, expandUsingProductRule
-from lbmpy.moments import discreteMoment, momentMatrix, polynomialToExponentRepresentation
+from lbmpy.moments import discreteMoment, momentMatrix, polynomialToExponentRepresentation, getMomentIndices
 from pystencils.sympyextensions import productSymmetric
 
 
@@ -83,6 +83,10 @@ class CeMoment(sp.Symbol):
     def _hashable_content(self):
         superClassContents = list(super(CeMoment, self)._hashable_content())
         return tuple(superClassContents + [hash(repr(self.momentTuple)), hash(repr(self.ceIdx))])
+
+    @property
+    def indices(self):
+        return getMomentIndices(self.momentTuple)
 
     def __getnewargs__(self):
         return self.name, self.momentTuple, self.ceIdx
@@ -325,19 +329,21 @@ def useChapmanEnskogAnsatz(equation, timeDerivativeOrders=(1, 3), spatialDerivat
     t, eps = sp.symbols("t epsilon")
 
     # expand time derivatives
-    equation = chapmanEnskogDerivativeExpansion(equation, t, eps, *timeDerivativeOrders)
+    if timeDerivativeOrders:
+        equation = chapmanEnskogDerivativeExpansion(equation, t, eps, *timeDerivativeOrders)
 
     # expand spatial derivatives
-    spatialDerivatives = [a for a in equation.atoms(Diff) if str(a.label) != 't']
-    labels = set(a.label for a in spatialDerivatives)
-    for label in labels:
-        equation = chapmanEnskogDerivativeExpansion(equation, label, eps, *spatialDerivativeOrders)
+    if spatialDerivativeOrders:
+        spatialDerivatives = [a for a in equation.atoms(Diff) if str(a.label) != 't']
+        labels = set(a.label for a in spatialDerivatives)
+        for label in labels:
+            equation = chapmanEnskogDerivativeExpansion(equation, label, eps, *spatialDerivativeOrders)
 
     # expand pdfs
     subsDict = {}
     expandedPdfSymbols = []
 
-    maxExpansionOrder = spatialDerivativeOrders[1]
+    maxExpansionOrder = spatialDerivativeOrders[1] if spatialDerivativeOrders else 10
     for pdfName, startOrder, stopOrder in pdfs:
         if isinstance(pdfName, sp.Symbol):
             pdfName = pdfName.name

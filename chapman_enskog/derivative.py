@@ -164,6 +164,27 @@ class Diff(sp.Expr):
 
 # ----------------------------------------------------------------------------------------------------------------------
 
+def derivativeTerms(expr):
+    """
+    Returns set of all derivatives in an expression
+    this is different from `expr.atoms(Diff)` when nested derivatives are in the expression, 
+    since this function only returns the outer derivatives
+    """
+    result = set()
+
+    def visit(e):
+        if isinstance(e, Diff):
+            result.add(e)
+        else:
+            for a in e.args:
+                visit(a)
+    visit(expr)
+    return result
+
+
+def collectDerivatives(expr):
+    return expr.collect(derivativeTerms(expr))
+
 
 def expandUsingLinearity(expr, functions=None, constants=None):
     """Expands all derivative nodes by applying Diff.splitLinear"""
