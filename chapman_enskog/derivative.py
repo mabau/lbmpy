@@ -183,11 +183,28 @@ def derivativeTerms(expr):
 
 
 def collectDerivatives(expr):
+    """Rewrites expression into a sum of distinct derivatives with prefactors"""
     return expr.collect(derivativeTerms(expr))
 
 
+def createNestedDiff(*args, arg=None):
+    """Shortcut to create nested derivatives"""
+    assert arg is not None
+    args = sorted(args, reverse=True)
+    res = arg
+    for i in args:
+        res = Diff(res, i)
+    return res
+
+
 def expandUsingLinearity(expr, functions=None, constants=None):
-    """Expands all derivative nodes by applying Diff.splitLinear"""
+    """
+    Expands all derivative nodes by applying Diff.splitLinear
+    :param expr: expression containing derivatives
+    :param functions: sequence of symbols that are considered functions and can not be pulled before the derivative.
+                      if None, all symbols are viewed as functions
+    :param constants: sequence of symbols which are considered constants and can be pulled before the derivative
+    """
     if functions is None:
         functions = expr.atoms(sp.Symbol)
         if constants is not None:
@@ -214,7 +231,7 @@ def expandUsingLinearity(expr, functions=None, constants=None):
 
 def normalizeDiffOrder(expression, functions, sortKey=defaultDiffSortKey):
     """Assumes order of differentiation can be exchanged. Changes the order of nested Diffs to a standard order defined
-    by the sorting key 'sortKey' """
+    by the sorting key 'sortKey' such that the derivative terms can be further simplified """
     def visit(expr):
         if isinstance(expr, Diff):
             nodes = [expr]

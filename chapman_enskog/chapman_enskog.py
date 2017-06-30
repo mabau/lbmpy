@@ -2,13 +2,15 @@ import warnings
 from collections import namedtuple
 import numpy as np
 import sympy as sp
+import functools
 from sympy.core.cache import cacheit
 
 from lbmpy.cache import diskcache
 from lbmpy.chapman_enskog import DiffOperator, normalizeDiffOrder, chapmanEnskogDerivativeExpansion, \
     chapmanEnskogDerivativeRecombination
+from lbmpy.chapman_enskog.derivative import collectDerivatives, createNestedDiff
 
-from pystencils.sympyextensions import normalizeProduct
+from pystencils.sympyextensions import normalizeProduct, multidimensionalSummation, kroneckerDelta
 from lbmpy.chapman_enskog import Diff, expandUsingLinearity, expandUsingProductRule
 from lbmpy.moments import discreteMoment, momentMatrix, polynomialToExponentRepresentation, getMomentIndices
 from pystencils.sympyextensions import productSymmetric
@@ -107,17 +109,46 @@ class CeMoment(sp.Symbol):
     def __repr__(self):
         return "%s_(%d)_%s" % (self.name, self.ceIdx, self.momentTuple)
 
+    def __str__(self):
+        return "%s_(%d)_%s" % (self.name, self.ceIdx, self.momentTuple)
+
 
 class LbMethodEqMoments:
     def __init__(self, lbMethod):
         self._eq = tuple(e.rhs for e in lbMethod.getEquilibrium().mainEquations)
         self._momentCache = dict()
+        self._postCollisionMomentCache = dict()
         self._stencil = lbMethod.stencil
+        self._inverseMomentMatrix = momentMatrix(lbMethod.moments, lbMethod.stencil).inv()
+        self._method = lbMethod
 
     def __call__(self, moment):
         if moment not in self._momentCache:
             self._momentCache[moment] = discreteMoment(self._eq, moment, self._stencil)
         return self._momentCache[moment]
+
+    def getPostCollisionMoment(self, ceMoment, exponent=1, preCollisionMomentName="\\Pi"):
+        if (ceMoment, exponent) in self._postCollisionMomentCache:
+            return self._postCollisionMomentCache[(ceMoment, exponent)]
+
+        stencil = self._method.stencil
+        Minv = self._inverseMomentMatrix
+
+        momentTuple = ceMoment.momentTuple
+
+        momentSymbols = []
+        for moment, (eqValue, rr) in self._method.relaxationInfoDict.items():
+            if isinstance(moment, tuple):
+                momentSymbols.append(-rr**exponent * CeMoment(preCollisionMomentName, moment, ceMoment.ceIdx))
+            else:
+                momentSymbols.append(-rr**exponent * sum(coeff * CeMoment(preCollisionMomentName, momentTuple, ceMoment.ceIdx)
+                                     for coeff, momentTuple in polynomialToExponentRepresentation(moment)))
+        momentSymbols = sp.Matrix(momentSymbols)
+        postCollisionValue = discreteMoment(tuple(Minv * momentSymbols), momentTuple, stencil)
+        self._postCollisionMomentCache[(ceMoment, exponent)] = postCollisionValue
+
+        outTuples = set(m.momentTuple for m in postCollisionValue.atoms(CeMoment))
+        return postCollisionValue
 
 
 def insertMoments(eqn, lbMethodMoments, momentName="\\Pi", useSolvabilityConditions=True):
@@ -131,31 +162,12 @@ def insertMoments(eqn, lbMethodMoments, momentName="\\Pi", useSolvabilityConditi
     return eqn.subs(subsDict)
 
 
-def substituteCollisionOperatorMoments(expr, lbMethod, collisionOpMomentName='\\Upsilon',
+def substituteCollisionOperatorMoments(expr, lbMomentComputation, collisionOpMomentName='\\Upsilon',
                                        preCollisionMomentName="\\Pi"):
     momentsToReplace = [m for m in expr.atoms(CeMoment) if m.name == collisionOpMomentName]
     subsDict = {}
-    maxNeighborhood = np.max(np.abs(np.array(lbMethod.stencil)))
-
-    Minv = momentMatrix(lbMethod.moments, lbMethod.stencil).inv()
-
     for ceMoment in momentsToReplace:
-        if maxNeighborhood == 1:
-            # Moment aliasing for stencils with first neighborhood i.e. x**3 is the same as x, or x**4 same as x**2
-            momentTuple = tuple(e if e <= 2 else 2 - (e % 2) for e in ceMoment.momentTuple)
-        else:
-            momentTuple = ceMoment.momentTuple
-
-        momentSymbols = []
-        for moment, (eqValue, rr) in lbMethod.relaxationInfoDict.items():
-            if isinstance(moment, tuple):
-                momentSymbols.append(-rr * CeMoment(preCollisionMomentName, moment, ceMoment.ceIdx))
-            else:
-                momentSymbols.append(-rr * sum(coeff * CeMoment(preCollisionMomentName, momentTuple, ceMoment.ceIdx)
-                                               for coeff, momentTuple in polynomialToExponentRepresentation(moment)))
-        momentSymbols = sp.Matrix(momentSymbols)
-        postCollisionValue = discreteMoment(tuple(Minv * momentSymbols), momentTuple, lbMethod.stencil)
-        subsDict[ceMoment] = postCollisionValue
+        subsDict[ceMoment] = lbMomentComputation.getPostCollisionMoment(ceMoment, 1, preCollisionMomentName)
 
     return expr.subs(subsDict)
 
@@ -496,7 +508,7 @@ class ChapmanEnskogAnalysis(object):
 
     def _takeAndInsertMoments(self, eq):
         eq = takeMoments(eq)
-        eq = substituteCollisionOperatorMoments(eq, self._method)
+        eq = substituteCollisionOperatorMoments(eq, self._momentCache)
         return insertMoments(eq, self._momentCache).expand()
 
     def _ceRecombine(self, expr):
@@ -586,6 +598,135 @@ class ChapmanEnskogAnalysis(object):
         kinematicViscosity = self.getKinematicViscosity()
         solveRes = sp.solve(kinematicViscosity - nu, kinematicViscosity.atoms(sp.Symbol), dict=True)
         return solveRes[0]
+
+
+class SteadyStateChapmanEnskogAnalysis(object):
+    """Experimental:
+        -> does not yield correct results for MRT, only SRT
+        -> does predict different value for bulk viscosity?! 
+    """
+
+    def __init__(self, method, order=4):
+        self.method = method
+        dim = method.dim
+        momentComputation = LbMethodEqMoments(method)
+
+        eps, B, f, dt = sp.symbols("epsilon B f Delta_t")
+        self.dt = dt
+        expandedPdfSymbols = [expandedSymbol("f", superscript=i) for i in range(0, order + 1)]
+        feq = expandedPdfSymbols[0]
+        c = sp.Matrix([expandedSymbol("c", subscript=i) for i in range(dim)])
+        Dx = sp.Matrix([DiffOperator(label=l) for l in range(dim)])
+        differentialOperator = sum((dt * eps * c.dot(Dx)) ** n / sp.factorial(n) for n in range(1, order + 1))
+        taylorExpansion = DiffOperator.apply(differentialOperator.expand(), f)
+        epsDict = useChapmanEnskogAnsatz(taylorExpansion,
+                                         spatialDerivativeOrders=None,  # do not expand the differential operator itself
+                                         pdfs=(['f', 0, order + 1],))  # expand only the 'f' terms
+
+        self.scaleHierarchy = [-B * epsDict[i] for i in range(0, 5)]
+        self.scaleHierarchyRaw = self.scaleHierarchy.copy()
+
+        expandedPdfs = [feq, self.scaleHierarchy[1]]
+        subsDict = {expandedPdfSymbols[1]: self.scaleHierarchy[1]}
+        for i in range(2, 5):
+            eq = self.scaleHierarchy[i].subs(subsDict)
+            eq = expandUsingLinearity(eq, functions=expandedPdfSymbols)
+            eq = normalizeDiffOrder(eq, functions=expandedPdfSymbols)
+            subsDict[expandedPdfSymbols[i]] = eq
+            expandedPdfs.append(eq)
+        self.scaleHierarchy = expandedPdfs
+
+        constants = sp.Matrix(method.relaxationRates).atoms(sp.Symbol)
+        recombined = -sum(self.scaleHierarchy[n] for n in range(1, order + 1))  # Eq 18a
+        recombined = sp.cancel(recombined / (dt * B)).expand()  # cancel common factors
+
+        def handlePostcollisionValues(eq):
+            eq = eq.expand()
+            assert isinstance(eq, sp.Add)
+            result = 0
+            for summand in eq.args:
+
+                moment = summand.atoms(CeMoment)
+                moment = moment.pop()
+                collisionOperatorExponent = normalizeProduct(summand).count(B)
+                if collisionOperatorExponent == 0:
+                    result += summand
+                else:
+                    substitutions = {
+                        B: 1,
+                        moment: -momentComputation.getPostCollisionMoment(moment, -collisionOperatorExponent),
+                    }
+                    result += summand.subs(substitutions)
+
+            return result
+
+        # Continuity equation (mass transport)
+        contEq = takeMoments(recombined, maxExpansion=(order + 1) * 2)
+        contEq = handlePostcollisionValues(contEq)
+        contEq = expandUsingLinearity(contEq, constants=constants).expand().collect(dt)
+        self.continuityEquationWithMoments = contEq
+        contEq = insertMoments(contEq, momentComputation, useSolvabilityConditions=False)
+        contEq = expandUsingLinearity(contEq, constants=constants).expand().collect(dt)
+        self.continuityEquation = contEq
+
+        # Momentum equation (momentum transport)
+        self.momentumEquationsWithMoments = []
+        self.momentumEquations = []
+        for h in range(dim):
+            momEq = takeMoments(recombined * c[h], maxExpansion=(order + 1) * 2)
+            momEq = handlePostcollisionValues(momEq)
+            momEq = expandUsingLinearity(momEq, constants=constants).expand().collect(dt)
+            self.momentumEquationsWithMoments.append(momEq)
+            momEq = insertMoments(momEq, momentComputation, useSolvabilityConditions=False)
+            momEq = expandUsingLinearity(momEq, constants=constants).expand().collect(dt)
+            self.momentumEquations.append(momEq)
+
+    def getMassTransportEquation(self, order):
+        if order == 0:
+            result = self.continuityEquation.subs(self.dt, 0)
+        else:
+            result = self.continuityEquation.coeff(self.dt ** order)
+        return collectDerivatives(result)
+
+    def getMomentumTransportEquation(self, coordinate, order):
+        if order == 0:
+            result = self.momentumEquations[coordinate].subs(self.dt, 0)
+        else:
+            result = self.momentumEquations[coordinate].coeff(self.dt ** order)
+        return collectDerivatives(result)
+
+    def determineViscosities(self, coordinate):
+        """
+        Matches the first order term of the momentum equation to Navier stokes
+        Automatically neglects higher order velocity terms and rho derivatives
+
+        The bulk viscosity is predicted differently than by the normal Navier Stokes analysis...why??
+
+        :param coordinate: which momentum equation to use i.e. x,y or z, to approximate Navier Stokes
+                           all have to return the same result
+        """
+        dim = self.method.dim
+
+        D = createNestedDiff
+        s = functools.partial(multidimensionalSummation, dim=dim)
+        kd = kroneckerDelta
+
+        eta, eta_b = sp.symbols("nu nu_B")
+        u = sp.symbols("u_:3")[:dim]
+        a = coordinate
+        navierStokesRef = eta * sum(D(b, b, arg=u[a]) + D(b, a, arg=u[b]) for b, in s(1)) + \
+                          (eta_b - 2 * eta / 3) * sum(D(b, g, arg=u[g]) * kd(a, b) for b, g in s(2))
+        navierStokesRef = -navierStokesRef.expand()
+
+        firstOrderTerms = self.getMomentumTransportEquation(coordinate, order=1)
+        firstOrderTerms = removeHigherOrderU(firstOrderTerms)
+        firstOrderTerms = expandUsingLinearity(firstOrderTerms, constants=[sp.Symbol("rho")])
+
+        matchCoeffEquations = []
+        for diff in navierStokesRef.atoms(Diff):
+            matchCoeffEquations.append(navierStokesRef.coeff(diff) - firstOrderTerms.coeff(diff))
+        return sp.solve(matchCoeffEquations, [eta, eta_b])
+
 
 if __name__ == '__main__':
     from lbmpy.creationfunctions import createLatticeBoltzmannMethod

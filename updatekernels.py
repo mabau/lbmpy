@@ -98,7 +98,7 @@ def createPdfArray(size, numDirections, ghostLayers=1, layout='fzyx'):
     sizeWithGl = [s + 2 * ghostLayers for s in size]
     dim = len(size)
     if isinstance(layout, str):
-        layout = layoutStringToTuple(dim+1)
+        layout = layoutStringToTuple(layout, dim+1)
     return createNumpyArrayWithLayout(sizeWithGl + [numDirections], layout)
 
 
