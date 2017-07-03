@@ -99,13 +99,20 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
         return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
-def createWithGivenEqMoments(stencil, momentToEqValueDict, compressible=False, forceModel=None,
-                             momentToRelaxationRateDict=defaultdict(lambda: sp.Symbol("omega"))):
+def createGenericMRT(stencil, momentEqValueRelaxationRateTuples, compressible=False, forceModel=None):
+    r"""
+    Creates a generic moment-based LB method
+    :param stencil: sequence of lattice velocities
+    :param momentEqValueRelaxationRateTuples: sequence of tuples containing (moment, equilibrium value, relax. rate)
+    :param compressible: compressibility, determines calculation of velocity for force models
+    :param forceModel: see createWithDiscreteMaxwellianEqMoments
+    """
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
     rrDict = OrderedDict()
-    for moment in momentToEqValueDict.keys():
-        rrDict[moment] = RelaxationInfo(momentToEqValueDict[moment], momentToRelaxationRateDict[moment])
+    for moment, eqValue, rr in momentEqValueRelaxationRateTuples:
+        moment = sp.sympify(moment)
+        rrDict[moment] = RelaxationInfo(eqValue, rr)
     return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 

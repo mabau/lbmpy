@@ -136,7 +136,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
 
         subexpressions = conservedQuantityEquations.allEquations
 
-        # 1) Determine monomial indices, and arange them such that the zeroth and first order indices come first
+        # 1) Determine monomial indices, and arrange them such that the zeroth and first order indices come first
         indices = list(extractMonomials(self.cumulants, dim=len(self.stencil[0])))
         zerothMomentExponent = (0,) * self.dim
         firstMomentExponents = [tuple([1 if i == j else 0 for i in range(self.dim)]) for j in range(self.dim)]

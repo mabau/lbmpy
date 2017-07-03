@@ -35,18 +35,12 @@ class MomentBasedLbMethod(AbstractLbMethod):
         equilibriumMoments = []
         for moment, relaxInfo in momentToRelaxationInfoDict.items():
             equilibriumMoments.append(relaxInfo.equilibriumValue)
-        symbolsInEquilibriumMoments = sp.Matrix(equilibriumMoments).atoms(sp.Symbol)
         conservedQuantities = set()
         for v in self._conservedQuantityComputation.definedSymbols().values():
             if isinstance(v, Sequence):
                 conservedQuantities.update(v)
             else:
                 conservedQuantities.add(v)
-
-        undefinedEquilibriumSymbols = symbolsInEquilibriumMoments - conservedQuantities
-        #TODO
-        #assert len(undefinedEquilibriumSymbols) == 0, "Undefined symbol(s) in equilibrium moment: %s" % \
-        #                                             (undefinedEquilibriumSymbols,)
 
     @property
     def forceModel(self):
@@ -116,6 +110,10 @@ class MomentBasedLbMethod(AbstractLbMethod):
             newEntry = RelaxationInfo(prevEntry[0], relaxationRate)
             self._momentToRelaxationInfoDict[e] = newEntry
 
+    @property
+    def momentMatrix(self):
+        return momentMatrix(self.moments, self.stencil)
+
     def _repr_html_(self):
         table = """
         <table style="border:none; width: 100%">
@@ -162,7 +160,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
     def _getCollisionRuleWithRelaxationMatrix(self, D, additionalSubexpressions=(), includeForceTerms=True,
                                               conservedQuantityEquations=None):
         f = sp.Matrix(self.preCollisionPdfSymbols)
-        M = momentMatrix(self.moments, self.stencil)
+        M = self.momentMatrix
         m_eq = sp.Matrix(self.momentEquilibriumValues)
 
         collisionRule = f + M.inv() * D * (m_eq - M * f)
