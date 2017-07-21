@@ -145,6 +145,7 @@ from functools import partial
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
     createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
+from lbmpy.methods.entropic_eq_srt import createEntropicSRT
 from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber
 from lbmpy.stencils import getStencil
 import lbmpy.forcemodels as forceModels
@@ -406,6 +407,8 @@ def createLatticeBoltzmannMethod(**params):
             raise NotImplementedError("KBC type TRT methods can only be constructed for D2Q9 and D3Q27 stencils")
         methodNr = methodName[-1]
         method = createKBCTypeTRT(dim, relaxationRates[0], relaxationRates[1], 'KBC-N' + methodNr, **commonParams)
+    elif methodName.lower() == 'entropic-srt':
+        method = createEntropicSRT(stencil, relaxationRates[0], forceModel, params['compressible'])
     else:
         raise ValueError("Unknown method %s" % (methodName,))
 

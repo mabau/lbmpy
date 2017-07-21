@@ -623,7 +623,7 @@ class SteadyStateChapmanEnskogAnalysis(object):
                                          spatialDerivativeOrders=None,  # do not expand the differential operator itself
                                          pdfs=(['f', 0, order + 1],))  # expand only the 'f' terms
 
-        self.scaleHierarchy = [-B * epsDict[i] for i in range(0, 5)]
+        self.scaleHierarchy = [-B * epsDict[i] for i in range(0, order+1)]
         self.scaleHierarchyRaw = self.scaleHierarchy.copy()
 
         expandedPdfs = [feq, self.scaleHierarchy[1]]
