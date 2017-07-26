@@ -161,3 +161,15 @@ class FixedDensity(Boundary):
                     for eq in symmetricEq.subexpressions]
         return subExprs + [sp.Eq(pdfField[neighbor](inverseDir), 2 * eq_component - pdfField(directionSymbol))]
 
+
+class NeumannByCopy(Boundary):
+    def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
+        neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
+        return [sp.Eq(pdfField[neighbor](directionSymbol), pdfField(directionSymbol))]
+
+    def __hash__(self):
+        # All boundaries of these class behave equal -> should also be equal
+        return hash("NeumannByCopy")
+
+    def __eq__(self, other):
+        return type(other) == NeumannByCopy
