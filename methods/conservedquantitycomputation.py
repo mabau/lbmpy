@@ -149,10 +149,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         eqs = [sp.Eq(self._symbolOrder0, zerothOrderMoment)]
 
         firstOrderMoments = [a - b for a, b in zip(firstOrderMoments, velOffset)]
-        if self._compressible:
-            eqs += [sp.expand(sp.Eq(l, r * density)) for l, r in zip(self._symbolsOrder1, firstOrderMoments)]
-        else:
-            eqs += [sp.Eq(l, r) for l, r in zip(self._symbolsOrder1, firstOrderMoments)]
+        eqs += [sp.Eq(l, r) for l, r in zip(self._symbolsOrder1, firstOrderMoments)]
 
         return EquationCollection(eqs, [])
 
