@@ -3,6 +3,7 @@ from collections import OrderedDict
 
 import sympy as sp
 from pystencils.equationcollection import EquationCollection
+from pystencils.field import Field
 
 
 class AbstractConservedQuantityComputation(abc.ABCMeta('ABC', (object,), {})):
@@ -132,11 +133,12 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         eqColl = applyForceModelShift('equilibriumVelocityShift', dim, eqColl, self._forceModel, self._compressible)
         return eqColl
 
-    def equilibriumInputEquationsFromInitValues(self, density=1, velocity=[0, 0, 0]):
+    def equilibriumInputEquationsFromInitValues(self, density=1, velocity=(0, 0, 0)):
         dim = len(self._stencil[0])
         zerothOrderMoment = density
         firstOrderMoments = velocity[:dim]
         velOffset = [0] * dim
+
         if self._compressible:
             if self._forceModel and hasattr(self._forceModel, 'macroscopicVelocityShift'):
                 velOffset = self._forceModel.macroscopicVelocityShift(zerothOrderMoment)
@@ -144,10 +146,14 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             if self._forceModel and hasattr(self._forceModel, 'macroscopicVelocityShift'):
                 velOffset = self._forceModel.macroscopicVelocityShift(sp.Rational(1, 1))
             zerothOrderMoment -= sp.Rational(1, 1)
-        firstOrderMoments = [a - b for a, b in zip(firstOrderMoments, velOffset)]
-
         eqs = [sp.Eq(self._symbolOrder0, zerothOrderMoment)]
-        eqs += [sp.Eq(l, r) for l, r in zip(self._symbolsOrder1, firstOrderMoments)]
+
+        firstOrderMoments = [a - b for a, b in zip(firstOrderMoments, velOffset)]
+        if self._compressible:
+            eqs += [sp.expand(sp.Eq(l, r * density)) for l, r in zip(self._symbolsOrder1, firstOrderMoments)]
+        else:
+            eqs += [sp.Eq(l, r) for l, r in zip(self._symbolsOrder1, firstOrderMoments)]
+
         return EquationCollection(eqs, [])
 
     def outputEquationsFromPdfs(self, pdfs, outputQuantityNamesToSymbols):
@@ -167,6 +173,8 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
 
         if 'density' in outputQuantityNamesToSymbols:
             densityOutputSymbol = outputQuantityNamesToSymbols['density']
+            if isinstance(densityOutputSymbol, Field):
+                densityOutputSymbol = densityOutputSymbol()
             if densityOutputSymbol != self._symbolOrder0:
                 mainEquations.append(sp.Eq(densityOutputSymbol, self._symbolOrder0))
             else:
@@ -174,6 +182,9 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                 del eqs[self._symbolOrder0]
         if 'velocity' in outputQuantityNamesToSymbols:
             velOutputSymbols = outputQuantityNamesToSymbols['velocity']
+            if isinstance(velOutputSymbols, Field):
+                field = velOutputSymbols
+                velOutputSymbols = [field(i) for i in range(len(self._symbolsOrder1))]
             if tuple(velOutputSymbols) != tuple(self._symbolsOrder1):
                 mainEquations += [sp.Eq(a, b) for a, b in zip(velOutputSymbols, self._symbolsOrder1)]
             else:

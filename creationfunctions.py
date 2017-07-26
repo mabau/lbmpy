@@ -50,6 +50,9 @@ General:
 - ``initialVelocity=None``: initial velocity in domain, can either be a tuple (x,y,z) velocity to set a constant
   velocity everywhere, or a numpy array with the same size of the domain, with a last coordinate of shape dim to set
   velocities on cell level
+- ``output={}``: a dictionary mapping macroscopic quantites e.g. the strings 'density' and 'velocity' to pystencils
+                fields. In each timestep the corresponding quantities are written to the given fields.
+- ``velocityInput``: symbolic field where the velocities are read from (for advection diffusion LBM)
 
 Entropic methods:
 
@@ -151,6 +154,7 @@ from lbmpy.stencils import getStencil
 import lbmpy.forcemodels as forceModels
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import createStreamPullKernel, createPdfArray
+from pystencils.equationcollection.equationcollection import EquationCollection
 
 
 def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
@@ -171,6 +175,9 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
         'entropic': False,
         'entropicNewtonIterations': None,
         'omegaOutputField': None,
+
+        'output': {},
+        'velocityInput': None,
     }
 
     defaultOptimizationDescription = {
@@ -305,7 +312,22 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
     doCseInOpposingDirections = False if dirCSE not in optParams else optParams[dirCSE]
     doOverallCse = False if 'doOverallCse' not in optParams else optParams['doOverallCse']
     simplification = createSimplificationStrategy(lbMethod, doCseInOpposingDirections, doOverallCse, splitInnerLoop)
-    collisionRule = simplification(lbMethod.getCollisionRule())
+    cqc = lbMethod.conservedQuantityComputation
+
+    if params['velocityInput'] is not None:
+        eqs = [sp.Eq(cqc.zerothOrderMomentSymbol, sum(lbMethod.preCollisionPdfSymbols))]
+        velocityField = params['velocityInput']
+        eqs += [sp.Eq(uSym, velocityField(i)) for i, uSym in enumerate(cqc.firstOrderMomentSymbols)]
+        eqs = EquationCollection(eqs, [])
+        collisionRule = lbMethod.getCollisionRule(conservedQuantityEquations=eqs)
+    else:
+        collisionRule = lbMethod.getCollisionRule()
+
+    if params['output']:
+        outputEqs = cqc.outputEquationsFromPdfs(lbMethod.preCollisionPdfSymbols, params['output'])
+        collisionRule = collisionRule.merge(outputEqs)
+
+    collisionRule = simplification(collisionRule)
 
     if params['entropic']:
         if params['entropicNewtonIterations']:

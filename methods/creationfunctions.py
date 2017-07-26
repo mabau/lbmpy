@@ -129,7 +129,7 @@ def createFromEquilibrium(stencil, equilibrium, momentToRelaxationRateDict, comp
     assert len(momToRrDict) == len(stencil), "The number of moments has to be the same as the number of stencil entries"
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
-    rrDict = OrderedDict([(mom, RelaxationInfo(discreteMoment(equilibrium, mom, stencil), rr))
+    rrDict = OrderedDict([(mom, RelaxationInfo(discreteMoment(equilibrium, mom, stencil).expand(), rr))
                           for mom, rr in zip(momToRrDict.keys(), momToRrDict.values())])
     return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
