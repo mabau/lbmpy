@@ -1,6 +1,7 @@
 import sympy as sp
 
 from lbmpy.simplificationfactory import createSimplificationStrategy
+from pystencils.astnodes import SympyAssignment
 from pystencils.sympyextensions import getSymmetricPart
 from pystencils import Field
 from lbmpy.boundaries.boundary_kernel import offsetFromDir, weightOfDirection, invDir
@@ -159,7 +160,9 @@ class FixedDensity(Boundary):
 
         subExprs = [sp.Eq(eq.lhs, transformedDensity if eq.lhs == densitySymbol else eq.rhs)
                     for eq in symmetricEq.subexpressions]
-        return subExprs + [sp.Eq(pdfField[neighbor](inverseDir), 2 * eq_component - pdfField(directionSymbol))]
+
+        return subExprs + [SympyAssignment(pdfField[neighbor](inverseDir),
+                                           2 * eq_component - pdfField(directionSymbol))]
 
 
 class NeumannByCopy(Boundary):
@@ -173,3 +176,10 @@ class NeumannByCopy(Boundary):
 
     def __eq__(self, other):
         return type(other) == NeumannByCopy
+
+
+if __name__ == '__main__':
+    from lbmpy.scenarios import *
+    sc = createForceDrivenChannel(domainSize=[60, 30])
+    sc.boundaryHandling.setBoundary(FixedDensity(1.01), makeSlice[0.2:0.25, :])
+    sc.boundaryHandling.prepare()
