@@ -32,6 +32,8 @@ class FlagFieldInterface(object):
         counter = 1
         while name in existingNames:
             name = "%s_%d" % (baseName, counter)
+            counter += 1
+
         return name
 
 
