@@ -307,7 +307,7 @@ def removeErrorTerms(expr):
 
 
 def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="\Omega f", velocityName="c",
-                                dim=3, taylorOrder=2):
+                                dim=3, taylorOrder=2, shift=True):
     dimLabels = [sp.Rational(i, 1) for i in range(dim)]
 
     c = sp.Matrix([expandedSymbol(velocityName, subscript=label) for label in dimLabels])
@@ -321,16 +321,18 @@ def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="\
     taylorOperator = sum(dt ** k * (Dt + c.dot(Dx)) ** k / sp.functions.factorial(k)
                          for k in range(1, taylorOrder + 1))
 
-    eq_4_5 = taylorOperator - dt * collidedPdf
-
-    operator = ((dt / 2) * (Dt + c.dot(Dx))).expand()
-
     functions = [pdf, collidedPdf]
+    eq_4_5 = taylorOperator - dt * collidedPdf
     applied_eq_4_5 = expandUsingLinearity(DiffOperator.apply(eq_4_5, pdf), functions)
-    opTimesEq_4_5 = expandUsingLinearity(DiffOperator.apply(operator, applied_eq_4_5), functions).expand()
-    opTimesEq_4_5 = normalizeDiffOrder(opTimesEq_4_5, functions)
 
-    eq_4_7 = (applied_eq_4_5 - opTimesEq_4_5).subs(dt ** (taylorOrder+1), 0)
+    if shift:
+        operator = ((dt / 2) * (Dt + c.dot(Dx))).expand()
+        opTimesEq_4_5 = expandUsingLinearity(DiffOperator.apply(operator, applied_eq_4_5), functions).expand()
+        opTimesEq_4_5 = normalizeDiffOrder(opTimesEq_4_5, functions)
+        eq_4_7 = (applied_eq_4_5 - opTimesEq_4_5).subs(dt ** (taylorOrder+1), 0)
+    else:
+        eq_4_7 = applied_eq_4_5.subs(dt ** (taylorOrder + 1), 0)
+
     eq_4_7 = eq_4_7.subs(dt, 1)
     return eq_4_7.expand()
 
@@ -364,7 +366,7 @@ def useChapmanEnskogAnsatz(equation, timeDerivativeOrders=(1, 3), spatialDerivat
                                            for i in range(startOrder, stopOrder))
         maxExpansionOrder = max(maxExpansionOrder, stopOrder)
     equation = equation.subs(subsDict)
-    equation = expandUsingLinearity(equation, expandedPdfSymbols).expand().collect(eps)
+    equation = expandUsingLinearity(equation, functions=expandedPdfSymbols).expand().collect(eps)
     result = {epsOrder: equation.coeff(eps ** epsOrder) for epsOrder in range(1, 2*maxExpansionOrder)}
     result[0] = equation.subs(eps, 0)
     return result

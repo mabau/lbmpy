@@ -225,7 +225,7 @@ def expandUsingLinearity(expr, functions=None, constants=None):
                 return diff.splitLinear(functions)
     else:
         newArgs = [expandUsingLinearity(e, functions) for e in expr.args]
-        result = expr.func(*newArgs) if newArgs else expr
+        result = sp.expand(expr.func(*newArgs) if newArgs else expr)
         return result
 
 
