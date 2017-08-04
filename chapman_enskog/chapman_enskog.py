@@ -66,6 +66,17 @@ def replaceIndex(term, oldIndex, newIndex):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
+def momentAliasing(momentTuple):
+    moment = list(momentTuple)
+    result = []
+    for element in moment:
+        if element > 2:
+            result.append(2 - (element % 2))
+        else:
+            result.append(element)
+    return tuple(result)
+
+
 class CeMoment(sp.Symbol):
     def __new__(cls, name, *args, **kwds):
         obj = CeMoment.__xnew_cached_(cls, name, *args, **kwds)
@@ -122,10 +133,14 @@ class LbMethodEqMoments:
         self._inverseMomentMatrix = momentMatrix(lbMethod.moments, lbMethod.stencil).inv()
         self._method = lbMethod
 
-    def __call__(self, moment):
-        if moment not in self._momentCache:
-            self._momentCache[moment] = discreteMoment(self._eq, moment, self._stencil)
-        return self._momentCache[moment]
+    def __call__(self, ceMoment):
+        return self.getPreCollisionMoment(ceMoment)
+
+    def getPreCollisionMoment(self, ceMoment):
+        assert ceMoment.ceIdx == 0, "Only equilibrium moments can be obtained with this function"
+        if ceMoment not in self._momentCache:
+            self._momentCache[ceMoment] = discreteMoment(self._eq, ceMoment.momentTuple, self._stencil)
+        return self._momentCache[ceMoment]
 
     def getPostCollisionMoment(self, ceMoment, exponent=1, preCollisionMomentName="\\Pi"):
         if (ceMoment, exponent) in self._postCollisionMomentCache:
@@ -147,8 +162,37 @@ class LbMethodEqMoments:
         postCollisionValue = discreteMoment(tuple(Minv * momentSymbols), momentTuple, stencil)
         self._postCollisionMomentCache[(ceMoment, exponent)] = postCollisionValue
 
-        outTuples = set(m.momentTuple for m in postCollisionValue.atoms(CeMoment))
         return postCollisionValue
+
+    def substitutePreCollisionMoments(self, expr, preCollisionMomentName="\\Pi"):
+        substitutions = {m: self.getPreCollisionMoment(m) for m in expr.atoms(CeMoment)
+                         if m.ceIdx == 0 and m.name == preCollisionMomentName}
+        return expr.subs(substitutions)
+
+    def substitutePostCollisionMoments(self, expr, preCollisionMomentName="\\Pi", postCollisionMomentName="\\Upsilon"):
+        """
+        Substitutes post-collision equilibrium moments 
+        :param expr: expression with fully expanded derivatives
+        :param preCollisionMomentName: post-collision moments are replaced by CeMoments with this name
+        :param postCollisionMomentName: name of post-collision CeMoments
+        :return: expressions where equilibrium post-collision moments have been replaced
+        """
+        expr = sp.expand(expr)
+
+        def visit(node, exponent):
+            if node.func == sp.Pow:
+                base, exp = node.args
+                return visit(base, exp)
+            elif isinstance(node, CeMoment) and node.name == postCollisionMomentName:
+                return self.getPostCollisionMoment(node, exponent, preCollisionMomentName)
+            else:
+                return node**exponent if not node.args else node.func(*[visit(k, 1) for k in node.args])
+        return visit(expr, 1)
+
+    def substitute(self, expr,  preCollisionMomentName="\\Pi", postCollisionMomentName="\\Upsilon"):
+        result = self.substitutePostCollisionMoments(expr, preCollisionMomentName, postCollisionMomentName)
+        result = self.substitutePreCollisionMoments(result, preCollisionMomentName)
+        return result
 
 
 def insertMoments(eqn, lbMethodMoments, momentName="\\Pi", useSolvabilityConditions=True):
@@ -158,7 +202,7 @@ def insertMoments(eqn, lbMethodMoments, momentName="\\Pi", useSolvabilityConditi
         subsDict.update({m: 0 for m in eqn.atoms(CeMoment) if condition(m)})
 
     condition = lambda m:  m.ceIdx == 0 and m.name == momentName
-    subsDict.update({m: lbMethodMoments(m.momentTuple) for m in eqn.atoms(CeMoment) if condition(m)})
+    subsDict.update({m: lbMethodMoments(m) for m in eqn.atoms(CeMoment) if condition(m)})
     return eqn.subs(subsDict)
 
 
@@ -172,7 +216,8 @@ def substituteCollisionOperatorMoments(expr, lbMomentComputation, collisionOpMom
     return expr.subs(subsDict)
 
 
-def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), velocityName='c', maxExpansion=5):
+def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), velocityName='c', maxExpansion=5,
+                useOneNeighborhoodAliasing=False):
 
     pdfSymbols = [tuple(expandedSymbol(name, superscript=i) for i in range(maxExpansion))
                   for name, _ in pdfToMomentName]
@@ -213,6 +258,8 @@ def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), 
             momentTuple[cIdx] += 1
         momentTuple = tuple(momentTuple)
 
+        if useOneNeighborhoodAliasing:
+            momentTuple = momentAliasing(momentTuple)
         result = CeMoment(fIndex.momentName, momentTuple, fIndex.ceIdx)
         if derivativeTerm is not None:
             result = derivativeTerm.changeArgRecursive(result)

@@ -159,7 +159,8 @@ class Diff(sp.Expr):
         return result
 
     def __str__(self):
-        return "Diff(%s, %s, %s)" % (self.arg, self.label, self.ceIdx)
+        #return "Diff(%s, %s, %s)" % (self.arg, self.label, self.ceIdx)
+        return "D(%s)" % (self.arg)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -229,7 +230,48 @@ def expandUsingLinearity(expr, functions=None, constants=None):
         return result
 
 
-def normalizeDiffOrder(expression, functions, sortKey=defaultDiffSortKey):
+def fullDiffExpand(expr, functions=None, constants=None):
+    if functions is None:
+        functions = expr.atoms(sp.Symbol)
+        if constants is not None:
+            functions.difference_update(constants)
+
+    def visit(e):
+        e = e.expand()
+
+        if e.func == Diff:
+            result = 0
+            diffArgs = {'label': e.label, 'ceIdx': e.ceIdx}
+            diffInner = e.args[0]
+            diffInner = visit(diffInner)
+            for term in diffInner.args if diffInner.func == sp.Add else [diffInner]:
+                independentTerms = 1
+                dependentTerms = []
+                for factor in normalizeProduct(term):
+                    if factor in functions or isinstance(factor, Diff):
+                        dependentTerms.append(factor)
+                    else:
+                        independentTerms *= factor
+                for i in range(len(dependentTerms)):
+                    dependentTerm = dependentTerms[i]
+                    otherDependentTerms = dependentTerms[:i] + dependentTerms[i+1:]
+                    processedDiff = normalizeDiffOrder(Diff(dependentTerm, **diffArgs))
+                    result += independentTerms * prod(otherDependentTerms) * processedDiff
+            return result
+        else:
+            newArgs = [visit(arg) for arg in e.args]
+            return e.func(*newArgs) if newArgs else e
+
+    return visit(expr)
+
+
+if __name__ == '__main__':
+    from sympy.abc import a, b, c
+    testTerm = Diff( Diff(a * b))
+    print( fullDiffExpand(testTerm) )
+
+
+def normalizeDiffOrder(expression, functions=None, constants=None, sortKey=defaultDiffSortKey):
     """Assumes order of differentiation can be exchanged. Changes the order of nested Diffs to a standard order defined
     by the sorting key 'sortKey' such that the derivative terms can be further simplified """
     def visit(expr):
@@ -249,7 +291,7 @@ def normalizeDiffOrder(expression, functions, sortKey=defaultDiffSortKey):
             newArgs = [visit(e) for e in expr.args]
             return expr.func(*newArgs) if newArgs else expr
 
-    expression = expandUsingLinearity(expression.expand(), functions).expand()
+    expression = expandUsingLinearity(expression.expand(), functions, constants).expand()
     return visit(expression)
 
 
@@ -277,6 +319,10 @@ def expandUsingProductRule(expr):
     """Fully expands all derivatives by applying product rule"""
     if isinstance(expr, Diff):
         arg = expandUsingProductRule(expr.args[0])
+        if arg.func == sp.Add:
+            newArgs = [Diff(e, label=expr.label, ceIdx=expr.ceIdx)
+                       for e in arg.args]
+            return sp.Add(*newArgs)
         if arg.func not in (sp.Mul, sp.Pow):
             return Diff(arg, label=expr.label, ceIdx=expr.ceIdx)
         else:
