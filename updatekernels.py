@@ -1,9 +1,11 @@
 import numpy as np
 import sympy as sp
 from pystencils import Field
+from pystencils.equationcollection.equationcollection import EquationCollection
 from pystencils.field import createNumpyArrayWithLayout, layoutStringToTuple
 from pystencils.sympyextensions import fastSubs
-from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, Pseudo2DTwoFieldsAccessor, PeriodicTwoFieldsAccessor
+from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, Pseudo2DTwoFieldsAccessor, PeriodicTwoFieldsAccessor, \
+    CollideOnlyInplaceAccessor
 
 
 # -------------------------------------------- LBM Kernel Creation -----------------------------------------------------
@@ -43,9 +45,9 @@ def createLBMKernel(collisionRule, inputField, outputField, accessor):
     return result
 
 
-def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", dstFieldName="dst",
-                           genericLayout='numpy', genericFieldType=np.float64,
-                           builtinPeriodicity=(False, False, False)):
+def createStreamPullCollideKernel(collisionRule, numpyField=None, srcFieldName="src", dstFieldName="dst",
+                                  genericLayout='numpy', genericFieldType=np.float64,
+                                  builtinPeriodicity=(False, False, False)):
     """
     Implements a stream-pull scheme, where values are read from source and written to destination field
     :param collisionRule: a collision rule created by lbm method
@@ -76,6 +78,46 @@ def createStreamPullKernel(collisionRule, numpyField=None, srcFieldName="src", d
     if any(builtinPeriodicity):
         accessor = PeriodicTwoFieldsAccessor(builtinPeriodicity, ghostLayers=1)
     return createLBMKernel(collisionRule, src, dst, accessor)
+
+
+def createCollideOnlyKernel(collisionRule, numpyField=None, fieldName="src",
+                            genericLayout='numpy', genericFieldType=np.float64):
+    """
+    Implements a collision only (no neighbor access) LBM kernel.
+    For parameters see function ``createStreamPullCollideKernel``
+    """
+    dim = collisionRule.method.dim
+    if numpyField is not None:
+        assert len(numpyField.shape) == dim + 1, "Field dimension mismatch: dimension is %s, should be %d" % \
+                                                 (len(numpyField.shape), dim + 1)
+
+    if numpyField is None:
+        field = Field.createGeneric(fieldName, dim, indexDimensions=1, layout=genericLayout, dtype=genericFieldType)
+    else:
+        field = Field.createFromNumpyArray(fieldName, numpyField, indexDimensions=1)
+
+    return createLBMKernel(collisionRule, field, field, CollideOnlyInplaceAccessor)
+
+
+def createStreamPullOnlyKernel(stencil, numpyField=None, srcFieldName="src", dstFieldName="dst",
+                               genericLayout='numpy', genericFieldType=np.float64):
+    """
+    Creates a stream-pull kernel, without collision
+    For parameters see function ``createStreamPullCollideKernel``
+    """
+
+    dim = len(stencil[0])
+    if numpyField is None:
+        src = Field.createGeneric(srcFieldName, dim, indexDimensions=1, layout=genericLayout, dtype=genericFieldType)
+        dst = Field.createGeneric(dstFieldName, dim, indexDimensions=1, layout=genericLayout, dtype=genericFieldType)
+    else:
+        src = Field.createFromNumpyArray(srcFieldName, numpyField, indexDimensions=1)
+        dst = Field.createFromNumpyArray(dstFieldName, numpyField, indexDimensions=1)
+
+    accessor = StreamPullTwoFieldsAccessor()
+    eqs = [sp.Eq(a, b) for a, b in zip(accessor.write(dst, stencil), accessor.read(src, stencil))
+           if sp.Eq(a, b) != True]
+    return EquationCollection(eqs, [])
 
 
 # ---------------------------------- Pdf array creation for various layouts --------------------------------------------

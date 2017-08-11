@@ -184,9 +184,9 @@ def compileAdvancedVelocitySetter(method, velocityArray, velocityRelaxationRate=
     :param optimizationParams: dictionary with optimization hints
     :return: stream-collide update function
     """
-    from lbmpy.updatekernels import createStreamPullKernel
+    from lbmpy.updatekernels import createStreamPullCollideKernel
     from lbmpy.creationfunctions import createLatticeBoltzmannAst, createLatticeBoltzmannFunction
     newCollisionRule = createAdvancedVelocitySetterCollisionRule(method, velocityArray, velocityRelaxationRate)
-    updateRule = createStreamPullKernel(newCollisionRule, pdfArr, genericLayout=fieldLayout)
+    updateRule = createStreamPullCollideKernel(newCollisionRule, pdfArr, genericLayout=fieldLayout)
     ast = createLatticeBoltzmannAst(updateRule, optimizationParams)
     return createLatticeBoltzmannFunction(ast, optimizationParams)

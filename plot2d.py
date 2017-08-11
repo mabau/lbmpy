@@ -44,6 +44,15 @@ def scalarField(field, **kwargs):
     return res
 
 
+def multipleScalarFields(field, **kwargs):
+    subPlots = field.shape[-1]
+    for i in range(subPlots):
+        subplot(1, subPlots, i + 1)
+        title(str(i))
+        scalarField(field[..., i])
+        colorbar()
+
+
 def plotBoundaryHandling(boundaryHandling, boundaryNameToColor=None):
     """
     Shows boundary cells

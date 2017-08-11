@@ -53,6 +53,8 @@ General:
 - ``output={}``: a dictionary mapping macroscopic quantites e.g. the strings 'density' and 'velocity' to pystencils
                 fields. In each timestep the corresponding quantities are written to the given fields.
 - ``velocityInput``: symbolic field where the velocities are read from (for advection diffusion LBM)
+- ``kernelType``: supported values: 'streamPullCollide' (default), 'collideOnly' 
+
 
 Entropic methods:
 
@@ -153,7 +155,8 @@ from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber
 from lbmpy.stencils import getStencil
 import lbmpy.forcemodels as forceModels
 from lbmpy.simplificationfactory import createSimplificationStrategy
-from lbmpy.updatekernels import createStreamPullKernel, createPdfArray
+from lbmpy.updatekernels import createStreamPullCollideKernel, createPdfArray, createCollideOnlyKernel, \
+    createStreamPullOnlyKernel
 from pystencils.equationcollection.equationcollection import EquationCollection
 
 
@@ -166,7 +169,7 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
         'equilibriumAccuracyOrder': 2,
         'c_s_sq': sp.Rational(1, 3),
 
-        'forceModel': 'none',  # can be 'simple', 'luo' or 'guo'
+        'forceModel': 'none',
         'force': (0, 0, 0),
         'useContinuousMaxwellianEquilibrium': True,
         'cumulant': False,
@@ -178,6 +181,11 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
 
         'output': {},
         'velocityInput': None,
+
+        'kernelType': 'streamPullCollide',
+
+        'fieldName': 'src',
+        'secondFieldName': 'dst',
     }
 
     defaultOptimizationDescription = {
@@ -340,23 +348,31 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
         else:
             collisionRule = addEntropyCondition(collisionRule, omegaOutputField=params['omegaOutputField'])
 
+    kernelCreateArgs = {}
+
     if 'fieldSize' in optParams and optParams['fieldSize']:
         npField = createPdfArray(optParams['fieldSize'], len(stencil), layout=optParams['fieldLayout'])
-        updateRule = createStreamPullKernel(collisionRule, numpyField=npField,
-                                            builtinPeriodicity=optParams['builtinPeriodicity'])
+        kernelCreateArgs['numpyField'] = npField
     else:
         if 'pdfArr' in optParams:
-            updateRule = createStreamPullKernel(collisionRule, numpyField=optParams['pdfArr'],
-                                                builtinPeriodicity=optParams['builtinPeriodicity'])
+            kernelCreateArgs['numpyField'] = optParams['pdfArr']
         else:
             layoutName = optParams['fieldLayout']
             if layoutName == 'fzyx' or 'zyxf':
                 dim = len(stencil[0])
                 layoutName = tuple(reversed(range(dim)))
-            updateRule = createStreamPullKernel(collisionRule, genericLayout=layoutName,
-                                                builtinPeriodicity=optParams['builtinPeriodicity'])
+            kernelCreateArgs['genericLayout'] = layoutName
 
-    return updateRule
+    if params['kernelType'] == 'streamPullCollide':
+        kernelCreateArgs['srcFieldName'] = params['fieldName']
+        kernelCreateArgs['dstFieldName'] = params['secondFieldName']
+        kernelCreateArgs['builtinPeriodicity'] = optParams['builtinPeriodicity']
+        return createStreamPullCollideKernel(collisionRule, **kernelCreateArgs)
+    elif params['kernelType'] == 'collideOnly':
+        kernelCreateArgs['fieldName'] = params['fieldName']
+        return createCollideOnlyKernel(collisionRule, **kernelCreateArgs)
+    else:
+        raise ValueError("Invalid value of parameter 'kernelType'", params['kernelType'])
 
 
 def createLatticeBoltzmannMethod(**params):
