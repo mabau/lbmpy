@@ -3,14 +3,14 @@ from lbmpy.boundaries.handlinginterface import GenericBoundaryHandling, FlagFiel
 from lbmpy.boundaries.periodicityhandling import PeriodicityHandling
 
 
-class BoundaryHandling(GenericBoundaryHandling, PeriodicityHandling):
+class BoundaryHandling(PeriodicityHandling, GenericBoundaryHandling):  # important: first periodicity, then boundary
 
     def __init__(self, pdfField, domainShape, lbMethod, ghostLayers=1, target='cpu', openMP=True, flagDtype=np.uint32):
         shapeWithGl = [a + 2 * ghostLayers for a in domainShape]
         flagFieldInterface = NumpyFlagFieldInterface(shapeWithGl, flagDtype)
 
         GenericBoundaryHandling.__init__(self, flagFieldInterface, pdfField, lbMethod, ghostLayers, target, openMP)
-        PeriodicityHandling.__init__(self, domainShape)
+        PeriodicityHandling.__init__(self, list(domainShape) + [len(lbMethod.stencil)])
 
     def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, sliceNormalizationGhostLayers=1):
         mask = None
@@ -65,3 +65,4 @@ class NumpyFlagFieldInterface(FlagFieldInterface):
         self._boundaryObjectToName = {}
         self._boundaryObjectToFlag = {'fluid': np.dtype(self._array.dtype)(2**0)}
         self._nextFreeExponent = 1
+

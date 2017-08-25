@@ -141,12 +141,12 @@ def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, le
             boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
     elif dim == 3:
         if roundChannel:
-            wallIdx = boundaryHandling.addBoundary(wallBoundary)
-            ff = boundaryHandling.flagField
-            yMid = ff.shape[1] // 2
-            zMid = ff.shape[2] // 2
-            y, z = np.meshgrid(range(ff.shape[1]), range(ff.shape[2]))
-            ff[(y - yMid) ** 2 + (z - zMid) ** 2 > radius ** 2] = wallIdx
+            def circleMaskCb(x, y, z):
+                yMid = np.max(y) // 2
+                zMid = np.max(z) // 2
+                return (y - yMid) ** 2 + (z - zMid) ** 2 > radius ** 2
+
+            boundaryHandling.setBoundary(wallBoundary, maskCallback=circleMaskCb)
         else:
             for direction in ('N', 'S', 'T', 'B'):
                 boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))

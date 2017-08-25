@@ -6,7 +6,7 @@ class PeriodicityHandling(object):
         self._spatialShape = fieldShape[:-1]
         self._indexShape = fieldShape[-1]
         self._periodicity = list(periodicity)
-        self._dirty = False
+        self._periodicityDirty = False
         self._periodicityKernels = []
 
     @property
@@ -20,13 +20,16 @@ class PeriodicityHandling(object):
             assert isinstance(d, bool)
 
         self._periodicity = [x, y, z]
-        self._dirty = True
+        self._periodicityDirty = True
 
     def __call__(self, **kwargs):
         for k in self._periodicityKernels:
             k(**kwargs)
 
     def prepare(self):
+        if not self._periodicityDirty:
+            return
+
         self._periodicityKernels = []
         dim = len(self.flagField.shape)
         if dim == 2:
@@ -60,5 +63,5 @@ class PeriodicityHandling(object):
             else:
                 assert False
 
-        self._dirty = False
+        self._periodicityDirty = False
 
