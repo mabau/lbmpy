@@ -265,12 +265,6 @@ def fullDiffExpand(expr, functions=None, constants=None):
     return visit(expr)
 
 
-if __name__ == '__main__':
-    from sympy.abc import a, b, c
-    testTerm = Diff( Diff(a * b))
-    print( fullDiffExpand(testTerm) )
-
-
 def normalizeDiffOrder(expression, functions=None, constants=None, sortKey=defaultDiffSortKey):
     """Assumes order of differentiation can be exchanged. Changes the order of nested Diffs to a standard order defined
     by the sorting key 'sortKey' such that the derivative terms can be further simplified """
@@ -422,4 +416,16 @@ def combineUsingProductRule(expr):
         newArgs = [combineUsingProductRule(e) for e in expr.args]
         return expr.func(*newArgs) if newArgs else expr
 
+
+def replaceDiff(expr, replacementDict):
+    """replacementDict: maps variable (label) to a new Differential operator"""
+
+    def visit(e):
+        if isinstance(e, Diff):
+            if e.label in replacementDict:
+                return DiffOperator.apply(replacementDict[e.label], visit(e.arg))
+        newArgs = [visit(arg) for arg in e.args]
+        return e.func(*newArgs) if newArgs else e
+
+    return visit(expr)
 
