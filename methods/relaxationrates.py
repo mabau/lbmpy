@@ -47,6 +47,16 @@ def getShearRelaxationRate(method):
                                       "Can not determine their relaxation rate automatically")
 
 
+def relaxationRateScaling(omega, levelScaleFactor):
+    """
+    Computes adapted omega for refinement
+    :param omega: relaxation rate
+    :param levelScaleFactor: resolution of finer grid i.e. 2, 4, 8
+    :return: relaxation rate on refined grid
+    """
+    return omega / (omega / 2 + levelScaleFactor * (1 - omega / 2))
+
+
 def defaultRelaxationRateNames():
     nextIndex = [0]
 
@@ -68,3 +78,5 @@ def defaultRelaxationRateNames():
             return sp.Symbol("omega_%d" % (nextIndex[0],))
 
     return result
+
+

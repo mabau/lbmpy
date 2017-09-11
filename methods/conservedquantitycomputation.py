@@ -188,6 +188,18 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                 for u_i in self._symbolsOrder1:
                     mainEquations.append(sp.Eq(u_i, eqs[u_i]))
                     del eqs[u_i]
+        if 'momentumDensity' in outputQuantityNamesToSymbols:
+            # get zeroth and first moments again - force-shift them if necessary
+            # and add their values directly to the main equations assuming that subexpressions are already in
+            # main equation collection
+            # Is not optimal when velocity and momentumDensity are calculated together, but this is usually not the case
+            momentumDensityOutputSymbols = outputQuantityNamesToSymbols['momentumDensity']
+            momDensityEqColl = getEquationsForZerothAndFirstOrderMoment(self._stencil, pdfs,
+                                                                        self._symbolOrder0, self._symbolsOrder1)
+            momDensityEqColl = applyForceModelShift('macroscopicVelocityShift', dim, momDensityEqColl,
+                                                    self._forceModel, self._compressible)
+            for sym, val in zip(momentumDensityOutputSymbols, momDensityEqColl.mainEquations[1:]):
+                mainEquations.append(sp.Eq(sym, val.rhs))
 
         eqColl = eqColl.copy(mainEquations, [sp.Eq(a, b) for a, b in eqs.items()])
         return eqColl.newWithoutUnusedSubexpressions()
