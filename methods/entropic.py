@@ -18,7 +18,8 @@ def addEntropyCondition(collisionRule, omegaOutputField=None):
     :return: new collision rule which only one relaxation rate
     """
     if collisionRule.method.conservedQuantityComputation.zeroCenteredPdfs:
-        raise NotImplementedError("Entropic Methods only implemented for models where pdfs are centered around 1")
+        raise NotImplementedError("Entropic Methods only implemented for models where pdfs are centered around 1. "
+                                  "Use compressible=1")
 
     omega_s, omega_h = _getRelaxationRates(collisionRule)
 
@@ -53,9 +54,11 @@ def addEntropyCondition(collisionRule, omegaOutputField=None):
     subexprs += [sp.Eq(omega_h, optimalOmegaH)]
 
     newUpdateEquations = []
+
+    constPart = decomp.constantExprs()
     for updateEq in collisionRule.mainEquations:
         index = collisionRule.method.postCollisionPdfSymbols.index(updateEq.lhs)
-        newEq = sp.Eq(updateEq.lhs, fSymbols[index] + omega_s * dsSymbols[index] + omega_h * dhSymbols[index])
+        newEq = sp.Eq(updateEq.lhs, constPart[index] + omega_s * dsSymbols[index] + omega_h * dhSymbols[index])
         newUpdateEquations.append(newEq)
     newCollisionRule = collisionRule.copy(newUpdateEquations, collisionRule.subexpressions + subexprs)
     newCollisionRule.simplificationHints['entropic'] = True
@@ -262,14 +265,8 @@ def _getRelaxationRates(collisionRule):
 
 
 if __name__ == '__main__':
-    from lbmpy.creationfunctions import createLatticeBoltzmannUpdateRule as cLbm
+    from lbmpy.creationfunctions import createLatticeBoltzmannUpdateRule
 
-    ur = cLbm(method='trt', compressible=True)
-    # ur.method
-    eUr = addGenericEntropicCondition(ur, sp.Symbol("omega_1"))
-
-    #cLbm(stencil="D2Q9", method='mrt3',
-    #     relaxationRates=[sp.Symbol("t"), sp.Symbol("t"), sp.Symbol("a")], cumulant=True,
-    #     useContinuousMaxwellianEquilibrium=True, compressible=True, entropic=True,
-    #     entropicNewtonIterations=5)
+    createLatticeBoltzmannUpdateRule(stencil='D2Q9', compressible=True, method='trt-kbc-n4', entropic=True,
+                                     force=[0.01, 0])
 
