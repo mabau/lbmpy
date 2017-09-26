@@ -1,18 +1,16 @@
-import warnings
-from collections import namedtuple
-import numpy as np
-import sympy as sp
 import functools
+from collections import namedtuple
+
+import sympy as sp
 from sympy.core.cache import cacheit
 
-from lbmpy.cache import diskcache
+from lbmpy.chapman_enskog import Diff, expandUsingLinearity, expandUsingProductRule
 from lbmpy.chapman_enskog import DiffOperator, normalizeDiffOrder, chapmanEnskogDerivativeExpansion, \
     chapmanEnskogDerivativeRecombination
 from lbmpy.chapman_enskog.derivative import collectDerivatives, createNestedDiff
-
-from pystencils.sympyextensions import normalizeProduct, multidimensionalSummation, kroneckerDelta
-from lbmpy.chapman_enskog import Diff, expandUsingLinearity, expandUsingProductRule
 from lbmpy.moments import discreteMoment, momentMatrix, polynomialToExponentRepresentation, getMomentIndices
+from pystencils.cache import diskcache
+from pystencils.sympyextensions import normalizeProduct, multidimensionalSummation, kroneckerDelta
 from pystencils.sympyextensions import productSymmetric
 
 

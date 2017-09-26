@@ -3,9 +3,10 @@
 """
 
 import sympy as sp
-from pystencils.sympyextensions import makeExponentialFuncArgumentSquares
-from lbmpy.cache import diskcache, memorycache
+
 from lbmpy.moments import polynomialToExponentRepresentation
+from pystencils.cache import diskcache, memorycache
+from pystencils.sympyextensions import makeExponentialFuncArgumentSquares
 
 
 @memorycache()

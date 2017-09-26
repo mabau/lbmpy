@@ -4,13 +4,13 @@ Additionally functions are provided to compute cumulants from moments and vice v
 """
 
 import sympy as sp
-from pystencils.sympyextensions import scalarProduct
-from lbmpy.moments import momentsUpToComponentOrder
-from lbmpy.continuous_distribution_measures import multiDifferentiation
-from lbmpy.cache import memorycache
 
+from lbmpy.continuous_distribution_measures import multiDifferentiation
+from lbmpy.moments import momentsUpToComponentOrder
+from pystencils.cache import memorycache
 # ------------------------------------------- Internal Functions -------------------------------------------------------
 from pystencils.sympyextensions import fastSubs
+from pystencils.sympyextensions import scalarProduct
 
 
 def __getIndexedSymbols(passedSymbols, prefix, indices):

@@ -34,13 +34,14 @@ Functions
 ~~~~~~~~~
 
 """
-import sympy as sp
-import math
 import itertools
-from copy import copy
+import math
 from collections import Counter, defaultdict
+from copy import copy
 
-from lbmpy.cache import memorycache
+import sympy as sp
+
+from pystencils.cache import memorycache
 from pystencils.sympyextensions import removeHigherOrderTerms
 
 MOMENT_SYMBOLS = sp.symbols("x y z")

@@ -4,10 +4,12 @@ used to formulate lattice-Boltzmann methods for hydrodynamics.
 Additionally functions are provided to compute moments and cumulants of these distributions.
 """
 
+import warnings
+
 import sympy as sp
 from sympy import Rational as R
-from lbmpy.cache import diskcache
-import warnings
+
+from pystencils.cache import diskcache
 
 
 def getWeights(stencil, c_s_sq):
