@@ -29,7 +29,7 @@ General:
     - ``mrt_raw``: non-orthogonal MRT where all relaxation rates can be specified independently i.e. there are as many
       relaxation rates as stencil entries. Look at the generated method in Jupyter to see which moment<->relaxation rate
       mapping (:func:`lbmpy.methods.createRawMRT`)
-    - ``trt-kbc-n<N>`` where <N> is 1,2,3 or 4. Special two-relaxation method. This is not the entropic method
+    - ``trt-kbc-n<N>`` where <N> is 1,2,3 or 4. Special two-relaxation rate method. This is not the entropic method
       yet, only the relaxation pattern. To get the entropic method, see parameters below!
       (:func:`lbmpy.methods.createKBCTypeTRT`)
 - ``relaxationRates``: sequence of relaxation rates, number depends on selected method. If you specify more rates than
@@ -78,8 +78,8 @@ Simplifications / Transformations:
 - ``split=False``: split innermost loop, to handle only 2 directions per loop. This reduces the number of parallel
   load/store streams and thus speeds up the kernel on most architectures
 - ``builtinPeriodicity=(False,False,False)``: instead of handling periodicity by copying ghost layers, the periodicity
-   is built into the kernel. This parameters specifies if the domain is periodic in (x,y,z) direction. Even if the
-   periodicity is built into the kernel, the fields have one ghost layer to be consistent with other functions. 
+  is built into the kernel. This parameters specifies if the domain is periodic in (x,y,z) direction. Even if the
+  periodicity is built into the kernel, the fields have one ghost layer to be consistent with other functions. 
     
 
 Field size information:
