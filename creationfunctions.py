@@ -354,7 +354,7 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
         npField = createPdfArray(optParams['fieldSize'], len(stencil), layout=optParams['fieldLayout'])
         kernelCreateArgs['numpyField'] = npField
     else:
-        if 'pdfArr' in optParams:
+        if 'pdfArr' in optParams and optParams['pdfArr'] is not None:
             kernelCreateArgs['numpyField'] = optParams['pdfArr']
         else:
             layoutName = optParams['fieldLayout']
