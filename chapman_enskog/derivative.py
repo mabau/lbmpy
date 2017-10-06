@@ -429,3 +429,12 @@ def replaceDiff(expr, replacementDict):
 
     return visit(expr)
 
+
+def zeroDiffs(expr, label):
+    def visit(e):
+        if isinstance(e, Diff):
+            if e.label == label:
+                return 0
+        newArgs = [visit(arg) for arg in e.args]
+        return e.func(*newArgs) if newArgs else e
+    return visit(expr)
