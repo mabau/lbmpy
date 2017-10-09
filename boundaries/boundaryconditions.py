@@ -5,7 +5,7 @@ from pystencils.astnodes import SympyAssignment
 from pystencils.sympyextensions import getSymmetricPart
 from pystencils import Field
 from lbmpy.boundaries.boundary_kernel import offsetFromDir, weightOfDirection, invDir
-from pystencils.types import createTypeFromString
+from pystencils.data_types import createTypeFromString
 
 
 class Boundary(object):
