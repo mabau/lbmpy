@@ -146,7 +146,8 @@ For example, to modify the AST one can run::
 import sympy as sp
 from copy import copy
 from functools import partial
-
+import json
+from pystencils.cache import diskcache, SympyJSONDecoder, SympyJSONEncoder
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
     createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
@@ -155,9 +156,10 @@ from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber
 from lbmpy.stencils import getStencil
 import lbmpy.forcemodels as forceModels
 from lbmpy.simplificationfactory import createSimplificationStrategy
-from lbmpy.updatekernels import createStreamPullCollideKernel, createPdfArray, createCollideOnlyKernel, \
-    createStreamPullOnlyKernel
+from lbmpy.updatekernels import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor, \
+    createLBMKernel
 from pystencils.equationcollection.equationcollection import EquationCollection
+from pystencils.field import getLayoutOfArray, Field
 
 
 def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
@@ -198,7 +200,6 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
 
         'target': 'cpu',
         'openMP': True,
-        'pdfArr': None,
         'doublePrecision': True,
 
         'gpuIndexing': 'block',
@@ -217,6 +218,12 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
                                              relaxationRateFromMagicNumber(params['relaxationRate'])]
 
             del params['relaxationRate']
+
+    if 'pdfArr' in optParams:
+        arr = optParams['pdfArr']
+        optParams['fieldSize'] = tuple(e - 2 for e in arr.shape[:-1])
+        optParams['fieldLayout'] = getLayoutOfArray(arr)
+        del optParams['pdfArr']
 
     if failOnUnknownParameter:
         unknownParams = [k for k in params.keys() if k not in defaultMethodDescription]
@@ -318,6 +325,18 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
 
 def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwargs):
     params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
+    parameters = json.dumps({
+        'params': params,
+        'optParams': optParams,
+    }, cls=SympyJSONEncoder, sort_keys=True)
+    return _createLatticeBoltzmannUpdateRuleCached(parameters, lbMethod)
+
+
+@diskcache
+def _createLatticeBoltzmannUpdateRuleCached(stringParameters, lbMethod=None):
+    parsedParams = json.loads(stringParameters, cls=SympyJSONDecoder)
+    params, optParams = parsedParams['params'], parsedParams['optParams']
+
     stencil = getStencil(params['stencil'])
 
     if lbMethod is None:
@@ -357,29 +376,23 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
         else:
             collisionRule = addEntropyCondition(collisionRule, omegaOutputField=params['omegaOutputField'])
 
-    kernelCreateArgs = {}
-
-    if 'fieldSize' in optParams and optParams['fieldSize']:
-        npField = createPdfArray(optParams['fieldSize'], len(stencil), layout=optParams['fieldLayout'])
-        kernelCreateArgs['numpyField'] = npField
+    if optParams['fieldSize']:
+        fieldSize = [s + 2 for s in optParams['fieldSize']] + [len(stencil)]
+        srcField = Field.createFixedSize(params['fieldName'], fieldSize, indexDimensions=1,
+                                         layout=optParams['fieldLayout'])
     else:
-        if 'pdfArr' in optParams and optParams['pdfArr'] is not None:
-            kernelCreateArgs['numpyField'] = optParams['pdfArr']
-        else:
-            layoutName = optParams['fieldLayout']
-            if layoutName == 'fzyx' or 'zyxf':
-                dim = len(stencil[0])
-                layoutName = tuple(reversed(range(dim)))
-            kernelCreateArgs['genericLayout'] = layoutName
+        srcField = Field.createGeneric(params['fieldName'], spatialDimensions=lbMethod.dim, indexDimensions=1,
+                                       layout=optParams['fieldLayout'])
+
+    dstField = srcField.newFieldWithDifferentName(params['secondFieldName'])
 
     if params['kernelType'] == 'streamPullCollide':
-        kernelCreateArgs['srcFieldName'] = params['fieldName']
-        kernelCreateArgs['dstFieldName'] = params['secondFieldName']
-        kernelCreateArgs['builtinPeriodicity'] = optParams['builtinPeriodicity']
-        return createStreamPullCollideKernel(collisionRule, **kernelCreateArgs)
+        accessor = StreamPullTwoFieldsAccessor
+        if any(optParams['builtinPeriodicity']):
+            accessor = PeriodicTwoFieldsAccessor(optParams['builtinPeriodicity'], ghostLayers=1)
+        return createLBMKernel(collisionRule, srcField, dstField, accessor)
     elif params['kernelType'] == 'collideOnly':
-        kernelCreateArgs['fieldName'] = params['fieldName']
-        return createCollideOnlyKernel(collisionRule, **kernelCreateArgs)
+        return createLBMKernel(collisionRule, srcField, srcField, CollideOnlyInplaceAccessor)
     else:
         raise ValueError("Invalid value of parameter 'kernelType'", params['kernelType'])
 
