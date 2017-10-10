@@ -204,6 +204,8 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
         'gpuIndexing': 'block',
         'gpuIndexingParams': {},
 
+        'vectorization': None,
+
         'builtinPeriodicity': (False, False, False),
     }
     if 'relaxationRate' in params:
@@ -258,6 +260,13 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
         ast = createLatticeBoltzmannAst(**params)
 
     if optParams['target'] == 'cpu':
+        if optParams['vectorization']:
+            import pystencils.backends.simd_instruction_sets as vec
+            from pystencils.vectorization import vectorize
+            vecParams = optParams['vectorization']
+            vec.selectedInstructionSet = vec.x86VectorInstructionSet(instructionSet=vecParams[0], dataType=vecParams[1])
+            vectorize(ast)
+
         from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
         addOpenMP(ast, numThreads=optParams['openMP'])
         res = makePythonCpuFunction(ast)
