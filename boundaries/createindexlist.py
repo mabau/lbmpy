@@ -1,5 +1,6 @@
 import numpy as np
 import itertools
+import warnings
 
 try:
     import pyximport;
@@ -45,4 +46,6 @@ def createBoundaryIndexList(flagField, stencil, boundaryMask, fluidMask, nrOfGho
             raise ValueError("Flag field has to be a 2 or 3 dimensional numpy array")
         return np.array(idxList, dtype=indexArrDtype)
     else:
+        if flagField.size > 1e6:
+            warnings.warn("Boundary setup may take very long! Consider installing cython to speed it up")
         return _createBoundaryIndexListPython(flagField, nrOfGhostLayers, boundaryMask, fluidMask, stencil)

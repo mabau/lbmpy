@@ -1,3 +1,7 @@
+# Workaround for cython bug
+# see https://stackoverflow.com/questions/8024805/cython-compiled-c-extension-importerror-dynamic-module-does-not-define-init-fu
+WORKAROUND = "Something"
+
 import cython
 
 ctypedef fused IntegerType:
