@@ -40,7 +40,7 @@ General:
   compressible.
 - ``equilibriumAccuracyOrder=2``: order in velocity, at which the equilibrium moment/cumulant approximation is
   truncated. Order 2 is sufficient to approximate Navier-Stokes
-- ``forceModel=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'``. For details see
+- ``forceModel=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'`` or ``'buick'``. For details see
   :mod:`lbmpy.forcemodels`
 - ``force=(0,0,0)``: either constant force or a symbolic expression depending on field value
 - ``useContinuousMaxwellianEquilibrium=True``: way to compute equilibrium moments/cumulants, if False the standard
@@ -422,8 +422,8 @@ def createLatticeBoltzmannMethod(**params):
             forceModel = forceModels.Luo(params['force'][:dim])
         elif forceModelName.lower() == 'guo':
             forceModel = forceModels.Guo(params['force'][:dim])
-        elif forceModelName.lower() == 'silva':
-            forceModel = forceModels.Silva(params['force'][:dim])
+        elif forceModelName.lower() == 'silva' or forceModelName.lower() == 'buick':
+            forceModel = forceModels.Buick(params['force'][:dim])
         else:
             raise ValueError("Unknown force model %s" % (forceModelName,))
     else:
