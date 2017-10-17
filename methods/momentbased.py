@@ -111,6 +111,18 @@ class MomentBasedLbMethod(AbstractLbMethod):
             self._momentToRelaxationInfoDict[e] = newEntry
 
     @property
+    def collisionMatrix(self):
+        M = self.momentMatrix
+        D = sp.diag(*self.relaxationRates)
+        return M.inv() * D * M
+
+    @property
+    def inverseCollisionMatrix(self):
+        M = self.momentMatrix
+        Dinv = sp.diag(*[1/e for e in self.relaxationRates])
+        return M.inv() * Dinv * M
+
+    @property
     def momentMatrix(self):
         return momentMatrix(self.moments, self.stencil)
 

@@ -25,12 +25,12 @@ def getExpandedName(originalObject, number):
     return originalObject.func(newName)
 
 
-def expandedSymbol(name, subscript=None, superscript=None):
+def expandedSymbol(name, subscript=None, superscript=None, **kwargs):
     if subscript is not None:
         name += "_{%s}" % (subscript,)
     if superscript is not None:
         name += "^{(%s)}" % (superscript,)
-    return sp.Symbol(name)
+    return sp.Symbol(name, **kwargs)
 
 # --------------------------------   Summation Convention  -------------------------------------------------------------
 
@@ -383,7 +383,7 @@ def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="\
 
 
 def useChapmanEnskogAnsatz(equation, timeDerivativeOrders=(1, 3), spatialDerivativeOrders=(1, 2),
-                           pdfs=(['f', 0, 3], ['\Omega f', 1, 3])):
+                           pdfs=(['f', 0, 3], ['\Omega f', 1, 3]), **kwargs):
 
     t, eps = sp.symbols("t epsilon")
 
@@ -406,9 +406,9 @@ def useChapmanEnskogAnsatz(equation, timeDerivativeOrders=(1, 3), spatialDerivat
     for pdfName, startOrder, stopOrder in pdfs:
         if isinstance(pdfName, sp.Symbol):
             pdfName = pdfName.name
-        expandedPdfSymbols += [expandedSymbol(pdfName, superscript=i) for i in range(startOrder, stopOrder)]
-        subsDict[sp.Symbol(pdfName)] = sum(eps ** i * expandedSymbol(pdfName, superscript=i)
-                                           for i in range(startOrder, stopOrder))
+        expandedPdfSymbols += [expandedSymbol(pdfName, superscript=i, **kwargs) for i in range(startOrder, stopOrder)]
+        subsDict[sp.Symbol(pdfName, **kwargs)] = sum(eps ** i * expandedSymbol(pdfName, superscript=i, **kwargs)
+                                                     for i in range(startOrder, stopOrder))
         maxExpansionOrder = max(maxExpansionOrder, stopOrder)
     equation = equation.subs(subsDict)
     equation = expandUsingLinearity(equation, functions=expandedPdfSymbols).expand().collect(eps)

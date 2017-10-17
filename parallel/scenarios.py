@@ -1,4 +1,3 @@
-import sympy as sp
 import numpy as np
 import numbers
 import waLBerla as wlb
@@ -7,7 +6,6 @@ from lbmpy.creationfunctions import createLatticeBoltzmannFunction, updateWithDe
 from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
 from lbmpy.parallel.boundaryhandling import BoundaryHandling
 from lbmpy.parallel.blockiteration import slicedBlockIteration
-from pystencils.field import createNumpyArrayWithLayout, getLayoutOfArray
 
 
 class Scenario(object):
@@ -38,7 +36,7 @@ class Scenario(object):
             switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, kernelParams)
             methodParameters['optimizationParams'] = optimizationParams
             self._lbmKernel = createLatticeBoltzmannFunction(**methodParameters)
-        else:
+        else:for
             self._lbmKernel = lbmKernel
 
         # ----- Add fields

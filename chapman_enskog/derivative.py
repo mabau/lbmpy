@@ -78,7 +78,6 @@ class Diff(sp.Expr):
         - all simplifications have to be done manually
         - each Diff has a Chapman Enskog expansion order index: 'ceIdx'
     """
-    is_commutative = True
     is_number = False
     is_Rational = False
 
@@ -86,6 +85,14 @@ class Diff(sp.Expr):
         if argument == 0:
             return sp.Rational(0, 1)
         return sp.Expr.__new__(cls, argument.expand(), sp.sympify(label), sp.sympify(ceIdx), **kwargs)
+
+    @property
+    def is_commutative(self):
+        anyNonCommutative = any(not s.is_commutative for s in self.atoms(sp.Symbol))
+        if anyNonCommutative:
+            return False
+        else:
+            return True
 
     def getArgRecursive(self):
         """Returns the argument the derivative acts on, for nested derivatives the inner argument is returned"""
@@ -213,7 +220,7 @@ def expandUsingLinearity(expr, functions=None, constants=None):
 
     if isinstance(expr, Diff):
         arg = expandUsingLinearity(expr.arg, functions)
-        if arg.func == sp.Add:
+        if hasattr(arg, 'func') and arg.func == sp.Add:
             result = 0
             for a in arg.args:
                 result += Diff(a, label=expr.label, ceIdx=expr.ceIdx).splitLinear(functions)

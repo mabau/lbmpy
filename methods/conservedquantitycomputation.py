@@ -93,6 +93,10 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         return {'density': 1,
                 'velocity': len(self._stencil[0])}
 
+    @property
+    def compressible(self):
+        return self._compressible
+
     def definedSymbols(self, order='all'):
         if order == 'all':
             return {'density': self._symbolOrder0,
