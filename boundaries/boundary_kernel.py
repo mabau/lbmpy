@@ -57,8 +57,8 @@ def generateIndexBoundaryKernel(pdfField, indexArr, lbMethod, boundaryFunctor, t
     dirSymbol = TypedSymbol("dir", indexArr.dtype.fields['dir'][0])
     boundaryEqList = [sp.Eq(dirSymbol, indexField[0]('dir'))]
     if createInitializationKernel:
-        boundaryEqList += boundaryFunctor.additionalDataInit(pdfField=pdfField, directionSymbol=dirSymbol,
-                                                             lbMethod=lbMethod, indexField=indexField)
+        boundaryEqList += boundaryFunctor.additionalDataInitKernelEquations(pdfField=pdfField, directionSymbol=dirSymbol,
+                                                                            lbMethod=lbMethod, indexField=indexField)
     else:
         boundaryEqList += boundaryFunctor(pdfField=pdfField, directionSymbol=dirSymbol, lbMethod=lbMethod,
                                           indexField=indexField)

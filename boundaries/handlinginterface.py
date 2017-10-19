@@ -40,10 +40,11 @@ class FlagFieldInterface(object):
 class GenericBoundaryHandling(object):
 
     class BoundaryInfo(object):
-        def __init__(self, kernel, ast, indexArray):
+        def __init__(self, kernel, ast, indexArray, idxArrayForExecution):
             self.kernel = kernel
             self.ast = ast
             self.indexArray = indexArray
+            self.idxArrayForExecution = idxArrayForExecution  # is different for GPU kernels
 
     def __init__(self, flagFieldInterface, pdfField, lbMethod, ghostLayers=1, target='cpu', openMP=True):
         """
@@ -86,7 +87,7 @@ class GenericBoundaryHandling(object):
             self.prepare()
         for boundary in self._boundaryInfos.values():
             if boundary.kernel:
-                boundary.kernel(**kwargs)
+                boundary.kernel(indexField=boundary.idxArrayForExecution, **kwargs)
 
     def getBoundaryIndexArray(self, boundaryObject):
         return self._boundaryInfos[boundaryObject].indexArray
@@ -99,6 +100,30 @@ class GenericBoundaryHandling(object):
 
     def _invalidateCache(self):
         self._dirty = True
+
+    def triggerReinitializationOfBoundaryData(self, **kwargs):
+        if self._dirty:
+            self.prepare()
+            return
+        else:
+            for boundaryObject, boundaryInfo in self._boundaryInfos.items():
+                self.__boundaryDataInitialization(boundaryInfo.indexArray, boundaryObject, **kwargs)
+                if self._target == 'gpu':
+                    import pycuda.gpuarray as gpuarray
+                    boundaryInfo.idxArrayForExecution = gpuarray.to_gpu(boundaryInfo.indexArray)
+
+    def __boundaryDataInitialization(self, idxArray, boundaryObject, **kwargs):
+        if boundaryObject.additionalDataInitCallback:
+            #TODO x,y,z coordinates should be transformed here
+            boundaryObject.additionalDataInitCallback(idxArray, **kwargs)
+
+        if boundaryObject.additionalDataInitKernelEquations:
+            initKernelAst = generateIndexBoundaryKernel(self._symbolicPdfField, idxArray, self._lbMethod,
+                                                        boundaryObject, target='cpu',
+                                                        createInitializationKernel=True)
+            from pystencils.cpu import makePythonFunction as makePythonCpuFunction
+            initKernel = makePythonCpuFunction(initKernelAst, {'indexField': idxArray, 'pdfs': self._pdfField})
+            initKernel()
 
     def prepare(self):
         """Compiles boundary kernels according to flag field. When setting boundaries the cache is automatically
@@ -127,29 +152,25 @@ class GenericBoundaryHandling(object):
                     extendedIdxField[prop] = idxArray[prop]
 
                 idxArray = extendedIdxField
-                if boundaryObject.additionalDataInit:
-                    initKernelAst = generateIndexBoundaryKernel(self._symbolicPdfField, idxArray, self._lbMethod,
-                                                                boundaryObject, target='cpu',
-                                                                createInitializationKernel=True)
-                    from pystencils.cpu import makePythonFunction as makePythonCpuFunction
-                    initKernel = makePythonCpuFunction(initKernelAst, {'indexField': idxArray, 'pdfs': self._pdfField})
-                    initKernel()
+                self.__boundaryDataInitialization(idxArray, boundaryObject)
 
             ast = generateIndexBoundaryKernel(self._symbolicPdfField, idxArray, self._lbMethod, boundaryObject,
                                               target=self._target)
+
             if self._target == 'cpu':
                 from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
                 addOpenMP(ast, numThreads=self._openMP)
-                kernel = makePythonCpuFunction(ast, {'indexField': idxArray})
+                idxArrayForExecution = idxArray
+                kernel = makePythonCpuFunction(ast)
             elif self._target == 'gpu':
                 from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
                 import pycuda.gpuarray as gpuarray
-                idxGpuField = gpuarray.to_gpu(idxArray)
-                kernel = makePythonGpuFunction(ast, {'indexField': idxGpuField})
+                idxArrayForExecution = gpuarray.to_gpu(idxArray)
+                kernel = makePythonGpuFunction(ast)
             else:
                 assert False
 
-            boundaryInfo = GenericBoundaryHandling.BoundaryInfo(kernel, ast, idxArray)
+            boundaryInfo = GenericBoundaryHandling.BoundaryInfo(kernel, ast, idxArray, idxArrayForExecution)
             self._boundaryInfos[boundaryObject] = boundaryInfo
 
         self._dirty = False
@@ -181,7 +202,7 @@ class GenericBoundaryHandling(object):
         self._dirty = True
 
     def getMask(self, boundaryObject):
-        return np.logical_and(self._flagFieldInterface.array, self._flagFieldInterface.getFlag(boundaryObject))
+        return np.bitwise_and(self._flagFieldInterface.array, self._flagFieldInterface.getFlag(boundaryObject))
 
     @property
     def flagField(self):

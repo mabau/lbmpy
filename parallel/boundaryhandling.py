@@ -30,6 +30,10 @@ class BoundaryHandling(object):
         for block in self._blocks:
             block[self._boundaryId].prepare()
 
+    def triggerReinitializationOfBoundaryData(self, **kwargs):
+        for block in self._blocks:
+            block[self._boundaryId].triggerReinitializationOfBoundaryData()
+
     def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, sliceNormalizationGhostLayers=1):
         if indexExpr is None:
             indexExpr = [slice(None, None, None)] * self.dim

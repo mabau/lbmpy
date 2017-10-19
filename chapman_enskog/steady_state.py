@@ -29,7 +29,9 @@ class SteadyStateChapmanEnskogAnalysis(object):
 
         # Perform the analysis
         self.tayloredEquation = self._createTaylorExpandedEquation()
-        self.pdfHierarchy = self._createPdfHierarchy(self.tayloredEquation)
+        insertedHierarchy, rawHierarchy = self._createPdfHierarchy(self.tayloredEquation)
+        self.pdfHierarchy = insertedHierarchy
+        self.pdfHierarchyRaw = rawHierarchy
         self.recombinedEq = self._recombinePdfs(self.pdfHierarchy)
 
         symbolsToValues = self._getSymbolsToValuesDict()
@@ -61,16 +63,18 @@ class SteadyStateChapmanEnskogAnalysis(object):
                                                         pdfs=(['f', 0, self.order + 1],), commutative=False)
         chapmanEnskogHierarchy = [chapmanEnskogHierarchy[i] for i in range(self.order + 1)]
 
-        result = []
+        insertedHierarchy = []
+        rawHierarchy = []j
         substitutionDict = {}
         for ceEq, f_i in zip(chapmanEnskogHierarchy, self.fSyms):
             newEq = -1 / self.collisionOpSym * (ceEq - self.collisionOpSym * f_i)
+            rawHierarchy.append(newEq)
             newEq = expandUsingLinearity(newEq.subs(substitutionDict), functions=self.fSyms + [self.forceSym])
             if newEq:
                 substitutionDict[f_i] = newEq
-            result.append(newEq)
+            insertedHierarchy.append(newEq)
 
-        return result
+        return insertedHierarchy, rawHierarchy
 
     def _recombinePdfs(self, pdfHierarchy):
         return sum(pdfHierarchy[i] * self.eps**(i-1) for i in range(1, self.order+1))

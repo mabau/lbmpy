@@ -161,8 +161,6 @@ class Buick(object):
     r"""
     This force model :cite:`buick2000gravity` has a force term with zero second moment. 
     It is suited for incompressible lattice models.
-
-    
     """
 
     def __init__(self, force):

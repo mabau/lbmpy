@@ -29,14 +29,25 @@ class Boundary(object):
 
     @property
     def additionalData(self):
+        """Return a list of (name, type) tuples for additional data items required in this boundary
+        These data items can either be initialized in separate kernel see additionalDataKernelInit or by 
+        Python callbacks - see additionalDataCallback """
         return []
+
+    @property
+    def additionalDataInitCallback(self):
+        """Return a callback function called with (x, y, [z]), and returning a dict of data-name to data for each
+         element that should be initialized"""
+        return None
+
+    @property
+    def additionalDataInitKernelEquations(self):
+        """Should return callback that returns kernel equations for the boundary data initialization kernel"""
+        return None
 
     @property
     def name(self):
         return type(self).__name__
-
-    def additionalDataInit(self, idxArray):
-        return []
 
 
 class NoSlip(Boundary):
@@ -61,8 +72,11 @@ class NoSlipFullWay(Boundary):
     def additionalData(self):
         return [('lastValue', createTypeFromString("double"))]
 
-    def additionalDataInit(self, pdfField, directionSymbol, indexField, **kwargs):
-        return [sp.Eq(indexField('lastValue'), pdfField(directionSymbol))]
+    @property
+    def additionalDataInitKernelEquations(self):
+        def kernelEqGetter(pdfField, directionSymbol, indexField, **kwargs):
+            return [sp.Eq(indexField('lastValue'), pdfField(directionSymbol))]
+        return kernelEqGetter
 
     def __call__(self, pdfField, directionSymbol, lbMethod, indexField, **kwargs):
         neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
@@ -82,20 +96,47 @@ class UBB(Boundary):
 
     """Velocity bounce back boundary condition, enforcing specified velocity at obstacle"""
 
-    def __init__(self, velocity, adaptVelocityToForce=False):
+    def __init__(self, velocity, adaptVelocityToForce=False, dim=None):
+        """
+        
+        :param velocity: can either be a constant, an access into a field, or a callback function.
+                         The callback functions gets a numpy record array with members, 'x','y','z', 'dir' (direction) 
+                         and 'velocity' which has to be set to the desired velocity of the corresponding link
+        :param adaptVelocityToForce:
+        """
         self._velocity = velocity
         self._adaptVelocityToForce = adaptVelocityToForce
+        if callable(self._velocity) and not dim:
+            raise ValueError("When using a velocity callback the dimension has to be specified with the dim parameter")
+        elif not callable(self._velocity):
+            dim = len(velocity)
+        self.dim = dim
 
-    def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
-        vel = self._velocity
+    @property
+    def additionalData(self):
+        if callable(self._velocity):
+            return [('vel_%d' % (i,), createTypeFromString("double")) for i in range(self.dim)]
+        else:
+            return []
+
+    @property
+    def additionalDataInitCallback(self):
+        if callable(self._velocity):
+            return self._velocity
+
+    def __call__(self, pdfField, directionSymbol, lbMethod, indexField, **kwargs):
+        velFromIdxField = callable(self._velocity)
+        vel = [indexField('vel_%d' % (i,)) for i in range(self.dim)] if velFromIdxField else self._velocity
         direction = directionSymbol
 
-        assert len(vel) == lbMethod.dim, \
-            "Dimension of velocity (%d) does not match dimension of LB method (%d)" % (len(vel), lbMethod.dim)
+        assert self.dim == lbMethod.dim, "Dimension of UBB (%d) does not match dimension of method (%d)" \
+                                         % (self.dim, lbMethod.dim)
+
         neighbor = offsetFromDir(direction, lbMethod.dim)
         inverseDir = invDir(direction)
 
-        velocity = tuple(v_i.getShifted(*neighbor) if isinstance(v_i, Field.Access) else v_i for v_i in vel)
+        velocity = tuple(v_i.getShifted(*neighbor) if isinstance(v_i, Field.Access) and not velFromIdxField else v_i
+                         for v_i in vel)
 
         if self._adaptVelocityToForce:
             cqc = lbMethod.conservedQuantityComputation

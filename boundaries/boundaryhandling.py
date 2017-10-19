@@ -7,6 +7,8 @@ class BoundaryHandling(PeriodicityHandling, GenericBoundaryHandling):  # importa
 
     def __init__(self, pdfField, domainShape, lbMethod, ghostLayers=1, target='cpu', openMP=True, flagDtype=np.uint32):
         shapeWithGl = [a + 2 * ghostLayers for a in domainShape]
+        self.domainShape = domainShape
+        self.domainShapeWithGhostLayers = shapeWithGl
         flagFieldInterface = NumpyFlagFieldInterface(shapeWithGl, flagDtype)
 
         GenericBoundaryHandling.__init__(self, flagFieldInterface, pdfField, lbMethod, ghostLayers, target, openMP)
