@@ -4,6 +4,7 @@ from pystencils.field import Field
 from pystencils.slicing import normalizeSlice
 from lbmpy.boundaries.boundary_kernel import generateIndexBoundaryKernel
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList
+from pystencils.cache import memorycache
 
 
 class FlagFieldInterface(object):
@@ -37,20 +38,63 @@ class FlagFieldInterface(object):
         return name
 
 
+class BoundaryDataSetter:
+
+    def __init__(self, indexArray, offset, stencil, ghostLayers):
+        self.indexArray = indexArray
+        self.offset = offset
+        self.stencil = np.array(stencil)
+        arrFieldNames = indexArray.dtype.names
+        self.dim = 3 if 'z' in arrFieldNames else 2
+        assert 'x' in arrFieldNames and 'y' in arrFieldNames and 'dir' in arrFieldNames, str(arrFieldNames)
+        self.boundaryDataNames = set(self.indexArray.dtype.names) - set(['x', 'y', 'z', 'dir'])
+        self.coordMap = {0: 'x', 1: 'y', 2: 'z'}
+        self.ghostLayers = ghostLayers
+
+    def fluidCellPositions(self, coord):
+        assert coord < self.dim
+        return self.indexArray[self.coordMap[coord]] + self.offset[coord] - self.ghostLayers
+
+    @memorycache()
+    def linkOffsets(self):
+        return self.stencil[self.indexArray['dir']]
+
+    @memorycache()
+    def linkPositions(self, coord):
+        return self.fluidCellPositions(coord) + 0.5 * self.linkOffsets()[:, coord]
+
+    @memorycache()
+    def boundaryCellPositions(self, coord):
+        return self.fluidCellPositions(coord) + self.linkOffsets()[:, coord]
+
+    def __setitem__(self, key, value):
+        if key not in self.boundaryDataNames:
+            raise KeyError("Invalid boundary data name %s. Allowed are %s" % (key, self.boundaryDataNames))
+        self.indexArray[key] = value
+
+    def __getitem__(self, item):
+        if item not in self.boundaryDataNames:
+            raise KeyError("Invalid boundary data name %s. Allowed are %s" % (item, self.boundaryDataNames))
+        return self.indexArray[item]
+
+
 class GenericBoundaryHandling(object):
 
     class BoundaryInfo(object):
-        def __init__(self, kernel, ast, indexArray, idxArrayForExecution):
+        def __init__(self, kernel, ast, indexArray, idxArrayForExecution, boundaryDataSetter):
             self.kernel = kernel
             self.ast = ast
             self.indexArray = indexArray
             self.idxArrayForExecution = idxArrayForExecution  # is different for GPU kernels
+            self.boundaryDataSetter = boundaryDataSetter
 
-    def __init__(self, flagFieldInterface, pdfField, lbMethod, ghostLayers=1, target='cpu', openMP=True):
+    def __init__(self, flagFieldInterface, pdfField, lbMethod, offset=None, ghostLayers=1, target='cpu', openMP=True):
         """
         :param flagFieldInterface: implementation of FlagFieldInterface
         :param pdfField: numpy array
         :param lbMethod:
+        :param offset: offset that is added to all coordinates when calling callback functions to set up geometry
+                       or boundary data. This is used for waLBerla simulations to pass the block offset  
         :param target: 'cpu' or 'gpu'
         :param openMP:
         """
@@ -61,7 +105,7 @@ class GenericBoundaryHandling(object):
         self._openMP = openMP
         self.ghostLayers = ghostLayers
         self._dirty = False
-
+        self.offset = offset if offset else (0,) * lbMethod.dim
         self._boundaryInfos = {}  # mapping of boundary object to boundary info
         self._symbolicPdfField = Field.createFromNumpyArray('pdfs', pdfField, indexDimensions=1)
 
@@ -98,32 +142,16 @@ class GenericBoundaryHandling(object):
         self._dirty = False
         self._boundaryInfos = {}
 
-    def _invalidateCache(self):
-        self._dirty = True
-
     def triggerReinitializationOfBoundaryData(self, **kwargs):
         if self._dirty:
             self.prepare()
             return
         else:
             for boundaryObject, boundaryInfo in self._boundaryInfos.items():
-                self.__boundaryDataInitialization(boundaryInfo.indexArray, boundaryObject, **kwargs)
+                self.__boundaryDataInitialization(boundaryInfo, boundaryObject, **kwargs)
                 if self._target == 'gpu':
                     import pycuda.gpuarray as gpuarray
                     boundaryInfo.idxArrayForExecution = gpuarray.to_gpu(boundaryInfo.indexArray)
-
-    def __boundaryDataInitialization(self, idxArray, boundaryObject, **kwargs):
-        if boundaryObject.additionalDataInitCallback:
-            #TODO x,y,z coordinates should be transformed here
-            boundaryObject.additionalDataInitCallback(idxArray, **kwargs)
-
-        if boundaryObject.additionalDataInitKernelEquations:
-            initKernelAst = generateIndexBoundaryKernel(self._symbolicPdfField, idxArray, self._lbMethod,
-                                                        boundaryObject, target='cpu',
-                                                        createInitializationKernel=True)
-            from pystencils.cpu import makePythonFunction as makePythonCpuFunction
-            initKernel = makePythonCpuFunction(initKernelAst, {'indexField': idxArray, 'pdfs': self._pdfField})
-            initKernel()
 
     def prepare(self):
         """Compiles boundary kernels according to flag field. When setting boundaries the cache is automatically
@@ -152,7 +180,6 @@ class GenericBoundaryHandling(object):
                     extendedIdxField[prop] = idxArray[prop]
 
                 idxArray = extendedIdxField
-                self.__boundaryDataInitialization(idxArray, boundaryObject)
 
             ast = generateIndexBoundaryKernel(self._symbolicPdfField, idxArray, self._lbMethod, boundaryObject,
                                               target=self._target)
@@ -170,15 +197,30 @@ class GenericBoundaryHandling(object):
             else:
                 assert False
 
-            boundaryInfo = GenericBoundaryHandling.BoundaryInfo(kernel, ast, idxArray, idxArrayForExecution)
+            boundaryDataSetter = BoundaryDataSetter(idxArray, self.offset, self._lbMethod.stencil, self.ghostLayers)
+            boundaryInfo = GenericBoundaryHandling.BoundaryInfo(kernel, ast, idxArray,
+                                                                idxArrayForExecution, boundaryDataSetter)
             self._boundaryInfos[boundaryObject] = boundaryInfo
+
+            if boundaryObject.additionalData:
+                self.__boundaryDataInitialization(boundaryInfo, boundaryObject)
 
         self._dirty = False
 
     def reserveFlag(self, boundaryObject):
         self._flagFieldInterface.getFlag(boundaryObject)
 
-    def setBoundary(self, boundaryObject, indexExpr=None, maskArr=None):
+    def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None):
+        mask = None
+        flagField = self._flagFieldInterface.array
+        if maskCallback is not None:
+            gridParams = [offset + np.arange(-self.ghostLayers, s - self.ghostLayers) + 0.5
+                          for s, offset in zip(flagField.shape, self.offset)]
+            indices = np.meshgrid(*gridParams, indexing='ij')
+            mask = maskCallback(*indices)
+        return self.setBoundaryWithMaskArray(boundaryObject, indexExpr, mask)
+
+    def setBoundaryWithMaskArray(self, boundaryObject, indexExpr=None, maskArr=None):
         """
         Sets boundary in a rectangular region (slice)
 
@@ -207,3 +249,19 @@ class GenericBoundaryHandling(object):
     @property
     def flagField(self):
         return self._flagFieldInterface.array
+
+    def _invalidateCache(self):
+        self._dirty = True
+
+    def __boundaryDataInitialization(self, boundaryInfo, boundaryObject, **kwargs):
+        if boundaryObject.additionalDataInitCallback:
+            boundaryObject.additionalDataInitCallback(boundaryInfo.boundaryDataSetter, **kwargs)
+
+        if boundaryObject.additionalDataInitKernelEquations:
+            initKernelAst = generateIndexBoundaryKernel(self._symbolicPdfField, boundaryInfo.indexArray, self._lbMethod,
+                                                        boundaryObject, target='cpu',
+                                                        createInitializationKernel=True)
+            from pystencils.cpu import makePythonFunction as makePythonCpuFunction
+            initKernel = makePythonCpuFunction(initKernelAst, {'indexField': boundaryInfo.indexArray,
+                                                               'pdfs': self._pdfField})
+            initKernel()

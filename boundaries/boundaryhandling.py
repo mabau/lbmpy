@@ -9,19 +9,10 @@ class BoundaryHandling(PeriodicityHandling, GenericBoundaryHandling):  # importa
         shapeWithGl = [a + 2 * ghostLayers for a in domainShape]
         self.domainShape = domainShape
         self.domainShapeWithGhostLayers = shapeWithGl
-        flagFieldInterface = NumpyFlagFieldInterface(shapeWithGl, flagDtype)
+        flagInterface = NumpyFlagFieldInterface(shapeWithGl, flagDtype)
 
-        GenericBoundaryHandling.__init__(self, flagFieldInterface, pdfField, lbMethod, ghostLayers, target, openMP)
+        GenericBoundaryHandling.__init__(self, flagInterface, pdfField, lbMethod, None, ghostLayers, target, openMP)
         PeriodicityHandling.__init__(self, list(domainShape) + [len(lbMethod.stencil)])
-
-    def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, sliceNormalizationGhostLayers=1):
-        mask = None
-        if maskCallback is not None:
-            gridParams = [np.arange(start=-sliceNormalizationGhostLayers, stop=s - sliceNormalizationGhostLayers) + 0.5
-                          for s in self.flagField.shape]
-            indices = np.meshgrid(*gridParams, indexing='ij')
-            mask = maskCallback(*indices)
-        return GenericBoundaryHandling.setBoundary(self, boundaryObject, indexExpr, mask)
 
     def __call__(self, *args, **kwargs):
         for cls in BoundaryHandling.__bases__:

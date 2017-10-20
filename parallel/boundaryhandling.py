@@ -10,8 +10,9 @@ class BoundaryHandling(object):
             flagFieldInterface = WalberlaFlagFieldInterface(block, flagFieldId)
             pdfField = wlb.field.toArray(block[pdfFieldId], withGhostLayers=True)
             ghostLayers = block[pdfFieldId].nrOfGhostLayers
-            return GenericBoundaryHandling(flagFieldInterface, pdfField, lbMethod, ghostLayers=ghostLayers,
-                                           target=target, openMP=openMP)
+            offset = blocks.getBlockCellBB(block).min
+            return GenericBoundaryHandling(flagFieldInterface, pdfField, lbMethod, offset=offset,
+                                           ghostLayers=ghostLayers, target=target, openMP=openMP)
 
         self._boundaryId = boundaryId
         self._pdfFieldId = pdfFieldId
@@ -41,13 +42,11 @@ class BoundaryHandling(object):
             return
 
         gl = self._blocks[0][self._boundaryId].ghostLayers
-        ngl = sliceNormalizationGhostLayers
         for block in self._blocks:
             block[self._boundaryId].reserveFlag(boundaryObject)
 
-        for block, indexArrs, localSlice in slicedBlockIteration(self._blocks, indexExpr, gl, ngl):
-            mask = maskCallback(*indexArrs) if maskCallback else None
-            block[self._boundaryId].setBoundary(boundaryObject, indexExpr=localSlice, maskArr=mask)
+        for block, localSlice in slicedBlockIteration(self._blocks, indexExpr, gl, sliceNormalizationGhostLayers):
+            block[self._boundaryId].setBoundary(boundaryObject, indexExpr=localSlice, maskCallback=maskCallback)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

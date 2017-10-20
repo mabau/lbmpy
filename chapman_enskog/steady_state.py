@@ -64,7 +64,7 @@ class SteadyStateChapmanEnskogAnalysis(object):
         chapmanEnskogHierarchy = [chapmanEnskogHierarchy[i] for i in range(self.order + 1)]
 
         insertedHierarchy = []
-        rawHierarchy = []j
+        rawHierarchy = []
         substitutionDict = {}
         for ceEq, f_i in zip(chapmanEnskogHierarchy, self.fSyms):
             newEq = -1 / self.collisionOpSym * (ceEq - self.collisionOpSym * f_i)
