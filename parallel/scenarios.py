@@ -9,6 +9,7 @@ from lbmpy.parallel.blockiteration import slicedBlockIteration
 
 
 class Scenario(object):
+    vtkCounter = 0
 
     def __init__(self, blocks, methodParameters, optimizationParams, lbmKernel=None,
                  preUpdateFunctions=[], kernelParams={}, blockDataPrefix='', directCommunication=False):
@@ -16,6 +17,10 @@ class Scenario(object):
         self.blocks = blocks
         self._blockDataPrefix = blockDataPrefix
         self.kernelParams = kernelParams
+
+        if 'stencil' not in methodParameters:
+            domainShape = [i + 1 for i in blocks.getDomainCellBB().max]
+            methodParameters['stencil'] = 'D2Q9' if domainShape[2] == 1 else 'D3Q27'
 
         methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
         self._target = optimizationParams['target']
@@ -36,7 +41,7 @@ class Scenario(object):
             switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, kernelParams)
             methodParameters['optimizationParams'] = optimizationParams
             self._lbmKernel = createLatticeBoltzmannFunction(**methodParameters)
-        else:for
+        else:
             self._lbmKernel = lbmKernel
 
         # ----- Add fields
@@ -78,7 +83,8 @@ class Scenario(object):
         self._macroscopicValueSetter = None
         self._macroscopicValueGetter = None
 
-        self._vtkOutput = wlb.vtk.makeOutput(blocks, "vtk")
+        self._vtkOutput = wlb.vtk.makeOutput(blocks, "vtk_%02d" % (Scenario.vtkCounter,))
+        Scenario.vtkCounter += 1
         self._vtkOutput.addCellDataWriter(wlb.field.createVTKWriter(self.blocks, self.flagFieldId))
         self._vtkOutput.addCellDataWriter(wlb.field.createVTKWriter(self.blocks, self.densityFieldId))
         self._vtkOutput.addCellDataWriter(wlb.field.createVTKWriter(self.blocks, self.velocityFieldId))

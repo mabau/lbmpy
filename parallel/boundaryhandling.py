@@ -1,8 +1,6 @@
-import numpy as np
 import waLBerla as wlb
 from lbmpy.boundaries.handlinginterface import GenericBoundaryHandling, FlagFieldInterface
 from lbmpy.parallel.blockiteration import slicedBlockIteration
-from pystencils.slicing import normalizeSlice
 
 
 class BoundaryHandling(object):
@@ -19,6 +17,7 @@ class BoundaryHandling(object):
         self._pdfFieldId = pdfFieldId
         self._blocks = blocks
         self.dim = lbMethod.dim
+        self.domainShape = [i + 1 for i in self._blocks.getDomainCellBB().max]
         blocks.addBlockData(boundaryId, addBoundaryHandling)
 
     def __call__(self, **kwargs):
@@ -36,7 +35,7 @@ class BoundaryHandling(object):
 
     def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, sliceNormalizationGhostLayers=1):
         if indexExpr is None:
-            indexExpr = [slice(None, None, None)] * self.dim
+            indexExpr = [slice(None, None, None)] * 3
 
         if len(self._blocks) == 0:
             return
@@ -49,29 +48,6 @@ class BoundaryHandling(object):
         for block, indexArrs, localSlice in slicedBlockIteration(self._blocks, indexExpr, gl, ngl):
             mask = maskCallback(*indexArrs) if maskCallback else None
             block[self._boundaryId].setBoundary(boundaryObject, indexExpr=localSlice, maskArr=mask)
-
-        #domainCellBB = self._blocks.getDomainCellBB()
-        #domainExtent = [s + 2 * sliceNormalizationGhostLayers for s in domainCellBB.size]
-        #indexExpr = normalizeSlice(indexExpr, domainExtent)
-        #targetCellBB = wlb.CellInterval.fromSlice(indexExpr)
-        #targetCellBB.shift(*[a - sliceNormalizationGhostLayers for a in domainCellBB.min])
-        #
-        #for block in self._blocks:
-        #    boundaryHandling = block[self._boundaryId]
-        #    ghostLayers = boundaryHandling.ghostLayers
-        #    intersection = self._blocks.getBlockCellBB(block).getExpanded(ghostLayers)
-        #    intersection.intersect(targetCellBB)
-        #    if not intersection.empty():
-        #        if maskCallback is not None:
-        #            meshGridParams = [offset + 0.5 + np.arange(width)
-        #                              for offset, width in zip(intersection.min, intersection.size)]
-        #            indexArr = np.meshgrid(*meshGridParams, indexing='ij')
-        #            mask = maskCallback(*indexArr)
-        #        else:
-        #            mask = None
-        #        localTargetBB = self._blocks.transformGlobalToLocal(block, intersection)
-        #        localTargetBB.shift(ghostLayers, ghostLayers, ghostLayers)
-        #        block[self._boundaryId].setBoundary(boundaryObject, indexExpr=localTargetBB.toSlice(), maskArr=mask)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -115,7 +91,7 @@ class WalberlaFlagFieldInterface(FlagFieldInterface):
         raise NotImplementedError()
 
 
-if __name__ == '__main__':
+def test():
     from lbmpy.creationfunctions import createLatticeBoltzmannMethod
     from lbmpy.boundaries.boundaryconditions import NoSlip
     from pystencils.slicing import makeSlice
@@ -129,7 +105,6 @@ if __name__ == '__main__':
 
     bh = BoundaryHandling(blocks, lbMethod, 'pdfField', 'flagField')
 
-
     def maskCallback(x, y, z):
         midPoint = (4, 4, 4)
         radius = 2.0
@@ -138,7 +113,6 @@ if __name__ == '__main__':
                      (y - midPoint[1]) ** 2 + \
                      (z - midPoint[2]) ** 2 <= radius ** 2
         return resultMask
-
 
     bh.setBoundary(NoSlip(), makeSlice[:, :, :], maskCallback, sliceNormalizationGhostLayers=0)
     vtkOutput = wlb.vtk.makeOutput(blocks, "vtkOutput")
