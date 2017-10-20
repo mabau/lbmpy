@@ -2,7 +2,7 @@ from pystencils.plot2d import *
 from pystencils.slicing import normalizeSlice
 
 
-def plotBoundaryHandling(boundaryHandling, slice=None, boundaryNameToColor=None, legend=True):
+def plotBoundaryHandling(boundaryHandling, indexExpr=None, boundaryNameToColor=None, legend=True):
     """
     Shows boundary cells
 
@@ -14,7 +14,7 @@ def plotBoundaryHandling(boundaryHandling, slice=None, boundaryNameToColor=None,
 
     boundaryHandling.prepare()
 
-    if len(boundaryHandling.flagField.shape) != 2 and slice is None:
+    if len(boundaryHandling.flagField.shape) != 2 and indexExpr is None:
         raise ValueError("To plot 3D boundary handlings a slice has to be passed")
 
     if boundaryNameToColor:
@@ -42,8 +42,8 @@ def plotBoundaryHandling(boundaryHandling, slice=None, boundaryNameToColor=None,
     norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
 
     flagField = boundaryHandling.flagField
-    if slice:
-        flagField = flagField[normalizeSlice(slice, flagField.shape)]
+    if indexExpr:
+        flagField = flagField[normalizeSlice(indexExpr, flagField.shape)]
     flagField = flagField.swapaxes(0, 1)
     plt.imshow(flagField, interpolation='none', origin='lower',
                cmap=cmap, norm=norm)

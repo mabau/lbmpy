@@ -1,7 +1,7 @@
 import numpy as np
 
 from pystencils.field import Field
-from pystencils.slicing import normalizeSlice
+from pystencils.slicing import normalizeSlice, shiftSlice
 from lbmpy.boundaries.boundary_kernel import generateIndexBoundaryKernel
 from lbmpy.boundaries.createindexlist import createBoundaryIndexList
 from pystencils.cache import memorycache
@@ -210,22 +210,53 @@ class GenericBoundaryHandling(object):
     def reserveFlag(self, boundaryObject):
         self._flagFieldInterface.getFlag(boundaryObject)
 
-    def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None):
+    def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, includeGhostLayers=True):
+        """
+        Sets boundary using either a rectangular slice, a boolean mask or a combination of both
+        
+        :param boundaryObject: instance of a boundary object that should be set 
+        :param indexExpr: a slice object (can be created with makeSlice[]) that selects a part of the domain where
+                          the boundary should be set. If none, the complete domain is selected which makes only sense
+                          if a maskCallback is passed. The slice can have ':' placeholders, which are interpreted 
+                          depending on the 'includeGhostLayers' parameter i.e. if it is True, the slice extends
+                          into the ghost layers
+        :param maskCallback: callback function getting x,y (z) parameters of the cell midpoints and returning a 
+                             boolean mask with True entries where boundary cells should be set. 
+                             The x, y, z arrays have 2D/3D shape such that they can be used directly 
+                             to create the boolean return array. i.e return x < 10 sets boundaries in cells with
+                             midpoint x coordinate smaller than 10.
+        :param includeGhostLayers: if this parameter is False, boundaries can not be set in the ghost
+                                   layer, because index 0 is the first inner layer and -1 is interpreted in the Python
+                                   way as maximum. If this parameter is True, the lower ghost layers have index 0, and
+                                   placeholders ':' in index expressions extend into the ghost layers.
+        """
+        if indexExpr is None:
+            indexExpr = [slice(None, None, None)] * len(self.flagField.shape)
+        if not includeGhostLayers:
+            domainSize = [i - 2 * self.ghostLayers for i in self._flagFieldInterface.array.shape]
+            indexExpr = normalizeSlice(indexExpr, domainSize)
+            indexExpr = shiftSlice(indexExpr, self.ghostLayers)
+        else:
+            indexExpr = normalizeSlice(indexExpr, self._flagFieldInterface.array.shape)
+
         mask = None
-        flagField = self._flagFieldInterface.array
         if maskCallback is not None:
-            gridParams = [offset + np.arange(-self.ghostLayers, s - self.ghostLayers) + 0.5
-                          for s, offset in zip(flagField.shape, self.offset)]
+            gridParams = []
+            for s, offset in zip(indexExpr, self.offset):
+                if isinstance(s, slice):
+                    gridParams.append(np.arange(s.start, s.stop) + offset + 0.5 - self.ghostLayers)
+                else:
+                    gridParams.append(s + offset + 0.5 - self.ghostLayers)
             indices = np.meshgrid(*gridParams, indexing='ij')
             mask = maskCallback(*indices)
-        return self.setBoundaryWithMaskArray(boundaryObject, indexExpr, mask)
+        return self._setBoundaryWithMaskArray(boundaryObject, indexExpr, mask)
 
-    def setBoundaryWithMaskArray(self, boundaryObject, indexExpr=None, maskArr=None):
+    def _setBoundaryWithMaskArray(self, boundaryObject, indexExpr=None, maskArr=None):
         """
         Sets boundary in a rectangular region (slice)
 
         :param boundaryObject: boundary condition object or the string 'fluid' to remove boundary conditions
-        :param indexExpr: slice expression, where boundary should be set, see :mod:`pystencils.slicing`
+        :param indexExpr: slice expression, where boundary should be set. ghost layers are expected to have coord=0
         :param maskArr: optional boolean (masked) array specifying where the boundary should be set
         """
         if indexExpr is None:

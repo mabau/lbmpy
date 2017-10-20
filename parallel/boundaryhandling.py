@@ -34,7 +34,8 @@ class BoundaryHandling(object):
         for block in self._blocks:
             block[self._boundaryId].triggerReinitializationOfBoundaryData()
 
-    def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, sliceNormalizationGhostLayers=1):
+    def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, includeGhostLayers=True):
+
         if indexExpr is None:
             indexExpr = [slice(None, None, None)] * 3
 
@@ -42,6 +43,8 @@ class BoundaryHandling(object):
             return
 
         gl = self._blocks[0][self._boundaryId].ghostLayers
+        sliceNormalizationGhostLayers = gl if includeGhostLayers else 0
+
         for block in self._blocks:
             block[self._boundaryId].reserveFlag(boundaryObject)
 
