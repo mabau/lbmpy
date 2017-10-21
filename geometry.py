@@ -9,10 +9,10 @@ def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, d
             if i != velCoord:
                 boundaryData[name] = 0
         if diameter is None:
-            radius = boundaryHandling.domainShape[velCoord] // 2
+            radius = min(sh for i, sh in enumerate(boundaryHandling.domainShape) if i != velCoord) // 2
         else:
             radius = diameter // 2
-
+        print("radius", radius)
         y, z = boundaryData.linkPositions(1), boundaryData.linkPositions(2)
         centeredY = y - radius
         centeredZ = z - radius

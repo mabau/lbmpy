@@ -1,3 +1,4 @@
+import numpy as np
 import waLBerla as wlb
 from lbmpy.boundaries.handlinginterface import GenericBoundaryHandling, FlagFieldInterface
 from lbmpy.parallel.blockiteration import slicedBlockIteration
@@ -17,6 +18,7 @@ class BoundaryHandling(object):
         self._boundaryId = boundaryId
         self._pdfFieldId = pdfFieldId
         self._blocks = blocks
+        self._flagFieldId = flagFieldId
         self.dim = lbMethod.dim
         self.domainShape = [i + 1 for i in self._blocks.getDomainCellBB().max]
         blocks.addBlockData(boundaryId, addBoundaryHandling)
@@ -25,6 +27,17 @@ class BoundaryHandling(object):
         for block in self._blocks:
             kwargs['pdfs'] = wlb.field.toArray(block[self._pdfFieldId], withGhostLayers=True)
             block[self._boundaryId](**kwargs)
+
+    def getMask(self, sliceDef, boundaryObject, targetRank=0):
+        flagField = wlb.field.gather(self._blocks, self._flagFieldId, sliceDef, targetRank)
+        if not flagField:
+            return
+        if len(self._blocks) == 0:
+            return
+
+        flag = self._blocks[0][self._boundaryId]._flagFieldInterface.getFlag(boundaryObject)
+        flagArr = wlb.field.toArray(flagField)
+        return np.bitwise_and(flagArr, flag)
 
     def prepare(self):
         for block in self._blocks:

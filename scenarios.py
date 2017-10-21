@@ -364,7 +364,7 @@ class Scenario(object):
     @property
     def velocity(self):
         """Velocity as numpy array"""
-        mask = np.logical_not(self._boundaryHandling.getMask('fluid'))
+        mask = np.logical_not(self.boundaryHandling.getMask('fluid'))
         mask = np.repeat(mask[..., np.newaxis], self.dim, axis=2)
         return removeGhostLayers(np.ma.masked_array(self._velocity, mask), indexDimensions=1)
 

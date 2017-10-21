@@ -18,9 +18,10 @@ class Scenario(object):
         self._blockDataPrefix = blockDataPrefix
         self.kernelParams = kernelParams
 
+        domainShape = [i + 1 for i in blocks.getDomainCellBB().max]
+        self.dim = 2 if domainShape[2] == 1 else 3
         if 'stencil' not in methodParameters:
-            domainShape = [i + 1 for i in blocks.getDomainCellBB().max]
-            methodParameters['stencil'] = 'D2Q9' if domainShape[2] == 1 else 'D3Q27'
+            methodParameters['stencil'] = 'D2Q9' if self.dim == 2 else 'D3Q27'
 
         methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
         self._target = optimizationParams['target']
@@ -177,15 +178,37 @@ class Scenario(object):
         """Lattice boltzmann method description"""
         return self._lbmKernel.method
 
+    def gatherVelocity(self, sliceDef, targetRank=0):
+        velField = wlb.field.gather(self.blocks, self.velocityFieldId, sliceDef, targetRank)
+        if not velField:
+            return
+        velArr = wlb.field.toArray(velField)
+        mask = np.logical_not(self.boundaryHandling.getMask(sliceDef, 'fluid', targetRank))
+        mask = np.repeat(mask[..., np.newaxis], self.dim, axis=2)
+        return np.ma.masked_array(velArr, mask)
+
+    def gatherDensity(self, sliceDef, targetRank=0):
+        densityField = wlb.field.gather(self.blocks, self.densityFieldId, sliceDef, targetRank)
+        if not densityField:
+            return
+        densityArr = wlb.field.toArray(densityField)
+        mask = np.logical_not(self.boundaryHandling.getMask(sliceDef, 'fluid', targetRank))
+        return np.ma.masked_array(densityArr, mask)
+
+    def gatherFlags(self, sliceDef, targetRank=0):
+        flagField = wlb.field.gather(self.blocks, self.flagFieldId, sliceDef, targetRank)
+        if not flagField:
+            return
+        return wlb.field.toArray(flagField)
+
     def _getMacroscopicValues(self):
         """Takes values from pdf field and writes them to density and velocity field"""
         if len(self.blocks) == 0:
             return
 
         if self._macroscopicValueGetter is None:
-            shape = wlb.field.toArray(self.blocks[0][self.flagFieldId], withGhostLayers=True).shape
-            self._macroscopicValueGetter = compileMacroscopicValuesGetter(self.method, ['density', 'velocity'], target='cpu',
-                                                                          fieldLayout=self._fieldLayout)
+            self._macroscopicValueGetter = compileMacroscopicValuesGetter(self.method, ['density', 'velocity'],
+                                                                          target='cpu', fieldLayout=self._fieldLayout)
         for block in self.blocks:
             densityArr = wlb.field.toArray(block[self.densityFieldId], withGhostLayers=True)
             velArr = wlb.field.toArray(block[self.velocityFieldId], withGhostLayers=True)

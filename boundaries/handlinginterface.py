@@ -108,6 +108,7 @@ class GenericBoundaryHandling(object):
         self.offset = offset if offset else (0,) * lbMethod.dim
         self._boundaryInfos = {}  # mapping of boundary object to boundary info
         self._symbolicPdfField = Field.createFromNumpyArray('pdfs', pdfField, indexDimensions=1)
+        self.dim = lbMethod.dim
 
         if target not in ('cpu', 'gpu'):
             raise ValueError("Invalid target '%s' . Allowed values: 'cpu' or 'gpu'" % (target,))
