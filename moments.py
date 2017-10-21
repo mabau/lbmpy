@@ -210,6 +210,13 @@ def polynomialToExponentRepresentation(polynomial, dim=3):
     return coeffExpTupleRepresentation
 
 
+def momentSortKey(moment):
+    """Sort key function for moments to sort them by (in decreasing priority)
+     order, number of occuring symbols, length of string representation, string representation"""
+    momStr = str(moment)
+    return getOrder(moment), len(moment.atoms(sp.Symbol)), len(momStr), momStr
+
+
 def sortMomentsIntoGroupsOfSameOrder(moments):
     """Returns a dictionary mapping the order (int) to a list of moments with that order."""
     result = defaultdict(list)
@@ -396,7 +403,7 @@ def getDefaultMomentSetForStencil(stencil):
     toPoly = exponentsToPolynomialRepresentations
 
     if stencilsHaveSameEntries(stencil, getStencil("D2Q9")):
-        return toPoly(momentsUpToComponentOrder(2, dim=2))
+        return sorted(toPoly(momentsUpToComponentOrder(2, dim=2)), key=momentSortKey)
 
     all27Moments = momentsUpToComponentOrder(2, dim=3)
     if stencilsHaveSameEntries(stencil, getStencil("D3Q27")):
@@ -404,7 +411,7 @@ def getDefaultMomentSetForStencil(stencil):
     if stencilsHaveSameEntries(stencil, getStencil("D3Q19")):
         nonMatchedMoments = [(1, 2, 2), (1, 1, 2), (2, 2, 2), (1, 1, 1)]
         moments19 = set(all27Moments) - set(extendMomentsWithPermutations(nonMatchedMoments))
-        return toPoly(moments19)
+        return sorted(toPoly(moments19), key=momentSortKey)
     if stencilsHaveSameEntries(stencil, getStencil("D3Q15")):
         x, y, z = MOMENT_SYMBOLS
         nonMatchedMoments = [(1, 2, 0), (2, 2, 0), (1, 1, 2), (1, 2, 2), (2, 2, 2)]
@@ -414,10 +421,7 @@ def getDefaultMomentSetForStencil(stencil):
                              3 * (z * (x**2 + y**2)),
                             )
         toRemove = set(extendMomentsWithPermutations(nonMatchedMoments))
-        return toPoly(set(all27Moments) - toRemove) + additionalMoments
-        #default7 = [sp.Rational(1, 1), x, y, z, x ** 2, y ** 2, z ** 2]
-        #diagonals = [(1, 2, 2), (1, 1, 2), (2, 2, 2), (1, 1, 1)]
-        #return default7 + list(toPoly(extendMomentsWithPermutations(diagonals)))
+        return sorted(toPoly(set(all27Moments) - toRemove) + additionalMoments, key=momentSortKey)
 
     raise NotImplementedError("No default moment system available for this stencil - define matched moments yourself")
 

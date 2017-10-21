@@ -13,75 +13,73 @@ def getStencil(name, ordering='walberla'):
                      the literature.
     """
     try:
-        return getStencil.data[ordering.lower()][name.upper()]
+        return getStencil.data[name.upper()][ordering.lower()]
     except KeyError:
         errMsg = ""
-        for orderingName, stencils in getStencil.data.items():
-            errMsg += "  %s: %s\n" % (orderingName, ", ".join(stencils.keys()))
+        for stencil, orderingNames in getStencil.data.items():
+            errMsg += "  %s: %s\n" % (stencil, ", ".join(orderingNames.keys()))
 
-        raise ValueError("No such stencil available. Available stencils: <orderingName>( <stencilNames> )\n" + errMsg)
+        raise ValueError("No such stencil available. Available stencils: <stencilName>( <orderingNames> )\n" + errMsg)
+
+
 getStencil.data = {
-
-    'walberla': {
-        'D2Q9': ((0, 0),
-                 (0, 1), (0, -1), (-1, 0), (1, 0),
-                 (-1, 1), (1, 1), (-1, -1), (1, -1),),
-        'D3Q15': ((0, 0, 0),
-                  (0, 1, 0), (0, -1, 0), (-1, 0, 0), (1, 0, 0), (0, 0, 1), (0, 0, -1),
-                  (1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1), (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1)),
-        'D3Q19': ((0, 0, 0),
-                  (0, 1, 0), (0, -1, 0), (-1, 0, 0), (1, 0, 0), (0, 0, 1), (0, 0, -1),
-                  (-1, 1, 0), (1, 1, 0), (-1, -1, 0), (1, -1, 0),
-                  (0, 1, 1), (0, -1, 1), (-1, 0, 1), (1, 0, 1),
-                  (0, 1, -1), (0, -1, -1), (-1, 0, -1), (1, 0, -1)),
-        'D3Q27': ((0, 0, 0),
+    'D2Q9': {
+        'walberla': ((0, 0),
+                     (0, 1), (0, -1), (-1, 0), (1, 0),
+                     (-1, 1), (1, 1), (-1, -1), (1, -1),),
+        'counterclockwise': ((0, 0),
+                             (1, 0), (0, 1), (-1, 0), (0, -1),
+                             (1, 1), (-1, 1), (-1, -1), (1, -1)),
+        'braunschweig': ((0, 0),
+                         (-1, 1), (-1, 0), (-1, -1), (0, -1),
+                         (1, -1), (1, 0), (1, 1), (0, 1)),
+    },
+    'D3Q15': {
+        'walberla':
+            ((0, 0, 0),
+            (0, 1, 0), (0, -1, 0), (-1, 0, 0), (1, 0, 0), (0, 0, 1), (0, 0, -1),
+            (1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1), (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1)),
+        'premnath': ((0, 0, 0),
+                     (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                     (1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1),
+                     (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1)),
+    },
+    'D3Q19': {
+        'walberla':((0, 0, 0),
+                    (0, 1, 0), (0, -1, 0), (-1, 0, 0), (1, 0, 0), (0, 0, 1), (0, 0, -1),
+                    (-1, 1, 0), (1, 1, 0), (-1, -1, 0), (1, -1, 0),
+                    (0, 1, 1), (0, -1, 1), (-1, 0, 1), (1, 0, 1),
+                    (0, 1, -1), (0, -1, -1), (-1, 0, -1), (1, 0, -1)),
+        'braunschweig':  ((0, 0, 0),
+                          (1, 0, 0), (-1, 0, 0),
+                          (0, 1, 0), (0, -1, 0),
+                          (0, 0, 1), (0, 0, -1),
+                          (1, 1, 0), (-1, -1, 0),
+                          (1, -1, 0), (-1, 1, 0),
+                          (1, 0, 1), (-1, 0, -1),
+                          (1, 0, -1), (-1, 0, 1),
+                          (0, 1, 1), (0, -1, -1),
+                          (0, 1, -1), (0, -1, 1)),
+        'premnath': ((0, 0, 0),
+                     (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                     (1, 1, 0), (-1, 1, 0), (1, -1, 0), (-1, -1, 0),
+                     (1, 0, 1), (-1, 0, 1), (1, 0, -1), (-1, 0, -1),
+                     (0, 1, 1), (0, -1, 1), (0, 1, -1), (0, -1, -1)),
+    },
+    'D3Q27': {
+        'walberla': ((0, 0, 0),
                   (0, 1, 0), (0, -1, 0), (-1, 0, 0), (1, 0, 0), (0, 0, 1), (0, 0, -1),
                   (-1, 1, 0), (1, 1, 0), (-1, -1, 0), (1, -1, 0),
                   (0, 1, 1), (0, -1, 1), (-1, 0, 1), (1, 0, 1),
                   (0, 1, -1), (0, -1, -1), (-1, 0, -1), (1, 0, -1),
-                  (1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1), (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1))
-    },
-
-    'standard': {
-        'D2Q9': ((0, 0),
-                 (1, 0), (0, 1), (-1, 0), (0, -1),
-                 (1, 1), (-1, 1), (-1, -1), (1, -1)),
-    },
-
-    'braunschweig': {
-        'D2Q9': ((0, 0),
-                 (-1, 1), (-1, 0), (-1, -1), (0, -1),
-                 (1, -1), (1, 0), (1, 1), (0, 1)),
-        'D3Q19': ((0, 0, 0),
-
-                  (1, 0, 0), (-1, 0, 0),
-                  (0, 1, 0), (0, -1, 0),
-                  (0, 0, 1), (0, 0, -1),
-
-                  (1, 1, 0), (-1, -1, 0),
-                  (1, -1, 0), (-1, 1, 0),
-                  (1, 0, 1), (-1, 0, -1),
-                  (1, 0, -1), (-1, 0, 1),
-                  (0, 1, 1), (0, -1, -1),
-                  (0, 1, -1), (0, -1, 1)),
-    },
-    'premnath': {
-        'D3Q15': ((0, 0, 0),
-                  (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
-                  (1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1),
-                  (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1)),
-        'D3Q19': ((0, 0, 0),
-                  (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
-                  (1, 1, 0), (-1, 1, 0), (1, -1, 0), (-1, -1, 0),
-                  (1, 0, 1), (-1, 0, 1), (1, 0, -1), (-1, 0, -1),
-                  (0, 1, 1), (0, -1, 1), (0, 1, -1), (0, -1, -1)),
-        'D3Q27': ((0, 0, 0),
+                  (1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1), (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1)),
+        'premnath': ((0, 0, 0),
                   (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
                   (1, 1, 0), (-1, 1, 0), (1, -1, 0), (-1, -1, 0),
                   (1, 0, 1), (-1, 0, 1), (1, 0, -1), (-1, 0, -1),
                   (0, 1, 1), (0, -1, 1), (0, 1, -1), (0, -1, -1),
                   (1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1),
-                  (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1)),
+                  (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1))
     }
 }
 
@@ -140,7 +138,7 @@ def visualizeStencil(stencil, **kwargs):
             visualizeStencil3D(stencil, **kwargs)
 
 
-def visualizeStencil2D(stencil, axes=None, data=None, textsize='12', **kwargs):
+def visualizeStencil2D(stencil, axes=None, figure=None, data=None, textsize='12', **kwargs):
     """
     Creates a matplotlib 2D plot of the stencil
 
@@ -153,7 +151,9 @@ def visualizeStencil2D(stencil, axes=None, data=None, textsize='12', **kwargs):
     import matplotlib.pyplot as plt
 
     if axes is None:
-        axes = plt.gca()
+        if figure is None:
+            figure = plt.gcf()
+        axes = figure.gca()
 
     text_box_style = BoxStyle("Round", pad=0.3)
     head_length = 0.1
@@ -182,7 +182,7 @@ def visualizeStencil2D(stencil, axes=None, data=None, textsize='12', **kwargs):
     axes.set_ylim([-text_offset * 1.1, text_offset * 1.1])
 
 
-def visualizeStencil3DBySlicing(stencil, sliceAxis=2, data=None, **kwargs):
+def visualizeStencil3DBySlicing(stencil, sliceAxis=2, figure=None, data=None, **kwargs):
     """
     Visualizes a 3D, first-neighborhood stencil by plotting 3 slices along a given axis
 
@@ -197,7 +197,11 @@ def visualizeStencil3DBySlicing(stencil, sliceAxis=2, data=None, **kwargs):
         for element in dir:
             assert element == -1 or element == 0 or element == 1, "This function can only first neighborhood stencils"
 
-    f, axes = plt.subplots(1, 3)
+    if figure is None:
+        figure = plt.gcf()
+
+    axes = [figure.add_subplot(1, 3, i+1) for i in range(3)]
+    #f, axes = plt.subplots(1, 3)
     splittedDirections = [[], [], []]
     splittedData = [[], [], []]
     axesNames = ['x', 'y', 'z']
@@ -209,12 +213,12 @@ def visualizeStencil3DBySlicing(stencil, sliceAxis=2, data=None, **kwargs):
         splittedData[splitIdx].append(i if data is None else data[i])
 
     for i in range(3):
-        visualizeStencil2D(splittedDirections[i], axes[i], splittedData[i], **kwargs)
+        visualizeStencil2D(splittedDirections[i], axes=axes[i], data=splittedData[i], **kwargs)
     for i in [-1, 0, 1]:
         axes[i+1].set_title("Cut at %s=%d" % (axesNames[sliceAxis], i))
 
 
-def visualizeStencil3D(stencil, axes=None, data=None, textsize='8'):
+def visualizeStencil3D(stencil, figure=None, axes=None, data=None, textsize='8'):
     """
     Draws 3D stencil into a 3D coordinate system, parameters are similar to :func:`visualizeStencil2D`
     If data is None, no labels are drawn. To draw the labels as in the 2D case, use ``data=list(range(len(stencil)))``
@@ -238,7 +242,9 @@ def visualizeStencil3D(stencil, axes=None, data=None, textsize='8'):
             FancyArrowPatch.draw(self, renderer)
 
     if axes is None:
-        axes = plt.figure().gca(projection='3d')
+        if figure is None:
+            figure = plt.figure()
+        axes = figure.gca(projection='3d')
         axes.set_aspect("equal")
 
     if data is None:
