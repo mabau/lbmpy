@@ -53,7 +53,7 @@ class BoundaryDataSetter:
 
     def fluidCellPositions(self, coord):
         assert coord < self.dim
-        return self.indexArray[self.coordMap[coord]] + self.offset[coord] - self.ghostLayers
+        return self.indexArray[self.coordMap[coord]] + self.offset[coord] - self.ghostLayers + 0.5
 
     @memorycache()
     def linkOffsets(self):
@@ -150,9 +150,6 @@ class GenericBoundaryHandling(object):
         else:
             for boundaryObject, boundaryInfo in self._boundaryInfos.items():
                 self.__boundaryDataInitialization(boundaryInfo, boundaryObject, **kwargs)
-                if self._target == 'gpu':
-                    import pycuda.gpuarray as gpuarray
-                    boundaryInfo.idxArrayForExecution = gpuarray.to_gpu(boundaryInfo.indexArray)
 
     def prepare(self):
         """Compiles boundary kernels according to flag field. When setting boundaries the cache is automatically
@@ -297,3 +294,9 @@ class GenericBoundaryHandling(object):
             initKernel = makePythonCpuFunction(initKernelAst, {'indexField': boundaryInfo.indexArray,
                                                                'pdfs': self._pdfField})
             initKernel()
+
+        if self._target == 'gpu':
+            import pycuda.gpuarray as gpuarray
+            boundaryInfo.idxArrayForExecution = gpuarray.to_gpu(boundaryInfo.indexArray)
+        else:
+            boundaryInfo.idxArrayForExecution = boundaryInfo.indexArray

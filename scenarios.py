@@ -253,7 +253,7 @@ class Scenario(object):
     :param kernelParams: additional parameters passed to the sweep
     """
 
-    def __init__(self, domainSize, methodParameters, optimizationParams, lbmKernel=None,
+    def __init__(self, domainSize, methodParameters, optimizationParams={}, lbmKernel=None,
                  initialVelocity=None, preUpdateFunctions=[], kernelParams={}):
         ghostLayers = 1
         domainSizeWithGhostLayer = tuple([s + 2 * ghostLayers for s in domainSize])
@@ -328,6 +328,19 @@ class Scenario(object):
         durationOfTimeStep = duration / timeSteps
         mlups = self.numberOfCells / durationOfTimeStep * 1e-6
         return mlups
+
+    def writeVTK(self):
+        from pyevtk.hl import gridToVTK
+        x = np.arange(self.domainSize[0])
+        y = np.arange(self.domainSize[1])
+        z = np.arange(self.domainSize[2])
+        gridToVTK("vtk_%06d" % (self.timeStepsRun,), x, y, z,
+                  cellData={
+                      'velocity_0': self.velocity[..., 0].filled(0.0),
+                      'velocity_1': self.velocity[..., 1].filled(0.0),
+                      'velocity_2': self.velocity[..., 2].filled(0.0),
+                      'density': self.density.filled(0.0),
+                  })
 
     @property
     def numberOfCells(self):

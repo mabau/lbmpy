@@ -7,17 +7,20 @@ def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, d
     def velocityInfoCallback(boundaryData):
         for i, name in enumerate(['vel_0', 'vel_1', 'vel_2']):
             if i != velCoord:
-                boundaryData[name] = 0
+                boundaryData[name] = 0.0
         if diameter is None:
             radius = min(sh for i, sh in enumerate(boundaryHandling.domainShape) if i != velCoord) // 2
         else:
             radius = diameter // 2
-        print("radius", radius)
-        y, z = boundaryData.linkPositions(1), boundaryData.linkPositions(2)
-        centeredY = y - radius
-        centeredZ = z - radius
-        distToCenter = np.sqrt(centeredY ** 2 + centeredZ ** 2)
-        boundaryData['vel_%d' % (velCoord,)] = u_max * (1 - distToCenter / radius)
+
+        normalCoord1 = (velCoord + 1) % 3
+        normalCoord2 = (velCoord + 2) % 3
+        y, z = boundaryData.linkPositions(normalCoord1), boundaryData.linkPositions(normalCoord2)
+        centeredNormal1 = y - radius
+        centeredNormal2 = z - radius
+        distToCenter = np.sqrt(centeredNormal1 ** 2 + centeredNormal2 ** 2)
+        velProfile = u_max * (1 - distToCenter / radius)
+        boundaryData['vel_%d' % (velCoord,)] = velProfile
 
     inflow = UBB(velocityInfoCallback, dim=boundaryHandling.dim)
     boundaryHandling.setBoundary(inflow, indexExpr=indexExpr, includeGhostLayers=False)
