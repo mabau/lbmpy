@@ -99,13 +99,14 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
         return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
-def createGenericMRT(stencil, momentEqValueRelaxationRateTuples, compressible=False, forceModel=None):
+def createGenericMRT(stencil, momentEqValueRelaxationRateTuples, compressible=False, forceModel=None, cumulant=False):
     r"""
     Creates a generic moment-based LB method
     :param stencil: sequence of lattice velocities
     :param momentEqValueRelaxationRateTuples: sequence of tuples containing (moment, equilibrium value, relax. rate)
     :param compressible: compressibility, determines calculation of velocity for force models
     :param forceModel: see createWithDiscreteMaxwellianEqMoments
+    :param cumulant: true for cumulant methods, False for moment-based methods
     """
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
 
@@ -113,7 +114,10 @@ def createGenericMRT(stencil, momentEqValueRelaxationRateTuples, compressible=Fa
     for moment, eqValue, rr in momentEqValueRelaxationRateTuples:
         moment = sp.sympify(moment)
         rrDict[moment] = RelaxationInfo(eqValue, rr)
-    return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+    if cumulant:
+        return CumulantBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
+    else:
+        return MomentBasedLbMethod(stencil, rrDict, densityVelocityComputation, forceModel)
 
 
 def createFromEquilibrium(stencil, equilibrium, momentToRelaxationRateDict, compressible=False, forceModel=None):
