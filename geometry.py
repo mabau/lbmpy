@@ -1,11 +1,13 @@
 import numpy as np
 from lbmpy.boundaries import NoSlip, UBB
-from pystencils.slicing import normalizeSlice, shiftSlice, sliceIntersection
+from pystencils.slicing import normalizeSlice, shiftSlice, sliceIntersection, sliceFromDirection
 
 
 def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, diameter=None):
+    dim = boundaryHandling.dim
+
     def velocityInfoCallback(boundaryData):
-        for i, name in enumerate(['vel_0', 'vel_1', 'vel_2']):
+        for i, name in enumerate(['vel_0', 'vel_1', 'vel_2'][:dim]):
             if i != velCoord:
                 boundaryData[name] = 0.0
         if diameter is None:
@@ -13,17 +15,39 @@ def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, d
         else:
             radius = diameter // 2
 
-        normalCoord1 = (velCoord + 1) % 3
-        normalCoord2 = (velCoord + 2) % 3
-        y, z = boundaryData.linkPositions(normalCoord1), boundaryData.linkPositions(normalCoord2)
-        centeredNormal1 = y - radius
-        centeredNormal2 = z - radius
-        distToCenter = np.sqrt(centeredNormal1 ** 2 + centeredNormal2 ** 2)
+        if dim == 3:
+            normalCoord1 = (velCoord + 1) % 3
+            normalCoord2 = (velCoord + 2) % 3
+            y, z = boundaryData.linkPositions(normalCoord1), boundaryData.linkPositions(normalCoord2)
+            centeredNormal1 = y - boundaryHandling.domainShape[normalCoord1] // 2
+            centeredNormal2 = z - boundaryHandling.domainShape[normalCoord2] // 2
+            distToCenter = np.sqrt(centeredNormal1 ** 2 + centeredNormal2 ** 2)
+        elif dim == 2:
+            normalCoord = (velCoord + 1) % 2
+            centeredNormal = boundaryData.linkPositions(normalCoord) - radius
+            distToCenter = np.sqrt(centeredNormal ** 2)
+        else:
+            raise ValueError("Invalid dimension")
+
         velProfile = u_max * (1 - distToCenter / radius)
         boundaryData['vel_%d' % (velCoord,)] = velProfile
 
     inflow = UBB(velocityInfoCallback, dim=boundaryHandling.dim)
-    boundaryHandling.setBoundary(inflow, indexExpr=indexExpr, includeGhostLayers=False)
+    boundaryHandling.setBoundary(inflow, indexExpr=indexExpr, includeGhostLayers=True)
+
+
+def setupChannelWalls(boundaryHandling, diameterCallback, duct=False, wallBoundary=NoSlip()):
+    dim = boundaryHandling.dim
+    directions = ('N', 'S', 'T', 'B') if dim == 3 else ('N', 'S')
+    for direction in directions:
+        boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
+
+    if duct and diameterCallback is not None:
+        raise ValueError("For duct flows, passing a diameter callback does not make sense.")
+
+    if not duct:
+        diameter = min(boundaryHandling.domainShape[1:])
+        addPipe(boundaryHandling, diameterCallback if diameterCallback else diameter, wallBoundary)
 
 
 def addPipe(boundaryHandling, diameter, boundary=NoSlip()):
@@ -61,6 +85,16 @@ def addPipe(boundaryHandling, diameter, boundary=NoSlip()):
 
 def addBlackAndWhiteImage(boundaryHandling, imageFile, targetSlice=None, plane=(0, 1), boundary=NoSlip(),
                           keepAspectRatio=False):
+    """
+    
+    :param boundaryHandling: 
+    :param imageFile: 
+    :param targetSlice: 
+    :param plane: 
+    :param boundary: 
+    :param keepAspectRatio: 
+    :return: 
+    """
     try:
         from scipy.misc import imread
         from scipy.ndimage import zoom

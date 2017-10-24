@@ -5,8 +5,8 @@ Scenario setup
 This module contains functions to set up pre-defined scenarios like a lid-driven cavity or channel flows.
 It is a good starting point if you are new to lbmpy.
 
->>> scenario = createForceDrivenChannel(dim=2, radius=10, length=20, force=1e-5,
-...                                     method='srt', relaxationRate=1.9)
+>>> scenario = createChannel(domainSize=(20, 10), force=1e-5,
+...                          method='srt', relaxationRate=1.9)
 >>> scenario.run(100)
 
 All scenarios can be modified, for example you can create a simple channel first, then place an object in it:
@@ -24,12 +24,15 @@ at :mod:`lbmpy.creationfunctions`. The only mandatory keyword parameter is ``rel
 that defines the viscosity of the fluid (valid values being between 0 and 2).
 """
 import numpy as np
+import sympy as sp
+
+from lbmpy.geometry import setupChannelWalls, addParabolicVelocityInflow
 from pystencils.field import getLayoutOfArray, createNumpyArrayWithLayout
 from pystencils.slicing import sliceFromDirection, addGhostLayers, removeGhostLayers, normalizeSlice, makeSlice
 from lbmpy.creationfunctions import createLatticeBoltzmannFunction, updateWithDefaultParameters, \
     switchToSymbolicRelaxationRatesForEntropicMethods
 from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
-from lbmpy.boundaries import BoundaryHandling, NoSlip, NoSlipFullWay, UBB, FixedDensity
+from lbmpy.boundaries import BoundaryHandling, NoSlip, UBB, FixedDensity
 from lbmpy.stencils import getStencil
 from lbmpy.updatekernels import createPdfArray
 
@@ -37,45 +40,42 @@ from lbmpy.updatekernels import createPdfArray
 # ---------------------------------------- Example Scenarios -----------------------------------------------------------
 
 
-def createFullyPeriodicFlow(initialVelocity, periodicityInKernel=False,
-                            optimizationParams={}, lbmKernel=None, kernelParams={}, **kwargs):
+def createFullyPeriodicFlow(initialVelocity, periodicityInKernel=False, lbmKernel=None, **kwargs):
     """
     Creates a fully periodic setup with prescribed velocity field
 
     :param initialVelocity: numpy array that defines an initial velocity for each cell. The shape of this
                             array determines the domain size.
     :param periodicityInKernel: don't use boundary handling for periodicity, but directly generate the kernel periodic 
-    :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
-    :param kernelParams: additional parameters passed to the sweep
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
-    optimizationParams = optimizationParams.copy()
+    if 'optimizationParams' not in kwargs:
+        kwargs['optimizationParams'] = {}
+    else:
+        kwargs['optimizationParams'] = kwargs['optimizationParams'].copy()
     domainSize = initialVelocity.shape[:-1]
     if periodicityInKernel:
-        optimizationParams['builtinPeriodicity'] = (True, True, True)
-    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel, initialVelocity, kernelParams=kernelParams)
+        kwargs['optimizationParams']['builtinPeriodicity'] = (True, True, True)
+    scenario = Scenario(domainSize, lbmKernel=lbmKernel, initialVelocity=initialVelocity, **kwargs)
 
     if not periodicityInKernel:
         scenario.boundaryHandling.setPeriodicity(True, True, True)
     return scenario
 
 
-def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, lbmKernel=None,
-                          kernelParams={}, **kwargs):
+def createLidDrivenCavity(domainSize, lidVelocity=0.005, lbmKernel=None, **kwargs):
     """
     Creates a lid driven cavity scenario
 
     :param domainSize: tuple specifying the number of cells in each dimension
     :param lidVelocity: x velocity of lid in lattice coordinates.
-    :param optimizationParams: see :mod:`lbmpy.creationfunctions`
     :param lbmKernel: a LBM function, which would otherwise automatically created
-    :param kernelParams: additional parameters passed to the sweep
     :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
     :return: instance of :class:`Scenario`
     """
-    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel, kernelParams=kernelParams)
+    scenario = Scenario(domainSize, lbmKernel=lbmKernel, **kwargs)
 
     myUbb = UBB(velocity=[lidVelocity, 0, 0][:scenario.method.dim])
     dim = scenario.method.dim
@@ -86,147 +86,53 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, optimizationParams={}, 
     return scenario
 
 
-def createForceDrivenChannel(force=1e-6, domainSize=None, dim=2, radius=None, length=None, initialVelocity=None,
-                             optimizationParams={}, lbmKernel=None, kernelParams={}, halfWayBounceBack=True, **kwargs):
+def createChannel(domainSize, force=None, pressureDifference=None, u_max=None,
+                  diameterCallback=None, duct=False, wallBoundary=NoSlip(), **kwargs):
     """
-    Creates a channel flow in x direction, which is driven by a constant force along the x axis
-
-    :param force: force in x direction (lattice units) that drives the channel
-    :param domainSize: tuple with size of channel in x, y, (z) direction. If not specified, pass dim, radius and length.
-                       In 3D, this creates a channel with rectangular cross section
-    :param dim: dimension of the channel (only required if domainSize is not passed)
-    :param radius: radius in 3D, or half of the height in 2D  (only required if domainSize is not passed).
-                   In 3D, this creates a channel with circular cross section
-    :param length: extend in x direction (only required if domainSize is not passed)
-    :param initialVelocity: initial velocity, either array to specify velocity for each cell or tuple for constant
-    :param optimizationParams: see :mod:`lbmpy.creationfunctions`
-    :param lbmKernel: a LBM function, which would otherwise automatically created
-    :param kernelParams: additional parameters passed to the sweep
-    :param halfWayBounceBack: determines wall boundary condition: if true half-way bounce back, if false full-way
-    :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
-    :return: instance of :class:`Scenario`
+    Create a channel scenario (2D or 3D)
+    :param domainSize: size of the simulation domain. First coordinate is the flow direction.
+    
+    The channel can be driven by one of the following methods. Please specify exactly one of the following parameters: 
+    :param force: Periodic channel, driven by a body force. Pass force in flow direction in lattice units here.
+    :param pressureDifference: Inflow and outflow are fixed pressure conditions, with the given pressure difference. 
+    :param u_max: Parabolic velocity profile prescribed at inflow, pressure boundary =1.0 at outflow.
+    
+    Geometry parameters:
+    :param diameterCallback: optional callback for channel with varying diameters. Only valid if duct=False.
+                             The callback receives x coordinate array and domainSize and returns a
+                             an array of diameters of the same shape
+    :param duct: if true the channel has rectangular instead of circular cross section
+    :param wallBoundary: instance of boundary class that should be set at the channel walls
+    :param kwargs: all other keyword parameters are passed directly to scenario class. 
     """
-    wallBoundary = NoSlip() if halfWayBounceBack else NoSlipFullWay()
-
-    if domainSize is not None:
-        dim = len(domainSize)
-    else:
-        if dim is None or radius is None or length is None:
-            raise ValueError("Pass either 'domainSize' or 'dim', 'radius' and 'length'")
-
-    assert dim in (2, 3)
-    kwargs['force'] = tuple([force, 0, 0][:dim])
-
-    if radius is not None:
-        assert length is not None
-        if dim == 3:
-            domainSize = (length, 2 * radius + 1, 2 * radius + 1)
-            roundChannel = True
-        else:
-            if domainSize is None:
-                domainSize = (length, 2 * radius)
-    else:
-        roundChannel = False
-
-    if 'forceModel' not in kwargs:
-        kwargs['forceModel'] = 'guo'
-
-    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel,
-                        initialVelocity=initialVelocity, kernelParams=kernelParams)
-
-    boundaryHandling = scenario.boundaryHandling
-    boundaryHandling.setPeriodicity(True, False, False)
-    if dim == 2:
-        for direction in ('N', 'S'):
-            boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
-    elif dim == 3:
-        if roundChannel:
-            def circleMaskCb(x, y, z):
-                yMid = np.max(y) // 2
-                zMid = np.max(z) // 2
-                return (y - yMid) ** 2 + (z - zMid) ** 2 > radius ** 2
-
-            boundaryHandling.setBoundary(wallBoundary, maskCallback=circleMaskCb)
-        else:
-            for direction in ('N', 'S', 'T', 'B'):
-                boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
-
-    assert domainSize is not None
-    if 'forceModel' not in kwargs:
-        kwargs['forceModel'] = 'guo'
-
-    return scenario
-
-
-def createPressureGradientDrivenChannel(pressureDifference, domainSize=None, dim=2, radius=None, length=None,
-                                        initialVelocity=None, optimizationParams={},
-                                        lbmKernel=None, kernelParams={}, halfWayBounceBack=True, **kwargs):
-    """
-    Creates a channel flow in x direction, which is driven by two pressure boundaries.
-    Consider using :func:`createForceDrivenChannel` which does not have artifacts an inflow and outflow.
-
-    :param pressureDifference: pressure drop in channel in lattice units
-    :param domainSize: tuple with size of channel in x, y, (z) direction. If not specified, pass dim, radius and length.
-                       In 3D, this creates a channel with rectangular cross section
-    :param dim: dimension of the channel (only required if domainSize is not passed)
-    :param radius: radius in 3D, or half of the height in 2D  (only required if domainSize is not passed).
-                   In 3D, this creates a channel with circular cross section
-    :param length: extend in x direction (only required if domainSize is not passed)
-    :param initialVelocity: initial velocity, either array to specify velocity for each cell or tuple for constant
-    :param optimizationParams: see :mod:`lbmpy.creationfunctions`
-    :param lbmKernel: a LBM function, which would otherwise automatically created
-    :param kernelParams: additional parameters passed to the sweep
-    :param halfWayBounceBack: determines wall boundary condition: if true half-way bounce back, if false full-way
-    :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
-    :return: instance of :class:`Scenario`
-    """
-    wallBoundary = NoSlip() if halfWayBounceBack else NoSlipFullWay()
-
-    if domainSize is not None:
-        dim = len(domainSize)
-    else:
-        if dim is None or radius is None or length is None:
-            raise ValueError("Pass either 'domainSize' or 'dim', 'radius' and 'length'")
-
+    dim = len(domainSize)
     assert dim in (2, 3)
 
-    if radius is not None:
-        assert length is not None
-        if dim == 3:
-            domainSize = (length, 2 * radius + 1, 2 * radius + 1)
-            roundChannel = True
-        else:
-            if domainSize is None:
-                domainSize = (length, 2 * radius)
+    if [bool(p) for p in (force, pressureDifference, u_max)].count(True) != 1:
+        raise ValueError("Please specify exactly one of the parameters 'force', 'pressureDifference' or 'u_max'")
+
+    scenario = Scenario(domainSize, **kwargs)
+    if force:
+        kwargs['force'] = tuple([force, 0, 0][:dim])
+        scenario.boundaryHandling.setPeriodicity(True, False, False)
+    elif pressureDifference:
+        inflow = FixedDensity(1.0 + pressureDifference)
+        outflow = FixedDensity(1.0)
+        scenario.boundaryHandling.setBoundary(inflow, sliceFromDirection('W', dim))
+        scenario.boundaryHandling.setBoundary(outflow, sliceFromDirection('E', dim))
+    elif u_max:
+        if duct:
+            raise NotImplementedError("Velocity inflow for duct flows not yet implemented")
+
+        diameter = diameterCallback(np.array([0]), domainSize)[0] if diameterCallback else min(domainSize[1:])
+        addParabolicVelocityInflow(scenario.boundaryHandling, u_max, sliceFromDirection('W', dim),
+                                   velCoord=0, diameter=diameter)
+        outflow = FixedDensity(1.0)
+        scenario.boundaryHandling.setBoundary(outflow, sliceFromDirection('E', dim))
     else:
-        roundChannel = False
+        assert False
 
-    assert dim in (2, 3)
-
-    scenario = Scenario(domainSize, kwargs, optimizationParams, lbmKernel=lbmKernel,
-                        initialVelocity=initialVelocity, kernelParams=kernelParams)
-    boundaryHandling = scenario.boundaryHandling
-    pressureBoundaryInflow = FixedDensity(density=1.0 + pressureDifference)
-
-    pressureBoundaryOutflow = FixedDensity(density=1.0)
-    boundaryHandling.setBoundary(pressureBoundaryInflow, sliceFromDirection('W', dim))
-    boundaryHandling.setBoundary(pressureBoundaryOutflow, sliceFromDirection('E', dim))
-
-    if dim == 2:
-        for direction in ('N', 'S'):
-            boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
-    elif dim == 3:
-        if roundChannel:
-            noSlipIdx = boundaryHandling.addBoundary(wallBoundary)
-            ff = boundaryHandling.flagField
-            yMid = ff.shape[1] // 2
-            zMid = ff.shape[2] // 2
-            y, z = np.meshgrid(range(ff.shape[1]), range(ff.shape[2]))
-            ff[(y - yMid) ** 2 + (z - zMid) ** 2 > radius ** 2] = noSlipIdx
-        else:
-            for direction in ('N', 'S', 'T', 'B'):
-                boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, dim))
-
+    setupChannelWalls(scenario.boundaryHandling, diameterCallback, duct, wallBoundary)
     return scenario
 
 
@@ -240,8 +146,6 @@ class Scenario(object):
     this constructor.
 
     :param domainSize: tuple, defining the domain size without ghost layers
-    :param methodParameters: dict with method parameters, as documented in :mod:`lbmpy.creationfunctions`,
-                             passed to :func:`lbmpy.creationfunctions.createLatticeBoltzmannFunction`
     :param optimizationParams: dict with optimization parameters, as documented in :mod:`lbmpy.creationfunctions`,
                                passed to :func:`lbmpy.creationfunctions.createLatticeBoltzmannFunction`
     :param lbmKernel: a lattice boltzmann function can be passed here, if None it is created with the parameters
@@ -251,17 +155,36 @@ class Scenario(object):
     :param preUpdateFunctions: list of functions that are called before the LBM kernel. They get the pdf array as
                                only argument. Can be used for custom boundary conditions, periodicity, etc.
     :param kernelParams: additional parameters passed to the sweep
+    :param kwargs:  dict with method parameters, as documented in :mod:`lbmpy.creationfunctions`,
+                             passed to :func:`lbmpy.creationfunctions.createLatticeBoltzmannFunction`
     """
 
-    def __init__(self, domainSize, methodParameters, optimizationParams={}, lbmKernel=None,
-                 initialVelocity=None, preUpdateFunctions=[], kernelParams={}):
+    def __init__(self, domainSize, optimizationParams={}, lbmKernel=None,
+                 initialVelocity=None, preUpdateFunctions=[], kernelParams={}, **kwargs):
+        methodParameters = kwargs
         ghostLayers = 1
         domainSizeWithGhostLayer = tuple([s + 2 * ghostLayers for s in domainSize])
         D = len(domainSize)
         if 'stencil' not in methodParameters:
             methodParameters['stencil'] = 'D2Q9' if D == 2 else 'D3Q27'
 
+        self.kernelParams = kernelParams
+
         methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
+
+        # Automatic handling of fixed relaxation rate in entropic scenario
+        if methodParameters['entropic']:
+            relaxationRates = methodParameters['relaxationRates']
+            hasTwoDifferentRates = len(set(relaxationRates)) == 2
+            noSymbolicRelaxationRates = all(not isinstance(e, sp.Symbol) for e in relaxationRates)
+            if noSymbolicRelaxationRates and hasTwoDifferentRates:
+                substitutions = {}
+                for i, value in enumerate(set(relaxationRates)):
+                    newSymbol = sp.Symbol("omega_ent_%d" % (i,))
+                    assert newSymbol not in self.kernelParams
+                    self.kernelParams[newSymbol.name] = value
+                    substitutions[sp.sympify(value)] = newSymbol
+                methodParameters['relaxationRates'] = [sp.sympify(v).subs(substitutions) for v in relaxationRates]
 
         Q = len(getStencil(methodParameters['stencil']))
         self._pdfArrays = [createPdfArray(domainSize, Q, layout=optimizationParams['fieldLayout']),
@@ -273,7 +196,7 @@ class Scenario(object):
 
         # Create kernel
         if lbmKernel is None:
-            switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, kernelParams)
+            switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, self.kernelParams)
             optimizationParams['pdfArr'] = self._pdfArrays[0]
             methodParameters['optimizationParams'] = optimizationParams
             self._lbmKernel = createLatticeBoltzmannFunction(**methodParameters)
@@ -294,7 +217,6 @@ class Scenario(object):
                                                   openMP=optimizationParams['openMP'])
 
         self._preUpdateFunctions = preUpdateFunctions
-        self.kernelParams = kernelParams
         self._pdfGpuArrays = []
         self.timeStepsRun = 0
         self.domainSize = domainSize
@@ -322,6 +244,7 @@ class Scenario(object):
 
     def benchmarkRun(self, timeSteps):
         from time import perf_counter
+        self.boundaryHandling.prepare() # make sure that boundary setup time does not enter benchmark
         start = perf_counter()
         self.run(timeSteps)
         duration = perf_counter() - start
@@ -330,16 +253,13 @@ class Scenario(object):
         return mlups
 
     def writeVTK(self):
-        from pyevtk.hl import gridToVTK
-        x = np.arange(self.domainSize[0])
-        y = np.arange(self.domainSize[1])
-        z = np.arange(self.domainSize[2])
-        gridToVTK("vtk_%06d" % (self.timeStepsRun,), x, y, z,
-                  cellData={
-                      'velocity_0': self.velocity[..., 0].filled(0.0),
-                      'velocity_1': self.velocity[..., 1].filled(0.0),
-                      'velocity_2': self.velocity[..., 2].filled(0.0),
-                      'density': self.density.filled(0.0),
+        from pyevtk.hl import imageToVTK
+        imageToVTK("vtk_%06d" % (self.timeStepsRun,),
+                   cellData={
+                      'velocity_0':  np.ascontiguousarray(self.velocity[..., 0].filled(0.0)),
+                      'velocity_1':  np.ascontiguousarray(self.velocity[..., 1].filled(0.0)),
+                      'velocity_2': np.ascontiguousarray(self.velocity[..., 2].filled(0.0)),
+                      'density': np.ascontiguousarray(self.density.filled(0.0)),
                   })
 
     @property

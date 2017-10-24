@@ -327,19 +327,22 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
 def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwargs):
     params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
     forceModel = params["forceModel"]
+    force = params['force']
+    del params['force']
     del params["forceModel"]
     parameters = json.dumps({
         'params': params,
         'optParams': optParams,
     }, cls=SympyJSONEncoder, sort_keys=True)
-    return _createLatticeBoltzmannUpdateRuleCached(parameters, forceModel, lbMethod)
+    return _createLatticeBoltzmannUpdateRuleCached(parameters, forceModel, force, lbMethod)
 
 
 @diskcache
-def _createLatticeBoltzmannUpdateRuleCached(stringParameters, forceModel, lbMethod=None):
+def _createLatticeBoltzmannUpdateRuleCached(stringParameters, forceModel, force, lbMethod=None):
     parsedParams = json.loads(stringParameters, cls=SympyJSONDecoder)
     params, optParams = parsedParams['params'], parsedParams['optParams']
     params['forceModel'] = forceModel
+    params['force'] = force
 
     stencil = getStencil(params['stencil'])
 

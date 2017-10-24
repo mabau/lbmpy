@@ -6,14 +6,37 @@ from lbmpy.creationfunctions import createLatticeBoltzmannFunction, updateWithDe
 from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
 from lbmpy.parallel.boundaryhandling import BoundaryHandling
 from lbmpy.parallel.blockiteration import slicedBlockIteration
+from lbmpy.boundaries import NoSlip, UBB
+from pystencils.slicing import sliceFromDirection
+
+
+def createLidDrivenCavity(blocks, lidVelocity=0.005, lbmKernel=None, **kwargs):
+    """
+    Creates a lid driven cavity scenario
+
+    :param lidVelocity: x velocity of lid in lattice coordinates.
+    :param lbmKernel: a LBM function, which would otherwise automatically created
+    :param kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
+    :return: instance of :class:`Scenario`
+    """
+    scenario = Scenario(blocks, lbmKernel=lbmKernel, **kwargs)
+
+    myUbb = UBB(velocity=[lidVelocity, 0, 0][:scenario.method.dim])
+    dim = scenario.method.dim
+    scenario.boundaryHandling.setBoundary(myUbb, sliceFromDirection('N', dim))
+    for direction in ('W', 'E', 'S') if scenario.method.dim == 2 else ('W', 'E', 'S', 'T', 'B'):
+        scenario.boundaryHandling.setBoundary(NoSlip(), sliceFromDirection(direction, dim))
+
+    return scenario
 
 
 class Scenario(object):
     vtkCounter = 0
 
-    def __init__(self, blocks, methodParameters, optimizationParams, lbmKernel=None,
-                 preUpdateFunctions=[], kernelParams={}, blockDataPrefix='', directCommunication=False):
+    def __init__(self, blocks, optimizationParams={}, lbmKernel=None,
+                 preUpdateFunctions=[], kernelParams={}, blockDataPrefix='', directCommunication=False, **kwargs):
 
+        methodParameters = kwargs
         self.blocks = blocks
         self._blockDataPrefix = blockDataPrefix
         self.kernelParams = kernelParams
@@ -234,41 +257,4 @@ class Scenario(object):
             velArr = wlb.field.toArray(block[self.velocityFieldId], withGhostLayers=True)
             pdfArr = wlb.field.toArray(block[self.pdfFieldId], withGhostLayers=True)
             self._macroscopicValueSetter(pdfArr=pdfArr, velocity=velArr, density=densityArr)
-
-
-if __name__ == '__main__':
-    from lbmpy.boundaries import NoSlip, FixedDensity
-    from pystencils.slicing import sliceFromDirection
-
-    blocks = wlb.createUniformBlockGrid(cellsPerBlock=(64, 20, 20), blocks=(2, 2, 2), oneBlockPerProcess=False,
-                                        periodic=(1, 0, 0))
-
-    scenario = Scenario(blocks, methodParameters={'stencil': 'D3Q19', 'relaxationRate': 1.92, 'force': (1e-5, 0, 0)},
-                        optimizationParams={})
-
-    wallBoundary = NoSlip()
-    for direction in ('N', 'S', 'T', 'B'):
-        scenario.boundaryHandling.setBoundary(wallBoundary, sliceFromDirection(direction, 3))
-
-    #scenario.boundaryHandling.setBoundary(FixedDensity(1.02), sliceFromDirection('W', 3, normalOffset=1))
-    #scenario.boundaryHandling.setBoundary(FixedDensity(1.00), sliceFromDirection('E', 3, normalOffset=1))
-
-    def maskCallback(x, y, z):
-        midPoint = (32, 10, 10)
-        radius = 5.0
-
-        resultMask = (x - midPoint[0]) ** 2 + \
-                     (y - midPoint[1]) ** 2 + \
-                     (z - midPoint[2]) ** 2 <= radius ** 2
-        return resultMask
-
-    scenario.boundaryHandling.setBoundary(wallBoundary, maskCallback=maskCallback)
-
-    scenario.run(1)
-    for i in range(50):
-        print(i)
-        scenario.writeVTK()
-        scenario.run(200)
-
-
 
