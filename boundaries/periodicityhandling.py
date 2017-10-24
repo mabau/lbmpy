@@ -23,6 +23,8 @@ class PeriodicityHandling(object):
         self._periodicityDirty = True
 
     def __call__(self, **kwargs):
+        if self._periodicityDirty:
+            self.prepare()
         for k in self._periodicityKernels:
             k(**kwargs)
 
@@ -64,4 +66,3 @@ class PeriodicityHandling(object):
                 assert False
 
         self._periodicityDirty = False
-
