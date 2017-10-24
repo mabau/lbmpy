@@ -40,7 +40,8 @@ General:
   compressible.
 - ``equilibriumAccuracyOrder=2``: order in velocity, at which the equilibrium moment/cumulant approximation is
   truncated. Order 2 is sufficient to approximate Navier-Stokes
-- ``forceModel=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'`` or ``'buick'``. For details see
+- ``forceModel=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'`` ``'buick'``, or an instance of a
+  class implementing the same methods as the classes in :mod:`lbmpy.forcemodels`. For details, see
   :mod:`lbmpy.forcemodels`
 - ``force=(0,0,0)``: either constant force or a symbolic expression depending on field value
 - ``useContinuousMaxwellianEquilibrium=True``: way to compute equilibrium moments/cumulants, if False the standard
@@ -325,17 +326,20 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
 
 def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwargs):
     params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
+    forceModel = params["forceModel"]
+    del params["forceModel"]
     parameters = json.dumps({
         'params': params,
         'optParams': optParams,
     }, cls=SympyJSONEncoder, sort_keys=True)
-    return _createLatticeBoltzmannUpdateRuleCached(parameters, lbMethod)
+    return _createLatticeBoltzmannUpdateRuleCached(parameters, forceModel, lbMethod)
 
 
 @diskcache
-def _createLatticeBoltzmannUpdateRuleCached(stringParameters, lbMethod=None):
+def _createLatticeBoltzmannUpdateRuleCached(stringParameters, forceModel, lbMethod=None):
     parsedParams = json.loads(stringParameters, cls=SympyJSONDecoder)
     params, optParams = parsedParams['params'], parsedParams['optParams']
+    params['forceModel'] = forceModel
 
     stencil = getStencil(params['stencil'])
 
@@ -414,7 +418,9 @@ def createLatticeBoltzmannMethod(**params):
 
     if 'forceModel' in params:
         forceModelName = params['forceModel']
-        if forceModelName.lower() == 'none':
+        if type(forceModelName) is not str:
+            forceModel = forceModelName
+        elif forceModelName.lower() == 'none':
             forceModel = None
         elif forceModelName.lower() == 'simple':
             forceModel = forceModels.Simple(params['force'][:dim])
