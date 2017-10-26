@@ -316,6 +316,15 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         res = createCUDAKernel(updateRule.allEquations,
                                typeForSymbol='double' if optParams['doublePrecision'] else 'float',
                                indexingCreator=indexingCreator, ghostLayers=1)
+    elif optParams['target'] == 'llvm':
+        from pystencils.llvm import createKernel
+        if 'splitGroups' in updateRule.simplificationHints:
+            splitGroups = updateRule.simplificationHints['splitGroups']
+        else:
+            splitGroups = ()
+        res = createKernel(updateRule.allEquations, splitGroups=splitGroups,
+                           typeForSymbol='double' if optParams['doublePrecision'] else 'float',
+                           ghostLayers=1)
     else:
         return ValueError("'target' has to be either 'cpu' or 'gpu'")
 
