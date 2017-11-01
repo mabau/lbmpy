@@ -113,6 +113,10 @@ class GenericBoundaryHandling(object):
         if target not in ('cpu', 'gpu'):
             raise ValueError("Invalid target '%s' . Allowed values: 'cpu' or 'gpu'" % (target,))
 
+    @property
+    def lbMethod(self):
+        return self._lbMethod
+
     def getBoundaryNameToFlagDict(self):
         result = {self._flagFieldInterface.getName(o): self._flagFieldInterface.getFlag(o) for o in self._boundaryInfos}
         result['fluid'] = self._flagFieldInterface.getFlag('fluid')

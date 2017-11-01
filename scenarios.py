@@ -26,6 +26,7 @@ that defines the viscosity of the fluid (valid values being between 0 and 2).
 import numpy as np
 import sympy as sp
 
+from lbmpy.boundaries.forceevaluation import calculateForceOnBoundary, calculateForceOnNoSlipBoundary
 from lbmpy.geometry import setupChannelWalls, addParabolicVelocityInflow
 from pystencils.field import getLayoutOfArray, createNumpyArrayWithLayout
 from pystencils.slicing import sliceFromDirection, addGhostLayers, removeGhostLayers, normalizeSlice, makeSlice
@@ -346,6 +347,14 @@ class Scenario(object):
         """Equation collection defining the LBM update rule (already in simplified form)"""
         return self._lbmKernel.updateRule
 
+    def calculateForceOnBoundary(self, boundaryObject):
+        """Computes force on boundary using simple momentum exchange method"""
+        if isinstance(boundaryObject, NoSlip):
+            return calculateForceOnNoSlipBoundary(boundaryObject, self.boundaryHandling, self._pdfArrays[0])
+        else:
+            self.runBoundaryHandlingOnly()
+            return calculateForceOnBoundary(boundaryObject, self.boundaryHandling, self._pdfArrays[0])
+
     def animateVelocity(self, steps=10, **kwargs):
         import lbmpy.plot2d as plt
 
@@ -415,3 +424,11 @@ class Scenario(object):
         self._getMacroscopic(pdfs=self._pdfArrays[0], density=self._density, velocity=self._velocity,
                              **self.kernelParams)
 
+    def runBoundaryHandlingOnly(self):
+        isGpuSimulation = len(self._pdfGpuArrays) > 0
+        if isGpuSimulation:
+            self._pdfGpuArrays[0].set(self._pdfArrays[0])
+            self._boundaryHandling(pdfs=self._pdfGpuArrays[0], **self.kernelParams)
+            self._pdfGpuArrays[0].get(self._pdfArrays[0])
+        else:
+            self._boundaryHandling(pdfs=self._pdfArrays[0], **self.kernelParams)

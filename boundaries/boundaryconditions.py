@@ -51,6 +51,11 @@ class Boundary(object):
 
 
 class NoSlip(Boundary):
+
+    def __init__(self, name=None):
+        """Set an optional name here, to mark boundaries, for example for force evaluations"""
+        self._name = name
+
     """No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle"""
     def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
         neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
@@ -58,11 +63,20 @@ class NoSlip(Boundary):
         return [sp.Eq(pdfField[neighbor](inverseDir), pdfField(directionSymbol))]
 
     def __hash__(self):
-        # All boundaries of these class behave equal -> should also be equal
-        return hash("NoSlip")
+        # All boundaries of these class behave equal -> should also be equal (as long as name is equal)
+        return hash(self.name)
 
     def __eq__(self, other):
-        return type(other) == NoSlip
+        if not isinstance(other, NoSlip):
+            return False
+        return self.name == other.name
+
+    @property
+    def name(self):
+        if self._name:
+            return self._name
+        else:
+            return type(self).__name__
 
 
 class NoSlipFullWay(Boundary):
