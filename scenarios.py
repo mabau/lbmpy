@@ -112,16 +112,18 @@ def createChannel(domainSize, force=None, pressureDifference=None, u_max=None,
     if [bool(p) for p in (force, pressureDifference, u_max)].count(True) != 1:
         raise ValueError("Please specify exactly one of the parameters 'force', 'pressureDifference' or 'u_max'")
 
-    scenario = Scenario(domainSize, **kwargs)
     if force:
         kwargs['force'] = tuple([force, 0, 0][:dim])
+        scenario = Scenario(domainSize, **kwargs)
         scenario.boundaryHandling.setPeriodicity(True, False, False)
     elif pressureDifference:
+        scenario = Scenario(domainSize, **kwargs)
         inflow = FixedDensity(1.0 + pressureDifference)
         outflow = FixedDensity(1.0)
         scenario.boundaryHandling.setBoundary(inflow, sliceFromDirection('W', dim))
         scenario.boundaryHandling.setBoundary(outflow, sliceFromDirection('E', dim))
     elif u_max:
+        scenario = Scenario(domainSize, **kwargs)
         if duct:
             raise NotImplementedError("Velocity inflow for duct flows not yet implemented")
 
@@ -253,15 +255,15 @@ class Scenario(object):
         mlups = self.numberOfCells / durationOfTimeStep * 1e-6
         return mlups
 
-    def writeVTK(self):
-        from pyevtk.hl import imageToVTK
-        imageToVTK("vtk_%06d" % (self.timeStepsRun,),
+    def writeVTK(self, fileBaseName="vtk"):
+        from pystencils.vtk import imageToVTK
+        imageToVTK("%s_%06d" % (fileBaseName, self.timeStepsRun,),
                    cellData={
-                      'velocity_0':  np.ascontiguousarray(self.velocity[..., 0].filled(0.0)),
-                      'velocity_1':  np.ascontiguousarray(self.velocity[..., 1].filled(0.0)),
-                      'velocity_2': np.ascontiguousarray(self.velocity[..., 2].filled(0.0)),
-                      'density': np.ascontiguousarray(self.density.filled(0.0)),
-                  })
+                       'velocity': (np.ascontiguousarray(self.velocity[..., 0].filled(0.0)),
+                                    np.ascontiguousarray(self.velocity[..., 1].filled(0.0)),
+                                    np.ascontiguousarray(self.velocity[..., 2].filled(0.0))),
+                       'density': np.ascontiguousarray(self.density.filled(0.0)),
+                   })
 
     @property
     def numberOfCells(self):
@@ -432,3 +434,4 @@ class Scenario(object):
             self._pdfGpuArrays[0].get(self._pdfArrays[0])
         else:
             self._boundaryHandling(pdfs=self._pdfArrays[0], **self.kernelParams)
+
