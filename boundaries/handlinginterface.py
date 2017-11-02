@@ -176,7 +176,7 @@ class GenericBoundaryHandling(object):
                 coordinateNames = ["x", "y", "z"][:dim]
                 indexArrDtype = np.dtype([(name, np.int32) for name in coordinateNames] +
                                          [('dir', np.int32)] +
-                                         [(i[0], i[1].numpyDtype) for i in boundaryObject.additionalData])
+                                         [(i[0], i[1].numpyDtype) for i in boundaryObject.additionalData], align=True)
                 extendedIdxField = np.empty(len(idxArray), dtype=indexArrDtype)
                 for prop in coordinateNames + ['dir']:
                     extendedIdxField[prop] = idxArray[prop]
