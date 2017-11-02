@@ -3,6 +3,28 @@ from lbmpy.boundaries import NoSlip, UBB
 from pystencils.slicing import normalizeSlice, shiftSlice, sliceIntersection, sliceFromDirection
 
 
+def getParabolicInitialVelocity(domainSize, u_max, velCoord=0, diameter=None):
+    if diameter is None:
+        radius = int(round(min(sh for i, sh in enumerate(domainSize) if i != velCoord) / 2))
+    else:
+        radius = int(round(diameter / 2))
+
+    params = [np.arange(s) + 0.5 for s in domainSize]
+    grid = np.meshgrid(*params, indexing='ij')
+
+    dist = 0
+    for i in range(len(domainSize)):
+        if i == velCoord:
+            continue
+        center = int(round(domainSize[i] / 2))
+        dist += (grid[i] - center) ** 2
+    dist = np.sqrt(dist)
+
+    u = np.zeros(domainSize + [len(domainSize)])
+    u[..., velCoord] = u_max * (1 - (dist / radius) ** 2)
+    return u
+
+
 def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, diameter=None):
     dim = boundaryHandling.dim
 
@@ -11,16 +33,16 @@ def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, d
             if i != velCoord:
                 boundaryData[name] = 0.0
         if diameter is None:
-            radius = min(sh for i, sh in enumerate(boundaryHandling.domainShape) if i != velCoord) // 2
+            radius = int(round(min(sh for i, sh in enumerate(boundaryHandling.domainShape) if i != velCoord) / 2))
         else:
-            radius = diameter // 2
+            radius = int(round(diameter / 2))
 
         if dim == 3:
             normalCoord1 = (velCoord + 1) % 3
             normalCoord2 = (velCoord + 2) % 3
             y, z = boundaryData.linkPositions(normalCoord1), boundaryData.linkPositions(normalCoord2)
-            centeredNormal1 = y - boundaryHandling.domainShape[normalCoord1] // 2
-            centeredNormal2 = z - boundaryHandling.domainShape[normalCoord2] // 2
+            centeredNormal1 = y - int(round(boundaryHandling.domainShape[normalCoord1] / 2))
+            centeredNormal2 = z - int(round(boundaryHandling.domainShape[normalCoord2] / 2))
             distToCenter = np.sqrt(centeredNormal1 ** 2 + centeredNormal2 ** 2)
         elif dim == 2:
             normalCoord = (velCoord + 1) % 2
@@ -29,7 +51,7 @@ def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, d
         else:
             raise ValueError("Invalid dimension")
 
-        velProfile = u_max * (1 - distToCenter / radius)
+        velProfile = u_max * (1 - (distToCenter / radius)**2)
         boundaryData['vel_%d' % (velCoord,)] = velProfile
 
     inflow = UBB(velocityInfoCallback, dim=boundaryHandling.dim)

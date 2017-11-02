@@ -194,6 +194,7 @@ class Scenario(object):
                            createPdfArray(domainSize, Q, layout=optimizationParams['fieldLayout'])]
 
         if isinstance(initialVelocity, np.ndarray):
+            assert initialVelocity.shape[-1] == D
             initialVelocity = addGhostLayers(initialVelocity, indexDimensions=1, ghostLayers=1,
                                              layout=getLayoutOfArray(self._pdfArrays[0]))
 
@@ -303,6 +304,16 @@ class Scenario(object):
         mask = np.logical_not(self.boundaryHandling.getMask('fluid'))
         mask = np.repeat(mask[..., np.newaxis], self.dim, axis=2)
         return removeGhostLayers(np.ma.masked_array(self._velocity, mask), indexDimensions=1)
+
+    def getVelocityInterpolator(self):
+        from scipy.interpolate import RegularGridInterpolator
+        coords = [np.arange(s) + 0.5 for s in self.domainSize]
+        return RegularGridInterpolator(*coords, self.velocity)
+
+    def getDensityInterpolator(self):
+        from scipy.interpolate import RegularGridInterpolator
+        coords = [np.arange(s) + 0.5 for s in self.domainSize]
+        return RegularGridInterpolator(coords, values=self.density)
 
     @property
     def vorticity(self):
