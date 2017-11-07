@@ -197,6 +197,8 @@ class Scenario(object):
             assert initialVelocity.shape[-1] == D
             initialVelocity = addGhostLayers(initialVelocity, indexDimensions=1, ghostLayers=1,
                                              layout=getLayoutOfArray(self._pdfArrays[0]))
+        elif initialVelocity is None:
+            initialVelocity = [0] * D
 
         # Create kernel
         if lbmKernel is None:
@@ -225,9 +227,6 @@ class Scenario(object):
         self.timeStepsRun = 0
         self.domainSize = domainSize
 
-        if initialVelocity is None:
-            initialVelocity = [0] * D
-
         setMacroscopic = compileMacroscopicValuesSetter(self.method, {'density': 1.0, 'velocity': initialVelocity},
                                                         pdfArr=self._pdfArrays[0], target='cpu')
         setMacroscopic(pdfs=self._pdfArrays[0], **self.kernelParams)
@@ -237,24 +236,6 @@ class Scenario(object):
             self._pdfGpuArrays = [gpuarray.to_gpu(a) for a in self._pdfArrays]
         else:
             self._pdfGpuArrays = []
-
-    def run(self, timeSteps=1):
-        """Run the scenario for the given amount of time steps"""
-        if len(self._pdfGpuArrays) > 0:
-            self._gpuTimeloop(timeSteps)
-        else:
-            self._cpuTimeloop(timeSteps)
-        self.timeStepsRun += timeSteps
-
-    def benchmarkRun(self, timeSteps):
-        from time import perf_counter
-        self.boundaryHandling.prepare() # make sure that boundary setup time does not enter benchmark
-        start = perf_counter()
-        self.run(timeSteps)
-        duration = perf_counter() - start
-        durationOfTimeStep = duration / timeSteps
-        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
-        return mlups
 
     def writeVTK(self, fileBaseName="vtk"):
         from pystencils.vtk import imageToVTK
@@ -407,6 +388,24 @@ class Scenario(object):
             plt.axis('equal')
         else:
             raise NotImplementedError("Can only plot 2D and 3D scenarios")
+
+    def run(self, timeSteps=1):
+        """Run the scenario for the given amount of time steps"""
+        if len(self._pdfGpuArrays) > 0:
+            self._gpuTimeloop(timeSteps)
+        else:
+            self._cpuTimeloop(timeSteps)
+        self.timeStepsRun += timeSteps
+
+    def benchmarkRun(self, timeSteps):
+        from time import perf_counter
+        self.boundaryHandling.prepare() # make sure that boundary setup time does not enter benchmark
+        start = perf_counter()
+        self.run(timeSteps)
+        duration = perf_counter() - start
+        durationOfTimeStep = duration / timeSteps
+        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
+        return mlups
 
     def _timeloop(self, pdfArrays, timeSteps):
         for t in range(timeSteps):
