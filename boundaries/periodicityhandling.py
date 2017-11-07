@@ -2,12 +2,13 @@ from lbmpy.stencils import getStencil
 
 
 class PeriodicityHandling(object):
-    def __init__(self, fieldShape, periodicity=(False, False, False)):
+    def __init__(self, fieldShape, periodicity=(False, False, False), target='cpu'):
         self._spatialShape = fieldShape[:-1]
         self._indexShape = fieldShape[-1]
         self._periodicity = list(periodicity)
-        self._periodicityDirty = False
+        self._periodicityDirty = True
         self._periodicityKernels = []
+        self._target = target
 
     @property
     def periodicity(self):
@@ -33,7 +34,7 @@ class PeriodicityHandling(object):
             return
 
         self._periodicityKernels = []
-        dim = len(self.flagField.shape)
+        dim = len(self._spatialShape)
         if dim == 2:
             stencil = getStencil("D2Q9")
         elif dim == 3:

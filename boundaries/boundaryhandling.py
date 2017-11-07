@@ -12,7 +12,7 @@ class BoundaryHandling(PeriodicityHandling, GenericBoundaryHandling):  # importa
         flagInterface = NumpyFlagFieldInterface(shapeWithGl, flagDtype)
 
         GenericBoundaryHandling.__init__(self, flagInterface, pdfField, lbMethod, None, ghostLayers, target, openMP)
-        PeriodicityHandling.__init__(self, list(domainShape) + [len(lbMethod.stencil)])
+        PeriodicityHandling.__init__(self, list(domainShape) + [len(lbMethod.stencil)], target=target)
 
     def __call__(self, *args, **kwargs):
         for cls in BoundaryHandling.__bases__:
