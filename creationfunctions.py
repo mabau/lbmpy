@@ -167,7 +167,7 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
     defaultMethodDescription = {
         'stencil': 'D2Q9',
         'method': 'srt',  # can be srt, trt or mrt
-        'relaxationRates': sp.symbols("omega_:10"),
+        'relaxationRates': None,
         'compressible': False,
         'equilibriumAccuracyOrder': 2,
         'c_s_sq': sp.Rational(1, 3),
@@ -238,6 +238,15 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
     paramsResult.update(params)
     optParamsResult = copy(defaultOptimizationDescription)
     optParamsResult.update(optParams)
+
+    if paramsResult['relaxationRates'] is None:
+        stencilParam = paramsResult['stencil']
+        if isinstance(stencilParam, tuple) or isinstance(stencilParam, list):
+            stencilEntries = stencilParam
+        else:
+            stencilEntries = getStencil(paramsResult['stencil'])
+        paramsResult['relaxationRates'] = sp.symbols("omega_:%d" % len(stencilEntries))
+
     return paramsResult, optParamsResult
 
 
