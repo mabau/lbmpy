@@ -438,6 +438,7 @@ def replaceDiff(expr, replacementDict):
 
 
 def zeroDiffs(expr, label):
+    """Replaces all differentials with the given label by 0"""
     def visit(e):
         if isinstance(e, Diff):
             if e.label == label:
@@ -445,3 +446,15 @@ def zeroDiffs(expr, label):
         newArgs = [visit(arg) for arg in e.args]
         return e.func(*newArgs) if newArgs else e
     return visit(expr)
+
+
+def evaluateDiffs(expr, var=None):
+    """Replaces Diff nodes by sp.diff , the free variable is either the label (if var=None) otherwise
+    the specified var"""
+    if isinstance(expr, Diff):
+        if var is None:
+            var = expr.label
+        return sp.diff(evaluateDiffs(expr.arg, var), var)
+    else:
+        newArgs = [evaluateDiffs(arg, var) for arg in expr.args]
+        return expr.func(*newArgs) if newArgs else expr
