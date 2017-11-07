@@ -1,5 +1,5 @@
 import sympy as sp
-from collections import OrderedDict, Sequence
+from collections import OrderedDict
 
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
@@ -31,16 +31,6 @@ class MomentBasedLbMethod(AbstractLbMethod):
         self._momentToRelaxationInfoDict = OrderedDict(momentToRelaxationInfoDict.items())
         self._conservedQuantityComputation = conservedQuantityComputation
         self._weights = None
-
-        equilibriumMoments = []
-        for moment, relaxInfo in momentToRelaxationInfoDict.items():
-            equilibriumMoments.append(relaxInfo.equilibriumValue)
-        conservedQuantities = set()
-        for v in self._conservedQuantityComputation.definedSymbols().values():
-            if isinstance(v, Sequence):
-                conservedQuantities.update(v)
-            else:
-                conservedQuantities.add(v)
 
     @property
     def forceModel(self):
@@ -125,6 +115,11 @@ class MomentBasedLbMethod(AbstractLbMethod):
     @property
     def momentMatrix(self):
         return momentMatrix(self.moments, self.stencil)
+
+    def __getstate__(self):
+        # Workaround for a bug in joblib
+        self._momentToRelaxationInfoDictToPickle = [i for i in self._momentToRelaxationInfoDict.items()]
+        return self.__dict__
 
     def _repr_html_(self):
         table = """
