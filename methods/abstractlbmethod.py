@@ -42,11 +42,11 @@ class AbstractLbMethod(abc.ABCMeta('ABC', (object,), {})):
 
     # ------------------------- Abstract Methods & Properties ----------------------------------------------------------
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def conservedQuantityComputation(self):
         """Returns an instance of class :class:`lbmpy.methods.AbstractConservedQuantityComputation`"""
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def weights(self):
         """Returns a sequence of weights, one for each lattice direction"""
 
