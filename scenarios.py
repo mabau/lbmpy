@@ -247,6 +247,34 @@ class Scenario(object):
                        'density': np.ascontiguousarray(self.density.filled(0.0)),
                    })
 
+    def writeBoundaryGeometryToVTK(self, fileName='geometry', boundary='all', inverse=False):
+        """
+        Writes a VTK field where each cell with the given boundary is marked with 1, other cells are 0
+        This can be used to display the simulation geometry in Paraview
+        :param fileName: vtk filename 
+        :param boundary: boundary object, or special string 'fluid' for fluid cells or special string 'all' for all
+                         boundary conditions.
+                         can also  be a sequence, to write multiple boundaries to VTK file
+        :param inverse: invert mask before writing it out
+        """
+        from pystencils.vtk import imageToVTK
+
+        if boundary == 'all':
+            boundary = list(self._boundaryHandling.boundaryObjects)
+        elif not hasattr(boundary, "__len__"):
+            boundary = [boundary]
+
+        def boundaryObjToString(b):
+            return b if isinstance(b, str) else b.name
+
+        masks = {boundaryObjToString(b): np.ascontiguousarray(self._boundaryHandling.getMask(b), np.int8)
+                 for b in boundary}
+
+        if inverse:
+            for mask in masks:
+                np.logical_not(mask, out=mask)
+        imageToVTK(fileName, cellData=masks)
+
     @property
     def numberOfCells(self):
         result = 1
@@ -399,7 +427,7 @@ class Scenario(object):
 
     def benchmarkRun(self, timeSteps):
         from time import perf_counter
-        self.boundaryHandling.prepare() # make sure that boundary setup time does not enter benchmark
+        self.boundaryHandling.prepare()  # make sure that boundary setup time does not enter benchmark
         start = perf_counter()
         self.run(timeSteps)
         duration = perf_counter() - start

@@ -114,6 +114,10 @@ class GenericBoundaryHandling(object):
             raise ValueError("Invalid target '%s' . Allowed values: 'cpu' or 'gpu'" % (target,))
 
     @property
+    def boundaryObjects(self):
+        return self._flagFieldInterface.boundaryObjects
+
+    @property
     def lbMethod(self):
         return self._lbMethod
 
