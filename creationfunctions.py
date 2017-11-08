@@ -409,12 +409,12 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
 def createLatticeBoltzmannMethod(**params):
     params, _ = updateWithDefaultParameters(params, {}, failOnUnknownParameter=False)
 
-    if 'stencilList' in params:
-        stencilList = params['stencilList']
+    if isinstance(params['stencil'], tuple) or isinstance(params['stencil'], list):
+        stencilEntries = params['stencil']
     else:
-        stencilList = getStencil(params['stencil'])
+        stencilEntries = getStencil(params['stencil'])
 
-    dim = len(stencilList[0])
+    dim = len(stencilEntries[0])
 
     forceIsZero = True
     for f_i in params['force']:
@@ -457,10 +457,10 @@ def createLatticeBoltzmannMethod(**params):
 
     if methodName.lower() == 'srt':
         assert len(relaxationRates) >= 1, "Not enough relaxation rates"
-        method = createSRT(stencilList, relaxationRates[0], **commonParams)
+        method = createSRT(stencilEntries, relaxationRates[0], **commonParams)
     elif methodName.lower() == 'trt':
         assert len(relaxationRates) >= 2, "Not enough relaxation rates"
-        method = createTRT(stencilList, relaxationRates[0], relaxationRates[1], **commonParams)
+        method = createTRT(stencilEntries, relaxationRates[0], relaxationRates[1], **commonParams)
     elif methodName.lower() == 'mrt':
         nextRelaxationRate = [0]
 
@@ -468,22 +468,22 @@ def createLatticeBoltzmannMethod(**params):
             res = relaxationRates[nextRelaxationRate[0]]
             nextRelaxationRate[0] += 1
             return res
-        method = createOrthogonalMRT(stencilList, relaxationRateGetter, **commonParams)
+        method = createOrthogonalMRT(stencilEntries, relaxationRateGetter, **commonParams)
     elif methodName.lower() == 'mrt_raw':
-        method = createRawMRT(stencilList, relaxationRates, **commonParams)
+        method = createRawMRT(stencilEntries, relaxationRates, **commonParams)
     elif methodName.lower() == 'mrt3':
-        method = createThreeRelaxationRateMRT(stencilList, relaxationRates, **commonParams)
+        method = createThreeRelaxationRateMRT(stencilEntries, relaxationRates, **commonParams)
     elif methodName.lower().startswith('trt-kbc-n'):
-        if stencilsHaveSameEntries(stencilList, getStencil("D2Q9")):
+        if stencilsHaveSameEntries(stencilEntries, getStencil("D2Q9")):
             dim = 2
-        elif stencilsHaveSameEntries(stencilList, getStencil("D3Q27")):
+        elif stencilsHaveSameEntries(stencilEntries, getStencil("D3Q27")):
             dim = 3
         else:
             raise NotImplementedError("KBC type TRT methods can only be constructed for D2Q9 and D3Q27 stencils")
         methodNr = methodName[-1]
         method = createKBCTypeTRT(dim, relaxationRates[0], relaxationRates[1], 'KBC-N' + methodNr, **commonParams)
     elif methodName.lower() == 'entropic-srt':
-        method = createEntropicSRT(stencilList, relaxationRates[0], forceModel, params['compressible'])
+        method = createEntropicSRT(stencilEntries, relaxationRates[0], forceModel, params['compressible'])
     else:
         raise ValueError("Unknown method %s" % (methodName,))
 
