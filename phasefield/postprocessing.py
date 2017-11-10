@@ -33,19 +33,19 @@ def findJumpIndices(array, threshold=0, minLength=3):
         array = array[jump + minLength:]
 
 
-def findBranchingPoint(pathVertices1, pathVertices2, maxDistance=0.5):
+def findBranchingPoint(pathVertices1, pathVertices2, maxDistance=0.5, branchingPointFilter=3):
     tree = scipy.spatial.KDTree(pathVertices1)
     distances, indices = tree.query(pathVertices2, k=1, distance_upper_bound=maxDistance)
     distances[distances == np.inf] = -1
-    jumpIndices = findJumpIndices(distances, 0, 3)
+    jumpIndices = findJumpIndices(distances, 0, branchingPointFilter)
     return pathVertices2[jumpIndices]
 
 
-def findAllBranchingPoints(phaseField1, phaseField2, maxDistance=0.1):
+def findAllBranchingPoints(phaseField1, phaseField2, maxDistance=0.1, branchingPointFilter=3):
     result = []
     isoLines = [getIsolines(p, level=0.5, refinementFactor=4) for p in (phaseField1, phaseField2)]
     for path1, path2 in itertools.product(*isoLines):
-        bbs = findBranchingPoint(path1, path2, maxDistance)
+        bbs = findBranchingPoint(path1, path2, maxDistance, branchingPointFilter)
         result += list(bbs)
     return np.array(result)
 
@@ -114,7 +114,7 @@ def getAngle(pMid, p1, p2):
     return result
 
 
-def getTriplePointInfos(phi0, phi1, phi2, branchingDistance=0.5):
+def getTriplePointInfos(phi0, phi1, phi2, branchingDistance=0.5, branchingPointFilter=3):
     """
 
     :param branchingDistance: where the 1/2 contour lines  move apart farther than this value, the
@@ -126,9 +126,11 @@ def getTriplePointInfos(phi0, phi1, phi2, branchingDistance=0.5):
     # the angle at the triple points is measured with contour lines of level 1/2 at "branching points"
     # i.e. at points where the lines move away from each other
 
-    bb1 = findAllBranchingPoints(phi0, phi1, branchingDistance)
-    bb2 = findAllBranchingPoints(phi0, phi2, branchingDistance)
+    bb1 = findAllBranchingPoints(phi0, phi1, branchingDistance, branchingPointFilter)
+    bb2 = findAllBranchingPoints(phi0, phi2, branchingDistance, branchingPointFilter)
     ip = findAllIntersectionPoints(phi0, phi1)
     return groupPoints(ip, np.vstack([bb1, bb2]))
 
 
+def getAnglesOfPhase(phi0, phi1, phi2, branchingDistance=0.5, branchingPointFilter=3):
+    return [getAngle(*r) for r in getTriplePointInfos(phi0, phi1, phi2, branchingDistance, branchingPointFilter)]

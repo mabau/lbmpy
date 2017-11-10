@@ -1,7 +1,7 @@
 from lbmpy.plot2d import *
 
 
-def drawAngles(ax, groupedPoints):
+def _drawAngles(ax, groupedPoints):
     from matplotlib.lines import Line2D
     from matplotlib.text import Annotation
     from lbmpy.phasefield.postprocessing import getAngle
@@ -32,25 +32,33 @@ def drawAngles(ax, groupedPoints):
     ax.add_line(lines)
 
     angle = getAngle(*groupedPoints)
-    text = Annotation('%.1f°' % (angle,), (textPos[1], textPos[0]), axes=ax, fontsize=15, ha=ha, va=va)
-    ax.add_artist(text)
+    annotation = Annotation('%.1f°' % (angle,), (textPos[1], textPos[0]), axes=ax, fontsize=15, ha=ha, va=va)
+    ax.add_artist(annotation)
 
 
-def plotAngles(phi0, phi1, phi2, branchingDistance=0.5, onlyFirst=True):
+def phaseIndices(phi, **kwargs):
+    singlePhaseArrays = [phi[..., i] for i in range(phi.shape[-1])]
+    lastPhase = 1 - sum(singlePhaseArrays)
+    singlePhaseArrays.append(lastPhase)
+    idxArray = np.array(singlePhaseArrays).argmax(axis=0)
+    return scalarField(idxArray, **kwargs)
+
+
+def angles(phi0, phi1, phi2, branchingDistance=0.5, branchingPointFilter=3, onlyFirst=True):
     from lbmpy.phasefield.postprocessing import getTriplePointInfos
 
     levels = [0.5, ]
     scalarFieldContour(phi0, levels=levels)
     scalarFieldContour(phi1, levels=levels)
-    scalarFieldContour(phi2, levels=levels);
+    scalarFieldContour(phi2, levels=levels)
 
     if onlyFirst:
-        angleInfo = getTriplePointInfos(phi0, phi1, phi2, branchingDistance)
+        angleInfo = getTriplePointInfos(phi0, phi1, phi2, branchingDistance, branchingPointFilter)
     else:
-        angleInfo = getTriplePointInfos(phi0, phi1, phi2, branchingDistance) +\
-                    getTriplePointInfos(phi1, phi0, phi2, branchingDistance) +\
-                    getTriplePointInfos(phi2, phi1, phi0, branchingDistance)
+        angleInfo = getTriplePointInfos(phi0, phi1, phi2, branchingDistance, branchingPointFilter) +\
+                    getTriplePointInfos(phi1, phi0, phi2, branchingDistance, branchingPointFilter) +\
+                    getTriplePointInfos(phi2, phi1, phi0, branchingDistance, branchingPointFilter)
 
     for points in angleInfo:
-        drawAngles(gca(), points)
+        _drawAngles(gca(), points)
 

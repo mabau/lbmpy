@@ -85,11 +85,21 @@ class PhasefieldScenario(object):
         self.lbSweepHydro = createLatticeBoltzmannFunction(force=[forceField(i) for i in range(D)],
                                                            output={'velocity': velField},
                                                            optimizationParams=optimizationParams, **kwargs)
-        self.lbSweepsCH = [createCahnHilliardLbFunction(stencil, mobilityRelaxationRates[i],
-                                                        velField, muField(i), phiField(i), optimizationParams, gamma)
-                           for i in range(numPhases-1)]
 
-        self.lbSweeps = [self.lbSweepHydro] + self.lbSweepsCH
+        useFdForCahnHilliard = True
+        if useFdForCahnHilliard:
+            dt = 0.01
+            mobility = 1
+            from lbmpy.phasefield.analytical import cahnHilliardFdKernel
+            self.sweepsCH = [cahnHilliardFdKernel(i, phiField, muField, velField, mobility,
+                                                  dx, dt, optimizationParams['target'])
+                             for i in range(numPhases-1)]
+        else:
+            self.sweepsCH = [createCahnHilliardLbFunction(stencil, mobilityRelaxationRates[i],
+                                                          velField, muField(i), phiField(i), optimizationParams, gamma)
+                             for i in range(numPhases-1)]
+
+        self.lbSweeps = [self.lbSweepHydro] + self.sweepsCH
 
         self._pdfPeriodicityHandler = PeriodicityHandling(self._pdfArrays[0][0].shape, (True, True, True),
                                                           optimizationParams['target'])

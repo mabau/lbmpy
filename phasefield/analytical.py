@@ -177,3 +177,17 @@ def createForceUpdateEquations(numPhases, forceField, phiField, muField, dx=1):
         forceSweepEqs.append(sp.Eq(forceField(d), rhs))
     return forceSweepEqs
 
+
+def cahnHilliardFdKernel(phaseIdx, phi, mu, velocity, mobility, dx, dt, target='cpu'):
+    from pystencils.finitedifferences import transient, advection, diffusion, Discretization2ndOrder
+    cahnHilliard = transient(phi, phaseIdx) + advection(phi, velocity, phaseIdx) - diffusion(mu, mobility, phaseIdx)
+    discretizedEq = Discretization2ndOrder(dx, dt)(cahnHilliard)
+    updateRule = [sp.Eq(phi.newFieldWithDifferentName('dst')(phaseIdx),
+                        discretizedEq)]
+
+    if target == 'cpu':
+        from pystencils.cpu import createKernel, makePythonFunction
+        return makePythonFunction(createKernel(updateRule))
+    elif target == 'gpu':
+        from pystencils.gpucuda import createCUDAKernel, makePythonFunction
+        return makePythonFunction(createCUDAKernel(updateRule))
