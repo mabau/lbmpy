@@ -7,15 +7,17 @@ def plotBoundaryHandling(boundaryHandling, indexExpr=None, boundaryNameToColor=N
     Shows boundary cells
 
     :param boundaryHandling: instance of :class:`lbmpy.boundaries.BoundaryHandling`
+    :param indexExpr: for 3D boundary handling a slice expression has to be passed here to define the plane that
+                      should be plotted
     :param boundaryNameToColor: optional dictionary mapping boundary names to colors
+    :param legend: if True legend for color->boundary name is added
     """
-    import matplotlib
     import matplotlib.pyplot as plt
 
     boundaryHandling.prepare()
 
     if len(boundaryHandling.flagField.shape) != 2 and indexExpr is None:
-        raise ValueError("To plot 3D boundary handlings a slice has to be passed")
+        raise ValueError("To plot a 3D boundary handling a slice has to be passed")
 
     if boundaryNameToColor:
         fixedColors = boundaryNameToColor
@@ -29,12 +31,12 @@ def plotBoundaryHandling(boundaryHandling, indexExpr=None, boundaryNameToColor=N
 
     boundaryNames = []
     flagValues = []
-    for name, flag in sorted(boundaryHandling.getBoundaryNameToFlagDict().items(), key=lambda l: l[1]):
+    for name, flagName in sorted(boundaryHandling.getBoundaryNameToFlagDict().items(), key=lambda l: l[1]):
         boundaryNames.append(name)
-        flagValues.append(flag)
-    defaultCycler = matplotlib.rcParams['axes.prop_cycle']
+        flagValues.append(flagName)
+    defaultCycle = matplotlib.rcParams['axes.prop_cycle']
     colorValues = [fixedColors[name] if name in fixedColors else cycle['color']
-                   for cycle, name in zip(defaultCycler, boundaryNames)]
+                   for cycle, name in zip(defaultCycle, boundaryNames)]
 
     cmap = matplotlib.colors.ListedColormap(colorValues)
     bounds = np.array(flagValues, dtype=float) - 0.5
