@@ -94,6 +94,10 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         D = sp.eye(len(self.relaxationRates))
         return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations, False, False, False, False)
 
+    def getEquilibriumTerms(self):
+        equilibrium = self.getEquilibrium()
+        return sp.Matrix([eq.rhs for eq in equilibrium.mainEquations])
+
     def getCollisionRule(self, conservedQuantityEquations=None, momentSubexpressions=False,
                          preCollisionSubexpressions=True, postCollisionSubexpressions=False):
         return self._getCollisionRuleWithRelaxationMatrix(sp.diag(*self.relaxationRates), conservedQuantityEquations,
