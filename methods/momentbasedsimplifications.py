@@ -35,6 +35,8 @@ def factorRelaxationRates(lbmCollisionEqs):
     """
     sh = lbmCollisionEqs.simplificationHints
     assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rates"
+    if len(sh['relaxationRates']) > 12:  # heuristics - for too many relaxation rates this simplification makes no sense
+        return lbmCollisionEqs
 
     relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)
 
@@ -193,7 +195,7 @@ def cseInOpposingDirections(lbmCollisionEqs):
                                                        order='None', optimizations=[])
                 substitutions += [sp.Eq(f[0], f[1]) for f in foundSubexpressions]
 
-                updateRules = [sp.Eq(ur.lhs, ur.rhs.subs(relaxationRate*oldTerm, newCoefficient*newTerm))
+                updateRules = [sp.Eq(ur.lhs, ur.rhs.subs(relaxationRate * oldTerm, newCoefficient * newTerm))
                                for ur, newTerm, oldTerm in zip(updateRules, newTerms, terms)]
 
         result += updateRules
@@ -220,7 +222,7 @@ def __getCommonQuadraticAndConstantTerms(lbmCollisionEqs):
 
     pdfSymbols = lbmCollisionEqs.freeSymbols - relaxationRates
 
-    center = tuple([0]*dim)
+    center = tuple([0] * dim)
     t = lbmCollisionEqs.mainEquations[stencil.index(center)].rhs
     for rp in relaxationRates:
         t = t.subs(rp, 1)
