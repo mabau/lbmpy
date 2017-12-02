@@ -313,7 +313,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         else:
             splitGroups = ()
         res = createKernel(updateRule.allEquations, splitGroups=splitGroups,
-                           typeForSymbol='double' if optParams['doublePrecision'] else 'float',
+                           typeForSymbol='double' if optParams['doublePrecision'] else 'float32',
                            ghostLayers=1)
     elif optParams['target'] == 'gpu':
         from pystencils.gpucuda import createCUDAKernel
@@ -385,13 +385,14 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
         else:
             collisionRule = addEntropyCondition(collisionRule, omegaOutputField=params['omegaOutputField'])
 
+    fieldDtype = 'float64' if optimizationParams['doublePrecision'] else 'float32'
     if optParams['fieldSize']:
         fieldSize = [s + 2 for s in optParams['fieldSize']] + [len(stencil)]
         srcField = Field.createFixedSize(params['fieldName'], fieldSize, indexDimensions=1,
-                                         layout=optParams['fieldLayout'])
+                                         layout=optParams['fieldLayout'], dtype=fieldDtype)
     else:
         srcField = Field.createGeneric(params['fieldName'], spatialDimensions=lbMethod.dim, indexDimensions=1,
-                                       layout=optParams['fieldLayout'])
+                                       layout=optParams['fieldLayout'], dtype=fieldDtype)
 
     dstField = srcField.newFieldWithDifferentName(params['secondFieldName'])
 
