@@ -232,9 +232,3 @@ class NeumannByCopy(Boundary):
     def __eq__(self, other):
         return type(other) == NeumannByCopy
 
-
-if __name__ == '__main__':
-    from lbmpy.scenarios import *
-    sc = createForceDrivenChannel(domainSize=[60, 30])
-    sc.boundaryHandling.setBoundary(FixedDensity(1.01), makeSlice[0.2:0.25, :])
-    sc.boundaryHandling.prepare()

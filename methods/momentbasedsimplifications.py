@@ -35,7 +35,7 @@ def factorRelaxationRates(lbmCollisionEqs):
     """
     sh = lbmCollisionEqs.simplificationHints
     assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rates"
-    if len(sh['relaxationRates']) > 12:  # heuristics - for too many relaxation rates this simplification makes no sense
+    if len(sh['relaxationRates']) > 19:  # heuristics - for too many relaxation rates this simplification makes no sense
         return lbmCollisionEqs
 
     relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)

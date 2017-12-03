@@ -385,7 +385,11 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
         else:
             collisionRule = addEntropyCondition(collisionRule, omegaOutputField=params['omegaOutputField'])
 
-    fieldDtype = 'float64' if optimizationParams['doublePrecision'] else 'float32'
+    if 'doublePrecision' in optimizationParams:
+        fieldDtype = 'float64' if optimizationParams['doublePrecision'] else 'float32'
+    else:
+        fieldDtype = 'float64'
+
     if optParams['fieldSize']:
         fieldSize = [s + 2 for s in optParams['fieldSize']] + [len(stencil)]
         srcField = Field.createFixedSize(params['fieldName'], fieldSize, indexDimensions=1,
