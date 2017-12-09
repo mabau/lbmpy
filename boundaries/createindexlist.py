@@ -13,9 +13,20 @@ except Exception:
     createBoundaryIndexList3D = None
 
 
+boundaryIndexArrayCoordinateNames = ["x", "y", "z"]
+directionMemberName = "dir"
+
+
+def numpyDataTypeForBoundaryObject(boundaryObject, dim):
+    coordinateNames = boundaryIndexArrayCoordinateNames[:dim]
+    return np.dtype([(name, np.int32) for name in coordinateNames] +
+                    [(directionMemberName, np.int32)] +
+                    [(i[0], i[1].numpyDtype) for i in boundaryObject.additionalData], align=True)
+
+
 def _createBoundaryIndexListPython(flagFieldArr, nrOfGhostLayers, boundaryMask, fluidMask, stencil):
-    coordinateNames = ("x", "y", "z")[:len(flagFieldArr.shape)]
-    indexArrDtype = np.dtype([(name, np.int32) for name in coordinateNames] + [('dir', np.int32)])
+    coordinateNames = boundaryIndexArrayCoordinateNames[:len(flagFieldArr.shape)]
+    indexArrDtype = np.dtype([(name, np.int32) for name in coordinateNames] + [(directionMemberName, np.int32)])
 
     result = []
     gl = nrOfGhostLayers
@@ -33,8 +44,8 @@ def _createBoundaryIndexListPython(flagFieldArr, nrOfGhostLayers, boundaryMask, 
 
 def createBoundaryIndexList(flagField, stencil, boundaryMask, fluidMask, nrOfGhostLayers=1):
     dim = len(flagField.shape)
-    coordinateNames = ("x", "y", "z")[:dim]
-    indexArrDtype = np.dtype([(name, np.int32) for name in coordinateNames] + [('dir', np.int32)])
+    coordinateNames = boundaryIndexArrayCoordinateNames[:dim]
+    indexArrDtype = np.dtype([(name, np.int32) for name in coordinateNames] + [(directionMemberName, np.int32)])
 
     if cythonFuncsAvailable:
         stencil = np.array(stencil, dtype=np.int32)

@@ -3,7 +3,8 @@ import numpy as np
 from pystencils.field import Field
 from pystencils.slicing import normalizeSlice, shiftSlice
 from lbmpy.boundaries.boundary_kernel import generateIndexBoundaryKernel
-from lbmpy.boundaries.createindexlist import createBoundaryIndexList
+from lbmpy.boundaries.createindexlist import createBoundaryIndexList, boundaryIndexArrayCoordinateNames,\
+    numpyDataTypeForBoundaryObject
 from pystencils.cache import memorycache
 
 
@@ -177,10 +178,8 @@ class GenericBoundaryHandling(object):
                 continue
 
             if boundaryObject.additionalData:
-                coordinateNames = ["x", "y", "z"][:dim]
-                indexArrDtype = np.dtype([(name, np.int32) for name in coordinateNames] +
-                                         [('dir', np.int32)] +
-                                         [(i[0], i[1].numpyDtype) for i in boundaryObject.additionalData], align=True)
+                coordinateNames = boundaryIndexArrayCoordinateNames[:dim]
+                indexArrDtype = numpyDataTypeForBoundaryObject(boundaryObject, dim)
                 extendedIdxField = np.empty(len(idxArray), dtype=indexArrDtype)
                 for prop in coordinateNames + ['dir']:
                     extendedIdxField[prop] = idxArray[prop]

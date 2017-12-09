@@ -1,5 +1,5 @@
 import sympy as sp
-
+import numpy as np
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from pystencils.astnodes import SympyAssignment
 from pystencils.sympyextensions import getSymmetricPart
@@ -10,6 +10,9 @@ from pystencils.data_types import createTypeFromString
 
 class Boundary(object):
     """Base class all boundaries should derive from"""
+
+    def __init__(self, name=None):
+        self._name = name
 
     def __call__(self, pdfField, directionSymbol, lbMethod, indexField):
         """
@@ -47,14 +50,21 @@ class Boundary(object):
 
     @property
     def name(self):
-        return type(self).__name__
+        if self._name:
+            return self._name
+        else:
+            return type(self).__name__
+
+    @name.setter
+    def name(self, newValue):
+        self._name = newValue
 
 
 class NoSlip(Boundary):
 
     def __init__(self, name=None):
         """Set an optional name here, to mark boundaries, for example for force evaluations"""
-        self._name = name
+        super(NoSlip, self).__init__(name)
 
     """No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle"""
     def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
@@ -70,13 +80,6 @@ class NoSlip(Boundary):
         if not isinstance(other, NoSlip):
             return False
         return self.name == other.name
-
-    @property
-    def name(self):
-        if self._name:
-            return self._name
-        else:
-            return type(self).__name__
 
 
 class NoSlipFullWay(Boundary):
@@ -110,7 +113,7 @@ class UBB(Boundary):
 
     """Velocity bounce back boundary condition, enforcing specified velocity at obstacle"""
 
-    def __init__(self, velocity, adaptVelocityToForce=False, dim=None):
+    def __init__(self, velocity, adaptVelocityToForce=False, dim=None, name=None):
         """
         
         :param velocity: can either be a constant, an access into a field, or a callback function.
@@ -118,6 +121,7 @@ class UBB(Boundary):
                          and 'velocity' which has to be set to the desired velocity of the corresponding link
         :param adaptVelocityToForce:
         """
+        super(UBB, self).__init__(name)
         self._velocity = velocity
         self._adaptVelocityToForce = adaptVelocityToForce
         if callable(self._velocity) and not dim:
@@ -180,7 +184,8 @@ class UBB(Boundary):
 
 class FixedDensity(Boundary):
 
-    def __init__(self, density):
+    def __init__(self, density, name=None):
+        super(FixedDensity, self).__init__(name)
         self._density = density
 
     def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):

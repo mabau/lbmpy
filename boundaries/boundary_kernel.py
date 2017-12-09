@@ -1,6 +1,8 @@
 import sympy as sp
+import numpy as np
 from pystencils.backends.cbackend import CustomCppCode
 from pystencils import TypedSymbol, Field
+from pystencils.data_types import castFunc, createType
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
 WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
@@ -10,7 +12,7 @@ WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
 
 
 def offsetSymbols(dim):
-    return [TypedSymbol("c_%d" % (d,), "int") for d in range(dim)]
+    return [TypedSymbol("c_%d" % (d,), createType(np.int64)) for d in range(dim)]
 
 
 def offsetFromDir(dirIdx, dim):
@@ -36,7 +38,7 @@ class LbmMethodInfo(CustomCppCode):
         code = "\n"
         for i in range(lbMethod.dim):
             offsetStr = ", ".join([str(d[i]) for d in stencil])
-            code += "const int %s [] = { %s };\n" % (offsetSym[i].name, offsetStr)
+            code += "const int64_t %s [] = { %s };\n" % (offsetSym[i].name, offsetStr)
 
         invDirs = []
         for direction in stencil:
@@ -52,9 +54,15 @@ class LbmMethodInfo(CustomCppCode):
 def generateIndexBoundaryKernel(pdfField, indexArr, lbMethod, boundaryFunctor, target='cpu',
                                 createInitializationKernel=False):
     indexField = Field.createFromNumpyArray("indexField", indexArr)
+    return generateIndexBoundaryKernelGeneric(pdfField, indexField, indexArr.dtype, lbMethod, boundaryFunctor, target,
+                                              createInitializationKernel)
+
+
+def generateIndexBoundaryKernelGeneric(pdfField, indexField, indexArrDtype, lbMethod, boundaryFunctor, target='cpu',
+                                       createInitializationKernel=False):
 
     elements = [LbmMethodInfo(lbMethod)]
-    dirSymbol = TypedSymbol("dir", indexArr.dtype.fields['dir'][0])
+    dirSymbol = TypedSymbol("dir", indexArrDtype.fields['dir'][0])
     boundaryEqList = [sp.Eq(dirSymbol, indexField[0]('dir'))]
     if createInitializationKernel:
         boundaryEqList += boundaryFunctor.additionalDataInitKernelEquations(pdfField=pdfField, directionSymbol=dirSymbol,
@@ -70,4 +78,3 @@ def generateIndexBoundaryKernel(pdfField, indexArr, lbMethod, boundaryFunctor, t
     elif target == 'gpu':
         from pystencils.gpucuda import createdIndexedCUDAKernel
         return createdIndexedCUDAKernel(elements, [indexField])
-
