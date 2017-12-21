@@ -146,9 +146,7 @@ For example, to modify the AST one can run::
 """
 import sympy as sp
 from copy import copy
-from functools import partial
-import json
-from pystencils.cache import diskcache, SympyJSONDecoder, SympyJSONEncoder
+from pystencils.cache import diskcache
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
     createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
@@ -161,6 +159,7 @@ from lbmpy.updatekernels import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAc
     createLBMKernel
 from pystencils.equationcollection.equationcollection import EquationCollection
 from pystencils.field import getLayoutOfArray, Field
+from pystencils import createKernel
 
 
 def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
@@ -276,22 +275,7 @@ def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
         params['optimizationParams'] = optParams
         ast = createLatticeBoltzmannAst(**params)
 
-    if optParams['target'] == 'cpu':
-        if optParams['vectorization']:
-            import pystencils.backends.simd_instruction_sets as vec
-            from pystencils.vectorization import vectorize
-            vecParams = optParams['vectorization']
-            vec.selectedInstructionSet = vec.x86VectorInstructionSet(instructionSet=vecParams[0], dataType=vecParams[1])
-            vectorize(ast)
-
-        from pystencils.cpu import makePythonFunction as makePythonCpuFunction, addOpenMP
-        addOpenMP(ast, numThreads=optParams['openMP'])
-        res = makePythonCpuFunction(ast)
-    elif optParams['target'] == 'gpu':
-        from pystencils.gpucuda import makePythonFunction as makePythonGpuFunction
-        res = makePythonGpuFunction(ast)
-    else:
-        return ValueError("'target' has to be either 'cpu' or 'gpu'")
+    res = ast.compile()
 
     res.method = ast.method
     res.updateRule = ast.updateRule
@@ -306,36 +290,10 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         params['optimizationParams'] = optimizationParams
         updateRule = createLatticeBoltzmannUpdateRule(**params)
 
-    if optParams['target'] == 'cpu':
-        from pystencils.cpu import createKernel
-        if 'splitGroups' in updateRule.simplificationHints:
-            splitGroups = updateRule.simplificationHints['splitGroups']
-        else:
-            splitGroups = ()
-        res = createKernel(updateRule.allEquations, splitGroups=splitGroups,
-                           typeForSymbol='double' if optParams['doublePrecision'] else 'float32',
-                           ghostLayers=1)
-    elif optParams['target'] == 'gpu':
-        from pystencils.gpucuda import createCUDAKernel
-        from pystencils.gpucuda.indexing import LineIndexing, BlockIndexing
-        assert optParams['gpuIndexing'] in ('line', 'block')
-        indexingCreator = LineIndexing if optParams['gpuIndexing'] == 'line' else BlockIndexing
-        if optParams['gpuIndexingParams']:
-            indexingCreator = partial(indexingCreator, **optParams['gpuIndexingParams'])
-        res = createCUDAKernel(updateRule.allEquations,
-                               typeForSymbol='double' if optParams['doublePrecision'] else 'float',
-                               indexingCreator=indexingCreator, ghostLayers=1)
-    elif optParams['target'] == 'llvm':
-        from pystencils.llvm import createKernel
-        if 'splitGroups' in updateRule.simplificationHints:
-            splitGroups = updateRule.simplificationHints['splitGroups']
-        else:
-            splitGroups = ()
-        res = createKernel(updateRule.allEquations, splitGroups=splitGroups,
-                           typeForSymbol='double' if optParams['doublePrecision'] else 'float',
-                           ghostLayers=1)
-    else:
-        return ValueError("'target' has to be either 'cpu' or 'gpu'")
+    dtype = 'double' if optParams['doublePrecision'] else 'float32'
+    res = createKernel(updateRule, target=optParams['target'], dataType=dtype,
+                       cpuOpenMP=optParams['openMP'], cpuVectorizeInfo=optParams['vectorization'],
+                       gpuIndexing=optParams['gpuIndexing'], gpuIndexingParams=optParams['gpuIndexingParams'])
 
     res.method = updateRule.method
     res.updateRule = updateRule

@@ -5,7 +5,7 @@ from pystencils.astnodes import SympyAssignment
 from pystencils.sympyextensions import getSymmetricPart
 from pystencils import Field
 from lbmpy.boundaries.boundary_kernel import offsetFromDir, weightOfDirection, invDir
-from pystencils.data_types import createTypeFromString
+from pystencils.data_types import createType
 
 
 class Boundary(object):
@@ -87,7 +87,7 @@ class NoSlipFullWay(Boundary):
 
     @property
     def additionalData(self):
-        return [('lastValue', createTypeFromString("double"))]
+        return [('lastValue', createType("double"))]
 
     @property
     def additionalDataInitKernelEquations(self):
@@ -133,7 +133,7 @@ class UBB(Boundary):
     @property
     def additionalData(self):
         if callable(self._velocity):
-            return [('vel_%d' % (i,), createTypeFromString("double")) for i in range(self.dim)]
+            return [('vel_%d' % (i,), createType("double")) for i in range(self.dim)]
         else:
             return []
 

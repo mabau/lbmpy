@@ -89,6 +89,14 @@ import sympy as sp
 from lbmpy.methods.relaxationrates import getShearRelaxationRate
 
 
+class ScalarSource(object):
+    def __init__(self, source):
+        self._source = source
+
+    def __call__(self, lbMethod, **kwargs):
+        return [w_i * self._source for w_i in lbMethod.weights]
+
+
 class Simple(object):
     r"""
     A simple force model which introduces the following additional force term in the
