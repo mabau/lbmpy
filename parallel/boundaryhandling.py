@@ -1,7 +1,7 @@
 import numpy as np
 import waLBerla as wlb
 from lbmpy.boundaries.handlinginterface import GenericBoundaryHandling, FlagFieldInterface
-from lbmpy.parallel.blockiteration import slicedBlockIteration
+from pystencils.parallel.blockiteration import slicedBlockIteration
 
 
 class BoundaryHandling(object):
@@ -61,8 +61,8 @@ class BoundaryHandling(object):
         for block in self._blocks:
             block[self._boundaryId].reserveFlag(boundaryObject)
 
-        for block, localSlice in slicedBlockIteration(self._blocks, indexExpr, gl, sliceNormalizationGhostLayers):
-            block[self._boundaryId].setBoundary(boundaryObject, indexExpr=localSlice, maskCallback=maskCallback)
+        for iter in slicedBlockIteration(self._blocks, indexExpr, gl, sliceNormalizationGhostLayers):
+            block[self._boundaryId].setBoundary(boundaryObject, indexExpr=iter.localSlice, maskCallback=maskCallback)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

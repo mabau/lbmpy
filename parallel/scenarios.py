@@ -5,7 +5,7 @@ from lbmpy.creationfunctions import createLatticeBoltzmannFunction, updateWithDe
     switchToSymbolicRelaxationRatesForEntropicMethods
 from lbmpy.macroscopic_value_kernels import compileMacroscopicValuesGetter, compileMacroscopicValuesSetter
 from lbmpy.parallel.boundaryhandling import BoundaryHandling
-from lbmpy.parallel.blockiteration import slicedBlockIteration
+from pystencils.parallel.blockiteration import slicedBlockIteration
 from lbmpy.boundaries import NoSlip, UBB
 from pystencils.slicing import sliceFromDirection
 
@@ -170,13 +170,13 @@ class Scenario(object):
         else:
             raise ValueError("density has to be a number or a callback function")
 
-        for block, (x, y, z), localSlice in slicedBlockIteration(self.blocks, indexExpr, 1, 1):
+        for it in slicedBlockIteration(self.blocks, indexExpr, 1, 1):
             if density:
-                densityArr = wlb.field.toArray(block[self.densityFieldId], withGhostLayers=True)
-                densityArr[localSlice] = densityCallback(x, y, z) if densityCallback else densityValue
+                densityArr = wlb.field.toArray(it.block[self.densityFieldId], withGhostLayers=True)
+                densityArr[it.localSlice] = densityCallback(*it.midpointArrays) if densityCallback else densityValue
             if velocity:
-                velArr = wlb.field.toArray(block[self.velocityFieldId], withGhostLayers=True)
-                velArr[localSlice, :] = velocityCallback(x, y, z) if velocityCallback else velocityValue
+                velArr = wlb.field.toArray(it.block[self.velocityFieldId], withGhostLayers=True)
+                velArr[it.localSlice, :] = velocityCallback(*it.midpointArrays) if velocityCallback else velocityValue
 
         self._setMacroscpicValues()
 
