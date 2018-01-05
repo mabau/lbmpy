@@ -49,7 +49,7 @@ def discreteLaplace(field, index, dx):
             count += 1
             result += field.neighbor(d, offset)(index)
 
-    result -= count * field.center()(index)
+    result -= count * field.center(index)
     result /= dx ** 2
     return result
 
