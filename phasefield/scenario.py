@@ -86,7 +86,7 @@ class PhasefieldScenario(object):
                                                            output={'velocity': velField},
                                                            optimizationParams=optimizationParams, **kwargs)
 
-        useFdForCahnHilliard = True
+        useFdForCahnHilliard = False
         if useFdForCahnHilliard:
             dt = 0.01
             mobility = 1
