@@ -146,7 +146,7 @@ For example, to modify the AST one can run::
 """
 import sympy as sp
 from copy import copy
-from pystencils.cache import diskcache
+from pystencils.cache import diskcacheNoFallback
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
     createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
@@ -300,7 +300,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
     return res
 
 
-@diskcache
+@diskcacheNoFallback
 def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwargs):
     params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
 
