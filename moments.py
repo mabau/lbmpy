@@ -195,18 +195,20 @@ def polynomialToExponentRepresentation(polynomial, dim=3):
     x, y, z = MOMENT_SYMBOLS
     polynomial = polynomial.expand()
     coeffExpTupleRepresentation = []
-    for expr, coefficient in polynomial.as_coefficients_dict().items():
+
+    summands = [polynomial] if polynomial.func != sp.Add else polynomial.args
+    for expr in summands:
         if len(expr.atoms(sp.Symbol) - set(MOMENT_SYMBOLS)) > 0:
             raise ValueError("Invalid moment polynomial: " + str(expr))
-        x_exp, y_exp, z_exp = sp.Wild('xexp'), sp.Wild('yexp'), sp.Wild('zc')
-        matchRes = expr.match(x**x_exp * y**y_exp * z**z_exp)
+        c, x_exp, y_exp, z_exp = sp.Wild('c'), sp.Wild('xexp'), sp.Wild('yexp'), sp.Wild('zc')
+        matchRes = expr.match(c * x**x_exp * y**y_exp * z**z_exp)
         assert matchRes[x_exp].is_integer and matchRes[y_exp].is_integer and matchRes[z_exp].is_integer
         expTuple = (int(matchRes[x_exp]), int(matchRes[y_exp]), int(matchRes[z_exp]),)
         if dim < 3:
             for i in range(dim, 3):
                 assert expTuple[i] == 0, "Used symbols in polynomial are not representable in that dimension"
             expTuple = expTuple[:dim]
-        coeffExpTupleRepresentation.append((coefficient, expTuple))
+        coeffExpTupleRepresentation.append((matchRes[c], expTuple))
     return coeffExpTupleRepresentation
 
 
