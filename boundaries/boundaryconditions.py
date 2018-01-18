@@ -39,13 +39,8 @@ class Boundary(object):
 
     @property
     def additionalDataInitCallback(self):
-        """Return a callback function called with (x, y, [z]), and returning a dict of data-name to data for each
-         element that should be initialized"""
-        return None
-
-    @property
-    def additionalDataInitKernelEquations(self):
-        """Should return callback that returns kernel equations for the boundary data initialization kernel"""
+        """Return a callback function called with a boundary data setter object and returning a dict of
+        data-name to data for each element that should be initialized"""
         return None
 
     @property
@@ -82,31 +77,33 @@ class NoSlip(Boundary):
         return self.name == other.name
 
 
-class NoSlipFullWay(Boundary):
-    """Full-way bounce back"""
-
-    @property
-    def additionalData(self):
-        return [('lastValue', createType("double"))]
-
-    @property
-    def additionalDataInitKernelEquations(self):
-        def kernelEqGetter(pdfField, directionSymbol, indexField, **kwargs):
-            return [sp.Eq(indexField('lastValue'), pdfField(directionSymbol))]
-        return kernelEqGetter
-
-    def __call__(self, pdfField, directionSymbol, lbMethod, indexField, **kwargs):
-        neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
-        inverseDir = invDir(directionSymbol)
-        return [sp.Eq(pdfField[neighbor](inverseDir), indexField('lastValue')),
-                sp.Eq(indexField('lastValue'), pdfField(directionSymbol))]
-
-    def __hash__(self):
-        # All boundaries of these class behave equal -> should also be equal
-        return hash("NoSlipFullWay")
-
-    def __eq__(self, other):
-        return type(other) == NoSlipFullWay
+#class NoSlipFullWay(Boundary):
+#    """Full-way bounce back"""
+#
+#    @property
+#    def additionalData(self):
+#        return [('lastValue', createType("double"))]
+#
+#    @property
+#    def additionalDataInitKernelEquations(self):
+#        # TODO this function is not longer availabel
+#        # formulate as additionalDataInitCallback
+#        def kernelEqGetter(pdfField, directionSymbol, indexField, **kwargs):
+#            return [sp.Eq(indexField('lastValue'), pdfField(directionSymbol))]
+#        return kernelEqGetter
+#
+#    def __call__(self, pdfField, directionSymbol, lbMethod, indexField, **kwargs):
+#        neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
+#        inverseDir = invDir(directionSymbol)
+#        return [sp.Eq(pdfField[neighbor](inverseDir), indexField('lastValue')),
+#                sp.Eq(indexField('lastValue'), pdfField(directionSymbol))]
+#
+#    def __hash__(self):
+#        # All boundaries of these class behave equal -> should also be equal
+#        return hash("NoSlipFullWay")
+#
+#    def __eq__(self, other):
+#        return type(other) == NoSlipFullWay
 
 
 class UBB(Boundary):

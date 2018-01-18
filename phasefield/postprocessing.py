@@ -2,10 +2,11 @@ import numpy as np
 from matplotlib.path import Path
 import itertools
 import scipy
+import scipy.spatial
 import warnings
 
 
-def getIsolines(dataset, level=0.5, refinementFactor=1):
+def getIsolines(dataset, level=0.5, refinementFactor=4):
     from matplotlib._contour import QuadContourGenerator
     indexArrays = np.meshgrid(*[np.arange(s) for s in dataset.shape])
     gen = QuadContourGenerator(*indexArrays, dataset, None, True, 0)
@@ -43,7 +44,7 @@ def findBranchingPoint(pathVertices1, pathVertices2, maxDistance=0.5, branchingP
 
 def findAllBranchingPoints(phaseField1, phaseField2, maxDistance=0.1, branchingPointFilter=3):
     result = []
-    isoLines = [getIsolines(p, level=0.5, refinementFactor=4) for p in (phaseField1, phaseField2)]
+    isoLines = [getIsolines(p, level=0.5, refinementFactor=16) for p in (phaseField1, phaseField2)]
     for path1, path2 in itertools.product(*isoLines):
         bbs = findBranchingPoint(path1, path2, maxDistance, branchingPointFilter)
         result += list(bbs)

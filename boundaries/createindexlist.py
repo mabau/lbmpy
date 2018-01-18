@@ -60,3 +60,19 @@ def createBoundaryIndexList(flagField, stencil, boundaryMask, fluidMask, nrOfGho
         if flagField.size > 1e6:
             warnings.warn("Boundary setup may take very long! Consider installing cython to speed it up")
         return _createBoundaryIndexListPython(flagField, nrOfGhostLayers, boundaryMask, fluidMask, stencil)
+
+
+def createBoundaryIndexArray(flagField, stencil, boundaryMask, fluidMask, boundaryObject, nrOfGhostLayers=1):
+    idxArray = createBoundaryIndexList(flagField, stencil, boundaryMask, fluidMask, nrOfGhostLayers)
+    dim = len(flagField.shape)
+
+    if boundaryObject.additionalData:
+        coordinateNames = boundaryIndexArrayCoordinateNames[:dim]
+        indexArrDtype = numpyDataTypeForBoundaryObject(boundaryObject, dim)
+        extendedIdxField = np.empty(len(idxArray), dtype=indexArrDtype)
+        for prop in coordinateNames + ['dir']:
+            extendedIdxField[prop] = idxArray[prop]
+
+        idxArray = extendedIdxField
+
+    return idxArray

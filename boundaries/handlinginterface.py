@@ -223,7 +223,7 @@ class GenericBoundaryHandling(object):
         self._flagFieldInterface.getFlag(boundaryObject)
 
     def setBoundary(self, boundaryObject, indexExpr=None, maskCallback=None, includeGhostLayers=True):
-        """c
+        """
         Sets boundary using either a rectangular slice, a boolean mask or a combination of both
         
         :param boundaryObject: instance of a boundary object that should be set 

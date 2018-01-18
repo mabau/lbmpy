@@ -2,6 +2,7 @@ import sympy as sp
 import numpy as np
 from pystencils.backends.cbackend import CustomCppCode
 from pystencils import TypedSymbol, Field
+from pystencils.cpu import addOpenMP
 from pystencils.data_types import castFunc, createType
 
 INV_DIR_SYMBOL = TypedSymbol("invDir", "int")
@@ -51,30 +52,25 @@ class LbmMethodInfo(CustomCppCode):
         super(LbmMethodInfo, self).__init__(code, symbolsRead=set(), symbolsDefined=symbolsDefined)
 
 
-def generateIndexBoundaryKernel(pdfField, indexArr, lbMethod, boundaryFunctor, target='cpu',
-                                createInitializationKernel=False):
+def generateIndexBoundaryKernel(pdfField, indexArr, lbMethod, boundaryFunctor, target='cpu', openMP=True):
     indexField = Field.createFromNumpyArray("indexField", indexArr)
-    return generateIndexBoundaryKernelGeneric(pdfField, indexField, indexArr.dtype, lbMethod, boundaryFunctor, target,
-                                              createInitializationKernel)
+    return generateIndexBoundaryKernelGeneric(pdfField, indexField, lbMethod, boundaryFunctor, target, openMP)
 
 
-def generateIndexBoundaryKernelGeneric(pdfField, indexField, indexArrDtype, lbMethod, boundaryFunctor, target='cpu',
-                                       createInitializationKernel=False):
-
+def generateIndexBoundaryKernelGeneric(pdfField, indexField, lbMethod, boundaryFunctor, target='cpu', openMP=True):
     elements = [LbmMethodInfo(lbMethod)]
+    indexArrDtype = indexField.dtype.numpyDtype
     dirSymbol = TypedSymbol("dir", indexArrDtype.fields['dir'][0])
     boundaryEqList = [sp.Eq(dirSymbol, indexField[0]('dir'))]
-    if createInitializationKernel:
-        boundaryEqList += boundaryFunctor.additionalDataInitKernelEquations(pdfField=pdfField, directionSymbol=dirSymbol,
-                                                                            lbMethod=lbMethod, indexField=indexField)
-    else:
-        boundaryEqList += boundaryFunctor(pdfField=pdfField, directionSymbol=dirSymbol, lbMethod=lbMethod,
-                                          indexField=indexField)
+    boundaryEqList += boundaryFunctor(pdfField=pdfField, directionSymbol=dirSymbol, lbMethod=lbMethod,
+                                      indexField=indexField)
     elements += boundaryEqList
 
     if target == 'cpu':
         from pystencils.cpu import createIndexedKernel
-        return createIndexedKernel(elements, [indexField])
+        ast = createIndexedKernel(elements, [indexField])
+        addOpenMP(ast, numThreads=openMP)
+        return ast
     elif target == 'gpu':
         from pystencils.gpucuda import createdIndexedCUDAKernel
         return createdIndexedCUDAKernel(elements, [indexField])

@@ -197,6 +197,7 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
 
         'fieldSize': None,
         'fieldLayout': 'fzyx',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
+        'symbolicField': None,
 
         'target': 'cpu',
         'openMP': True,
@@ -348,7 +349,9 @@ def createLatticeBoltzmannUpdateRule(lbMethod=None, optimizationParams={}, **kwa
     else:
         fieldDtype = 'float64'
 
-    if optParams['fieldSize']:
+    if optParams['symbolicField'] is not None:
+        srcField = optParams['symbolicField']
+    elif optParams['fieldSize']:
         fieldSize = [s + 2 for s in optParams['fieldSize']] + [len(stencil)]
         srcField = Field.createFixedSize(params['fieldName'], fieldSize, indexDimensions=1,
                                          layout=optParams['fieldLayout'], dtype=fieldDtype)

@@ -48,9 +48,6 @@ def createBoundaryIndexList3D(object[IntegerType, ndim=3] flagField,
     boundaryIndexList = []
     numDirections = stencil.shape[0]
 
-    #for x in range(nrOfGhostLayers,xs-nrOfGhostLayers):
-    #    for y in range(nrOfGhostLayers,ys-nrOfGhostLayers):
-    #        for z in range(nrOfGhostLayers, zs-nrOfGhostLayers):
     for z in range(nrOfGhostLayers, zs-nrOfGhostLayers):
         for y in range(nrOfGhostLayers,ys-nrOfGhostLayers):
             for x in range(nrOfGhostLayers,xs-nrOfGhostLayers):

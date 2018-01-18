@@ -104,7 +104,10 @@ def freeEnergyFunctionalNPhases(numPhases, surfaceTensions=symmetricSymbolicSurf
     else:
         phi = orderParameters
 
-    tauFactor = sp.Rational(1, 2)  # originally this was 1 / sp.sqrt(2)
+    # Compared to handwritten notes we scale the interface width parameter here to obtain the correct
+    # equations for the interface profile and the surface tensions i.e. to pass tests
+    # test_analyticInterfaceSolution and test_surfaceTensionDerivation
+    interfaceWidth *= sp.sqrt(2)
 
     def f(c):
         return c ** 2 * (1 - c) ** 2
@@ -113,12 +116,12 @@ def freeEnergyFunctionalNPhases(numPhases, surfaceTensions=symmetricSymbolicSurf
         N = numPhases - 1
         if k == l:
             assert surfaceTensions(l, l) == 0
-        return 6 * tauFactor * interfaceWidth * (surfaceTensions(k, N) + surfaceTensions(l, N) - surfaceTensions(k, l))
+        return 3 / sp.sqrt(2) * interfaceWidth * (surfaceTensions(k, N) + surfaceTensions(l, N) - surfaceTensions(k, l))
 
     def bulkTerm(i, j):
         return surfaceTensions(i, j) / 2 * (f(phi[i]) + f(phi[j]) - f(phi[i] + phi[j]))
 
-    F_bulk = 3 * tauFactor / interfaceWidth * sum(bulkTerm(i, j) for i, j in multiSum(2, numPhases) if i != j)
+    F_bulk = 3 / sp.sqrt(2) / interfaceWidth * sum(bulkTerm(i, j) for i, j in multiSum(2, numPhases) if i != j)
     F_interface = sum(lambdaCoeff(i, j) / 2 * Diff(phi[i]) * Diff(phi[j]) for i, j in multiSum(2, numPhases))
 
     return F_bulk + F_interface
