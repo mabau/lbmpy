@@ -2,15 +2,7 @@ import numpy as np
 import itertools
 import warnings
 
-try:
-    import pyximport;
-    pyximport.install()
-    from lbmpy.boundaries.createindexlistcython import createBoundaryIndexList2D, createBoundaryIndexList3D
-    cythonFuncsAvailable = True
-except Exception:
-    cythonFuncsAvailable = False
-    createBoundaryIndexList2D = None
-    createBoundaryIndexList3D = None
+
 
 
 boundaryIndexArrayCoordinateNames = ["x", "y", "z"]
@@ -43,6 +35,16 @@ def _createBoundaryIndexListPython(flagFieldArr, nrOfGhostLayers, boundaryMask, 
 
 
 def createBoundaryIndexList(flagField, stencil, boundaryMask, fluidMask, nrOfGhostLayers=1):
+    try:
+        import pyximport;
+        pyximport.install()
+        from lbmpy.boundaries.createindexlistcython import createBoundaryIndexList2D, createBoundaryIndexList3D
+        cythonFuncsAvailable = True
+    except Exception:
+        cythonFuncsAvailable = False
+        createBoundaryIndexList2D = None
+        createBoundaryIndexList3D = None
+
     dim = len(flagField.shape)
     coordinateNames = boundaryIndexArrayCoordinateNames[:dim]
     indexArrDtype = np.dtype([(name, np.int32) for name in coordinateNames] + [(directionMemberName, np.int32)])

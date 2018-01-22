@@ -214,7 +214,7 @@ class BoundaryHandling:
             from pycuda import gpuarray
             gpuVersion = gpuVersion.boundaryObjectToIndexList
             cpuVersion = cpuVersion.boundaryObjectToIndexList
-            for obj, cpuArr in cpuVersion.values():
+            for obj, cpuArr in cpuVersion.items():
                 if obj not in gpuVersion:
                     gpuVersion[obj] = gpuarray.to_gpu(cpuArr)
                 else:

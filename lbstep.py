@@ -4,7 +4,7 @@ from lbmpy.creationfunctions import switchToSymbolicRelaxationRatesForEntropicMe
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.stencils import getStencil
 from pystencils.datahandling import SerialDataHandling
-from pystencils import createKernel
+from pystencils import createKernel, makeSlice
 
 
 class LatticeBoltzmannStep:
@@ -22,6 +22,9 @@ class LatticeBoltzmannStep:
                 raise ValueError("Specify either domainSize or dataHandling")
             dataHandling = SerialDataHandling(domainSize, defaultGhostLayers=1, periodicity=periodicity)
 
+        if 'stencil' not in methodParameters:
+            methodParameters['stencil'] = 'D2Q9' if dataHandling.dim == 2 else 'D3Q27'
+
         methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
         target = optimizationParams['target']
 
@@ -34,15 +37,15 @@ class LatticeBoltzmannStep:
         self._dataHandling = dataHandling
         self._pdfArrName = dataPrefix + "pdfSrc"
         self._tmpArrName = dataPrefix + "pdfTmp"
-        self._velocityArrName = dataPrefix + "velocity"
-        self._densityArrName = dataPrefix + "density"
+        self.velocityDataName = dataPrefix + "velocity"
+        self.densityDataName = dataPrefix + "density"
 
         self._gpu = target == 'gpu'
         layout = optimizationParams['fieldLayout']
         self._dataHandling.addArray(self._pdfArrName, fSize=Q, gpu=self._gpu, layout=layout)
         self._dataHandling.addArray(self._tmpArrName, fSize=Q, gpu=self._gpu, cpu=not self._gpu, layout=layout)
-        self._dataHandling.addArray(self._velocityArrName, fSize=self._dataHandling.dim, gpu=False, layout=layout)
-        self._dataHandling.addArray(self._densityArrName, fSize=1, gpu=False, layout=layout)
+        self._dataHandling.addArray(self.velocityDataName, fSize=self._dataHandling.dim, gpu=False, layout=layout)
+        self._dataHandling.addArray(self.densityDataName, fSize=1, gpu=False, layout=layout)
 
         self._kernelParams = kernelParams
 
@@ -72,13 +75,38 @@ class LatticeBoltzmannStep:
         self.timeStepsRun = 0
 
         for b in self._dataHandling.iterate():
-            b[self._densityArrName].fill(1.0)
-            b[self._velocityArrName].fill(0.0)
+            b[self.densityDataName].fill(1.0)
+            b[self.velocityDataName].fill(0.0)
 
     @property
     def boundaryHandling(self):
         """Boundary handling instance of the scenario. Use this to change the boundary setup"""
         return self._boundaryHandling
+
+    @property
+    def dataHandling(self):
+        return self._dataHandling
+
+    @property
+    def dim(self):
+        return self._dataHandling.dim
+
+    @property
+    def method(self):
+        return self._lbmKernel.method
+
+    def _getSlice(self, dataName, sliceObj):
+        if sliceObj is None:
+            sliceObj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
+        for arr in self._dataHandling.gatherArray(dataName, sliceObj):
+            return arr
+        return None
+
+    def velocitySlice(self, sliceObj=None):
+        return self._getSlice(self.velocityDataName, sliceObj)
+
+    def densitySlice(self, sliceObj=None):
+        return self._getSlice(self.densityDataName, sliceObj)
 
     def preRun(self):
         self._dataHandling.runKernel(self._setterKernel)
@@ -109,8 +137,8 @@ class LatticeBoltzmannStep:
         Q = len(lbMethod.stencil)
         cqc = lbMethod.conservedQuantityComputation
         pdfField = self._dataHandling.fields[self._pdfArrName]
-        rhoField = self._dataHandling.fields[self._densityArrName]
-        velField = self._dataHandling.fields[self._velocityArrName]
+        rhoField = self._dataHandling.fields[self.densityDataName]
+        velField = self._dataHandling.fields[self.velocityDataName]
         pdfSymbols = [pdfField(i) for i in range(Q)]
 
         getterEqs = cqc.outputEquationsFromPdfs(pdfSymbols, {'density': rhoField, 'velocity': velField})
