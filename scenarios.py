@@ -16,7 +16,7 @@ All scenarios can be modified, for example you can create a simple channel first
 >>> scenario.boundaryHandling.setBoundary(NoSlip(), makeSlice[0.3:0.4, 0.0:0.3])
 
 Functions for scenario setup:
------------------------------
+----    -------------------------
 
 All of the following scenario creation functions take keyword arguments specifying which LBM method should be used
 and a ``optimizationParams`` dictionary, defining performance related options. These parameters are documented
@@ -31,7 +31,8 @@ from pystencils.slicing import sliceFromDirection
 from lbmpy.boundaries import NoSlip, UBB, FixedDensity
 
 
-def createFullyPeriodicFlow(initialVelocity, periodicityInKernel=False, lbmKernel=None, parallel=False, **kwargs):
+def createFullyPeriodicFlow(initialVelocity, periodicityInKernel=False, lbmKernel=None,
+                            dataHandling=None, parallel=False, **kwargs):
     """
     Creates a fully periodic setup with prescribed velocity field
 
@@ -51,14 +52,17 @@ def createFullyPeriodicFlow(initialVelocity, periodicityInKernel=False, lbmKerne
     if periodicityInKernel:
         kwargs['optimizationParams']['builtinPeriodicity'] = (True, True, True)
 
-    dataHandling = createDataHandling(parallel, domainSize, periodicity=not periodicityInKernel, defaultGhostLayers=1)
+    if dataHandling is None:
+        dataHandling = createDataHandling(parallel, domainSize, periodicity=not periodicityInKernel,
+                                          defaultGhostLayers=1)
     step = LatticeBoltzmannStep(dataHandling=dataHandling, lbmKernel=lbmKernel, **kwargs)
     for b in step.dataHandling.iterate(ghostLayers=False):
         np.copyto(b[step.velocityDataName], initialVelocity[b.globalSlice])
     return step
 
 
-def createLidDrivenCavity(domainSize, lidVelocity=0.005, lbmKernel=None, parallel=False, **kwargs):
+def createLidDrivenCavity(domainSize=None, lidVelocity=0.005, lbmKernel=None, parallel=False,
+                          dataHandling=None, **kwargs):
     """
     Creates a lid driven cavity scenario
 
@@ -69,7 +73,9 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, lbmKernel=None, paralle
     :param parallel: True for distributed memory parallelization with waLBerla
     :return: instance of :class:`Scenario`
     """
-    dataHandling = createDataHandling(parallel, domainSize, periodicity=False, defaultGhostLayers=1)
+    assert domainSize is not None or dataHandling is not None
+    if dataHandling is None:
+        dataHandling = createDataHandling(parallel, domainSize, periodicity=False, defaultGhostLayers=1)
     step = LatticeBoltzmannStep(dataHandling=dataHandling, lbmKernel=lbmKernel, **kwargs)
 
     myUbb = UBB(velocity=[lidVelocity, 0, 0][:step.method.dim])
@@ -80,8 +86,8 @@ def createLidDrivenCavity(domainSize, lidVelocity=0.005, lbmKernel=None, paralle
     return step
 
 
-def createChannel(domainSize, force=None, pressureDifference=None, u_max=None,
-                  diameterCallback=None, duct=False, wallBoundary=NoSlip(), parallel=False, **kwargs):
+def createChannel(domainSize, force=None, pressureDifference=None, u_max=None, diameterCallback=None,
+                  duct=False, wallBoundary=NoSlip(), parallel=False, dataHandling=None, **kwargs):
     """
     Create a channel scenario (2D or 3D)
     :param domainSize: size of the simulation domain. First coordinate is the flow direction.
@@ -107,7 +113,8 @@ def createChannel(domainSize, force=None, pressureDifference=None, u_max=None,
         raise ValueError("Please specify exactly one of the parameters 'force', 'pressureDifference' or 'u_max'")
 
     periodicity = (True, False, False) if force else (False, False, False)
-    dataHandling = createDataHandling(parallel, domainSize, periodicity=periodicity[:dim], defaultGhostLayers=1)
+    if dataHandling is None:
+        dataHandling = createDataHandling(parallel, domainSize, periodicity=periodicity[:dim], defaultGhostLayers=1)
     step = LatticeBoltzmannStep(dataHandling=dataHandling, **kwargs)
     boundaryHandling = step.boundaryHandling
     if force:
@@ -136,7 +143,14 @@ def createChannel(domainSize, force=None, pressureDifference=None, u_max=None,
 
 if __name__ == '__main__':
     import pycuda.autoinit
-    ldc = createLidDrivenCavity((30, 30, 30), relaxationRate=1.5,
-                                optimizationParams={'openMP': 2, 'target': 'gpu', 'fieldLayout': 'c'})
+    import waLBerla as wlb
+    from pystencils.datahandling import ParallelDataHandling
+    blocks = wlb.createUniformBlockGrid(blocks=(2, 2, 1), cellsPerBlock=(20, 20, 1), oneBlockPerProcess=False)
+    dh = ParallelDataHandling(blocks, dim=2)
+    ldc = createLidDrivenCavity(relaxationRate=1.5, dataHandling=dh,
+                                optimizationParams={'openMP': 2, 'target': 'gpu', 'fieldLayout': 'f',
+                                                    'gpuIndexingParams': {'blockSize': (8, 8, 2)}})
     ldc.boundaryHandling.prepare()
-    ldc.run(3)
+
+    ldc.run(4)
+    ldc.run(100)

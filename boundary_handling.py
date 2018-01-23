@@ -145,11 +145,10 @@ class BoundaryHandling:
         if self._dirty:
             self.prepare()
 
-        for b in self._dataHandling.iterate():
-            for bInfo in self._boundaryObjectToBoundaryInfo.values():
-                idxArr = b[self._indexArrayName].boundaryObjectToIndexList[bInfo.boundaryObject]
+        for b in self._dataHandling.iterate(gpu=self._target == 'gpu'):
+            for bObj, idxArr in b[self._indexArrayName].boundaryObjectToIndexList.items():
                 kwargs[self._pdfFieldName] = b[self._pdfFieldName]
-                bInfo.kernel(indexField=idxArr, **kwargs)
+                self._boundaryObjectToBoundaryInfo[bObj].kernel(indexField=idxArr, **kwargs)
 
     # ------------------------------ Implementation Details ------------------------------------------------------------
 
@@ -173,14 +172,17 @@ class BoundaryHandling:
         ffGhostLayers = dh.ghostLayersOfField(self._flagFieldName)
         for b in dh.iterate(ghostLayers=ffGhostLayers):
             flagArr = b[self._flagFieldName]
+            pdfArr = b[self._pdfFieldName]
+            indexArrayBD = b[self._indexArrayName]
+            indexArrayBD.clear()
             for bInfo in self._boundaryObjectToBoundaryInfo.values():
                 idxArr = createBoundaryIndexArray(flagArr, self.lbMethod.stencil, bInfo.flag, self._fluidFlag,
                                                   bInfo.boundaryObject, dh.ghostLayersOfField(self._flagFieldName))
+                if idxArr.size == 0:
+                    continue
 
-                pdfArr = b[self._pdfFieldName]
-                # TODO test that offset is used correctly here
+                # TODO test boundary data setter (especially offset)
                 boundaryDataSetter = BoundaryDataSetter(idxArr, b.offset, self.lbMethod.stencil, ffGhostLayers, pdfArr)
-                indexArrayBD = b[self._indexArrayName]
                 indexArrayBD.boundaryObjectToIndexList[bInfo.boundaryObject] = idxArr
                 indexArrayBD.boundaryObjectToDataSetter[bInfo.boundaryObject] = boundaryDataSetter
                 self._boundaryDataInitialization(bInfo.boundaryObject, boundaryDataSetter)
@@ -198,9 +200,13 @@ class BoundaryHandling:
             self.kernel = kernel
 
     class IndexFieldBlockData:
-        def __init__(self):
+        def __init__(self, *args, **kwargs):
             self.boundaryObjectToIndexList = {}
             self.boundaryObjectToDataSetter = {}
+
+        def clear(self):
+            self.boundaryObjectToIndexList.clear()
+            self.boundaryObjectToDataSetter.clear()
 
         @staticmethod
         def toCpu(gpuVersion, cpuVersion):

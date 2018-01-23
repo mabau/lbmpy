@@ -1,9 +1,10 @@
+import numpy as np
 from lbmpy.boundary_handling import BoundaryHandling
 from lbmpy.creationfunctions import switchToSymbolicRelaxationRatesForEntropicMethods, createLatticeBoltzmannFunction, \
     updateWithDefaultParameters
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.stencils import getStencil
-from pystencils.datahandling import SerialDataHandling
+from pystencils.datahandling.serial_datahandling import SerialDataHandling
 from pystencils import createKernel, makeSlice
 
 
@@ -99,7 +100,7 @@ class LatticeBoltzmannStep:
         if sliceObj is None:
             sliceObj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
         for arr in self._dataHandling.gatherArray(dataName, sliceObj):
-            return arr
+            return np.squeeze(arr)
         return None
 
     def velocitySlice(self, sliceObj=None):
@@ -171,4 +172,5 @@ if __name__ == '__main__':
     bh.setBoundary(movingWall, makeSlice[:, -1])
     bh.prepare()
 
-    step.run(5000)
+    step.run(4)
+    step.run(100)
