@@ -1,5 +1,5 @@
 import numpy as np
-from lbmpy.boundary_handling import BoundaryHandling
+from lbmpy.boundaries.boundary_handling import BoundaryHandling
 from lbmpy.creationfunctions import switchToSymbolicRelaxationRatesForEntropicMethods, createLatticeBoltzmannFunction, \
     updateWithDefaultParameters
 from lbmpy.simplificationfactory import createSimplificationStrategy
@@ -11,7 +11,7 @@ from pystencils import createKernel, makeSlice
 class LatticeBoltzmannStep:
 
     def __init__(self, domainSize=None, lbmKernel=None, periodicity=False,
-                 kernelParams={}, dataHandling=None, dataPrefix="", optimizationParams={}, **methodParameters):
+                 kernelParams={}, dataHandling=None, name="lbm", optimizationParams={}, **methodParameters):
 
         # --- Parameter normalization  ---
         if dataHandling is not None:
@@ -36,10 +36,10 @@ class LatticeBoltzmannStep:
             Q = len(getStencil(methodParameters['stencil']))
 
         self._dataHandling = dataHandling
-        self._pdfArrName = dataPrefix + "pdfSrc"
-        self._tmpArrName = dataPrefix + "pdfTmp"
-        self.velocityDataName = dataPrefix + "velocity"
-        self.densityDataName = dataPrefix + "density"
+        self._pdfArrName = name + "_pdfSrc"
+        self._tmpArrName = name + "_pdfTmp"
+        self.velocityDataName = name + "_velocity"
+        self.densityDataName = name + "_density"
 
         self._gpu = target == 'gpu'
         layout = optimizationParams['fieldLayout']
@@ -67,7 +67,7 @@ class LatticeBoltzmannStep:
         else:
             self._sync = dataHandling.synchronizationFunctionCPU([self._pdfArrName], methodParameters['stencil'])
         self._boundaryHandling = BoundaryHandling(self._lbmKernel.method, self._dataHandling, self._pdfArrName,
-                                                  name=dataPrefix + "_boundaryHandling",
+                                                  name=name + "_boundaryHandling",
                                                   target=target, openMP=optimizationParams['openMP'])
 
         # -- Macroscopic Value Kernels
@@ -78,6 +78,9 @@ class LatticeBoltzmannStep:
         for b in self._dataHandling.iterate():
             b[self.densityDataName].fill(1.0)
             b[self.velocityDataName].fill(0.0)
+
+        # -- VTK output
+        self.vtkWriter = self.dataHandling.vtkWriter(name, [self.velocityDataName, self.densityDataName])
 
     @property
     def boundaryHandling(self):
@@ -95,6 +98,10 @@ class LatticeBoltzmannStep:
     @property
     def method(self):
         return self._lbmKernel.method
+
+    @property
+    def pdfArrayName(self):
+        return self._pdfArrName
 
     def _getSlice(self, dataName, sliceObj):
         if sliceObj is None:
@@ -132,6 +139,9 @@ class LatticeBoltzmannStep:
             self.timeStep()
         self.postRun()
 
+    def writeVTK(self):
+        self.vtkWriter(self.timeStepsRun)
+
     def _compilerMacroscopicSetterAndGetter(self):
         lbMethod = self._lbmKernel.method
         D = lbMethod.dim
@@ -153,24 +163,3 @@ class LatticeBoltzmannStep:
         setterEqs = createSimplificationStrategy(lbMethod)(setterEqs)
         setterKernel = createKernel(setterEqs, target='cpu').compile()
         return getterKernel, setterKernel
-
-
-if __name__ == '__main__':
-    from pycuda import autoinit
-    from lbmpy.boundaries import NoSlip, UBB
-    from pystencils import makeSlice
-    step = LatticeBoltzmannStep((30, 30), relaxationRate=1.8, periodicity=True,
-                                optimizationParams={'target': 'cpu', 'openMP': False})
-
-    wall = NoSlip()
-    movingWall = UBB((0.001, 0))
-
-    bh = step.boundaryHandling
-    bh.setBoundary(wall, makeSlice[0, :])
-    bh.setBoundary(wall, makeSlice[-1, :])
-    bh.setBoundary(wall, makeSlice[:, 0])
-    bh.setBoundary(movingWall, makeSlice[:, -1])
-    bh.prepare()
-
-    step.run(4)
-    step.run(100)

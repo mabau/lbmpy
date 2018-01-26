@@ -33,7 +33,7 @@ def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, d
             if i != velCoord:
                 boundaryData[name] = 0.0
         if diameter is None:
-            radius = int(round(min(sh for i, sh in enumerate(boundaryHandling.domainShape) if i != velCoord) / 2))
+            radius = int(round(min(sh for i, sh in enumerate(boundaryHandling.shape) if i != velCoord) / 2))
         else:
             radius = int(round(diameter / 2))
 
@@ -41,8 +41,8 @@ def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, d
             normalCoord1 = (velCoord + 1) % 3
             normalCoord2 = (velCoord + 2) % 3
             y, z = boundaryData.linkPositions(normalCoord1), boundaryData.linkPositions(normalCoord2)
-            centeredNormal1 = y - int(round(boundaryHandling.domainShape[normalCoord1] / 2))
-            centeredNormal2 = z - int(round(boundaryHandling.domainShape[normalCoord2] / 2))
+            centeredNormal1 = y - int(round(boundaryHandling.shape[normalCoord1] / 2))
+            centeredNormal2 = z - int(round(boundaryHandling.shape[normalCoord2] / 2))
             distToCenter = np.sqrt(centeredNormal1 ** 2 + centeredNormal2 ** 2)
         elif dim == 2:
             normalCoord = (velCoord + 1) % 2
@@ -68,7 +68,7 @@ def setupChannelWalls(boundaryHandling, diameterCallback, duct=False, wallBounda
         raise ValueError("For duct flows, passing a diameter callback does not make sense.")
 
     if not duct:
-        diameter = min(boundaryHandling.domainShape[1:])
+        diameter = min(boundaryHandling.shape[1:])
         addPipe(boundaryHandling, diameterCallback if diameterCallback else diameter, wallBoundary)
 
 
@@ -82,7 +82,7 @@ def addPipe(boundaryHandling, diameter, boundary=NoSlip()):
                      a array of same shape as the received xCoordArray, with the diameter for each x position
     :param boundary: boundary object that is set at the wall, defaults to NoSlip (bounce back)
     """
-    domainShape = boundaryHandling.domainShape
+    domainShape = boundaryHandling.shape
     dim = len(domainShape)
     assert dim in (2, 3)
 
@@ -123,11 +123,11 @@ def addBlackAndWhiteImage(boundaryHandling, imageFile, targetSlice=None, plane=(
     except ImportError:
         raise ImportError("scipy image read could not be imported! Install 'scipy' and 'pillow'")
 
-    domainSize = boundaryHandling.domainShape
+    domainSize = boundaryHandling.shape
     if targetSlice is None:
         targetSlice = [slice(None, None, None)] * len(domainSize)
 
-    dim = len(boundaryHandling.domainShape)
+    dim = boundaryHandling.dim
 
     imageSlice = normalizeSlice(targetSlice, domainSize)
     targetSize = [imageSlice[i].stop - imageSlice[i].start for i in plane]

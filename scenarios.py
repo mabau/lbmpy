@@ -55,7 +55,7 @@ def createFullyPeriodicFlow(initialVelocity, periodicityInKernel=False, lbmKerne
     if dataHandling is None:
         dataHandling = createDataHandling(parallel, domainSize, periodicity=not periodicityInKernel,
                                           defaultGhostLayers=1)
-    step = LatticeBoltzmannStep(dataHandling=dataHandling, lbmKernel=lbmKernel, **kwargs)
+    step = LatticeBoltzmannStep(dataHandling=dataHandling, name="periodicScenario", lbmKernel=lbmKernel, **kwargs)
     for b in step.dataHandling.iterate(ghostLayers=False):
         np.copyto(b[step.velocityDataName], initialVelocity[b.globalSlice])
     return step
@@ -76,7 +76,7 @@ def createLidDrivenCavity(domainSize=None, lidVelocity=0.005, lbmKernel=None, pa
     assert domainSize is not None or dataHandling is not None
     if dataHandling is None:
         dataHandling = createDataHandling(parallel, domainSize, periodicity=False, defaultGhostLayers=1)
-    step = LatticeBoltzmannStep(dataHandling=dataHandling, lbmKernel=lbmKernel, **kwargs)
+    step = LatticeBoltzmannStep(dataHandling=dataHandling, lbmKernel=lbmKernel, name="lidDrivenCavity" **kwargs)
 
     myUbb = UBB(velocity=[lidVelocity, 0, 0][:step.method.dim])
     step.boundaryHandling.setBoundary(myUbb, sliceFromDirection('N', step.dim))
@@ -86,7 +86,7 @@ def createLidDrivenCavity(domainSize=None, lidVelocity=0.005, lbmKernel=None, pa
     return step
 
 
-def createChannel(domainSize, force=None, pressureDifference=None, u_max=None, diameterCallback=None,
+def createChannel(domainSize=None, force=None, pressureDifference=None, u_max=None, diameterCallback=None,
                   duct=False, wallBoundary=NoSlip(), parallel=False, dataHandling=None, **kwargs):
     """
     Create a channel scenario (2D or 3D)
@@ -106,6 +106,8 @@ def createChannel(domainSize, force=None, pressureDifference=None, u_max=None, d
     :param parallel: True for distributed memory parallelization with waLBerla
     :param kwargs: all other keyword parameters are passed directly to scenario class.
     """
+    assert domainSize is not None or dataHandling is not None
+
     dim = len(domainSize)
     assert dim in (2, 3)
 
@@ -115,42 +117,29 @@ def createChannel(domainSize, force=None, pressureDifference=None, u_max=None, d
     periodicity = (True, False, False) if force else (False, False, False)
     if dataHandling is None:
         dataHandling = createDataHandling(parallel, domainSize, periodicity=periodicity[:dim], defaultGhostLayers=1)
-    step = LatticeBoltzmannStep(dataHandling=dataHandling, **kwargs)
-    boundaryHandling = step.boundaryHandling
+
     if force:
         kwargs['force'] = tuple([force, 0, 0][:dim])
-        boundaryHandling.setPeriodicity(True, False, False)
+        assert dataHandling.periodicity[0]
+        step = LatticeBoltzmannStep(dataHandling=dataHandling, name="forceDrivenChannel", **kwargs)
     elif pressureDifference:
         inflow = FixedDensity(1.0 + pressureDifference)
         outflow = FixedDensity(1.0)
-        boundaryHandling.setBoundary(inflow, sliceFromDirection('W', dim))
-        boundaryHandling.setBoundary(outflow, sliceFromDirection('E', dim))
+        step = LatticeBoltzmannStep(dataHandling=dataHandling, name="pressureDrivenChannel", **kwargs)
+        step.boundaryHandling.setBoundary(inflow, sliceFromDirection('W', dim))
+        step.boundaryHandling.setBoundary(outflow, sliceFromDirection('E', dim))
     elif u_max:
         if duct:
             raise NotImplementedError("Velocity inflow for duct flows not yet implemented")
-
+        step = LatticeBoltzmannStep(dataHandling=dataHandling, name="velocityDrivenChannel", **kwargs)
         diameter = diameterCallback(np.array([0]), domainSize)[0] if diameterCallback else min(domainSize[1:])
-        addParabolicVelocityInflow(boundaryHandling, u_max, sliceFromDirection('W', dim),
+        addParabolicVelocityInflow(step.boundaryHandling, u_max, sliceFromDirection('W', dim),
                                    velCoord=0, diameter=diameter)
         outflow = FixedDensity(1.0)
-        boundaryHandling.setBoundary(outflow, sliceFromDirection('E', dim))
+        step.boundaryHandling.setBoundary(outflow, sliceFromDirection('E', dim))
     else:
         assert False
 
-    setupChannelWalls(boundaryHandling, diameterCallback, duct, wallBoundary)
+    setupChannelWalls(step.boundaryHandling, diameterCallback, duct, wallBoundary)
     return step
 
-
-if __name__ == '__main__':
-    import pycuda.autoinit
-    import waLBerla as wlb
-    from pystencils.datahandling import ParallelDataHandling
-    blocks = wlb.createUniformBlockGrid(blocks=(2, 2, 1), cellsPerBlock=(20, 20, 1), oneBlockPerProcess=False)
-    dh = ParallelDataHandling(blocks, dim=2)
-    ldc = createLidDrivenCavity(relaxationRate=1.5, dataHandling=dh,
-                                optimizationParams={'openMP': 2, 'target': 'gpu', 'fieldLayout': 'f',
-                                                    'gpuIndexingParams': {'blockSize': (8, 8, 2)}})
-    ldc.boundaryHandling.prepare()
-
-    ldc.run(4)
-    ldc.run(100)

@@ -77,35 +77,6 @@ class NoSlip(Boundary):
         return self.name == other.name
 
 
-#class NoSlipFullWay(Boundary):
-#    """Full-way bounce back"""
-#
-#    @property
-#    def additionalData(self):
-#        return [('lastValue', createType("double"))]
-#
-#    @property
-#    def additionalDataInitKernelEquations(self):
-#        # TODO this function is not longer availabel
-#        # formulate as additionalDataInitCallback
-#        def kernelEqGetter(pdfField, directionSymbol, indexField, **kwargs):
-#            return [sp.Eq(indexField('lastValue'), pdfField(directionSymbol))]
-#        return kernelEqGetter
-#
-#    def __call__(self, pdfField, directionSymbol, lbMethod, indexField, **kwargs):
-#        neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
-#        inverseDir = invDir(directionSymbol)
-#        return [sp.Eq(pdfField[neighbor](inverseDir), indexField('lastValue')),
-#                sp.Eq(indexField('lastValue'), pdfField(directionSymbol))]
-#
-#    def __hash__(self):
-#        # All boundaries of these class behave equal -> should also be equal
-#        return hash("NoSlipFullWay")
-#
-#    def __eq__(self, other):
-#        return type(other) == NoSlipFullWay
-
-
 class UBB(Boundary):
 
     """Velocity bounce back boundary condition, enforcing specified velocity at obstacle"""
