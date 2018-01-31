@@ -68,6 +68,21 @@ class BoundaryHandling:
         result['fluid'] = self._fluidFlag
         return result
 
+    def getMask(self, sliceObj, boundaryObj, inverse=False):
+        if isinstance(boundaryObj, str) and boundaryObj.lower() == 'fluid':
+            flag = self._fluidFlag
+        else:
+            flag = self._boundaryObjectToBoundaryInfo[boundaryObj].flag
+
+        arr = self.dataHandling.gatherArray(self.flagArrayName, sliceObj)
+        if arr is None:
+            return None
+        else:
+            result = np.bitwise_and(arr, flag)
+            if inverse:
+                result = np.logical_not(result)
+            return result
+
     def setBoundary(self, boundaryObject, sliceObj=None, maskCallback=None, ghostLayers=True, innerGhostLayers=True):
         """
         Sets boundary using either a rectangular slice, a boolean mask or a combination of both
@@ -85,7 +100,10 @@ class BoundaryHandling:
                              midpoint x coordinate smaller than 10.
         :param ghostLayers see DataHandling.iterate()
         """
-        flag = self._getFlagForBoundary(boundaryObject)
+        if isinstance(boundaryObject, str) and boundaryObject.lower() == 'fluid':
+            flag = self._fluidFlag
+        else:
+            flag = self._getFlagForBoundary(boundaryObject)
 
         for b in self._dataHandling.iterate(sliceObj, ghostLayers=ghostLayers, innerGhostLayers=innerGhostLayers):
             flagArr = b[self._flagFieldName]

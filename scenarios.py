@@ -76,7 +76,7 @@ def createLidDrivenCavity(domainSize=None, lidVelocity=0.005, lbmKernel=None, pa
     assert domainSize is not None or dataHandling is not None
     if dataHandling is None:
         dataHandling = createDataHandling(parallel, domainSize, periodicity=False, defaultGhostLayers=1)
-    step = LatticeBoltzmannStep(dataHandling=dataHandling, lbmKernel=lbmKernel, name="lidDrivenCavity" **kwargs)
+    step = LatticeBoltzmannStep(dataHandling=dataHandling, lbmKernel=lbmKernel, name="lidDrivenCavity", **kwargs)
 
     myUbb = UBB(velocity=[lidVelocity, 0, 0][:step.method.dim])
     step.boundaryHandling.setBoundary(myUbb, sliceFromDirection('N', step.dim))

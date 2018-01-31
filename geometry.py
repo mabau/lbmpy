@@ -105,6 +105,18 @@ def addPipe(boundaryHandling, diameter, boundary=NoSlip()):
     boundaryHandling.setBoundary(boundary, maskCallback=callback)
 
 
+def readImage(path, flatten=False):
+    try:
+        from PIL import Image
+    except ImportError:
+        raise ImportError("Image loading failed. Required package 'pillow' is missing")
+
+    im = Image.open(path)
+    if flatten:
+        im = im.convert('F')
+    return np.array(im)
+
+
 def addBlackAndWhiteImage(boundaryHandling, imageFile, targetSlice=None, plane=(0, 1), boundary=NoSlip(),
                           keepAspectRatio=False):
     """
@@ -117,11 +129,7 @@ def addBlackAndWhiteImage(boundaryHandling, imageFile, targetSlice=None, plane=(
     :param keepAspectRatio: 
     :return: 
     """
-    try:
-        from scipy.misc import imread
-        from scipy.ndimage import zoom
-    except ImportError:
-        raise ImportError("scipy image read could not be imported! Install 'scipy' and 'pillow'")
+    from scipy.ndimage import zoom
 
     domainSize = boundaryHandling.shape
     if targetSlice is None:
@@ -132,7 +140,7 @@ def addBlackAndWhiteImage(boundaryHandling, imageFile, targetSlice=None, plane=(
     imageSlice = normalizeSlice(targetSlice, domainSize)
     targetSize = [imageSlice[i].stop - imageSlice[i].start for i in plane]
 
-    imgArr = imread(imageFile, flatten=True).astype(int)
+    imgArr = readImage(imageFile, flatten=True).astype(int)
     imgArr = np.rot90(imgArr, 3)
 
     zoomFactor = [targetSize[i] / imgArr.shape[i] for i in range(2)]
@@ -169,5 +177,5 @@ def addBlackAndWhiteImage(boundaryHandling, imageFile, targetSlice=None, plane=(
             result[maskTargetSlice] = zoomedImage[imageTargetSlice]
             return result
 
-    boundaryHandling.setBoundary(boundary, indexExpr=imageSlice, maskCallback=callback, includeGhostLayers=False)
-
+    boundaryHandling.setBoundary(boundary, sliceObj=imageSlice, maskCallback=callback,
+                                 ghostLayers=False, innerGhostLayers=True)

@@ -6,9 +6,12 @@ from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.stencils import getStencil
 from pystencils.datahandling.serial_datahandling import SerialDataHandling
 from pystencils import createKernel, makeSlice
+from pystencils.timeloop import TimeLoop
 
 
 class LatticeBoltzmannStep:
+
+    vtkScenarioNrCounter = 0
 
     def __init__(self, domainSize=None, lbmKernel=None, periodicity=False,
                  kernelParams={}, dataHandling=None, name="lbm", optimizationParams={}, **methodParameters):
@@ -80,7 +83,9 @@ class LatticeBoltzmannStep:
             b[self.velocityDataName].fill(0.0)
 
         # -- VTK output
-        self.vtkWriter = self.dataHandling.vtkWriter(name, [self.velocityDataName, self.densityDataName])
+        self.vtkWriter = self.dataHandling.vtkWriter(name + str(LatticeBoltzmannStep.vtkScenarioNrCounter),
+                                                     [self.velocityDataName, self.densityDataName])
+        LatticeBoltzmannStep.vtkScenarioNrCounter += 1
 
     @property
     def boundaryHandling(self):
@@ -100,21 +105,46 @@ class LatticeBoltzmannStep:
         return self._lbmKernel.method
 
     @property
+    def domainSize(self):
+        return self._dataHandling.shape
+
+    @property
+    def numberOfCells(self):
+        result = 1
+        for d in self.domainSize:
+            result *= d
+        return result
+
+    @property
+    def ast(self):
+        return self._lbmKernel.ast
+
+    @property
     def pdfArrayName(self):
         return self._pdfArrName
 
-    def _getSlice(self, dataName, sliceObj):
+    def _getSlice(self, dataName, sliceObj, masked):
         if sliceObj is None:
             sliceObj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
-        for arr in self._dataHandling.gatherArray(dataName, sliceObj):
-            return np.squeeze(arr)
-        return None
 
-    def velocitySlice(self, sliceObj=None):
-        return self._getSlice(self.velocityDataName, sliceObj)
+        result = self._dataHandling.gatherArray(dataName, sliceObj)
+        if result is None:
+            return
 
-    def densitySlice(self, sliceObj=None):
-        return self._getSlice(self.densityDataName, sliceObj)
+        if masked:
+            mask = self.boundaryHandling.getMask(sliceObj, 'fluid', True)
+            if len(mask.shape) < len(result.shape):
+                assert len(mask.shape) + 1 == len(result.shape)
+                mask = np.repeat(mask[..., np.newaxis], result.shape[-1], axis=2)
+
+            result = np.ma.masked_array(result, mask)
+        return result.squeeze()
+
+    def velocitySlice(self, sliceObj=None, masked=True):
+        return self._getSlice(self.velocityDataName, sliceObj, masked)
+
+    def densitySlice(self, sliceObj=None, masked=True):
+        return self._getSlice(self.densityDataName, sliceObj, masked)
 
     def preRun(self):
         self._dataHandling.runKernel(self._setterKernel)
@@ -138,6 +168,20 @@ class LatticeBoltzmannStep:
         for i in range(timeSteps):
             self.timeStep()
         self.postRun()
+
+    def benchmarkRun(self, timeSteps):
+        timeLoop = TimeLoop()
+        timeLoop.addStep(self)
+        durationOfTimeStep = timeLoop.benchmarkRun(timeSteps)
+        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
+        return mlups
+
+    def benchmark(self, timeForBenchmark=5, initTimeSteps=10, numberOfTimeStepsForEstimation=20):
+        timeLoop = TimeLoop()
+        timeLoop.addStep(self)
+        durationOfTimeStep = timeLoop.benchmark(timeForBenchmark, initTimeSteps, numberOfTimeStepsForEstimation)
+        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
+        return mlups
 
     def writeVTK(self):
         self.vtkWriter(self.timeStepsRun)

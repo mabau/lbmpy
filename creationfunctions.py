@@ -200,7 +200,7 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
         'symbolicField': None,
 
         'target': 'cpu',
-        'openMP': True,
+        'openMP': False,
         'doublePrecision': True,
 
         'gpuIndexing': 'block',
@@ -256,10 +256,13 @@ def switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, kernelPa
     new dummy variable is inserted and the value of this variable is later on passed to the kernel
     """
     if methodParameters['entropic']:
+        valueToSymbolMap = {}
         newRelaxationRates = []
         for rr in methodParameters['relaxationRates']:
             if not isinstance(rr, sp.Symbol):
-                dummyVar = sp.Dummy()
+                if rr not in valueToSymbolMap:
+                    valueToSymbolMap[rr] = sp.Dummy()
+                dummyVar = valueToSymbolMap[rr]
                 newRelaxationRates.append(dummyVar)
                 kernelParams[dummyVar.name] = rr
             else:
