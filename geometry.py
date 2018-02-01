@@ -55,7 +55,7 @@ def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, d
         boundaryData['vel_%d' % (velCoord,)] = velProfile
 
     inflow = UBB(velocityInfoCallback, dim=boundaryHandling.dim)
-    boundaryHandling.setBoundary(inflow, indexExpr=indexExpr, includeGhostLayers=True)
+    boundaryHandling.setBoundary(inflow, sliceObj=indexExpr, ghostLayers=True)
 
 
 def setupChannelWalls(boundaryHandling, diameterCallback, duct=False, wallBoundary=NoSlip()):

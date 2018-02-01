@@ -6,6 +6,7 @@ from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.stencils import getStencil
 from pystencils.datahandling.serial_datahandling import SerialDataHandling
 from pystencils import createKernel, makeSlice
+from pystencils.slicing import SlicedGetter
 from pystencils.timeloop import TimeLoop
 
 
@@ -127,6 +128,12 @@ class LatticeBoltzmannStep:
         if sliceObj is None:
             sliceObj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
 
+        indexSlice = None
+        if len(sliceObj) > self.dim:
+            indexSlice = sliceObj[self.dim:]
+            sliceObj = sliceObj[:self.dim]
+            assert len(indexSlice) == 1
+
         result = self._dataHandling.gatherArray(dataName, sliceObj)
         if result is None:
             return
@@ -138,6 +145,8 @@ class LatticeBoltzmannStep:
                 mask = np.repeat(mask[..., np.newaxis], result.shape[-1], axis=2)
 
             result = np.ma.masked_array(result, mask)
+        if indexSlice:
+            result = result[..., indexSlice[-1]]
         return result.squeeze()
 
     def velocitySlice(self, sliceObj=None, masked=True):
@@ -146,8 +155,16 @@ class LatticeBoltzmannStep:
     def densitySlice(self, sliceObj=None, masked=True):
         return self._getSlice(self.densityDataName, sliceObj, masked)
 
+    @property
+    def velocity(self):
+        return SlicedGetter(self.velocitySlice)
+
+    @property
+    def density(self):
+        return SlicedGetter(self.densitySlice)
+
     def preRun(self):
-        self._dataHandling.runKernel(self._setterKernel)
+        self._dataHandling.runKernel(self._setterKernel, **self._kernelParams)
         if self._gpu:
             self._dataHandling.toGpu(self._pdfArrName)
 
@@ -161,7 +178,7 @@ class LatticeBoltzmannStep:
     def postRun(self):
         if self._gpu:
             self._dataHandling.toCpu(self._pdfArrName)
-        self._dataHandling.runKernel(self._getterKernel)
+        self._dataHandling.runKernel(self._getterKernel, **self._kernelParams)
 
     def run(self, timeSteps):
         self.preRun()

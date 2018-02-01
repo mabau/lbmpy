@@ -297,7 +297,8 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
     dtype = 'double' if optParams['doublePrecision'] else 'float32'
     res = createKernel(updateRule, target=optParams['target'], dataType=dtype,
                        cpuOpenMP=optParams['openMP'], cpuVectorizeInfo=optParams['vectorization'],
-                       gpuIndexing=optParams['gpuIndexing'], gpuIndexingParams=optParams['gpuIndexingParams'])
+                       gpuIndexing=optParams['gpuIndexing'], gpuIndexingParams=optParams['gpuIndexingParams'],
+                       ghostLayers=1)
 
     res.method = updateRule.method
     res.updateRule = updateRule

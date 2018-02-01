@@ -16,7 +16,7 @@ def boundaryHandling(boundaryHandlingObj, indexExpr=None, boundaryNameToColor=No
     boundaryHandlingObj.prepare()
 
     dh = boundaryHandlingObj.dataHandling
-    flagArr = dh.gatherArray(boundaryHandlingObj.flagArrayName, indexExpr)
+    flagArr = dh.gatherArray(boundaryHandlingObj.flagArrayName, indexExpr, ghostLayers=True).squeeze()
     if flagArr is None:
         return
 
