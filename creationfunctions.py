@@ -386,6 +386,9 @@ def createLatticeBoltzmannMethod(**params):
 
     dim = len(stencilEntries[0])
 
+    if isinstance(params['force'], Field):
+        params['force'] = tuple(params['force'](i) for i in range(dim))
+
     forceIsZero = True
     for f_i in params['force']:
         if f_i != 0:

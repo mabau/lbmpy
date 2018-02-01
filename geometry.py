@@ -25,6 +25,14 @@ def getParabolicInitialVelocity(domainSize, u_max, velCoord=0, diameter=None):
     return u
 
 
+def addBox(boundaryHandling, boundary=NoSlip()):
+    borders = ['N', 'S', 'E', 'W']
+    if boundaryHandling.dim == 3:
+        borders += ['T', 'B']
+    for d in borders:
+        boundaryHandling.setBoundary(boundary, sliceFromDirection(d, boundaryHandling.dim))
+
+
 def addParabolicVelocityInflow(boundaryHandling, u_max, indexExpr, velCoord=0, diameter=None):
     dim = boundaryHandling.dim
 

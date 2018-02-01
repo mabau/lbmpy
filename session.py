@@ -6,6 +6,7 @@ from pystencils import makeSlice, showCode
 from lbmpy.boundaries import *
 from lbmpy.postprocessing import *
 from lbmpy.lbstep import LatticeBoltzmannStep
+from lbmpy.geometry import *
 
 try:
     from IPython import get_ipython

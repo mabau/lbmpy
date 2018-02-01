@@ -15,7 +15,11 @@ class LatticeBoltzmannStep:
     vtkScenarioNrCounter = 0
 
     def __init__(self, domainSize=None, lbmKernel=None, periodicity=False,
-                 kernelParams={}, dataHandling=None, name="lbm", optimizationParams={}, **methodParameters):
+                 kernelParams={}, dataHandling=None, name="lbm", optimizationParams={},
+                 velocityDataName=None, densityDataName=None,
+                 computeVelocityInEveryStep=False, computeDensityInEveryStep=False,
+                 velocityInputArrayName=None,
+                 **methodParameters):
 
         # --- Parameter normalization  ---
         if dataHandling is not None:
@@ -31,29 +35,41 @@ class LatticeBoltzmannStep:
             methodParameters['stencil'] = 'D2Q9' if dataHandling.dim == 2 else 'D3Q27'
 
         methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
-        target = optimizationParams['target']
 
-        # --- Kernel creation ---
         if lbmKernel:
             Q = len(lbmKernel.method.stencil)
         else:
             Q = len(getStencil(methodParameters['stencil']))
+        target = optimizationParams['target']
 
         self._dataHandling = dataHandling
         self._pdfArrName = name + "_pdfSrc"
         self._tmpArrName = name + "_pdfTmp"
-        self.velocityDataName = name + "_velocity"
-        self.densityDataName = name + "_density"
+        self.velocityDataName = name + "_velocity" if velocityDataName is None else velocityDataName
+        self.densityDataName = name + "_density" if densityDataName is None else densityDataName
 
         self._gpu = target == 'gpu'
         layout = optimizationParams['fieldLayout']
         self._dataHandling.addArray(self._pdfArrName, fSize=Q, gpu=self._gpu, layout=layout)
         self._dataHandling.addArray(self._tmpArrName, fSize=Q, gpu=self._gpu, cpu=not self._gpu, layout=layout)
-        self._dataHandling.addArray(self.velocityDataName, fSize=self._dataHandling.dim, gpu=False, layout=layout)
-        self._dataHandling.addArray(self.densityDataName, fSize=1, gpu=False, layout=layout)
+
+        if velocityDataName is None:
+            self._dataHandling.addArray(self.velocityDataName, fSize=self._dataHandling.dim,
+                                        gpu=self._gpu and computeVelocityInEveryStep, layout=layout)
+        if densityDataName is None:
+            self._dataHandling.addArray(self.densityDataName, fSize=1,
+                                        gpu=self._gpu and computeDensityInEveryStep, layout=layout)
+
+        if computeVelocityInEveryStep:
+            methodParameters['output']['velocity'] = self._dataHandling.fields[self.velocityDataName]
+        if computeDensityInEveryStep:
+            methodParameters['output']['density'] = self._dataHandling.fields[self.densityDataName]
+        if velocityInputArrayName is not None:
+            methodParameters['velocityInput'] = self._dataHandling.fields[velocityInputArrayName]
 
         self._kernelParams = kernelParams
 
+        # --- Kernel creation ---
         if lbmKernel is None:
             switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, self._kernelParams)
             optimizationParams['symbolicField'] = dataHandling.fields[self._pdfArrName]
@@ -167,6 +183,10 @@ class LatticeBoltzmannStep:
         self._dataHandling.runKernel(self._setterKernel, **self._kernelParams)
         if self._gpu:
             self._dataHandling.toGpu(self._pdfArrName)
+            if self._dataHandling.isOnGpu(self.velocityDataName):
+                self._dataHandling.toGpu(self.velocityDataName)
+            if self._dataHandling.isOnGpu(self.densityDataName):
+                self._dataHandling.toGpu(self.densityDataName)
 
     def timeStep(self):
         self._sync()
