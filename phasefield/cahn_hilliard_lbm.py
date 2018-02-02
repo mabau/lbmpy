@@ -43,7 +43,7 @@ def createCahnHilliardEquilibrium(stencil, mu, gamma=1):
 
 
 def createCahnHilliardLbFunction(stencil, relaxationRate, velocityField, mu, orderParameterOut,
-                                 optimizationParams, gamma=1):
+                                 optimizationParams={}, gamma=1, srcFieldName='src', dstFieldName='dst'):
     """
     Update rule for a LB scheme that solves Cahn-Hilliard.
 
@@ -61,7 +61,8 @@ def createCahnHilliardLbFunction(stencil, relaxationRate, velocityField, mu, ord
 
     updateRule = createLatticeBoltzmannUpdateRule(method, optimizationParams,
                                                   output={'density': orderParameterOut},
-                                                  velocityInput=velocityField)
+                                                  velocityInput=velocityField, fieldName=srcFieldName,
+                                                  secondFieldName=dstFieldName)
 
     ast = createLatticeBoltzmannAst(updateRule=updateRule, optimizationParams=optimizationParams)
     return createLatticeBoltzmannFunction(ast=ast, optimizationParams=optimizationParams)

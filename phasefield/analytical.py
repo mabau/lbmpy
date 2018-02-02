@@ -5,7 +5,7 @@ from pystencils.sympyextensions import multidimensionalSummation as multiSum
 
 orderParameterSymbolName = "phi"
 surfaceTensionSymbolName = "tau"
-interfaceWidthSymbol = sp.Symbol("eta")
+interfaceWidthSymbol = sp.Symbol("alpha")
 
 
 def functionalDerivative(functional, v, constants=None):
@@ -39,6 +39,16 @@ def functionalDerivative(functional, v, constants=None):
     return expandUsingLinearity(result, constants=constants)
 
 
+def coshIntegral(f, var):
+    """Integrates a function f that has exactly one cosh term, from -oo to oo, by
+    substituting a new helper variable for the cosh argument"""
+    coshTerm = list(f.atoms(sp.cosh))
+    assert len(coshTerm) == 1
+    integral = sp.Integral(f, var)
+    transformedInt = integral.transform(coshTerm[0].args[0], sp.Symbol("u", real=True))
+    return sp.integrate(transformedInt.args[0], (transformedInt.args[1][0], -sp.oo, sp.oo))
+
+
 def discreteLaplace(field, index, dx):
     """Returns second order Laplace stencil"""
     dim = field.spatialDimensions
@@ -63,18 +73,58 @@ def symmetricSymbolicSurfaceTension(i, j):
     return sp.Symbol("%s_%d_%d" % ((surfaceTensionSymbolName, ) + index))
 
 
-def symbolicOrderParameters(numPhases):
+def symbolicOrderParameters(numPhases, symbolicLastOrderParameter=False):
     """
     Returns a tuple with numPhases entries, where the all but the last are numbered symbols and the last entry
     is 1 - others
     """
-    phi = sp.symbols("%s_:%i" % (orderParameterSymbolName, numPhases-1))
-    phi = phi + (1 - sum(phi),)  # choose last order parameter as 1 - sum(others)
-    return phi
+    if symbolicLastOrderParameter:
+        return sp.symbols("%s_:%i" % (orderParameterSymbolName, numPhases))
+    else:
+        phi = sp.symbols("%s_:%i" % (orderParameterSymbolName, numPhases - 1))
+        phi = phi + (1 - sum(phi),)  # choose last order parameter as 1 - sum(others)
+        return phi
 
 
-def freeEnergyFunctionalNPhases(numPhases, surfaceTensions=symmetricSymbolicSurfaceTension,
-                                interfaceWidth=interfaceWidthSymbol, orderParameters=None):
+def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidthSymbol, transformed=True,
+                              includeBulk=True, includeInterface=True, expandDerivatives=True,
+                              kappa=sp.symbols("kappa_:3")):
+    kappaPrime = tuple(interfaceWidth**2 * k for k in kappa)
+    C = sp.symbols("C_:3")
+
+    bulkFreeEnergy = sum(k / 2 * C_i ** 2 * (1 - C_i) ** 2 for k, C_i in zip(kappa, C))
+    surfaceFreeEnergy = sum(k / 2 * Diff(C_i) ** 2 for k, C_i in zip(kappaPrime, C))
+
+    F = 0
+    if includeBulk:
+        F += bulkFreeEnergy
+    if includeInterface:
+        F += surfaceFreeEnergy
+
+    if not transformed:
+        return F
+
+    if orderParameters:
+        rho, phi, psi = orderParameters
+    else:
+        rho, phi, psi = sp.symbols("rho phi psi")
+    rhoDef = C[0] + C[1] + C[2]
+    phiDef = C[0] - C[1]
+    psiDef = C[2]
+
+    concentrationToOrderParamRelation = {rho: rhoDef, phi: phiDef, psi: psiDef}
+    orderParamToConcentrationRelation = sp.solve([rhoDef - rho, phiDef - phi, psiDef - psi], C)
+
+    F = F.subs(orderParamToConcentrationRelation)
+    if expandDerivatives:
+        F = expandUsingLinearity(F, functions=orderParameters)
+
+    return F
+
+
+def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymbolicSurfaceTension,
+                                interfaceWidth=interfaceWidthSymbol, orderParameters=None,
+                                includeBulk=True, includeInterface=True):
     r"""
     Returns a symbolic expression for the free energy of a system with N phases and
     specified surface tensions. The total free energy is the sum of a bulk and an interface component.
@@ -97,12 +147,18 @@ def freeEnergyFunctionalNPhases(numPhases, surfaceTensions=symmetricSymbolicSurf
     :param numPhases: number of phases, called N above
     :param surfaceTensions: surface tension function, called with two phase indices (two integers)
     :param interfaceWidth: called :math:`\eta` above, controls the interface width
-    :param orderParameters: 
+    :param orderParameters: explicitly
+
+    Parameter useful for viewing / debugging the function
+    :param includeBulk: if false no bulk term is added
+    :param includeInterface:if false no interface contribution is added
     """
+    assert not (numPhases is None and orderParameters is None)
     if orderParameters is None:
         phi = symbolicOrderParameters(numPhases)
     else:
         phi = orderParameters
+        numPhases = len(phi)
 
     # Compared to handwritten notes we scale the interface width parameter here to obtain the correct
     # equations for the interface profile and the surface tensions i.e. to pass tests
@@ -124,7 +180,12 @@ def freeEnergyFunctionalNPhases(numPhases, surfaceTensions=symmetricSymbolicSurf
     F_bulk = 3 / sp.sqrt(2) / interfaceWidth * sum(bulkTerm(i, j) for i, j in multiSum(2, numPhases) if i != j)
     F_interface = sum(lambdaCoeff(i, j) / 2 * Diff(phi[i]) * Diff(phi[j]) for i, j in multiSum(2, numPhases))
 
-    return F_bulk + F_interface
+    result = 0
+    if includeBulk:
+        result += F_bulk
+    if includeInterface:
+        result += F_interface
+    return result
 
 
 def analyticInterfaceProfile(x, interfaceWidth=interfaceWidthSymbol):
@@ -154,43 +215,38 @@ def chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters=None):
     if orderParameters is None:
         orderParameters = [s for s in syms if s.name.startswith(orderParameterSymbolName)]
         orderParameters.sort(key=lambda e: e.name)
-    constants = [s for s in syms if not s.name.startswith(orderParameterSymbolName)]
-    return sp.Matrix([functionalDerivative(freeEnergy, op, constants) for op in orderParameters[:-1]])
+        orderParameters = orderParameters[:-1]
+    constants = [s for s in syms if s not in orderParameters]
+    return sp.Matrix([functionalDerivative(freeEnergy, op, constants) for op in orderParameters])
 
 
 def createChemicalPotentialEvolutionEquations(freeEnergy, orderParameters, phiField, muField, dx=1):
     """Reads from order parameter (phi) field and updates chemical potentials"""
     chemicalPotential = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
     laplaceDiscretization = {Diff(Diff(op)): discreteLaplace(phiField, i, dx)
-                             for i, op in enumerate(orderParameters[:-1])}
+                             for i, op in enumerate(orderParameters)}
     chemicalPotential = chemicalPotential.subs(laplaceDiscretization)
-    chemicalPotential = chemicalPotential.subs({op: phiField(i) for i, op in enumerate(orderParameters[:-1])})
+    chemicalPotential = chemicalPotential.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
 
     muSweepEqs = [sp.Eq(muField(i), cp) for i, cp in enumerate(chemicalPotential)]
-    return sympyCseOnEquationList(muSweepEqs)
+    return muSweepEqs #sympyCseOnEquationList(muSweepEqs)
 
 
-def createForceUpdateEquations(numPhases, forceField, phiField, muField, dx=1):
+def createForceUpdateEquations(forceField, phiField, muField, dx=1):
+    assert muField.indexDimensions == 1
+    muFSize = muField.indexShape[0]
     forceSweepEqs = []
     dim = phiField.spatialDimensions
     for d in range(dim):
         rhs = 0
-        for i in range(numPhases - 1):
+        for i in range(muFSize):
             rhs -= phiField(i) * (muField.neighbor(d, 1)(i) - muField.neighbor(d, -1)(i)) / (2 * dx)
         forceSweepEqs.append(sp.Eq(forceField(d), rhs))
     return forceSweepEqs
 
 
-def cahnHilliardFdKernel(phaseIdx, phi, mu, velocity, mobility, dx, dt, target='cpu'):
+def cahnHilliardFdKernel(phaseIdx, phi, mu, velocity, mobility, dx, dt):
     from pystencils.finitedifferences import transient, advection, diffusion, Discretization2ndOrder
     cahnHilliard = transient(phi, phaseIdx) + advection(phi, velocity, phaseIdx) - diffusion(mu, mobility, phaseIdx)
     discretizedEq = Discretization2ndOrder(dx, dt)(cahnHilliard)
-    updateRule = [sp.Eq(phi.newFieldWithDifferentName('dst')(phaseIdx),
-                        discretizedEq)]
-
-    if target == 'cpu':
-        from pystencils.cpu import createKernel, makePythonFunction
-        return makePythonFunction(createKernel(updateRule))
-    elif target == 'gpu':
-        from pystencils.gpucuda import createCUDAKernel, makePythonFunction
-        return makePythonFunction(createCUDAKernel(updateRule))
+    return [sp.Eq(phi.newFieldWithDifferentName('dst')(phaseIdx), discretizedEq)]
