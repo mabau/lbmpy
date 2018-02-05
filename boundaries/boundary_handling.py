@@ -32,7 +32,7 @@ class BoundaryHandling:
                              "If you want to add multiple handlings, choose a different name.")
 
         gpu = self._target == 'gpu'
-        dataHandling.addArray(self._flagFieldName, dtype=np.uint32, cpu=True, gpu=gpu)
+        dataHandling.addArray(self._flagFieldName, dtype=np.uint32, cpu=True, gpu=False)
         dataHandling.addCustomClass(self._indexArrayName, self.IndexFieldBlockData, cpu=True, gpu=gpu)
 
         ffGhostLayers = self._dataHandling.ghostLayersOfField(self._flagFieldName)

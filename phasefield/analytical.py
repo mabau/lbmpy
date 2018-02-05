@@ -73,17 +73,8 @@ def symmetricSymbolicSurfaceTension(i, j):
     return sp.Symbol("%s_%d_%d" % ((surfaceTensionSymbolName, ) + index))
 
 
-def symbolicOrderParameters(numPhases, symbolicLastOrderParameter=False):
-    """
-    Returns a tuple with numPhases entries, where the all but the last are numbered symbols and the last entry
-    is 1 - others
-    """
-    if symbolicLastOrderParameter:
-        return sp.symbols("%s_:%i" % (orderParameterSymbolName, numPhases))
-    else:
-        phi = sp.symbols("%s_:%i" % (orderParameterSymbolName, numPhases - 1))
-        phi = phi + (1 - sum(phi),)  # choose last order parameter as 1 - sum(others)
-        return phi
+def symbolicOrderParameters(numSymbols):
+    return sp.symbols("%s_:%i" % (orderParameterSymbolName, numSymbols))
 
 
 def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidthSymbol, transformed=True,
@@ -155,10 +146,12 @@ def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymboli
     """
     assert not (numPhases is None and orderParameters is None)
     if orderParameters is None:
-        phi = symbolicOrderParameters(numPhases)
+        phi = symbolicOrderParameters(numPhases-1)
     else:
         phi = orderParameters
-        numPhases = len(phi)
+        numPhases = len(phi) + 1
+
+    phi = tuple(phi) + (1 - sum(phi),)
 
     # Compared to handwritten notes we scale the interface width parameter here to obtain the correct
     # equations for the interface profile and the surface tensions i.e. to pass tests
@@ -195,10 +188,10 @@ def analyticInterfaceProfile(x, interfaceWidth=interfaceWidthSymbol):
     get from the condition :math:`\mu_0 = 0` (thermodynamic equilibrium) for a situation with only a single order
     parameter, i.e. at a transition between two phases.
     >>> numPhases = 4
-    >>> x, phi = sp.Symbol("x"), symbolicOrderParameters(numPhases)
-    >>> F = freeEnergyFunctionalNPhases(numPhases)
+    >>> x, phi = sp.Symbol("x"), symbolicOrderParameters(numPhases-1)
+    >>> F = freeEnergyFunctionalNPhases(orderParameters=phi)
     >>> mu = chemicalPotentialsFromFreeEnergy(F)
-    >>> mu0 = mu[0].subs({p: 0 for p in phi[1:-1]})  # mu[0] as function of one order parameter only
+    >>> mu0 = mu[0].subs({p: 0 for p in phi[1:]})  # mu[0] as function of one order parameter only
     >>> solution = analyticInterfaceProfile(x)
     >>> solutionSubstitution = {phi[0]: solution, Diff(Diff(phi[0])): sp.diff(solution, x, x) }
     >>> sp.expand(mu0.subs(solutionSubstitution))  # inserting solution should solve the mu_0=0 equation
@@ -220,7 +213,7 @@ def chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters=None):
     return sp.Matrix([functionalDerivative(freeEnergy, op, constants) for op in orderParameters])
 
 
-def createChemicalPotentialEvolutionEquations(freeEnergy, orderParameters, phiField, muField, dx=1):
+def createChemicalPotentialEvolutionEquations(freeEnergy, orderParameters, phiField, muField, dx=1, cse=True):
     """Reads from order parameter (phi) field and updates chemical potentials"""
     chemicalPotential = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
     laplaceDiscretization = {Diff(Diff(op)): discreteLaplace(phiField, i, dx)
@@ -229,7 +222,7 @@ def createChemicalPotentialEvolutionEquations(freeEnergy, orderParameters, phiFi
     chemicalPotential = chemicalPotential.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
 
     muSweepEqs = [sp.Eq(muField(i), cp) for i, cp in enumerate(chemicalPotential)]
-    return muSweepEqs #sympyCseOnEquationList(muSweepEqs)
+    return muSweepEqs if not cse else sympyCseOnEquationList(muSweepEqs)
 
 
 def createForceUpdateEquations(forceField, phiField, muField, dx=1):

@@ -42,6 +42,7 @@ class LatticeBoltzmannStep:
             Q = len(getStencil(methodParameters['stencil']))
         target = optimizationParams['target']
 
+        self.name = name
         self._dataHandling = dataHandling
         self._pdfArrName = name + "_pdfSrc"
         self._tmpArrName = name + "_pdfTmp"
@@ -67,11 +68,11 @@ class LatticeBoltzmannStep:
         if velocityInputArrayName is not None:
             methodParameters['velocityInput'] = self._dataHandling.fields[velocityInputArrayName]
 
-        self._kernelParams = kernelParams
+        self.kernelParams = kernelParams
 
         # --- Kernel creation ---
         if lbmKernel is None:
-            switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, self._kernelParams)
+            switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, self.kernelParams)
             optimizationParams['symbolicField'] = dataHandling.fields[self._pdfArrName]
             methodParameters['fieldName'] = self._pdfArrName
             methodParameters['secondFieldName'] = self._tmpArrName
@@ -82,10 +83,7 @@ class LatticeBoltzmannStep:
             self._lbmKernel = lbmKernel
 
         # -- Boundary Handling  & Synchronization ---
-        if self._gpu:
-            self._sync = dataHandling.synchronizationFunctionGPU([self._pdfArrName], methodParameters['stencil'])
-        else:
-            self._sync = dataHandling.synchronizationFunctionCPU([self._pdfArrName], methodParameters['stencil'])
+        self._sync = dataHandling.synchronizationFunction([self._pdfArrName], methodParameters['stencil'], target)
         self._boundaryHandling = BoundaryHandling(self._lbmKernel.method, self._dataHandling, self._pdfArrName,
                                                   name=name + "_boundaryHandling",
                                                   target=target, openMP=optimizationParams['openMP'])
@@ -98,6 +96,7 @@ class LatticeBoltzmannStep:
         for b in self._dataHandling.iterate():
             b[self.densityDataName].fill(1.0)
             b[self.velocityDataName].fill(0.0)
+        self.setPdfFieldsFromMacroscopicValues()
 
         # -- VTK output
         self.vtkWriter = self.dataHandling.vtkWriter(name + str(LatticeBoltzmannStep.vtkScenarioNrCounter),
@@ -180,7 +179,6 @@ class LatticeBoltzmannStep:
         return SlicedGetter(self.densitySlice)
 
     def preRun(self):
-        self._dataHandling.runKernel(self._setterKernel, **self._kernelParams)
         if self._gpu:
             self._dataHandling.toGpu(self._pdfArrName)
             if self._dataHandling.isOnGpu(self.velocityDataName):
@@ -188,17 +186,20 @@ class LatticeBoltzmannStep:
             if self._dataHandling.isOnGpu(self.densityDataName):
                 self._dataHandling.toGpu(self.densityDataName)
 
+    def setPdfFieldsFromMacroscopicValues(self):
+        self._dataHandling.runKernel(self._setterKernel, **self.kernelParams)
+
     def timeStep(self):
         self._sync()
-        self._boundaryHandling()
-        self._dataHandling.runKernel(self._lbmKernel, **self._kernelParams)
+        self._boundaryHandling(**self.kernelParams)
+        self._dataHandling.runKernel(self._lbmKernel, **self.kernelParams)
         self._dataHandling.swap(self._pdfArrName, self._tmpArrName, self._gpu)
         self.timeStepsRun += 1
 
     def postRun(self):
         if self._gpu:
             self._dataHandling.toCpu(self._pdfArrName)
-        self._dataHandling.runKernel(self._getterKernel, **self._kernelParams)
+        self._dataHandling.runKernel(self._getterKernel, **self.kernelParams)
 
     def run(self, timeSteps):
         self.preRun()
