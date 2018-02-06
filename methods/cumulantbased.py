@@ -64,6 +64,10 @@ class CumulantBasedLbMethod(AbstractLbMethod):
             self._weights = self._computeWeights()
         return self._weights
 
+    def overrideWeights(self, weights):
+        assert len(weights) == len(self.stencil)
+        self._weights = weights
+
     def _repr_html_(self):
         table = """
         <table style="border:none; width: 100%">

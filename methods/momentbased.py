@@ -70,6 +70,10 @@ class MomentBasedLbMethod(AbstractLbMethod):
             self._weights = self._computeWeights()
         return self._weights
 
+    def overrideWeights(self, weights):
+        assert len(weights) == len(self.stencil)
+        self._weights = weights
+
     def getEquilibrium(self, conservedQuantityEquations=None, includeForceTerms=False):
         D = sp.eye(len(self.relaxationRates))
         return self._getCollisionRuleWithRelaxationMatrix(D, conservedQuantityEquations=conservedQuantityEquations,

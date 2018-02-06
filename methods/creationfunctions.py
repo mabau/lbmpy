@@ -40,6 +40,8 @@ def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, c
     :param c_s_sq: Speed of sound squared
     :return: :class:`lbmpy.methods.MomentBasedLbMethod` instance
     """
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
     assert len(momToRrDict) == len(stencil), \
         "The number of moments has to be the same as the number of stencil entries"
@@ -72,6 +74,8 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
     For parameter description see :func:`lbmpy.methods.createWithDiscreteMaxwellianEqMoments`.
     By using the continuous Maxwellian we automatically get a compressible model.
     """
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
     assert len(momToRrDict) == len(stencil), "The number of moments has to be the same as the number of stencil entries"
     dim = len(stencil[0])
@@ -125,10 +129,16 @@ def createFromEquilibrium(stencil, equilibrium, momentToRelaxationRateDict, comp
     Creates a moment-based LB method using a given equilibrium distribution function
     :param stencil: see createWithDiscreteMaxwellianEqMoments
     :param equilibrium: list of equilibrium terms, dependent on rho and u, one for each stencil direction
-    :param momentToRelaxationRateDict: relaxation rate for each moment
+    :param momentToRelaxationRateDict: relaxation rate for each moment, or a symbol/float if all should relaxed with the
+                                       same rate
     :param compressible: see createWithDiscreteMaxwellianEqMoments
     :param forceModel: see createWithDiscreteMaxwellianEqMoments
     """
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
+    if isinstance(momentToRelaxationRateDict, sp.Symbol) or isinstance(momentToRelaxationRateDict, float):
+        momentToRelaxationRateDict = {m: momentToRelaxationRateDict for m in getDefaultMomentSetForStencil(stencil)}
+
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
     assert len(momToRrDict) == len(stencil), "The number of moments has to be the same as the number of stencil entries"
     densityVelocityComputation = DensityVelocityComputation(stencil, compressible, forceModel)
@@ -152,6 +162,8 @@ def createSRT(stencil, relaxationRate, useContinuousMaxwellianEquilibrium=False,
                            used to compute the equilibrium moments
     :return: :class:`lbmpy.methods.MomentBasedLbMethod` instance
     """
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
     moments = getDefaultMomentSetForStencil(stencil)
     rrDict = OrderedDict([(m, relaxationRate) for m in moments])
     if useContinuousMaxwellianEquilibrium:
@@ -171,6 +183,8 @@ def createTRT(stencil, relaxationRateEvenMoments, relaxationRateOddMoments,
     two relaxation rates: one for even moments (determines viscosity) and one for odd moments.
     If unsure how to choose the odd relaxation rate, use the function :func:`lbmpy.methods.createTRTWithMagicNumber`.
     """
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
     moments = getDefaultMomentSetForStencil(stencil)
     rrDict = OrderedDict([(m, relaxationRateEvenMoments if isEven(m) else relaxationRateOddMoments) for m in moments])
     if useContinuousMaxwellianEquilibrium:
@@ -193,6 +207,8 @@ def createRawMRT(stencil, relaxationRates, useContinuousMaxwellianEquilibrium=Fa
     """
     Creates a MRT method using non-orthogonalized moments
     """
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
     moments = getDefaultMomentSetForStencil(stencil)
     rrDict = OrderedDict(zip(moments, relaxationRates))
     if useContinuousMaxwellianEquilibrium:
@@ -208,6 +224,8 @@ def createThreeRelaxationRateMRT(stencil, relaxationRates, useContinuousMaxwelli
     """
     def product(iterable):
         return reduce(operator.mul, iterable, 1)
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
 
     dim = len(stencil[0])
     theMoment = MOMENT_SYMBOLS[:dim]
@@ -337,6 +355,8 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, useContinuousMaxwell
     """
     if relaxationRateGetter is None:
         relaxationRateGetter = defaultRelaxationRateNames()
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
 
     x, y, z = MOMENT_SYMBOLS
     one = sp.Rational(1, 1)
@@ -410,6 +430,19 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, useContinuousMaxwell
     else:
         return createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, **kwargs)
 
+
+def modifyRelaxationTable(method, modificationFunction):
+    """
+    Creates a new method, based on an existing method with modified relaxation table
+    :param method: old method
+    :param modificationFunction: function receiving (moment, equilibriumValue, relaxationRate) tuple, i.e. on row
+                                 of the relaxation table, returning a modified tuple
+    """
+    relaxationTable = (modificationFunction(m, eq, rr)
+                       for m, eq, rr in zip(method.moments, method.momentEquilibriumValues, method.relaxationRates))
+    compressible = method.conservedQuantityComputation.compressible
+    cumulant = isinstance(method, CumulantBasedLbMethod)
+    return createGenericMRT(method.stencil, relaxationTable, compressible, method.forceModel, cumulant)
 
 # ----------------------------------------- Comparison view for notebooks ----------------------------------------------
 
