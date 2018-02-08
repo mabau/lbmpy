@@ -1,13 +1,11 @@
 import sympy as sp
-from lbmpy.creationfunctions import createLatticeBoltzmannFunction, createLatticeBoltzmannUpdateRule, \
-    createLatticeBoltzmannAst
 from lbmpy.methods.creationfunctions import createFromEquilibrium
+from lbmpy.stencils import getStencil
 from pystencils.sympyextensions import kroneckerDelta, multidimensionalSummation
-from lbmpy.moments import getDefaultMomentSetForStencil
 from lbmpy.maxwellian_equilibrium import getWeights
 
 
-def createCahnHilliardEquilibrium(stencil, mu, gamma=1):
+def cahnHilliardLbmMethod(stencil, mu, relaxationRate=sp.Symbol("omega"), gamma=1):
     """Returns LB equilibrium that solves the Cahn Hilliard equation
 
     ..math ::
@@ -16,8 +14,11 @@ def createCahnHilliardEquilibrium(stencil, mu, gamma=1):
     
     :param stencil: tuple of discrete directions
     :param mu: symbolic expression (field access) for the chemical potential
+    :param relaxationRate: relaxation rate of method
     :param gamma: tunable parameter affecting the second order equilibrium moment
     """
+    if isinstance(stencil, str):
+        stencil = getStencil(stencil)
     weights = getWeights(stencil, c_s_sq=sp.Rational(1, 3))
 
     kd = kroneckerDelta
@@ -39,31 +40,5 @@ def createCahnHilliardEquilibrium(stencil, mu, gamma=1):
 
     rho = sp.Symbol("rho")
     equilibrium[0] = rho - sp.expand(sum(equilibrium[1:]))
-    return tuple(equilibrium)
-
-
-def createCahnHilliardLbFunction(stencil, relaxationRate, velocityField, mu, orderParameterOut,
-                                 optimizationParams={}, gamma=1, srcFieldName='src', dstFieldName='dst'):
-    """
-    Update rule for a LB scheme that solves Cahn-Hilliard.
-
-    :param stencil:
-    :param relaxationRate: relaxation rate controls the mobility
-    :param velocityField: velocity field (output from N-S LBM)
-    :param mu: chemical potential field
-    :param orderParameterOut: field where order parameter :math:`\phi` is written to
-    :param optimizationParams: generic optimization parameters passed to creation functions
-    :param gamma: tunable equilibrium parameter
-    """
-    equilibrium = createCahnHilliardEquilibrium(stencil, mu, gamma)
-    rrRates = {m: relaxationRate for m in getDefaultMomentSetForStencil(stencil)}
-    method = createFromEquilibrium(stencil, tuple(equilibrium), rrRates, compressible=True)
-
-    updateRule = createLatticeBoltzmannUpdateRule(method, optimizationParams,
-                                                  output={'density': orderParameterOut},
-                                                  velocityInput=velocityField, fieldName=srcFieldName,
-                                                  secondFieldName=dstFieldName)
-
-    ast = createLatticeBoltzmannAst(updateRule=updateRule, optimizationParams=optimizationParams)
-    return createLatticeBoltzmannFunction(ast=ast, optimizationParams=optimizationParams)
+    return createFromEquilibrium(stencil, tuple(equilibrium), relaxationRate, compressible=True)
 

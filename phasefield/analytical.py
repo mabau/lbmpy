@@ -201,9 +201,7 @@ def analyticInterfaceProfile(x, interfaceWidth=interfaceWidthSymbol):
 
 
 def chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters=None):
-    """
-    Computes chemical potentials as functional derivative of free energy
-    """
+    """Computes chemical potentials as functional derivative of free energy"""
     syms = freeEnergy.atoms(sp.Symbol)
     if orderParameters is None:
         orderParameters = [s for s in syms if s.name.startswith(orderParameterSymbolName)]
@@ -234,12 +232,52 @@ def createForceUpdateEquations(forceField, phiField, muField, dx=1):
         rhs = 0
         for i in range(muFSize):
             rhs -= phiField(i) * (muField.neighbor(d, 1)(i) - muField.neighbor(d, -1)(i)) / (2 * dx)
+            # In the C code this form is found: when commenting in make sure phi field is synced before!
+            #rhs += muField(i) * (phiField.neighbor(d, 1)(i) - phiField.neighbor(d, -1)(i)) / (2 * dx)
         forceSweepEqs.append(sp.Eq(forceField(d), rhs))
     return forceSweepEqs
 
 
-def cahnHilliardFdKernel(phaseIdx, phi, mu, velocity, mobility, dx, dt):
+def cahnHilliardFdEq(phaseIdx, phi, mu, velocity, mobility, dx, dt):
     from pystencils.finitedifferences import transient, advection, diffusion, Discretization2ndOrder
     cahnHilliard = transient(phi, phaseIdx) + advection(phi, velocity, phaseIdx) - diffusion(mu, mobility, phaseIdx)
-    discretizedEq = Discretization2ndOrder(dx, dt)(cahnHilliard)
-    return [sp.Eq(phi.newFieldWithDifferentName('dst')(phaseIdx), discretizedEq)]
+    return Discretization2ndOrder(dx, dt)(cahnHilliard)
+
+
+class CahnHilliardFDStep:
+    def __init__(self, dataHandling, phiFieldName, muFieldName, velocityFieldName, name='ch_fd', target='cpu',
+                 dx=1, dt=1, mobilities=1):
+        from pystencils import createKernel
+        self.dataHandling = dataHandling
+
+        muField = self.dataHandling.fields[muFieldName]
+        velField = self.dataHandling.fields[velocityFieldName]
+        self.phiField = self.dataHandling.fields[phiFieldName]
+        self.tmpField = self.dataHandling.addArrayLike(name + '_tmp', phiFieldName, latexName='tmp')
+
+        numPhases = self.dataHandling.fSize(phiFieldName)
+        if not hasattr(mobilities, '__len__'):
+            mobilities = [mobilities] * numPhases
+
+        updateEqs = []
+        for i in range(numPhases):
+            rhs = cahnHilliardFdEq(i, self.phiField, muField, velField, mobilities[i], dx, dt)
+            updateEqs.append(sp.Eq(self.tmpField(i), rhs))
+        self.updateEqs = updateEqs
+        self.kernel = createKernel(updateEqs, target=target).compile()
+        self.sync = self.dataHandling.synchronizationFunction([phiFieldName, velocityFieldName, muFieldName],
+                                                              target=target)
+
+    def timeStep(self):
+        self.sync()
+        self.dataHandling.runKernel(self.kernel)
+        self.dataHandling.swap(self.phiField.name, self.tmpField.name)
+
+    def setPdfFieldsFromMacroscopicValues(self):
+        pass
+
+    def preRun(self):
+        pass
+
+    def postRun(self):
+        pass

@@ -16,7 +16,7 @@ class LatticeBoltzmannStep:
 
     def __init__(self, domainSize=None, lbmKernel=None, periodicity=False,
                  kernelParams={}, dataHandling=None, name="lbm", optimizationParams={},
-                 velocityDataName=None, densityDataName=None,
+                 velocityDataName=None, densityDataName=None, densityDataIndex=None,
                  computeVelocityInEveryStep=False, computeDensityInEveryStep=False,
                  velocityInputArrayName=None,
                  **methodParameters):
@@ -48,23 +48,28 @@ class LatticeBoltzmannStep:
         self._tmpArrName = name + "_pdfTmp"
         self.velocityDataName = name + "_velocity" if velocityDataName is None else velocityDataName
         self.densityDataName = name + "_density" if densityDataName is None else densityDataName
+        self.densityDataIndex = densityDataIndex
 
         self._gpu = target == 'gpu'
         layout = optimizationParams['fieldLayout']
-        self._dataHandling.addArray(self._pdfArrName, fSize=Q, gpu=self._gpu, layout=layout)
-        self._dataHandling.addArray(self._tmpArrName, fSize=Q, gpu=self._gpu, cpu=not self._gpu, layout=layout)
+        self._dataHandling.addArray(self._pdfArrName, fSize=Q, gpu=self._gpu, layout=layout, latexName='src')
+        self._dataHandling.addArray(self._tmpArrName, fSize=Q, gpu=self._gpu, cpu=not self._gpu,
+                                    layout=layout, latexName='dst')
 
         if velocityDataName is None:
             self._dataHandling.addArray(self.velocityDataName, fSize=self._dataHandling.dim,
-                                        gpu=self._gpu and computeVelocityInEveryStep, layout=layout)
+                                        gpu=self._gpu and computeVelocityInEveryStep, layout=layout, latexName='u')
         if densityDataName is None:
             self._dataHandling.addArray(self.densityDataName, fSize=1,
-                                        gpu=self._gpu and computeDensityInEveryStep, layout=layout)
+                                        gpu=self._gpu and computeDensityInEveryStep, layout=layout, latexName='ρ')
 
         if computeVelocityInEveryStep:
             methodParameters['output']['velocity'] = self._dataHandling.fields[self.velocityDataName]
         if computeDensityInEveryStep:
-            methodParameters['output']['density'] = self._dataHandling.fields[self.densityDataName]
+            densityField = self._dataHandling.fields[self.densityDataName]
+            if self.densityDataIndex is not None:
+                densityField = densityField(densityDataIndex)
+            methodParameters['output']['density'] = densityField
         if velocityInputArrayName is not None:
             methodParameters['velocityInput'] = self._dataHandling.fields[velocityInputArrayName]
 
@@ -91,17 +96,16 @@ class LatticeBoltzmannStep:
         # -- Macroscopic Value Kernels
         self._getterKernel, self._setterKernel = self._compilerMacroscopicSetterAndGetter()
 
-        self.timeStepsRun = 0
-
-        for b in self._dataHandling.iterate():
-            b[self.densityDataName].fill(1.0)
-            b[self.velocityDataName].fill(0.0)
+        self._dataHandling.fill(self.densityDataName, 1.0, fValue=self.densityDataIndex,
+                                ghostLayers=True, innerGhostLayers=True)
+        self._dataHandling.fill(self.velocityDataName, 0.0, ghostLayers=True, innerGhostLayers=True)
         self.setPdfFieldsFromMacroscopicValues()
 
         # -- VTK output
         self.vtkWriter = self.dataHandling.vtkWriter(name + str(LatticeBoltzmannStep.vtkScenarioNrCounter),
                                                      [self.velocityDataName, self.densityDataName])
         LatticeBoltzmannStep.vtkScenarioNrCounter += 1
+        self.timeStepsRun = 0
 
     @property
     def boundaryHandling(self):
@@ -143,31 +147,25 @@ class LatticeBoltzmannStep:
         if sliceObj is None:
             sliceObj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
 
-        indexSlice = None
-        if len(sliceObj) > self.dim:
-            indexSlice = sliceObj[self.dim:]
-            sliceObj = sliceObj[:self.dim]
-            assert len(indexSlice) == 1
-
         result = self._dataHandling.gatherArray(dataName, sliceObj)
         if result is None:
             return
 
         if masked:
-            mask = self.boundaryHandling.getMask(sliceObj, 'fluid', True)
+            mask = self.boundaryHandling.getMask(sliceObj[:self.dim], 'fluid', True)
             if len(mask.shape) < len(result.shape):
                 assert len(mask.shape) + 1 == len(result.shape)
                 mask = np.repeat(mask[..., np.newaxis], result.shape[-1], axis=2)
 
             result = np.ma.masked_array(result, mask)
-        if indexSlice:
-            result = result[..., indexSlice[-1]]
         return result.squeeze()
 
     def velocitySlice(self, sliceObj=None, masked=True):
         return self._getSlice(self.velocityDataName, sliceObj, masked)
 
     def densitySlice(self, sliceObj=None, masked=True):
+        if self.densityDataIndex is not None:
+            sliceObj += (self.densityDataIndex,)
         return self._getSlice(self.densityDataName, sliceObj, masked)
 
     @property
@@ -231,13 +229,14 @@ class LatticeBoltzmannStep:
         cqc = lbMethod.conservedQuantityComputation
         pdfField = self._dataHandling.fields[self._pdfArrName]
         rhoField = self._dataHandling.fields[self.densityDataName]
+        rhoField = rhoField.center if self.densityDataIndex is None else rhoField(self.densityDataIndex)
         velField = self._dataHandling.fields[self.velocityDataName]
         pdfSymbols = [pdfField(i) for i in range(Q)]
 
         getterEqs = cqc.outputEquationsFromPdfs(pdfSymbols, {'density': rhoField, 'velocity': velField})
         getterKernel = createKernel(getterEqs, target='cpu').compile()
 
-        inpEqs = cqc.equilibriumInputEquationsFromInitValues(rhoField.center, [velField(i) for i in range(D)])
+        inpEqs = cqc.equilibriumInputEquationsFromInitValues(rhoField, [velField(i) for i in range(D)])
         setterEqs = lbMethod.getEquilibrium(conservedQuantityEquations=inpEqs)
         setterEqs = setterEqs.copyWithSubstitutionsApplied({sym: pdfField(i)
                                                             for i, sym in enumerate(lbMethod.postCollisionPdfSymbols)})

@@ -136,7 +136,7 @@ def createFromEquilibrium(stencil, equilibrium, momentToRelaxationRateDict, comp
     """
     if isinstance(stencil, str):
         stencil = getStencil(stencil)
-    if isinstance(momentToRelaxationRateDict, sp.Symbol) or isinstance(momentToRelaxationRateDict, float):
+    if any(isinstance(momentToRelaxationRateDict, t) for t in (sp.Symbol, float, int)):
         momentToRelaxationRateDict = {m: momentToRelaxationRateDict for m in getDefaultMomentSetForStencil(stencil)}
 
     momToRrDict = OrderedDict(momentToRelaxationRateDict)
