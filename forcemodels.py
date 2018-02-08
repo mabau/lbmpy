@@ -188,6 +188,26 @@ class Buick(object):
         return defaultVelocityShift(density, self._force)
 
 
+class EDM(object):
+    r"""Exact differencing force model"""
+
+    def __init__(self, force):
+        self._force = force
+
+    def __call__(self, lbMethod, **kwargs):
+        cqc = lbMethod.conservedQuantityComputation
+        rho = cqc.zerothOrderMomentSymbol if cqc.compressible else 1
+        u = cqc.firstOrderMomentSymbols
+
+        shiftedU = (u_i + f_i / rho for u_i, f_i in zip(u, self._force))
+        eqTerms = lbMethod.getEquilibriumTerms()
+        shiftedEq = eqTerms.subs({u_i: su_i for u_i, su_i in zip(u, shiftedU)})
+        return shiftedEq - eqTerms
+
+    def macroscopicVelocityShift(self, density):
+        return defaultVelocityShift(density, self._force)
+
+
 # --------------------------------  Helper functions  ------------------------------------------------------------------
 
 

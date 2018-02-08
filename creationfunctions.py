@@ -348,20 +348,23 @@ def createLatticeBoltzmannMethod(**params):
 
 def forceModelFromString(forceModelName, forceValues):
     if type(forceModelName) is not str:
-        forceModel = forceModelName
-    elif forceModelName.lower() == 'none':
-        forceModel = None
-    elif forceModelName.lower() == 'simple':
-        forceModel = forcemodels.Simple(forceValues)
-    elif forceModelName.lower() == 'luo':
-        forceModel = forcemodels.Luo(forceValues)
-    elif forceModelName.lower() == 'guo':
-        forceModel = forcemodels.Guo(forceValues)
-    elif forceModelName.lower() == 'silva' or forceModelName.lower() == 'buick':
-        forceModel = forcemodels.Buick(forceValues)
-    else:
+        return forceModelName
+    if forceModelName == 'none':
+        return None
+
+    forceModelDict = {
+        'simple': forcemodels.Simple,
+        'luo': forcemodels.Luo,
+        'guo': forcemodels.Guo,
+        'buick': forcemodels.Buick,
+        'silva': forcemodels.Buick,
+        'edm': forcemodels.EDM,
+    }
+    if forceModelName.lower() not in forceModelDict:
         raise ValueError("Unknown force model %s" % (forceModelName,))
-    return forceModel
+
+    forceModelClass = forceModelDict[forceModelName.lower()]
+    return forceModelClass(forceValues)
 
 
 def switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, kernelParams):
