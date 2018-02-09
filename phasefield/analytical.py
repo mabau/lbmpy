@@ -8,62 +8,6 @@ surfaceTensionSymbolName = "tau"
 interfaceWidthSymbol = sp.Symbol("alpha")
 
 
-def functionalDerivative(functional, v, constants=None):
-    """
-    Computes functional derivative of functional with respect to v using Euler-Lagrange equation
-
-    .. math ::
-
-        \frac{\delta F}{\delta v} =
-                \frac{\partial F}{\partial v} - \nabla \cdot \frac{\partial F}{\partial \nabla v}
-
-    - assumes that gradients are represented by Diff() node (from Chapman Enskog module)    
-    - Diff(Diff(r)) represents the divergence of r
-    - the constants parameter is a list with symbols not affected by the derivative. This is used for simplification
-      of the derivative terms.
-    """
-    functional = expandUsingLinearity(functional, constants=constants)
-    diffs = functional.atoms(Diff)
-
-    diffV = Diff(v)
-    assert diffV in diffs  # not necessary in general, but for this use case this should be true
-
-    nonDiffPart = functional.subs({d: 0 for d in diffs})
-
-    partialF_partialV = sp.diff(nonDiffPart, v)
-
-    dummy = sp.Dummy()
-    partialF_partialGradV = functional.subs(diffV, dummy).diff(dummy).subs(dummy, diffV)
-
-    result = partialF_partialV - Diff(partialF_partialGradV)
-    return expandUsingLinearity(result, constants=constants)
-
-
-def coshIntegral(f, var):
-    """Integrates a function f that has exactly one cosh term, from -oo to oo, by
-    substituting a new helper variable for the cosh argument"""
-    coshTerm = list(f.atoms(sp.cosh))
-    assert len(coshTerm) == 1
-    integral = sp.Integral(f, var)
-    transformedInt = integral.transform(coshTerm[0].args[0], sp.Symbol("u", real=True))
-    return sp.integrate(transformedInt.args[0], (transformedInt.args[1][0], -sp.oo, sp.oo))
-
-
-def discreteLaplace(field, index, dx):
-    """Returns second order Laplace stencil"""
-    dim = field.spatialDimensions
-    count = 0
-    result = 0
-    for d in range(dim):
-        for offset in (-1, 1):
-            count += 1
-            result += field.neighbor(d, offset)(index)
-
-    result -= count * field.center(index)
-    result /= dx ** 2
-    return result
-
-
 def symmetricSymbolicSurfaceTension(i, j):
     """Returns symbolic surface tension. The function is symmetric, i.e. interchanging i and j yields the same result.
     If both phase indices i and j are chosen equal, zero is returned"""
@@ -181,6 +125,20 @@ def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymboli
     return result
 
 
+def separateIntoBulkAndInterface(freeEnergy):
+    """Separates the bulk and interface parts of a free energy
+
+    >>> F = freeEnergyFunctionalNPhases(3)
+    >>> bulk, inter = separateIntoBulkAndInterface(F)
+    >>> assert sp.expand(bulk - freeEnergyFunctionalNPhases(3, includeInterface=False)) == 0
+    >>> assert sp.expand(inter - freeEnergyFunctionalNPhases(3, includeBulk=False)) == 0
+    """
+    freeEnergy = freeEnergy.expand()
+    bulkPart = freeEnergy.subs({a: 0 for a in freeEnergy.atoms(Diff)})
+    interfacePart = freeEnergy - bulkPart
+    return bulkPart, interfacePart
+
+
 def analyticInterfaceProfile(x, interfaceWidth=interfaceWidthSymbol):
     """Analytic expression for a 1D interface normal to x with given interface width
 
@@ -236,6 +194,62 @@ def createForceUpdateEquations(forceField, phiField, muField, dx=1):
             #rhs += muField(i) * (phiField.neighbor(d, 1)(i) - phiField.neighbor(d, -1)(i)) / (2 * dx)
         forceSweepEqs.append(sp.Eq(forceField(d), rhs))
     return forceSweepEqs
+
+
+def functionalDerivative(functional, v, constants=None):
+    """
+    Computes functional derivative of functional with respect to v using Euler-Lagrange equation
+
+    .. math ::
+
+        \frac{\delta F}{\delta v} =
+                \frac{\partial F}{\partial v} - \nabla \cdot \frac{\partial F}{\partial \nabla v}
+
+    - assumes that gradients are represented by Diff() node (from Chapman Enskog module)
+    - Diff(Diff(r)) represents the divergence of r
+    - the constants parameter is a list with symbols not affected by the derivative. This is used for simplification
+      of the derivative terms.
+    """
+    functional = expandUsingLinearity(functional, constants=constants)
+    diffs = functional.atoms(Diff)
+
+    diffV = Diff(v)
+    #assert diffV in diffs  # not necessary in general, but for this use case this should be true
+
+    nonDiffPart = functional.subs({d: 0 for d in diffs})
+
+    partialF_partialV = sp.diff(nonDiffPart, v)
+
+    dummy = sp.Dummy()
+    partialF_partialGradV = functional.subs(diffV, dummy).diff(dummy).subs(dummy, diffV)
+
+    result = partialF_partialV - Diff(partialF_partialGradV)
+    return expandUsingLinearity(result, constants=constants)
+
+
+def coshIntegral(f, var):
+    """Integrates a function f that has exactly one cosh term, from -oo to oo, by
+    substituting a new helper variable for the cosh argument"""
+    coshTerm = list(f.atoms(sp.cosh))
+    assert len(coshTerm) == 1
+    integral = sp.Integral(f, var)
+    transformedInt = integral.transform(coshTerm[0].args[0], sp.Symbol("u", real=True))
+    return sp.integrate(transformedInt.args[0], (transformedInt.args[1][0], -sp.oo, sp.oo))
+
+
+def discreteLaplace(field, index, dx):
+    """Returns second order Laplace stencil"""
+    dim = field.spatialDimensions
+    count = 0
+    result = 0
+    for d in range(dim):
+        for offset in (-1, 1):
+            count += 1
+            result += field.neighbor(d, offset)(index)
+
+    result -= count * field.center(index)
+    result /= dx ** 2
+    return result
 
 
 def cahnHilliardFdEq(phaseIdx, phi, mu, velocity, mobility, dx, dt):
