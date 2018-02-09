@@ -185,7 +185,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         params['optimizationParams'] = optimizationParams
         updateRule = createLatticeBoltzmannUpdateRule(**params)
 
-    fieldTypes = set(fa.field.dtype for fa in updateRule.freeSymbols if isinstance(fa, Field.Access))
+    fieldTypes = set(fa.field.dtype for fa in updateRule.definedSymbols if isinstance(fa, Field.Access))
     res = createKernel(updateRule, target=optParams['target'], dataType=collateTypes(fieldTypes),
                        cpuOpenMP=optParams['openMP'], cpuVectorizeInfo=optParams['vectorization'],
                        gpuIndexing=optParams['gpuIndexing'], gpuIndexingParams=optParams['gpuIndexingParams'],
