@@ -269,7 +269,10 @@ def fullDiffExpand(expr, functions=None, constants=None):
             newArgs = [visit(arg) for arg in e.args]
             return e.func(*newArgs) if newArgs else e
 
-    return visit(expr)
+    if isinstance(expr, sp.Matrix):
+        return expr.applyfunc(visit)
+    else:
+        return visit(expr)
 
 
 def normalizeDiffOrder(expression, functions=None, constants=None, sortKey=defaultDiffSortKey):

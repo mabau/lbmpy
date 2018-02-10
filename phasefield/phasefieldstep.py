@@ -1,8 +1,8 @@
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.phasefield.cahn_hilliard_lbm import cahnHilliardLbmMethod
+from lbmpy.phasefield.kerneleqs import muKernel, forceKernelUsingMu, CahnHilliardFDStep
 from pystencils import createKernel
-from lbmpy.phasefield import createChemicalPotentialEvolutionEquations, createForceUpdateEquations
-from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, CahnHilliardFDStep
+from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy
 from pystencils.datahandling import SerialDataHandling
 from pystencils.equationcollection.simplifications import sympyCseOnEquationList
 from pystencils.slicing import makeSlice, SlicedGetter
@@ -40,13 +40,13 @@ class PhaseFieldStep:
         F = self.freeEnergy.subs({old: new for old, new in zip(orderParameters, phi)})
 
         # μ Kernel
-        self.muEqs = createChemicalPotentialEvolutionEquations(F, phi, self.phiField, self.muField, dx, cse=False)
+        self.muEqs = muKernel(F, phi, self.phiField, self.muField, dx)
         self.muKernel = createKernel(sympyCseOnEquationList(self.muEqs), target=target, cpuOpenMP=openMP).compile()
         self.phiSync = dataHandling.synchronizationFunction([self.phiFieldName], target=target)
 
         # F Kernel
-        self.forceEqs = createForceUpdateEquations(self.forceField, self.phiField, self.muField, dx)
-        self.forceKernel = createKernel(self.forceEqs, target=target, cpuOpenMP=openMP).compile()
+        self.forceEqs = forceKernelUsingMu(self.forceField, self.phiField, self.muField, dx)
+        self.forceKernel = createKernel(sympyCseOnEquationList(self.forceEqs), target=target, cpuOpenMP=openMP).compile()
         self.muSync = dataHandling.synchronizationFunction([self.muFieldName], target=target)
 
         # Hydrodynamic LBM

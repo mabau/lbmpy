@@ -1,7 +1,9 @@
 import sympy as sp
-from lbmpy.chapman_enskog.derivative import expandUsingLinearity, Diff
+from collections import defaultdict
+
+from lbmpy.chapman_enskog.derivative import expandUsingLinearity, Diff, fullDiffExpand
 from pystencils.equationcollection.simplifications import sympyCseOnEquationList
-from pystencils.sympyextensions import multidimensionalSummation as multiSum
+from pystencils.sympyextensions import multidimensionalSummation as multiSum, normalizeProduct, prod
 
 orderParameterSymbolName = "phi"
 surfaceTensionSymbolName = "tau"
@@ -59,7 +61,7 @@ def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidt
 
 def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymbolicSurfaceTension,
                                 interfaceWidth=interfaceWidthSymbol, orderParameters=None,
-                                includeBulk=True, includeInterface=True):
+                                includeBulk=True, includeInterface=True, symbolicLambda=False):
     r"""
     Returns a symbolic expression for the free energy of a system with N phases and
     specified surface tensions. The total free energy is the sum of a bulk and an interface component.
@@ -106,16 +108,18 @@ def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymboli
         return c ** 2 * (1 - c) ** 2
 
     def lambdaCoeff(k, l):
+        if symbolicLambda:
+            return sp.Symbol("Lambda_%d%d" % ((k,l) if k < l else (l,k)))
         N = numPhases - 1
         if k == l:
             assert surfaceTensions(l, l) == 0
-        return 3 / sp.sqrt(2) * interfaceWidth * (surfaceTensions(k, N) + surfaceTensions(l, N) - surfaceTensions(k, l))
+        return  3 / sp.sqrt(2) * interfaceWidth * (surfaceTensions(k, N) + surfaceTensions(l, N) - surfaceTensions(k, l))
 
     def bulkTerm(i, j):
         return surfaceTensions(i, j) / 2 * (f(phi[i]) + f(phi[j]) - f(phi[i] + phi[j]))
 
     F_bulk = 3 / sp.sqrt(2) / interfaceWidth * sum(bulkTerm(i, j) for i, j in multiSum(2, numPhases) if i != j)
-    F_interface = sum(lambdaCoeff(i, j) / 2 * Diff(phi[i]) * Diff(phi[j]) for i, j in multiSum(2, numPhases))
+    F_interface = sum(lambdaCoeff(i, j) / 2 * Diff(phi[i]) * Diff(phi[j]) for i, j in multiSum(2, numPhases-1))
 
     result = 0
     if includeBulk:
@@ -169,31 +173,24 @@ def chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters=None):
     return sp.Matrix([functionalDerivative(freeEnergy, op, constants) for op in orderParameters])
 
 
-def createChemicalPotentialEvolutionEquations(freeEnergy, orderParameters, phiField, muField, dx=1, cse=True):
-    """Reads from order parameter (phi) field and updates chemical potentials"""
-    chemicalPotential = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
-    laplaceDiscretization = {Diff(Diff(op)): discreteLaplace(phiField, i, dx)
-                             for i, op in enumerate(orderParameters)}
-    chemicalPotential = chemicalPotential.subs(laplaceDiscretization)
-    chemicalPotential = chemicalPotential.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
+def forceFromPhiAndMu(orderParameters, dim, mu=None):
+    if mu is None:
+        mu = sp.symbols("mu_:%d" % (len(orderParameters),))
 
-    muSweepEqs = [sp.Eq(muField(i), cp) for i, cp in enumerate(chemicalPotential)]
-    return muSweepEqs if not cse else sympyCseOnEquationList(muSweepEqs)
+    return sp.Matrix([sum(- c_i * Diff(mu_i, a) for c_i, mu_i in zip(orderParameters, mu))
+                      for a in range(dim)])
 
 
-def createForceUpdateEquations(forceField, phiField, muField, dx=1):
-    assert muField.indexDimensions == 1
-    muFSize = muField.indexShape[0]
-    forceSweepEqs = []
-    dim = phiField.spatialDimensions
-    for d in range(dim):
-        rhs = 0
-        for i in range(muFSize):
-            rhs -= phiField(i) * (muField.neighbor(d, 1)(i) - muField.neighbor(d, -1)(i)) / (2 * dx)
-            # In the C code this form is found: when commenting in make sure phi field is synced before!
-            #rhs += muField(i) * (phiField.neighbor(d, 1)(i) - phiField.neighbor(d, -1)(i)) / (2 * dx)
-        forceSweepEqs.append(sp.Eq(forceField(d), rhs))
-    return forceSweepEqs
+def substituteLaplacianBySum(eq, dim):
+    """Substitutes abstract laplacian represented by ∂∂ by a sum over all dimensions
+    i.e. in case of 3D: ∂∂ is replaced by ∂0∂0 + ∂1∂1 + ∂2∂2
+    :param eq: the term where the substitutions should be made
+    :param dim: spatial dimension, in example above, 3
+    """
+    functions = [d.args[0] for d in eq.atoms(Diff)]
+    substitutions = {Diff(Diff(op)): sum(Diff(Diff(op, i), i) for i in range(dim))
+                     for op in functions}
+    return fullDiffExpand(eq.subs(substitutions))
 
 
 def functionalDerivative(functional, v, constants=None):
@@ -237,61 +234,114 @@ def coshIntegral(f, var):
     return sp.integrate(transformedInt.args[0], (transformedInt.args[1][0], -sp.oo, sp.oo))
 
 
-def discreteLaplace(field, index, dx):
-    """Returns second order Laplace stencil"""
-    dim = field.spatialDimensions
-    count = 0
-    result = 0
-    for d in range(dim):
-        for offset in (-1, 1):
-            count += 1
-            result += field.neighbor(d, offset)(index)
+def discretizeSecondDerivatives(term, dx=1):
+    """Substitutes symbolic integral of field access by second order accurate finite differences.
+    The only valid argument of Diff objects are field accesses (usually center field accesses)"""
+    def diffOrder(e):
+        if not isinstance(e, Diff):
+            return 0
+        else:
+            return 1 + diffOrder(e.args[0])
 
-    result -= count * field.center(index)
-    result /= dx ** 2
+    def visit(e):
+        order = diffOrder(e)
+        if order == 0:
+            paramList = [visit(a) for a in e.args]
+            return e if not paramList else e.func(*paramList)
+        elif order == 1:
+            fa = e.args[0]
+            index = e.label
+            return (fa.neighbor(index, 1) - fa.neighbor(index, -1)) / (2 * dx)
+        elif order == 2:
+            indices = sorted([e.label, e.args[0].label])
+            fa = e.args[0].args[0]
+            if indices[0] == indices[1]:
+                result = (-2 * fa + fa.neighbor(indices[0], -1) + fa.neighbor(indices[0], +1))
+            else:
+                offsets = [(1,1), [-1, 1], [1, -1], [-1, -1]]
+                result = sum(o1*o2 * fa.neighbor(indices[0], o1).neighbor(indices[1], o2) for o1, o2 in offsets) / 4
+            return result / (dx**2)
+        else:
+            raise NotImplementedError("Term contains derivatives of order > 2")
+
+    return visit(term)
+
+
+def symmetricTensorLinearization(dim):
+    nextIdx = 0
+    resultMap = {}
+    for idx in multiSum(2, dim):
+        idx = tuple(sorted(idx))
+        if idx in resultMap:
+            continue
+        else:
+            resultMap[idx] = nextIdx
+            nextIdx += 1
+    return resultMap
+
+# ----------------------------------------- Pressure Tensor ------------------------------------------------------------
+
+
+def extractGamma(freeEnergy, orderParameters):
+    """Extracts parameters before the gradient terms"""
+    result = defaultdict(lambda: 0)
+    freeEnergy = freeEnergy.expand()
+    assert freeEnergy.func == sp.Add
+    for product in freeEnergy.args:
+        product = normalizeProduct(product)
+        diffFactors = [e for e in product if e.func == Diff]
+        if len(diffFactors) == 0:
+            continue
+
+        if len(diffFactors) != 2:
+            raise ValueError("Could not extract Λ because of term " + str(product))
+
+        indices = sorted([orderParameters.index(d.args[0]) for d in diffFactors])
+        result[tuple(indices)] += prod(e for e in product if e.func != Diff)
+        if diffFactors[0] == diffFactors[1]:
+            result[tuple(indices)] *= 2
     return result
 
 
-def cahnHilliardFdEq(phaseIdx, phi, mu, velocity, mobility, dx, dt):
-    from pystencils.finitedifferences import transient, advection, diffusion, Discretization2ndOrder
-    cahnHilliard = transient(phi, phaseIdx) + advection(phi, velocity, phaseIdx) - diffusion(mu, mobility, phaseIdx)
-    return Discretization2ndOrder(dx, dt)(cahnHilliard)
+def pressureTensorBulkComponent(freeEnergy, orderParameters):
+    """Diagonal component of pressure tensor in bulk"""
+    bulkFreeEnergy, _ = separateIntoBulkAndInterface(freeEnergy)
+    muBulk = chemicalPotentialsFromFreeEnergy(bulkFreeEnergy, orderParameters)
+    return sum(c_i * mu_i for c_i, mu_i in zip(orderParameters, muBulk)) - bulkFreeEnergy
 
 
-class CahnHilliardFDStep:
-    def __init__(self, dataHandling, phiFieldName, muFieldName, velocityFieldName, name='ch_fd', target='cpu',
-                 dx=1, dt=1, mobilities=1):
-        from pystencils import createKernel
-        self.dataHandling = dataHandling
+def pressureTensorInterfaceComponent(freeEnergy, orderParameters, dim, a, b):
+    gamma = extractGamma(freeEnergy, orderParameters)
+    d = Diff
+    result = 0
+    for i, c_i in enumerate(orderParameters):
+        for j, c_j in enumerate(orderParameters):
+            t = d(c_i, a) * d(c_j, b) + d(c_i, b) * d(c_j, a)
+            if a == b:
+                t -= sum(d(c_i, g) * d(c_j, g) for g in range(dim))
+                t -= sum(c_i * d(d(c_j, g), g) for g in range(dim))
+                t -= sum(c_j * d(d(c_i, g), g) for g in range(dim))
+            gamma_ij = gamma[(i, j)] if i < j else gamma[(j, i)]
+            result += t * gamma_ij / 2
+    return result
 
-        muField = self.dataHandling.fields[muFieldName]
-        velField = self.dataHandling.fields[velocityFieldName]
-        self.phiField = self.dataHandling.fields[phiFieldName]
-        self.tmpField = self.dataHandling.addArrayLike(name + '_tmp', phiFieldName, latexName='tmp')
 
-        numPhases = self.dataHandling.fSize(phiFieldName)
-        if not hasattr(mobilities, '__len__'):
-            mobilities = [mobilities] * numPhases
+def pressureTensorFromFreeEnergy(freeEnergy, orderParameters, dim):
+    def getEntry(i, j):
+        pIf = pressureTensorInterfaceComponent(freeEnergy, orderParameters, dim, i, j)
+        pB = pressureTensorBulkComponent(freeEnergy, orderParameters) if i == j else 0
+        return sp.expand(pIf + pB)
 
-        updateEqs = []
-        for i in range(numPhases):
-            rhs = cahnHilliardFdEq(i, self.phiField, muField, velField, mobilities[i], dx, dt)
-            updateEqs.append(sp.Eq(self.tmpField(i), rhs))
-        self.updateEqs = updateEqs
-        self.kernel = createKernel(updateEqs, target=target).compile()
-        self.sync = self.dataHandling.synchronizationFunction([phiFieldName, velocityFieldName, muFieldName],
-                                                              target=target)
+    return sp.Matrix(dim, dim, getEntry)
 
-    def timeStep(self):
-        self.sync()
-        self.dataHandling.runKernel(self.kernel)
-        self.dataHandling.swap(self.phiField.name, self.tmpField.name)
 
-    def setPdfFieldsFromMacroscopicValues(self):
-        pass
+def forceFromPressureTensor(pressureTensor, functions=None):
+    assert len(pressureTensor.shape) == 2 and pressureTensor.shape[0] == pressureTensor.shape[1]
+    dim = pressureTensor.shape[0]
 
-    def preRun(self):
-        pass
+    def forceComponent(b):
+        r = -sum(Diff(pressureTensor[a, b], a) for a in range(dim))
+        r = fullDiffExpand(r, functions=functions)
+        return r
 
-    def postRun(self):
-        pass
+    return sp.Matrix([forceComponent(b) for b in range(dim)])
