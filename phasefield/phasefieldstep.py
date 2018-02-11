@@ -26,43 +26,37 @@ class PhaseFieldStep:
         gpu = target == 'gpu'
         self.gpu = gpu
         self.numOrderParameters = len(orderParameters)
+        pressureTensorSize = len(symmetricTensorLinearization(dataHandling.dim))
+
         self.phiFieldName = name + "_phi"
         self.muFieldName = name + "_mu"
         self.velFieldName = name + "_u"
         self.forceFieldName = name + "_F"
+        self.pressureTensorFieldName = name + "_P"
         self.dataHandling = dataHandling
         self.phiField = dataHandling.addArray(self.phiFieldName, fSize=len(orderParameters), gpu=gpu, latexName='φ')
         self.muField = dataHandling.addArray(self.muFieldName, fSize=len(orderParameters), gpu=gpu, latexName="μ")
         self.velField = dataHandling.addArray(self.velFieldName, fSize=dataHandling.dim, gpu=gpu, latexName="u")
         self.forceField = dataHandling.addArray(self.forceFieldName, fSize=dataHandling.dim, gpu=gpu, latexName="F")
+        self.pressureTensorField = dataHandling.addArray(self.pressureTensorFieldName,
+                                                         fSize=pressureTensorSize, latexName='P')
 
         # ------------------ Creating kernels ------------------
         phi = tuple(self.phiField(i) for i in range(len(orderParameters)))
         F = self.freeEnergy.subs({old: new for old, new in zip(orderParameters, phi)})
 
-        self.usePressureTensor = True
-        if self.usePressureTensor:
-            self.pressureTensorFieldName = name + "_P"
-            pressureTensorSize = len(symmetricTensorLinearization(dataHandling.dim))
-            self.pressureTensorField = dataHandling.addArray(self.pressureTensorFieldName, fSize=pressureTensorSize,
-                                                             latexName='P')
-            pEqs = pressureTensorKernel(self.freeEnergy, orderParameters, self.phiField, self.pressureTensorField, dx)
-            self.pressureTensorKernel = createKernel(pEqs, target=target, cpuOpenMP=openMP).compile()
-
-        # μ Kernel
-        self.muEqs = muKernel(F, phi, self.phiField, self.muField, dx)
-        self.muKernel = createKernel(sympyCseOnEquationList(self.muEqs), target=target, cpuOpenMP=openMP).compile()
+        # μ and pressure tensor update
         self.phiSync = dataHandling.synchronizationFunction([self.phiFieldName], target=target)
+        self.muEqs = muKernel(F, phi, self.phiField, self.muField, dx)
+        self.pressureTensorEqs = pressureTensorKernel(self.freeEnergy, orderParameters,
+                                                      self.phiField, self.pressureTensorField, dx)
+        self.muAndPressureTensorKernel = createKernel(sympyCseOnEquationList(self.muEqs + self.pressureTensorEqs),
+                                                      target=target, cpuOpenMP=openMP).compile()
 
         # F Kernel
-        if self.usePressureTensor:
-            fEqs = forceKernelUsingPressureTensor(self.forceField, self.pressureTensorField, dx)
-            self.forceFromPressureTensorKernel = createKernel(fEqs, target=target, cpuOpenMP=openMP).compile()
-            self.pressureTensorSync = dataHandling.synchronizationFunction([self.pressureTensorFieldName], target=target)
-        else:
-            self.forceEqs = forceKernelUsingMu(self.forceField, self.phiField, self.muField, dx)
-            self.forceKernel = createKernel(sympyCseOnEquationList(self.forceEqs), target=target, cpuOpenMP=openMP).compile()
-            self.muSync = dataHandling.synchronizationFunction([self.muFieldName], target=target)
+        self.forceEqs = forceKernelUsingPressureTensor(self.forceField, self.pressureTensorField, dx)
+        self.forceFromPressureTensorKernel = createKernel(self.forceEqs, target=target, cpuOpenMP=openMP).compile()
+        self.pressureTensorSync = dataHandling.synchronizationFunction([self.pressureTensorFieldName], target=target)
 
         # Hydrodynamic LBM
         if densityOrderParameter is not None:
@@ -136,15 +130,9 @@ class PhaseFieldStep:
 
     def timeStep(self):
         self.phiSync()
-        self.dataHandling.runKernel(self.muKernel)
-
-        if self.usePressureTensor:
-            self.dataHandling.runKernel(self.pressureTensorKernel)
-            self.pressureTensorSync()
-            self.dataHandling.runKernel(self.forceFromPressureTensorKernel)
-        else:
-            self.muSync()
-            self.dataHandling.runKernel(self.forceKernel)
+        self.dataHandling.runKernel(self.muAndPressureTensorKernel)
+        self.pressureTensorSync()
+        self.dataHandling.runKernel(self.forceFromPressureTensorKernel)
 
         if self.runHydroLbm:
             self.hydroLbmStep.timeStep()
