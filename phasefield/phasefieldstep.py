@@ -1,8 +1,9 @@
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.phasefield.cahn_hilliard_lbm import cahnHilliardLbmMethod
-from lbmpy.phasefield.kerneleqs import muKernel, forceKernelUsingMu, CahnHilliardFDStep
+from lbmpy.phasefield.kerneleqs import muKernel, forceKernelUsingMu, CahnHilliardFDStep, pressureTensorKernel, \
+    forceKernelUsingPressureTensor
 from pystencils import createKernel
-from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy
+from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, symmetricTensorLinearization
 from pystencils.datahandling import SerialDataHandling
 from pystencils.equationcollection.simplifications import sympyCseOnEquationList
 from pystencils.slicing import makeSlice, SlicedGetter
@@ -39,15 +40,29 @@ class PhaseFieldStep:
         phi = tuple(self.phiField(i) for i in range(len(orderParameters)))
         F = self.freeEnergy.subs({old: new for old, new in zip(orderParameters, phi)})
 
+        self.usePressureTensor = True
+        if self.usePressureTensor:
+            self.pressureTensorFieldName = name + "_P"
+            pressureTensorSize = len(symmetricTensorLinearization(dataHandling.dim))
+            self.pressureTensorField = dataHandling.addArray(self.pressureTensorFieldName, fSize=pressureTensorSize,
+                                                             latexName='P')
+            pEqs = pressureTensorKernel(self.freeEnergy, orderParameters, self.phiField, self.pressureTensorField, dx)
+            self.pressureTensorKernel = createKernel(pEqs, target=target, cpuOpenMP=openMP).compile()
+
         # μ Kernel
         self.muEqs = muKernel(F, phi, self.phiField, self.muField, dx)
         self.muKernel = createKernel(sympyCseOnEquationList(self.muEqs), target=target, cpuOpenMP=openMP).compile()
         self.phiSync = dataHandling.synchronizationFunction([self.phiFieldName], target=target)
 
         # F Kernel
-        self.forceEqs = forceKernelUsingMu(self.forceField, self.phiField, self.muField, dx)
-        self.forceKernel = createKernel(sympyCseOnEquationList(self.forceEqs), target=target, cpuOpenMP=openMP).compile()
-        self.muSync = dataHandling.synchronizationFunction([self.muFieldName], target=target)
+        if self.usePressureTensor:
+            fEqs = forceKernelUsingPressureTensor(self.forceField, self.pressureTensorField, dx)
+            self.forceFromPressureTensorKernel = createKernel(fEqs, target=target, cpuOpenMP=openMP).compile()
+            self.pressureTensorSync = dataHandling.synchronizationFunction([self.pressureTensorFieldName], target=target)
+        else:
+            self.forceEqs = forceKernelUsingMu(self.forceField, self.phiField, self.muField, dx)
+            self.forceKernel = createKernel(sympyCseOnEquationList(self.forceEqs), target=target, cpuOpenMP=openMP).compile()
+            self.muSync = dataHandling.synchronizationFunction([self.muFieldName], target=target)
 
         # Hydrodynamic LBM
         if densityOrderParameter is not None:
@@ -56,6 +71,7 @@ class PhaseFieldStep:
                                                  relaxationRate=hydroDynamicRelaxationRate,
                                                  computeVelocityInEveryStep=True, force=self.forceField,
                                                  velocityDataName=self.velFieldName, kernelParams=kernelParams,
+                                                 timeStepOrder='collideStream',
                                                  **hydroLbmParameters)
 
         # Cahn-Hilliard LBMs
@@ -122,8 +138,13 @@ class PhaseFieldStep:
         self.phiSync()
         self.dataHandling.runKernel(self.muKernel)
 
-        self.muSync()
-        self.dataHandling.runKernel(self.forceKernel)
+        if self.usePressureTensor:
+            self.dataHandling.runKernel(self.pressureTensorKernel)
+            self.pressureTensorSync()
+            self.dataHandling.runKernel(self.forceFromPressureTensorKernel)
+        else:
+            self.muSync()
+            self.dataHandling.runKernel(self.forceKernel)
 
         if self.runHydroLbm:
             self.hydroLbmStep.timeStep()
