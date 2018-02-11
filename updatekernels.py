@@ -1,5 +1,7 @@
 import numpy as np
 import sympy as sp
+
+from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 from pystencils import Field
 from pystencils.equationcollection.equationcollection import EquationCollection
 from pystencils.field import createNumpyArrayWithLayout, layoutStringToTuple
@@ -119,6 +121,20 @@ def createStreamPullOnlyKernel(stencil, numpyField=None, srcFieldName="src", dst
            if sp.Eq(a, b) != True]
     return EquationCollection(eqs, [])
 
+
+def createStreamPullWithOutputKernel(lbMethod, srcField, dstField, output):
+    stencil = lbMethod.stencil
+    cqc = lbMethod.conservedQuantityComputation
+    streamed = sp.symbols("streamed_:%d" % (len(stencil),))
+    accessor = StreamPullTwoFieldsAccessor()
+    streamEqs = [sp.Eq(a, b) for a, b in zip(streamed, accessor.read(srcField, stencil))
+                 if sp.Eq(a, b) != True]
+    outputEqCollection = cqc.outputEquationsFromPdfs(streamed, output)
+    writeEqs = [sp.Eq(a, b) for a, b in zip(accessor.write(dstField, stencil), streamed)]
+
+    subExprs = streamEqs + outputEqCollection.subexpressions
+    mainEqs = outputEqCollection.mainEquations + writeEqs
+    return LbmCollisionRule(lbMethod, mainEqs, subExprs, simplificationHints=outputEqCollection.simplificationHints)
 
 # ---------------------------------- Pdf array creation for various layouts --------------------------------------------
 

@@ -108,16 +108,16 @@ def createChannel(domainSize=None, force=None, pressureDifference=None, u_max=No
     """
     assert domainSize is not None or dataHandling is not None
 
-    dim = len(domainSize)
-    assert dim in (2, 3)
-
     if [bool(p) for p in (force, pressureDifference, u_max)].count(True) != 1:
         raise ValueError("Please specify exactly one of the parameters 'force', 'pressureDifference' or 'u_max'")
 
     periodicity = (True, False, False) if force else (False, False, False)
     if dataHandling is None:
+        dim = len(domainSize)
+        assert dim in (2, 3)
         dataHandling = createDataHandling(parallel, domainSize, periodicity=periodicity[:dim], defaultGhostLayers=1)
 
+    dim = dataHandling.dim
     if force:
         kwargs['force'] = tuple([force, 0, 0][:dim])
         assert dataHandling.periodicity[0]

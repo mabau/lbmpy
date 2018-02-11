@@ -156,7 +156,7 @@ from lbmpy.stencils import getStencil, stencilsHaveSameEntries
 import lbmpy.forcemodels as forcemodels
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor, \
-    createLBMKernel
+    createLBMKernel, createStreamPullOnlyKernel, createStreamPullWithOutputKernel
 from pystencils.data_types import collateTypes
 from pystencils.equationcollection.equationcollection import EquationCollection
 from pystencils.field import getLayoutOfArray, Field
@@ -197,42 +197,18 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
 
 
 @diskcacheNoFallback
-def createLatticeBoltzmannCollisionRule(lbMethod=None, optimizationParams={}, **kwargs):
-    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
-
-    if lbMethod is None:
-        lbMethod = createLatticeBoltzmannMethod(**params)
-
-    splitInnerLoop = 'split' in optParams and optParams['split']
-
-    dirCSE = 'doCseInOpposingDirections'
-    doCseInOpposingDirections = False if dirCSE not in optParams else optParams[dirCSE]
-    doOverallCse = False if 'doOverallCse' not in optParams else optParams['doOverallCse']
-    simplification = createSimplificationStrategy(lbMethod, doCseInOpposingDirections, doOverallCse, splitInnerLoop)
-    cqc = lbMethod.conservedQuantityComputation
-
-    if params['velocityInput'] is not None:
-        eqs = [sp.Eq(cqc.zerothOrderMomentSymbol, sum(lbMethod.preCollisionPdfSymbols))]
-        velocityField = params['velocityInput']
-        eqs += [sp.Eq(uSym, velocityField(i)) for i, uSym in enumerate(cqc.firstOrderMomentSymbols)]
-        eqs = EquationCollection(eqs, [])
-        collisionRule = lbMethod.getCollisionRule(conservedQuantityEquations=eqs)
-    else:
-        collisionRule = lbMethod.getCollisionRule()
-
-    if params['output']:
-        outputEqs = cqc.outputEquationsFromPdfs(lbMethod.preCollisionPdfSymbols, params['output'])
-        collisionRule = collisionRule.merge(outputEqs)
-
-    return simplification(collisionRule)
-
-
-@diskcacheNoFallback
 def createLatticeBoltzmannUpdateRule(collisionRule=None, optimizationParams={}, **kwargs):
     params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
 
     if collisionRule is None:
         collisionRule = createLatticeBoltzmannCollisionRule(**params, optimizationParams=optParams)
+
+    lbMethod = collisionRule.method
+
+    if params['output'] and params['kernelType'] == 'streamPullCollide':
+        cqc = lbMethod.conservedQuantityComputation
+        outputEqs = cqc.outputEquationsFromPdfs(lbMethod.preCollisionPdfSymbols, params['output'])
+        collisionRule = collisionRule.merge(outputEqs)
 
     if params['entropic']:
         if params['entropicNewtonIterations']:
@@ -266,8 +242,37 @@ def createLatticeBoltzmannUpdateRule(collisionRule=None, optimizationParams={}, 
         return createLBMKernel(collisionRule, srcField, dstField, accessor)
     elif params['kernelType'] == 'collideOnly':
         return createLBMKernel(collisionRule, srcField, srcField, CollideOnlyInplaceAccessor)
+    elif params['kernelType'] == 'streamPullOnly':
+        return createStreamPullWithOutputKernel(lbMethod, srcField, dstField, params['output'])
     else:
         raise ValueError("Invalid value of parameter 'kernelType'", params['kernelType'])
+
+
+@diskcacheNoFallback
+def createLatticeBoltzmannCollisionRule(lbMethod=None, optimizationParams={}, **kwargs):
+    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
+
+    if lbMethod is None:
+        lbMethod = createLatticeBoltzmannMethod(**params)
+
+    splitInnerLoop = 'split' in optParams and optParams['split']
+
+    dirCSE = 'doCseInOpposingDirections'
+    doCseInOpposingDirections = False if dirCSE not in optParams else optParams[dirCSE]
+    doOverallCse = False if 'doOverallCse' not in optParams else optParams['doOverallCse']
+    simplification = createSimplificationStrategy(lbMethod, doCseInOpposingDirections, doOverallCse, splitInnerLoop)
+    cqc = lbMethod.conservedQuantityComputation
+
+    if params['velocityInput'] is not None:
+        eqs = [sp.Eq(cqc.zerothOrderMomentSymbol, sum(lbMethod.preCollisionPdfSymbols))]
+        velocityField = params['velocityInput']
+        eqs += [sp.Eq(uSym, velocityField(i)) for i, uSym in enumerate(cqc.firstOrderMomentSymbols)]
+        eqs = EquationCollection(eqs, [])
+        collisionRule = lbMethod.getCollisionRule(conservedQuantityEquations=eqs)
+    else:
+        collisionRule = lbMethod.getCollisionRule()
+
+    return simplification(collisionRule)
 
 
 def createLatticeBoltzmannMethod(**params):

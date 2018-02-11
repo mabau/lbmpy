@@ -18,7 +18,7 @@ class LatticeBoltzmannStep:
                  kernelParams={}, dataHandling=None, name="lbm", optimizationParams={},
                  velocityDataName=None, densityDataName=None, densityDataIndex=None,
                  computeVelocityInEveryStep=False, computeDensityInEveryStep=False,
-                 velocityInputArrayName=None,
+                 velocityInputArrayName=None, timeStepOrder='streamCollide',
                  **methodParameters):
 
         # --- Parameter normalization  ---
@@ -35,6 +35,7 @@ class LatticeBoltzmannStep:
             methodParameters['stencil'] = 'D2Q9' if dataHandling.dim == 2 else 'D3Q27'
 
         methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
+        del methodParameters['kernelType']
 
         if lbmKernel:
             Q = len(lbmKernel.method.stencil)
@@ -81,15 +82,28 @@ class LatticeBoltzmannStep:
             optimizationParams['symbolicField'] = dataHandling.fields[self._pdfArrName]
             methodParameters['fieldName'] = self._pdfArrName
             methodParameters['secondFieldName'] = self._tmpArrName
-            self._lbmKernel = createLatticeBoltzmannFunction(optimizationParams=optimizationParams, **methodParameters)
+            if timeStepOrder == 'streamCollide':
+                self._lbmKernels = [createLatticeBoltzmannFunction(optimizationParams=optimizationParams,
+                                                                   **methodParameters)]
+            elif timeStepOrder == 'collideStream':
+                self._lbmKernels = [createLatticeBoltzmannFunction(optimizationParams=optimizationParams,
+                                                                   kernelType='collideOnly',
+                                                                   **methodParameters),
+                                    createLatticeBoltzmannFunction(optimizationParams=optimizationParams,
+                                                                   kernelType='streamPullOnly',
+                                                                   ** methodParameters)]
+
         else:
-            assert self._dataHandling.dim == self._lbmKernel.method.dim, \
-                "Error: %dD Kernel for %D domain" % (self._lbmKernel.method.dim, self._dataHandling.dim)
-            self._lbmKernel = lbmKernel
+            assert self._dataHandling.dim == lbmKernel.method.dim, \
+                "Error: %dD Kernel for %D domain" % (lbmKernel.method.dim, self._dataHandling.dim)
+            self._lbmKernels = [lbmKernel]
+
+        self.method = self._lbmKernels[0].method
+        self.ast = self._lbmKernels[0].ast
 
         # -- Boundary Handling  & Synchronization ---
         self._sync = dataHandling.synchronizationFunction([self._pdfArrName], methodParameters['stencil'], target)
-        self._boundaryHandling = BoundaryHandling(self._lbmKernel.method, self._dataHandling, self._pdfArrName,
+        self._boundaryHandling = BoundaryHandling(self.method, self._dataHandling, self._pdfArrName,
                                                   name=name + "_boundaryHandling",
                                                   target=target, openMP=optimizationParams['openMP'])
 
@@ -121,10 +135,6 @@ class LatticeBoltzmannStep:
         return self._dataHandling.dim
 
     @property
-    def method(self):
-        return self._lbmKernel.method
-
-    @property
     def domainSize(self):
         return self._dataHandling.shape
 
@@ -134,10 +144,6 @@ class LatticeBoltzmannStep:
         for d in self.domainSize:
             result *= d
         return result
-
-    @property
-    def ast(self):
-        return self._lbmKernel.ast
 
     @property
     def pdfArrayName(self):
@@ -188,9 +194,16 @@ class LatticeBoltzmannStep:
         self._dataHandling.runKernel(self._setterKernel, **self.kernelParams)
 
     def timeStep(self):
-        self._sync()
-        self._boundaryHandling(**self.kernelParams)
-        self._dataHandling.runKernel(self._lbmKernel, **self.kernelParams)
+        if len(self._lbmKernels) == 2:  # collide stream
+            self._dataHandling.runKernel(self._lbmKernels[0], **self.kernelParams)
+            self._sync()
+            self._boundaryHandling(**self.kernelParams)
+            self._dataHandling.runKernel(self._lbmKernels[1], **self.kernelParams)
+        else: # stream collide
+            self._sync()
+            self._boundaryHandling(**self.kernelParams)
+            self._dataHandling.runKernel(self._lbmKernels[0], **self.kernelParams)
+
         self._dataHandling.swap(self._pdfArrName, self._tmpArrName, self._gpu)
         self.timeStepsRun += 1
 
@@ -223,7 +236,7 @@ class LatticeBoltzmannStep:
         self.vtkWriter(self.timeStepsRun)
 
     def _compilerMacroscopicSetterAndGetter(self):
-        lbMethod = self._lbmKernel.method
+        lbMethod = self.method
         D = lbMethod.dim
         Q = len(lbMethod.stencil)
         cqc = lbMethod.conservedQuantityComputation
