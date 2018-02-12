@@ -1,6 +1,6 @@
 import sympy as sp
 from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, substituteLaplacianBySum, \
-    discretizeSecondDerivatives, forceFromPhiAndMu, symmetricTensorLinearization, pressureTensorFromFreeEnergy, \
+    finiteDifferences2ndOrder, forceFromPhiAndMu, symmetricTensorLinearization, pressureTensorFromFreeEnergy, \
     forceFromPressureTensor
 
 
@@ -14,7 +14,7 @@ def muKernel(freeEnergy, orderParameters, phiField, muField, dx=1):
     chemicalPotential = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
     chemicalPotential = substituteLaplacianBySum(chemicalPotential, dim)
     chemicalPotential = chemicalPotential.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
-    return [sp.Eq(muField(i), discretizeSecondDerivatives(mu_i, dx)) for i, mu_i in enumerate(chemicalPotential)]
+    return [sp.Eq(muField(i), finiteDifferences2ndOrder(mu_i, dx)) for i, mu_i in enumerate(chemicalPotential)]
 
 
 def forceKernelUsingMu(forceField, phiField, muField, dx=1):
@@ -22,7 +22,7 @@ def forceKernelUsingMu(forceField, phiField, muField, dx=1):
     assert muField.indexDimensions == 1
     force = forceFromPhiAndMu(phiField.vecCenter, mu=muField.vecCenter, dim=muField.spatialDimensions)
     return [sp.Eq(forceField(i),
-                  discretizeSecondDerivatives(f_i, dx)).expand() for i, f_i in enumerate(force)]
+                  finiteDifferences2ndOrder(f_i, dx)).expand() for i, f_i in enumerate(force)]
 
 
 def pressureTensorKernel(freeEnergy, orderParameters, phiField, pressureTensorField, dx=1):
@@ -34,7 +34,7 @@ def pressureTensorKernel(freeEnergy, orderParameters, phiField, pressureTensorFi
     eqs = []
     for index, linIndex in indexMap.items():
         eq = sp.Eq(pressureTensorField(linIndex),
-                   discretizeSecondDerivatives(p[index], dx).expand())
+                   finiteDifferences2ndOrder(p[index], dx).expand())
         eqs.append(eq)
     return eqs
 
@@ -45,7 +45,7 @@ def forceKernelUsingPressureTensor(forceField, pressureTensorField, dx=1):
 
     p = sp.Matrix(dim, dim, lambda i, j: pressureTensorField(indexMap[i,j] if i < j else indexMap[j, i]))
     f = forceFromPressureTensor(p)
-    return [sp.Eq(forceField(i), discretizeSecondDerivatives(f_i, dx).expand())
+    return [sp.Eq(forceField(i), finiteDifferences2ndOrder(f_i, dx).expand())
             for i, f_i in enumerate(f)]
 
 

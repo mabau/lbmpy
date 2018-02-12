@@ -61,7 +61,8 @@ def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidt
 
 def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymbolicSurfaceTension,
                                 interfaceWidth=interfaceWidthSymbol, orderParameters=None,
-                                includeBulk=True, includeInterface=True, symbolicLambda=False):
+                                includeBulk=True, includeInterface=True, symbolicLambda=False,
+                                symbolicDependentVariable=False):
     r"""
     Returns a symbolic expression for the free energy of a system with N phases and
     specified surface tensions. The total free energy is the sum of a bulk and an interface component.
@@ -89,6 +90,9 @@ def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymboli
     Parameter useful for viewing / debugging the function
     :param includeBulk: if false no bulk term is added
     :param includeInterface:if false no interface contribution is added
+    :param symbolicLambda: surface energy coefficient is represented by symbol, not in expanded form
+    :param symbolicDependentVariable: last phase variable is defined as 1-otherPhaseVars, if this is set to True
+                                      it is represented by phi_A for better readability
     """
     assert not (numPhases is None and orderParameters is None)
     if orderParameters is None:
@@ -97,7 +101,10 @@ def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymboli
         phi = orderParameters
         numPhases = len(phi) + 1
 
-    phi = tuple(phi) + (1 - sum(phi),)
+    if not symbolicDependentVariable:
+        phi = tuple(phi) + (1 - sum(phi),)
+    else:
+        phi = tuple(phi) + (sp.Symbol("phi_D"), )
 
     # Compared to handwritten notes we scale the interface width parameter here to obtain the correct
     # equations for the interface profile and the surface tensions i.e. to pass tests
@@ -109,11 +116,11 @@ def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymboli
 
     def lambdaCoeff(k, l):
         if symbolicLambda:
-            return sp.Symbol("Lambda_%d%d" % ((k,l) if k < l else (l,k)))
+            return sp.Symbol("Lambda_%d%d" % ((k, l) if k < l else (l, k)))
         N = numPhases - 1
         if k == l:
             assert surfaceTensions(l, l) == 0
-        return  3 / sp.sqrt(2) * interfaceWidth * (surfaceTensions(k, N) + surfaceTensions(l, N) - surfaceTensions(k, l))
+        return 3 / sp.sqrt(2) * interfaceWidth * (surfaceTensions(k, N) + surfaceTensions(l, N) - surfaceTensions(k, l))
 
     def bulkTerm(i, j):
         return surfaceTensions(i, j) / 2 * (f(phi[i]) + f(phi[j]) - f(phi[i] + phi[j]))
@@ -234,7 +241,7 @@ def coshIntegral(f, var):
     return sp.integrate(transformedInt.args[0], (transformedInt.args[1][0], -sp.oo, sp.oo))
 
 
-def discretizeSecondDerivatives(term, dx=1):
+def finiteDifferences2ndOrder(term, dx=1):
     """Substitutes symbolic integral of field access by second order accurate finite differences.
     The only valid argument of Diff objects are field accesses (usually center field accesses)"""
     def diffOrder(e):
