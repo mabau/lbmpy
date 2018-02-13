@@ -64,7 +64,7 @@ def freeEnergyFunctionalNPhasesPenaltyTerm(orderParameters, interfaceWidth=inter
     numPhases = len(orderParameters)
     if kappa is None:
         kappa = sp.symbols("kappa_:%d" % (numPhases,))
-    if not hasattr(kappa, "__length__"):
+    if not hasattr(kappa, "__len__"):
         kappa = [kappa] * numPhases
 
     def f(x):

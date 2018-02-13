@@ -1,3 +1,4 @@
+import sympy as sp
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.phasefield.cahn_hilliard_lbm import cahnHilliardLbmMethod
 from lbmpy.phasefield.kerneleqs import muKernel, forceKernelUsingMu, CahnHilliardFDStep, pressureTensorKernel, \
@@ -14,7 +15,8 @@ class PhaseFieldStep:
     def __init__(self, freeEnergy, orderParameters, domainSize=None, dataHandling=None,
                  name='pf', hydroLbmParameters={},
                  hydroDynamicRelaxationRate=1.0, cahnHilliardRelaxationRates=1.0, densityOrderParameter=None,
-                 target='cpu', openMP=False, kernelParams={}, dx=1, dt=1, solveCahnHilliardWithFiniteDifferences=False):
+                 target='cpu', openMP=False, kernelParams={}, dx=1, dt=1, solveCahnHilliardWithFiniteDifferences=False,
+                 orderParameterForce=None):
 
         if dataHandling is None:
             dataHandling = SerialDataHandling(domainSize, periodicity=True)
@@ -54,7 +56,12 @@ class PhaseFieldStep:
                                                       target=target, cpuOpenMP=openMP).compile()
 
         # F Kernel
-        self.forceEqs = forceKernelUsingPressureTensor(self.forceField, self.pressureTensorField, dx)
+        extraForce = sp.Matrix([0] * self.dataHandling.dim)
+        if orderParameterForce is not None:
+            for orderParameterIdx, force in orderParameterForce.items():
+                extraForce += self.phiField(orderParameterIdx) * sp.Matrix(force)
+        self.forceEqs = forceKernelUsingPressureTensor(self.forceField, self.pressureTensorField, dx=dx,
+                                                       extraForce=extraForce)
         self.forceFromPressureTensorKernel = createKernel(self.forceEqs, target=target, cpuOpenMP=openMP).compile()
         self.pressureTensorSync = dataHandling.synchronizationFunction([self.pressureTensorFieldName], target=target)
 

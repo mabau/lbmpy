@@ -39,12 +39,14 @@ def pressureTensorKernel(freeEnergy, orderParameters, phiField, pressureTensorFi
     return eqs
 
 
-def forceKernelUsingPressureTensor(forceField, pressureTensorField, dx=1):
+def forceKernelUsingPressureTensor(forceField, pressureTensorField, extraForce=None, dx=1):
     dim = forceField.spatialDimensions
     indexMap = symmetricTensorLinearization(dim)
 
     p = sp.Matrix(dim, dim, lambda i, j: pressureTensorField(indexMap[i,j] if i < j else indexMap[j, i]))
     f = forceFromPressureTensor(p)
+    if extraForce:
+        f += extraForce
     return [sp.Eq(forceField(i), finiteDifferences2ndOrder(f_i, dx).expand())
             for i, f_i in enumerate(f)]
 
