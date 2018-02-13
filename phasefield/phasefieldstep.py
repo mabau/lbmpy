@@ -17,7 +17,7 @@ class PhaseFieldStep:
                  target='cpu', openMP=False, kernelParams={}, dx=1, dt=1, solveCahnHilliardWithFiniteDifferences=False):
 
         if dataHandling is None:
-            dataHandling = SerialDataHandling(domainSize)
+            dataHandling = SerialDataHandling(domainSize, periodicity=True)
 
         self.freeEnergy = freeEnergy
         self.chemicalPotentials = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
@@ -95,16 +95,21 @@ class PhaseFieldStep:
                                               name=name + "_chLbm_%d" % (i,), )
                 self.cahnHilliardSteps.append(chStep)
 
+        self.runHydroLbm = True
+        self.densityOrderParameter = densityOrderParameter
+        self.timeStepsRun = 0
+        self.reset()
+
+    def reset(self):
         # Init φ and μ
         self.dataHandling.fill(self.phiFieldName, 0.0)
-        self.dataHandling.fill(self.phiFieldName, 1.0 if densityOrderParameter is not None else 0.0, fValue=0)
+        self.dataHandling.fill(self.phiFieldName, 1.0 if self.densityOrderParameter is not None else 0.0, fValue=0)
         self.dataHandling.fill(self.muFieldName, 0.0)
         self.dataHandling.fill(self.forceFieldName, 0.0)
+        self.dataHandling.fill(self.velFieldName, 0.0)
         self.setPdfFieldsFromMacroscopicValues()
 
         self.timeStepsRun = 0
-
-        self.runHydroLbm = True
 
     def setPdfFieldsFromMacroscopicValues(self):
         self.hydroLbmStep.setPdfFieldsFromMacroscopicValues()

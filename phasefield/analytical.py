@@ -29,8 +29,8 @@ def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidt
     kappaPrime = tuple(interfaceWidth**2 * k for k in kappa)
     C = sp.symbols("C_:3")
 
-    bulkFreeEnergy = sum(k / 2 * C_i ** 2 * (1 - C_i) ** 2 for k, C_i in zip(kappa, C))
-    surfaceFreeEnergy = sum(k / 2 * Diff(C_i) ** 2 for k, C_i in zip(kappaPrime, C))
+    bulkFreeEnergy = sum(k * C_i ** 2 * (1 - C_i) ** 2  / 2 for k, C_i in zip(kappa, C))
+    surfaceFreeEnergy = sum(k * Diff(C_i) ** 2 / 2 for k, C_i in zip(kappaPrime, C))
 
     F = 0
     if includeBulk:
@@ -57,6 +57,25 @@ def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidt
         F = expandUsingLinearity(F, functions=orderParameters)
 
     return F
+
+
+def freeEnergyFunctionalNPhasesPenaltyTerm(orderParameters, interfaceWidth=interfaceWidthSymbol, kappa=None,
+                                           penaltyTermFactor=0.01):
+    numPhases = len(orderParameters)
+    if kappa is None:
+        kappa = sp.symbols("kappa_:%d" % (numPhases,))
+    if not hasattr(kappa, "__length__"):
+        kappa = [kappa] * numPhases
+
+    def f(x):
+        return x ** 2 * (1 - x) ** 2
+
+    bulk = sum(f(c) * k / 2 for c, k in zip(orderParameters, kappa))
+    interface = sum(Diff(c) ** 2 / 2 * interfaceWidth ** 2 * k
+                    for c, k in zip(orderParameters, kappa))
+
+    bulkPenaltyTerm = (1 - sum(c for c in orderParameters)) ** 2
+    return bulk + interface + penaltyTermFactor * bulkPenaltyTerm
 
 
 def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymbolicSurfaceTension,
