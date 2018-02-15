@@ -1,10 +1,9 @@
 import sympy as sp
-import numpy as np
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from pystencils.astnodes import SympyAssignment
 from pystencils.sympyextensions import getSymmetricPart
 from pystencils import Field
-from lbmpy.boundaries.boundary_kernel import offsetFromDir, weightOfDirection, invDir
+from lbmpy.boundaries.boundaryhandling import BoundaryOffsetInfo, LbmWeightInfo
 from pystencils.data_types import createType
 
 
@@ -63,8 +62,8 @@ class NoSlip(Boundary):
 
     """No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle"""
     def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
-        neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
-        inverseDir = invDir(directionSymbol)
+        neighbor = BoundaryOffsetInfo.offsetFromDir(directionSymbol, lbMethod.dim)
+        inverseDir = BoundaryOffsetInfo.invDir(directionSymbol)
         return [sp.Eq(pdfField[neighbor](inverseDir), pdfField(directionSymbol))]
 
     def __hash__(self):
@@ -118,8 +117,8 @@ class UBB(Boundary):
         assert self.dim == lbMethod.dim, "Dimension of UBB (%d) does not match dimension of method (%d)" \
                                          % (self.dim, lbMethod.dim)
 
-        neighbor = offsetFromDir(direction, lbMethod.dim)
-        inverseDir = invDir(direction)
+        neighbor = BoundaryOffsetInfo.offsetFromDir(direction, lbMethod.dim)
+        inverseDir = BoundaryOffsetInfo.invDir(direction)
 
         velocity = tuple(v_i.getShifted(*neighbor) if isinstance(v_i, Field.Access) and not velFromIdxField else v_i
                          for v_i in vel)
@@ -130,6 +129,7 @@ class UBB(Boundary):
             velocity = [eq.rhs for eq in shiftedVelEqs.extract(cqc.firstOrderMomentSymbols).mainEquations]
 
         c_s_sq = sp.Rational(1, 3)
+        weightOfDirection = LbmWeightInfo.weightOfDirection
         velTerm = 2 / c_s_sq * sum([d_i * v_i for d_i, v_i in zip(neighbor, velocity)]) * weightOfDirection(direction)
 
         # Better alternative: in conserved value computation
@@ -163,8 +163,8 @@ class FixedDensity(Boundary):
             newMainEquations = [sp.Eq(e.lhs, getSymmetricPart(e.rhs, dofs)) for e in eqColl.mainEquations]
             return eqColl.copy(newMainEquations)
 
-        neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
-        inverseDir = invDir(directionSymbol)
+        neighbor = BoundaryOffsetInfo.offsetFromDir(directionSymbol, lbMethod.dim)
+        inverseDir = BoundaryOffsetInfo.invDir(directionSymbol)
 
         cqc = lbMethod.conservedQuantityComputation
         velocity = cqc.definedSymbols()['velocity']
@@ -195,7 +195,7 @@ class FixedDensity(Boundary):
 
 class NeumannByCopy(Boundary):
     def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
-        neighbor = offsetFromDir(directionSymbol, lbMethod.dim)
+        neighbor = BoundaryOffsetInfo.offsetFromDir(directionSymbol, lbMethod.dim)
         return [sp.Eq(pdfField[neighbor](directionSymbol), pdfField(directionSymbol))]
 
     def __hash__(self):

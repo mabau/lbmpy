@@ -1,5 +1,5 @@
 import numpy as np
-from lbmpy.boundaries.boundary_handling import BoundaryHandling
+from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import switchToSymbolicRelaxationRatesForEntropicMethods, createLatticeBoltzmannFunction, \
     updateWithDefaultParameters
 from lbmpy.simplificationfactory import createSimplificationStrategy
@@ -101,9 +101,9 @@ class LatticeBoltzmannStep:
 
         # -- Boundary Handling  & Synchronization ---
         self._sync = dataHandling.synchronizationFunction([self._pdfArrName], methodParameters['stencil'], target)
-        self._boundaryHandling = BoundaryHandling(self.method, self._dataHandling, self._pdfArrName,
-                                                  name=name + "_boundaryHandling",
-                                                  target=target, openMP=optimizationParams['openMP'])
+        self._boundaryHandling = LatticeBoltzmannBoundaryHandling(self.method, self._dataHandling, self._pdfArrName,
+                                                                  name=name + "_boundaryHandling",
+                                                                  target=target, openMP=optimizationParams['openMP'])
 
         # -- Macroscopic Value Kernels
         self._getterKernel, self._setterKernel = self._compilerMacroscopicSetterAndGetter()

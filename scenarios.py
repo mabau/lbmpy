@@ -58,6 +58,7 @@ def createFullyPeriodicFlow(initialVelocity, periodicityInKernel=False, lbmKerne
     step = LatticeBoltzmannStep(dataHandling=dataHandling, name="periodicScenario", lbmKernel=lbmKernel, **kwargs)
     for b in step.dataHandling.iterate(ghostLayers=False):
         np.copyto(b[step.velocityDataName], initialVelocity[b.globalSlice])
+    step.setPdfFieldsFromMacroscopicValues()
     return step
 
 
