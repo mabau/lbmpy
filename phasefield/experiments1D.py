@@ -36,11 +36,12 @@ def plotStatus(phaseFieldStep, fromX=None, toX=None):
     plt.legend()
 
 
-def plotFreeEnergyBulkContours(freeEnergy, orderParameters, phase0=0, phase1=1, **kwargs):
+def plotFreeEnergyBulkContours(freeEnergy, orderParameters, phase0=0, phase1=1,
+                               xRange=(-0.2, 1.2), yRange=(-0.2, 1.2), **kwargs):
     import lbmpy.plot2d as plt
 
-    x = np.linspace(-.2, 1.2, 100)
-    y = np.linspace(-.2, 1.2, 100)
+    x = np.linspace(xRange[0], xRange[1], 100)
+    y = np.linspace(yRange[0], yRange[1], 100)
     xg, yg = np.meshgrid(x, y)
     substitutions = {op: 0 for i, op in enumerate(orderParameters) if i not in (phase0, phase1)}
     substitutions.update({d: 0 for d in freeEnergy.atoms(Diff)})  # remove interface components of free energy

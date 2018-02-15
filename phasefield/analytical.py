@@ -29,7 +29,7 @@ def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidt
     kappaPrime = tuple(interfaceWidth**2 * k for k in kappa)
     C = sp.symbols("C_:3")
 
-    bulkFreeEnergy = sum(k * C_i ** 2 * (1 - C_i) ** 2  / 2 for k, C_i in zip(kappa, C))
+    bulkFreeEnergy = sum(k * C_i ** 2 * (1 - C_i) ** 2 / 2 for k, C_i in zip(kappa, C))
     surfaceFreeEnergy = sum(k * Diff(C_i) ** 2 / 2 for k, C_i in zip(kappaPrime, C))
 
     F = 0
@@ -45,18 +45,18 @@ def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidt
         rho, phi, psi = orderParameters
     else:
         rho, phi, psi = sp.symbols("rho phi psi")
-    rhoDef = C[0] + C[1] + C[2]
-    phiDef = C[0] - C[1]
-    psiDef = C[2]
 
-    concentrationToOrderParamRelation = {rho: rhoDef, phi: phiDef, psi: psiDef}
+    transformationMatrix = sp.Matrix([[1,  1, 1],
+                                      [1, -1, 0],
+                                      [0,  0, 1]])
+    rhoDef, phiDef, psiDef = transformationMatrix * sp.Matrix(C)
     orderParamToConcentrationRelation = sp.solve([rhoDef - rho, phiDef - phi, psiDef - psi], C)
 
     F = F.subs(orderParamToConcentrationRelation)
     if expandDerivatives:
         F = expandUsingLinearity(F, functions=orderParameters)
 
-    return F
+    return F, transformationMatrix
 
 
 def freeEnergyFunctionalNPhasesPenaltyTerm(orderParameters, interfaceWidth=interfaceWidthSymbol, kappa=None,
@@ -237,7 +237,6 @@ def functionalDerivative(functional, v, constants=None):
     diffs = functional.atoms(Diff)
 
     diffV = Diff(v)
-    #assert diffV in diffs  # not necessary in general, but for this use case this should be true
 
     nonDiffPart = functional.subs({d: 0 for d in diffs})
 

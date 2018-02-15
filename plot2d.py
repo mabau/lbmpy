@@ -1,3 +1,6 @@
+from itertools import cycle
+
+from pystencils import makeSlice
 from pystencils.plot2d import *
 
 
@@ -55,3 +58,16 @@ def boundaryHandling(boundaryHandlingObj, indexExpr=None, boundaryNameToColor=No
     plt.axis('equal')
     if showLegend:
         plt.legend(handles=patches, bbox_to_anchor=(1.02, 0.5), loc=2, borderaxespad=0.)
+
+
+def phasePlot(pfStep, sliceObj=makeSlice[:, :], linewidth=1.0):
+    import lbmpy.plot2d as plt
+    colors = ['#fe0002', '#00fe00', '#0000ff', '#ffa800', '#f600ff']
+    colorCycle = cycle(colors)
+
+    concentrations = pfStep.concentration[sliceObj]
+
+    for i in range(concentrations.shape[-1]):
+        plt.scalarFieldAlphaValue(concentrations[..., i], next(colorCycle), clip=True, interpolation='bilinear')
+    for i in range(concentrations.shape[-1]):
+        plt.scalarFieldContour(concentrations[..., i], levels=[0.5], colors='k', linewidths=[linewidth])

@@ -12,8 +12,6 @@ from pystencils.timeloop import TimeLoop
 
 class LatticeBoltzmannStep:
 
-    vtkScenarioNrCounter = 0
-
     def __init__(self, domainSize=None, lbmKernel=None, periodicity=False,
                  kernelParams={}, dataHandling=None, name="lbm", optimizationParams={},
                  velocityDataName=None, densityDataName=None, densityDataIndex=None,
@@ -116,9 +114,7 @@ class LatticeBoltzmannStep:
         self.setPdfFieldsFromMacroscopicValues()
 
         # -- VTK output
-        self.vtkWriter = self.dataHandling.vtkWriter(name + str(LatticeBoltzmannStep.vtkScenarioNrCounter),
-                                                     [self.velocityDataName, self.densityDataName])
-        LatticeBoltzmannStep.vtkScenarioNrCounter += 1
+        self.vtkWriter = self.dataHandling.vtkWriter(name, [self.velocityDataName, self.densityDataName])
         self.timeStepsRun = 0
 
     @property

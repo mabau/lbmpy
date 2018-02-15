@@ -1,4 +1,5 @@
 import sympy as sp
+import numpy as np
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.phasefield.cahn_hilliard_lbm import cahnHilliardLbmMethod
 from lbmpy.phasefield.kerneleqs import muKernel, forceKernelUsingMu, CahnHilliardFDStep, pressureTensorKernel, \
@@ -15,13 +16,20 @@ class PhaseFieldStep:
     def __init__(self, freeEnergy, orderParameters, domainSize=None, dataHandling=None,
                  name='pf', hydroLbmParameters={},
                  hydroDynamicRelaxationRate=1.0, cahnHilliardRelaxationRates=1.0, densityOrderParameter=None,
-                 target='cpu', openMP=False, kernelParams={}, dx=1, dt=1, solveCahnHilliardWithFiniteDifferences=False,
-                 orderParameterForce=None):
+                 optimizationParams=None, kernelParams={}, dx=1, dt=1, solveCahnHilliardWithFiniteDifferences=False,
+                 orderParameterForce=None, concentrationToOrderParameters=None, orderParametersToConcentrations=None):
+
+        if optimizationParams is None:
+            optimizationParams = {'openMP': False, 'target': 'cpu'}
+        openMP, target = optimizationParams['openMP'], optimizationParams['target']
 
         if dataHandling is None:
             dataHandling = SerialDataHandling(domainSize, periodicity=True)
 
         self.freeEnergy = freeEnergy
+        self.concentrationToOrderParameter = concentrationToOrderParameters
+        self.orderParametersToConcentrations = orderParametersToConcentrations
+
         self.chemicalPotentials = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
 
         # ------------------ Adding arrays ---------------------
@@ -67,7 +75,16 @@ class PhaseFieldStep:
 
         # Hydrodynamic LBM
         if densityOrderParameter is not None:
-            hydroLbmParameters['output'] = {'density': self.phiField(orderParameters.index(densityOrderParameter))}
+            densityIdx = orderParameters.index(densityOrderParameter)
+            hydroLbmParameters['computeDensityInEveryStep'] = True
+            hydroLbmParameters['densityDataName'] = self.phiFieldName
+            hydroLbmParameters['densityDataIndex'] = densityIdx
+
+        if 'optimizationParams' not in hydroLbmParameters:
+            hydroLbmParameters['optimizationParams'] = optimizationParams
+        else:
+            hydroLbmParameters['optimizationParams'].update(optimizationParams)
+
         self.hydroLbmStep = LatticeBoltzmannStep(dataHandling=dataHandling, name=name + '_hydroLBM',
                                                  relaxationRate=hydroDynamicRelaxationRate,
                                                  computeVelocityInEveryStep=True, force=self.forceField,
@@ -83,7 +100,8 @@ class PhaseFieldStep:
 
         if solveCahnHilliardWithFiniteDifferences:
             if densityOrderParameter is not None:
-                raise NotImplementedError("densityOrderParameter not supported when CH is solved with finite differences")
+                raise NotImplementedError("densityOrderParameter not supported when "
+                                          "CH is solved with finite differences")
             chStep = CahnHilliardFDStep(self.dataHandling, self.phiFieldName, self.muFieldName, self.velFieldName,
                                         target=target, dx=dx, dt=dt, mobilities=1)
             self.cahnHilliardSteps.append(chStep)
@@ -97,15 +115,23 @@ class PhaseFieldStep:
                 chStep = LatticeBoltzmannStep(dataHandling=dataHandling, relaxationRate=1, lbMethod=chMethod,
                                               velocityInputArrayName=self.velField.name,
                                               densityDataName=self.phiField.name,
+                                              stencil='D3Q19' if self.dataHandling.dim == 3 else 'D2Q9',
                                               computeDensityInEveryStep=True,
                                               densityDataIndex=i,
-                                              name=name + "_chLbm_%d" % (i,), )
+                                              name=name + "_chLbm_%d" % (i,),
+                                              optimizationParams=optimizationParams)
                 self.cahnHilliardSteps.append(chStep)
+
+        self.vtkWriter = self.dataHandling.vtkWriter(name, [self.phiFieldName, self.muFieldName, self.velFieldName,
+                                                            self.forceFieldName])
 
         self.runHydroLbm = True
         self.densityOrderParameter = densityOrderParameter
         self.timeStepsRun = 0
         self.reset()
+
+    def writeVTK(self):
+        self.vtkWriter(self.timeStepsRun)
 
     def reset(self):
         # Init φ and μ
@@ -125,6 +151,7 @@ class PhaseFieldStep:
 
     def preRun(self):
         if self.gpu:
+            self.dataHandling.toGpu(self.phiFieldName)
             self.dataHandling.toGpu(self.muFieldName)
             self.dataHandling.toGpu(self.forceFieldName)
         self.hydroLbmStep.preRun()
@@ -133,6 +160,7 @@ class PhaseFieldStep:
 
     def postRun(self):
         if self.gpu:
+            self.dataHandling.toCpu(self.phiFieldName)
             self.dataHandling.toCpu(self.muFieldName)
             self.dataHandling.toCpu(self.forceFieldName)
         if self.runHydroLbm:
@@ -154,6 +182,21 @@ class PhaseFieldStep:
 
         self.timeStepsRun += 1
 
+    def setConcentration(self, sliceObj, concentration):
+        if self.concentrationToOrderParameter is not None:
+            phi = self.concentrationToOrderParameter(concentration)
+        else:
+            phi = np.array(concentration)
+
+        for b in self.dataHandling.iterate(sliceObj):
+            for i in range(phi.shape[-1]):
+                b[self.phiFieldName][..., i] = phi[i]
+
+    def setDensity(self, sliceObj, value):
+        for b in self.dataHandling.iterate(sliceObj):
+            for i in range(self.numOrderParameters):
+                b[self.hydroLbmStep.densityDataName].fill(value)
+
     def run(self, timeSteps):
         self.preRun()
         for i in range(timeSteps):
@@ -168,6 +211,10 @@ class PhaseFieldStep:
     def phiSlice(self, sliceObj=None):
         return self._getSlice(self.phiFieldName, sliceObj)
 
+    def concentrationSlice(self, sliceObj=None):
+        phi = self.phiSlice(sliceObj)
+        return phi if self.orderParametersToConcentrations is None else self.orderParametersToConcentrations(phi)
+
     def muSlice(self, sliceObj=None):
         return self._getSlice(self.muFieldName, sliceObj)
 
@@ -180,6 +227,10 @@ class PhaseFieldStep:
     @property
     def phi(self):
         return SlicedGetter(self.phiSlice)
+
+    @property
+    def concentration(self):
+        return SlicedGetter(self.concentrationSlice)
 
     @property
     def mu(self):
