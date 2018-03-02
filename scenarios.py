@@ -13,7 +13,9 @@ All scenarios can be modified, for example you can create a simple channel first
 
 >>> from lbmpy.boundaries import NoSlip
 >>> from pystencils.slicing import makeSlice
->>> scenario.boundaryHandling.setBoundary(NoSlip(), makeSlice[0.3:0.4, 0.0:0.3])
+>>> flag = scenario.boundaryHandling.setBoundary(NoSlip(), makeSlice[0.3:0.4, 0.0:0.3])
+
+
 
 Functions for scenario setup:
 ----    -------------------------

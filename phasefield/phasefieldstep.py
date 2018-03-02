@@ -1,11 +1,14 @@
 import sympy as sp
 import numpy as np
+
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.phasefield.cahn_hilliard_lbm import cahnHilliardLbmMethod
-from lbmpy.phasefield.kerneleqs import muKernel, forceKernelUsingMu, CahnHilliardFDStep, pressureTensorKernel, \
+from lbmpy.phasefield.kerneleqs import muKernel, CahnHilliardFDStep, pressureTensorKernel, \
     forceKernelUsingPressureTensor
 from pystencils import createKernel
 from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, symmetricTensorLinearization
+from pystencils.boundaries.boundaryhandling import FlagInterface
+from pystencils.boundaries.inkernel import addNeumannBoundary
 from pystencils.datahandling import SerialDataHandling
 from pystencils.equationcollection.simplifications import sympyCseOnEquationList
 from pystencils.slicing import makeSlice, SlicedGetter
@@ -17,7 +20,8 @@ class PhaseFieldStep:
                  name='pf', hydroLbmParameters={},
                  hydroDynamicRelaxationRate=1.0, cahnHilliardRelaxationRates=1.0, densityOrderParameter=None,
                  optimizationParams=None, kernelParams={}, dx=1, dt=1, solveCahnHilliardWithFiniteDifferences=False,
-                 orderParameterForce=None, concentrationToOrderParameters=None, orderParametersToConcentrations=None):
+                 orderParameterForce=None, concentrationToOrderParameters=None, orderParametersToConcentrations=None,
+                 activateHomogenousNeumannBoundaries=False):
 
         if optimizationParams is None:
             optimizationParams = {'openMP': False, 'target': 'cpu'}
@@ -50,17 +54,31 @@ class PhaseFieldStep:
         self.forceField = dataHandling.addArray(self.forceFieldName, fSize=dataHandling.dim, gpu=gpu, latexName="F")
         self.pressureTensorField = dataHandling.addArray(self.pressureTensorFieldName,
                                                          fSize=pressureTensorSize, latexName='P')
+        self.flagInterface = FlagInterface(dataHandling, 'flags')
 
         # ------------------ Creating kernels ------------------
         phi = tuple(self.phiField(i) for i in range(len(orderParameters)))
         F = self.freeEnergy.subs({old: new for old, new in zip(orderParameters, phi)})
+
+        if activateHomogenousNeumannBoundaries:
+            def applyNeumannBoundaries(eqs):
+                fields = [dataHandling.fields[self.phiFieldName],
+                          dataHandling.fields[self.pressureTensorFieldName],
+                          ]
+                flagField = dataHandling.fields[self.flagInterface.flagFieldName]
+                return addNeumannBoundary(eqs, fields, flagField, "neumannFlag", inverseFlag=False)
+        else:
+            def applyNeumannBoundaries(eqs):
+                return eqs
 
         # μ and pressure tensor update
         self.phiSync = dataHandling.synchronizationFunction([self.phiFieldName], target=target)
         self.muEqs = muKernel(F, phi, self.phiField, self.muField, dx)
         self.pressureTensorEqs = pressureTensorKernel(self.freeEnergy, orderParameters,
                                                       self.phiField, self.pressureTensorField, dx)
-        self.muAndPressureTensorKernel = createKernel(sympyCseOnEquationList(self.muEqs + self.pressureTensorEqs),
+        muAndPressureTensorEqs = self.muEqs + self.pressureTensorEqs
+        muAndPressureTensorEqs = applyNeumannBoundaries(muAndPressureTensorEqs)
+        self.muAndPressureTensorKernel = createKernel(sympyCseOnEquationList(muAndPressureTensorEqs),
                                                       target=target, cpuOpenMP=openMP).compile()
 
         # F Kernel
@@ -70,7 +88,8 @@ class PhaseFieldStep:
                 extraForce += self.phiField(orderParameterIdx) * sp.Matrix(force)
         self.forceEqs = forceKernelUsingPressureTensor(self.forceField, self.pressureTensorField, dx=dx,
                                                        extraForce=extraForce)
-        self.forceFromPressureTensorKernel = createKernel(self.forceEqs, target=target, cpuOpenMP=openMP).compile()
+        self.forceFromPressureTensorKernel = createKernel(applyNeumannBoundaries(self.forceEqs),
+                                                          target=target, cpuOpenMP=openMP).compile()
         self.pressureTensorSync = dataHandling.synchronizationFunction([self.pressureTensorFieldName], target=target)
 
         # Hydrodynamic LBM
@@ -89,6 +108,7 @@ class PhaseFieldStep:
                                                  relaxationRate=hydroDynamicRelaxationRate,
                                                  computeVelocityInEveryStep=True, force=self.forceField,
                                                  velocityDataName=self.velFieldName, kernelParams=kernelParams,
+                                                 flagInterface=self.flagInterface,
                                                  timeStepOrder='collideStream',
                                                  **hydroLbmParameters)
 
@@ -103,7 +123,8 @@ class PhaseFieldStep:
                 raise NotImplementedError("densityOrderParameter not supported when "
                                           "CH is solved with finite differences")
             chStep = CahnHilliardFDStep(self.dataHandling, self.phiFieldName, self.muFieldName, self.velFieldName,
-                                        target=target, dx=dx, dt=dt, mobilities=1)
+                                        target=target, dx=dx, dt=dt, mobilities=1,
+                                        equationModifier=applyNeumannBoundaries)
             self.cahnHilliardSteps.append(chStep)
         else:
             for i, op in enumerate(orderParameters):
@@ -118,6 +139,7 @@ class PhaseFieldStep:
                                               stencil='D3Q19' if self.dataHandling.dim == 3 else 'D2Q9',
                                               computeDensityInEveryStep=True,
                                               densityDataIndex=i,
+                                              flagInterface=self.hydroLbmStep.boundaryHandling.flagInterface,
                                               name=name + "_chLbm_%d" % (i,),
                                               optimizationParams=optimizationParams)
                 self.cahnHilliardSteps.append(chStep)
@@ -129,6 +151,8 @@ class PhaseFieldStep:
         self.densityOrderParameter = densityOrderParameter
         self.timeStepsRun = 0
         self.reset()
+
+        self.neumannFlag = 0
 
     def writeVTK(self):
         self.vtkWriter(self.timeStepsRun)
@@ -169,18 +193,31 @@ class PhaseFieldStep:
             chStep.postRun()
 
     def timeStep(self):
+        neumannFlag = self.neumannFlag
+        #for b in self.dataHandling.iterate(sliceObj=makeSlice[:, 0]):
+        #    b[self.phiFieldName][..., 0] = 0.0
+        #    b[self.phiFieldName][..., 1] = 1.0
+        #for b in self.dataHandling.iterate(sliceObj=makeSlice[0, :]):
+        #    b[self.phiFieldName][..., 0] = 1.0
+        #    b[self.phiFieldName][..., 1] = 0.0
+
         self.phiSync()
-        self.dataHandling.runKernel(self.muAndPressureTensorKernel)
+        self.dataHandling.runKernel(self.muAndPressureTensorKernel, neumannFlag=neumannFlag)
         self.pressureTensorSync()
-        self.dataHandling.runKernel(self.forceFromPressureTensorKernel)
+        self.dataHandling.runKernel(self.forceFromPressureTensorKernel, neumannFlag=neumannFlag)
 
         if self.runHydroLbm:
             self.hydroLbmStep.timeStep()
 
         for chLbm in self.cahnHilliardSteps:
+            #chLbm.timeStep(neumannFlag=neumannFlag)
             chLbm.timeStep()
 
         self.timeStepsRun += 1
+
+    @property
+    def boundaryHandling(self):
+        return self.hydroLbmStep.boundaryHandling
 
     def setConcentration(self, sliceObj, concentration):
         if self.concentrationToOrderParameter is not None:

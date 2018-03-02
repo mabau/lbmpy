@@ -16,7 +16,7 @@ class LatticeBoltzmannStep:
                  kernelParams={}, dataHandling=None, name="lbm", optimizationParams={},
                  velocityDataName=None, densityDataName=None, densityDataIndex=None,
                  computeVelocityInEveryStep=False, computeDensityInEveryStep=False,
-                 velocityInputArrayName=None, timeStepOrder='streamCollide',
+                 velocityInputArrayName=None, timeStepOrder='streamCollide', flagInterface=None,
                  **methodParameters):
 
         # --- Parameter normalization  ---
@@ -103,6 +103,7 @@ class LatticeBoltzmannStep:
         self._sync = dataHandling.synchronizationFunction([self._pdfArrName], methodParameters['stencil'], target)
         self._boundaryHandling = LatticeBoltzmannBoundaryHandling(self.method, self._dataHandling, self._pdfArrName,
                                                                   name=name + "_boundaryHandling",
+                                                                  flagInterface=flagInterface,
                                                                   target=target, openMP=optimizationParams['openMP'])
 
         # -- Macroscopic Value Kernels
@@ -154,7 +155,7 @@ class LatticeBoltzmannStep:
             return
 
         if masked:
-            mask = self.boundaryHandling.getMask(sliceObj[:self.dim], 'fluid', True)
+            mask = self.boundaryHandling.getMask(sliceObj[:self.dim], 'domain', True)
             if len(mask.shape) < len(result.shape):
                 assert len(mask.shape) + 1 == len(result.shape)
                 mask = np.repeat(mask[..., np.newaxis], result.shape[-1], axis=2)
@@ -195,7 +196,7 @@ class LatticeBoltzmannStep:
             self._sync()
             self._boundaryHandling(**self.kernelParams)
             self._dataHandling.runKernel(self._lbmKernels[1], **self.kernelParams)
-        else: # stream collide
+        else:  # stream collide
             self._sync()
             self._boundaryHandling(**self.kernelParams)
             self._dataHandling.runKernel(self._lbmKernels[0], **self.kernelParams)

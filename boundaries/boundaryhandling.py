@@ -9,10 +9,11 @@ from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 
 class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
 
-    def __init__(self, lbMethod, dataHandling, pdfFieldName, name="boundaryHandling", target='cpu', openMP=True):
+    def __init__(self, lbMethod, dataHandling, pdfFieldName, name="boundaryHandling", flagInterface=None,
+                 target='cpu', openMP=True):
         self.lbMethod = lbMethod
         super(LatticeBoltzmannBoundaryHandling, self).__init__(dataHandling, pdfFieldName, lbMethod.stencil,
-                                                               name, target, openMP)
+                                                               name, flagInterface, target, openMP)
 
     def forceOnBoundary(self, boundaryObj):
         from lbmpy.boundaries import NoSlip
@@ -26,7 +27,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
 
     def _forceOnNoSlip(self, boundaryObj):
         dh = self._dataHandling
-        ffGhostLayers = dh.ghostLayersOfField(self._flagFieldName)
+        ffGhostLayers = dh.ghostLayersOfField(self.flagInterface.flagFieldName)
         method = self.lbMethod
         stencil = np.array(method.stencil)
 
@@ -46,7 +47,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
 
     def _forceOnBoundary(self, boundaryObj):
         dh = self._dataHandling
-        ffGhostLayers = dh.ghostLayersOfField(self._flagFieldName)
+        ffGhostLayers = dh.ghostLayersOfField(self.flagInterface.flagFieldName)
         method = self.lbMethod
         stencil = np.array(method.stencil)
         invDirection = np.array([method.stencil.index(inverseDirection(d))

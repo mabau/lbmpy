@@ -62,7 +62,7 @@ def cahnHilliardFdEq(phaseIdx, phi, mu, velocity, mobility, dx, dt):
 
 class CahnHilliardFDStep:
     def __init__(self, dataHandling, phiFieldName, muFieldName, velocityFieldName, name='ch_fd', target='cpu',
-                 dx=1, dt=1, mobilities=1):
+                 dx=1, dt=1, mobilities=1, equationModifier=lambda eqs: eqs):
         from pystencils import createKernel
         self.dataHandling = dataHandling
 
@@ -80,13 +80,14 @@ class CahnHilliardFDStep:
             rhs = cahnHilliardFdEq(i, self.phiField, muField, velField, mobilities[i], dx, dt)
             updateEqs.append(sp.Eq(self.tmpField(i), rhs))
         self.updateEqs = updateEqs
-        self.kernel = createKernel(updateEqs, target=target).compile()
+        self.updateEqs = equationModifier(updateEqs)
+        self.kernel = createKernel(self.updateEqs, target=target).compile()
         self.sync = self.dataHandling.synchronizationFunction([phiFieldName, velocityFieldName, muFieldName],
                                                               target=target)
 
-    def timeStep(self):
+    def timeStep(self, **kwargs):
         self.sync()
-        self.dataHandling.runKernel(self.kernel)
+        self.dataHandling.runKernel(self.kernel, **kwargs)
         self.dataHandling.swap(self.phiField.name, self.tmpField.name)
 
     def setPdfFieldsFromMacroscopicValues(self):

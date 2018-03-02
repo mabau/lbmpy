@@ -196,7 +196,9 @@ class FixedDensity(Boundary):
 class NeumannByCopy(Boundary):
     def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
         neighbor = BoundaryOffsetInfo.offsetFromDir(directionSymbol, lbMethod.dim)
-        return [sp.Eq(pdfField[neighbor](directionSymbol), pdfField(directionSymbol))]
+        inverseDir = BoundaryOffsetInfo.invDir(directionSymbol)
+        return [sp.Eq(pdfField[neighbor](inverseDir), pdfField(inverseDir)),
+                sp.Eq(pdfField[neighbor](directionSymbol), pdfField(directionSymbol))]
 
     def __hash__(self):
         # All boundaries of these class behave equal -> should also be equal
@@ -204,4 +206,39 @@ class NeumannByCopy(Boundary):
 
     def __eq__(self, other):
         return type(other) == NeumannByCopy
+
+
+class StreamInZero(Boundary):
+    def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
+        neighbor = BoundaryOffsetInfo.offsetFromDir(directionSymbol, lbMethod.dim)
+        inverseDir = BoundaryOffsetInfo.invDir(directionSymbol)
+        return [sp.Eq(pdfField[neighbor](inverseDir), 0),
+                sp.Eq(pdfField[neighbor](directionSymbol), 0)]
+
+    def __hash__(self):
+        # All boundaries of these class behave equal -> should also be equal
+        return hash("StreamInZero")
+
+    def __eq__(self, other):
+        return type(other) == StreamInZero
+
+
+class AntiBounceBack(Boundary):
+
+    """No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle"""
+    def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
+        neighbor = BoundaryOffsetInfo.offsetFromDir(directionSymbol, lbMethod.dim)
+        inverseDir = BoundaryOffsetInfo.invDir(directionSymbol)
+        rhs = pdfField(directionSymbol)
+        t = -rhs
+        return [SympyAssignment(pdfField[neighbor](inverseDir), t)]
+
+    def __hash__(self):
+        # All boundaries of these class behave equal -> should also be equal (as long as name is equal)
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, AntiBounceBack):
+            return False
+        return self.name == other.name
 
