@@ -39,6 +39,27 @@ class SteadyStateChapmanEnskogAnalysis(object):
         self.momentumEquations = [self._computeMomentumEquation(self.recombinedEq, symbolsToValues, h)
                                   for h in range(self.dim)]
 
+    def getPdfHierarchy(self, order, collisionOperatorSymbol=sp.Symbol("omega")):
+        def substituteNonCommutingSymbols(eq):
+            return eq.subs({a: sp.Symbol(a.name) for a in eq.atoms(sp.Symbol)})
+        result = self.pdfHierarchy[order].subs(self.collisionOpSym, collisionOperatorSymbol)
+        result = normalizeDiffOrder(result, functions=(self.fSyms[0], self.forceSym))
+        return substituteNonCommutingSymbols(result)
+
+    def getContinuityEquation(self, onlyOrder=None):
+        return self._extractOrder(self.continuityEquation, onlyOrder)
+
+    def getMomentumEquation(self, onlyOrder=None):
+        return [self._extractOrder(e, onlyOrder) for e in self.momentumEquations]
+
+    def _extractOrder(self, eq, order):
+        if order is None:
+            return eq
+        elif order == 0:
+            return eq.subs(self.eps, 0)
+        else:
+            return eq.coeff(self.eps ** order)
+
     def _createTaylorExpandedEquation(self):
         """
         Creates a generic, Taylor expanded lattice Boltzmann update equation with collision and force term.
@@ -135,12 +156,3 @@ class SteadyStateChapmanEnskogAnalysis(object):
             newProducts.append(newProd)
 
         return normalizeDiffOrder(expandUsingLinearity(sp.Add(*newProducts), functions=self.physicalVariables))
-
-
-if __name__ == '__main__':
-    from lbmpy.creationfunctions import createLatticeBoltzmannMethod
-    from lbmpy.forcemodels import Buick
-
-    method = createLatticeBoltzmannMethod(stencil='D2Q9', method='srt')
-    result = SteadyStateChapmanEnskogAnalysis(method, Buick, 3)
-
