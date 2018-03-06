@@ -60,14 +60,18 @@ def boundaryHandling(boundaryHandlingObj, indexExpr=None, boundaryNameToColor=No
         plt.legend(handles=patches, bbox_to_anchor=(1.02, 0.5), loc=2, borderaxespad=0.)
 
 
-def phasePlot(pfStep, sliceObj=makeSlice[:, :], linewidth=1.0):
-    import lbmpy.plot2d as plt
+def phasePlot(phaseField, linewidth=1.0):
     colors = ['#fe0002', '#00fe00', '#0000ff', '#ffa800', '#f600ff']
     colorCycle = cycle(colors)
 
-    concentrations = pfStep.concentration[sliceObj]
+    assert len(phaseField.shape) == 3
 
-    for i in range(concentrations.shape[-1]):
-        plt.scalarFieldAlphaValue(concentrations[..., i], next(colorCycle), clip=True, interpolation='bilinear')
-    for i in range(concentrations.shape[-1]):
-        plt.scalarFieldContour(concentrations[..., i], levels=[0.5], colors='k', linewidths=[linewidth])
+    for i in range(phaseField.shape[-1]):
+        scalarFieldAlphaValue(phaseField[..., i], next(colorCycle), clip=True, interpolation='bilinear')
+    for i in range(phaseField.shape[-1]):
+        scalarFieldContour(phaseField[..., i], levels=[0.5], colors='k', linewidths=[linewidth])
+
+
+def phasePlotForStep(pfStep, sliceObj=makeSlice[:, :], **kwargs):
+    concentrations = pfStep.concentration[sliceObj]
+    phasePlot(concentrations, **kwargs)
