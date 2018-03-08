@@ -1,7 +1,7 @@
 import sympy as sp
+from pystencils.finitedifferences import Discretization2ndOrder
 from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, substituteLaplacianBySum, \
-    finiteDifferences2ndOrder, forceFromPhiAndMu, symmetricTensorLinearization, pressureTensorFromFreeEnergy, \
-    forceFromPressureTensor
+    forceFromPhiAndMu, symmetricTensorLinearization, pressureTensorFromFreeEnergy, forceFromPressureTensor
 
 
 # ---------------------------------- Kernels to compute force ----------------------------------------------------------
@@ -14,15 +14,17 @@ def muKernel(freeEnergy, orderParameters, phiField, muField, dx=1):
     chemicalPotential = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
     chemicalPotential = substituteLaplacianBySum(chemicalPotential, dim)
     chemicalPotential = chemicalPotential.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
-    return [sp.Eq(muField(i), finiteDifferences2ndOrder(mu_i, dx)) for i, mu_i in enumerate(chemicalPotential)]
+    discretize = Discretization2ndOrder(dx=dx)
+    return [sp.Eq(muField(i), discretize(mu_i)) for i, mu_i in enumerate(chemicalPotential)]
 
 
 def forceKernelUsingMu(forceField, phiField, muField, dx=1):
     """Computes forces using precomputed chemical potential - needs muKernel first"""
     assert muField.indexDimensions == 1
     force = forceFromPhiAndMu(phiField.vecCenter, mu=muField.vecCenter, dim=muField.spatialDimensions)
+    discretize = Discretization2ndOrder(dx=dx)
     return [sp.Eq(forceField(i),
-                  finiteDifferences2ndOrder(f_i, dx)).expand() for i, f_i in enumerate(force)]
+                  discretize(f_i)).expand() for i, f_i in enumerate(force)]
 
 
 def pressureTensorKernel(freeEnergy, orderParameters, phiField, pressureTensorField, dx=1):
@@ -30,11 +32,11 @@ def pressureTensorKernel(freeEnergy, orderParameters, phiField, pressureTensorFi
     p = pressureTensorFromFreeEnergy(freeEnergy, orderParameters, dim)
     p = p.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
     indexMap = symmetricTensorLinearization(dim)
-
+    discretize = Discretization2ndOrder(dx=dx)
     eqs = []
     for index, linIndex in indexMap.items():
         eq = sp.Eq(pressureTensorField(linIndex),
-                   finiteDifferences2ndOrder(p[index], dx).expand())
+                   discretize(p[index]).expand())
         eqs.append(eq)
     return eqs
 
@@ -43,11 +45,12 @@ def forceKernelUsingPressureTensor(forceField, pressureTensorField, extraForce=N
     dim = forceField.spatialDimensions
     indexMap = symmetricTensorLinearization(dim)
 
-    p = sp.Matrix(dim, dim, lambda i, j: pressureTensorField(indexMap[i,j] if i < j else indexMap[j, i]))
+    p = sp.Matrix(dim, dim, lambda i, j: pressureTensorField(indexMap[i, j] if i < j else indexMap[j, i]))
     f = forceFromPressureTensor(p)
     if extraForce:
         f += extraForce
-    return [sp.Eq(forceField(i), finiteDifferences2ndOrder(f_i, dx).expand())
+    discretize = Discretization2ndOrder(dx=dx)
+    return [sp.Eq(forceField(i), discretize(f_i).expand())
             for i, f_i in enumerate(f)]
 
 
@@ -55,7 +58,7 @@ def forceKernelUsingPressureTensor(forceField, pressureTensorField, extraForce=N
 
 
 def cahnHilliardFdEq(phaseIdx, phi, mu, velocity, mobility, dx, dt):
-    from pystencils.finitedifferences import transient, advection, diffusion, Discretization2ndOrder
+    from pystencils.finitedifferences import transient, advection, diffusion
     cahnHilliard = transient(phi, phaseIdx) + advection(phi, velocity, phaseIdx) - diffusion(mu, mobility, phaseIdx)
     return Discretization2ndOrder(dx, dt)(cahnHilliard)
 

@@ -1,9 +1,8 @@
 import sympy as sp
 from collections import defaultdict
 
-from lbmpy.chapman_enskog.derivative import expandUsingLinearity, Diff, fullDiffExpand
-from pystencils.equationcollection.simplifications import sympyCseOnEquationList
 from pystencils.sympyextensions import multidimensionalSummation as multiSum, normalizeProduct, prod
+from pystencils.derivative import functionalDerivative, expandUsingLinearity, Diff, fullDiffExpand
 
 orderParameterSymbolName = "phi"
 surfaceTensionSymbolName = "tau"
@@ -219,36 +218,6 @@ def substituteLaplacianBySum(eq, dim):
     return fullDiffExpand(eq.subs(substitutions))
 
 
-def functionalDerivative(functional, v, constants=None):
-    """
-    Computes functional derivative of functional with respect to v using Euler-Lagrange equation
-
-    .. math ::
-
-        \frac{\delta F}{\delta v} =
-                \frac{\partial F}{\partial v} - \nabla \cdot \frac{\partial F}{\partial \nabla v}
-
-    - assumes that gradients are represented by Diff() node (from Chapman Enskog module)
-    - Diff(Diff(r)) represents the divergence of r
-    - the constants parameter is a list with symbols not affected by the derivative. This is used for simplification
-      of the derivative terms.
-    """
-    functional = expandUsingLinearity(functional, constants=constants)
-    diffs = functional.atoms(Diff)
-
-    diffV = Diff(v)
-
-    nonDiffPart = functional.subs({d: 0 for d in diffs})
-
-    partialF_partialV = sp.diff(nonDiffPart, v)
-
-    dummy = sp.Dummy()
-    partialF_partialGradV = functional.subs(diffV, dummy).diff(dummy).subs(dummy, diffV)
-
-    result = partialF_partialV - Diff(partialF_partialGradV)
-    return expandUsingLinearity(result, constants=constants)
-
-
 def coshIntegral(f, var):
     """Integrates a function f that has exactly one cosh term, from -oo to oo, by
     substituting a new helper variable for the cosh argument"""
@@ -257,39 +226,6 @@ def coshIntegral(f, var):
     integral = sp.Integral(f, var)
     transformedInt = integral.transform(coshTerm[0].args[0], sp.Symbol("u", real=True))
     return sp.integrate(transformedInt.args[0], (transformedInt.args[1][0], -sp.oo, sp.oo))
-
-
-def finiteDifferences2ndOrder(term, dx=1):
-    """Substitutes symbolic integral of field access by second order accurate finite differences.
-    The only valid argument of Diff objects are field accesses (usually center field accesses)"""
-    def diffOrder(e):
-        if not isinstance(e, Diff):
-            return 0
-        else:
-            return 1 + diffOrder(e.args[0])
-
-    def visit(e):
-        order = diffOrder(e)
-        if order == 0:
-            paramList = [visit(a) for a in e.args]
-            return e if not paramList else e.func(*paramList)
-        elif order == 1:
-            fa = e.args[0]
-            index = e.label
-            return (fa.neighbor(index, 1) - fa.neighbor(index, -1)) / (2 * dx)
-        elif order == 2:
-            indices = sorted([e.label, e.args[0].label])
-            fa = e.args[0].args[0]
-            if indices[0] == indices[1]:
-                result = (-2 * fa + fa.neighbor(indices[0], -1) + fa.neighbor(indices[0], +1))
-            else:
-                offsets = [(1,1), [-1, 1], [1, -1], [-1, -1]]
-                result = sum(o1*o2 * fa.neighbor(indices[0], o1).neighbor(indices[1], o2) for o1, o2 in offsets) / 4
-            return result / (dx**2)
-        else:
-            raise NotImplementedError("Term contains derivatives of order > 2")
-
-    return visit(term)
 
 
 def symmetricTensorLinearization(dim):
