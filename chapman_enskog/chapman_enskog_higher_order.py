@@ -33,7 +33,7 @@ def getSolvabilityConditions(dim, order):
     for name in ["\Pi", "\\Upsilon"]:
         for momentTuple in momentsUpToOrder(1, dim=dim):
             for k in range(order+1):
-                solvabilityConditions[CeMoment(name, ceIdx=k, momentTuple=momentTuple)] = 0
+                solvabilityConditions[CeMoment(name, superscript=k, momentTuple=momentTuple)] = 0
     return solvabilityConditions
 
 
@@ -54,12 +54,12 @@ def determineHigherOrderMoments(epsilonHierarchy, relaxationRates, momentComputa
 
         for order in range(order+1):
             eqs = sp.Matrix([fullExpand(tm(epsEq * m)) for m in polyMoments(order, dim)])
-            unknownMoments = [m for m in eqs.atoms(CeMoment) if m.ceIdx == epsOrder and sum(m.momentTuple) == order]
+            unknownMoments = [m for m in eqs.atoms(CeMoment) if m.superscript == epsOrder and sum(m.momentTuple) == order]
             print(epsOrder, order)
             if len(unknownMoments) == 0:
                 for eq in eqs:
                     timeDiffsInExpr = [d for d in eq.atoms(Diff) if
-                                       (d.label == 't' or d.label == sp.Symbol("t")) and d.ceIdx == epsOrder]
+                                       (d.target == 't' or d.target == sp.Symbol("t")) and d.superscript == epsOrder]
                     if len(timeDiffsInExpr) == 0:
                         continue
                     assert len(timeDiffsInExpr) == 1, "Time diffs in expr %d %s" % (len(timeDiffsInExpr), timeDiffsInExpr)

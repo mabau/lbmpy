@@ -37,7 +37,7 @@ def expandedSymbol(name, subscript=None, superscript=None, **kwargs):
 
 def getOccurrenceCountOfIndex(term, index):
     if isinstance(term, Diff):
-        return getOccurrenceCountOfIndex(term.arg, index) + (1 if term.label == index else 0)
+        return getOccurrenceCountOfIndex(term.arg, index) + (1 if term.target == index else 0)
     elif isinstance(term, sp.Symbol):
         return 1 if term.name.endswith("_" + str(index)) else 0
     else:
@@ -47,8 +47,8 @@ def getOccurrenceCountOfIndex(term, index):
 def replaceIndex(term, oldIndex, newIndex):
     if isinstance(term, Diff):
         newArg = replaceIndex(term.arg, oldIndex, newIndex)
-        newLabel = newIndex if term.label == oldIndex else term.label
-        return Diff(newArg, newLabel, term.ceIdx)
+        newLabel = newIndex if term.target == oldIndex else term.target
+        return Diff(newArg, newLabel, term.superscript)
     elif isinstance(term, sp.Symbol):
         if term.name.endswith("_" + str(oldIndex)):
             baseName = term.name[:-(len(str(oldIndex))+1)]
@@ -80,12 +80,12 @@ class CeMoment(sp.Symbol):
         obj = CeMoment.__xnew_cached_(cls, name, *args, **kwds)
         return obj
 
-    def __new_stage2__(cls, name, momentTuple, ceIdx=-1):
+    def __new_stage2__(cls, name, momentTuple, superscript=-1):
         obj = super(CeMoment, cls).__xnew__(cls, name)
         obj.momentTuple = momentTuple
         while len(obj.momentTuple) < 3:
             obj.momentTuple = obj.momentTuple + (0,)
-        obj.ceIdx = ceIdx
+        obj.superscript = superscript
         return obj
 
     __xnew__ = staticmethod(__new_stage2__)
@@ -93,14 +93,14 @@ class CeMoment(sp.Symbol):
 
     def _hashable_content(self):
         superClassContents = list(super(CeMoment, self)._hashable_content())
-        return tuple(superClassContents + [hash(repr(self.momentTuple)), hash(repr(self.ceIdx))])
+        return tuple(superClassContents + [hash(repr(self.momentTuple)), hash(repr(self.superscript))])
 
     @property
     def indices(self):
         return getMomentIndices(self.momentTuple)
 
     def __getnewargs__(self):
-        return self.name, self.momentTuple, self.ceIdx
+        return self.name, self.momentTuple, self.superscript
 
     def _latex(self, printer, *args):
         coordNames = ['x', 'y', 'z']
@@ -109,17 +109,17 @@ class CeMoment(sp.Symbol):
             coordStr += [coordNames[i]] * comp
         coordStr = "".join(coordStr)
         result = "{%s_{%s}" % (self.name, coordStr)
-        if self.ceIdx >= 0:
-            result += "^{(%d)}}" % (self.ceIdx,)
+        if self.superscript >= 0:
+            result += "^{(%d)}}" % (self.superscript,)
         else:
             result += "}"
         return result
 
     def __repr__(self):
-        return "%s_(%d)_%s" % (self.name, self.ceIdx, self.momentTuple)
+        return "%s_(%d)_%s" % (self.name, self.superscript, self.momentTuple)
 
     def __str__(self):
-        return "%s_(%d)_%s" % (self.name, self.ceIdx, self.momentTuple)
+        return "%s_(%d)_%s" % (self.name, self.superscript, self.momentTuple)
 
 
 class LbMethodEqMoments:
@@ -135,7 +135,7 @@ class LbMethodEqMoments:
         return self.getPreCollisionMoment(ceMoment)
 
     def getPreCollisionMoment(self, ceMoment):
-        assert ceMoment.ceIdx == 0, "Only equilibrium moments can be obtained with this function"
+        assert ceMoment.superscript == 0, "Only equilibrium moments can be obtained with this function"
         if ceMoment not in self._momentCache:
             self._momentCache[ceMoment] = discreteMoment(self._eq, ceMoment.momentTuple, self._stencil)
         return self._momentCache[ceMoment]
@@ -152,9 +152,9 @@ class LbMethodEqMoments:
         momentSymbols = []
         for moment, (eqValue, rr) in self._method.relaxationInfoDict.items():
             if isinstance(moment, tuple):
-                momentSymbols.append(-rr**exponent * CeMoment(preCollisionMomentName, moment, ceMoment.ceIdx))
+                momentSymbols.append(-rr**exponent * CeMoment(preCollisionMomentName, moment, ceMoment.superscript))
             else:
-                momentSymbols.append(-rr**exponent * sum(coeff * CeMoment(preCollisionMomentName, momentTuple, ceMoment.ceIdx)
+                momentSymbols.append(-rr**exponent * sum(coeff * CeMoment(preCollisionMomentName, momentTuple, ceMoment.superscript)
                                      for coeff, momentTuple in polynomialToExponentRepresentation(moment)))
         momentSymbols = sp.Matrix(momentSymbols)
         postCollisionValue = discreteMoment(tuple(Minv * momentSymbols), momentTuple, stencil)
@@ -164,7 +164,7 @@ class LbMethodEqMoments:
 
     def substitutePreCollisionMoments(self, expr, preCollisionMomentName="\\Pi"):
         substitutions = {m: self.getPreCollisionMoment(m) for m in expr.atoms(CeMoment)
-                         if m.ceIdx == 0 and m.name == preCollisionMomentName}
+                         if m.superscript == 0 and m.name == preCollisionMomentName}
         return expr.subs(substitutions)
 
     def substitutePostCollisionMoments(self, expr, preCollisionMomentName="\\Pi", postCollisionMomentName="\\Upsilon"):
@@ -196,10 +196,10 @@ class LbMethodEqMoments:
 def insertMoments(eqn, lbMethodMoments, momentName="\\Pi", useSolvabilityConditions=True):
     subsDict = {}
     if useSolvabilityConditions:
-        condition = lambda m:  m.ceIdx > 0 and sum(m.momentTuple) <= 1 and m.name == momentName
+        condition = lambda m: m.superscript > 0 and sum(m.momentTuple) <= 1 and m.name == momentName
         subsDict.update({m: 0 for m in eqn.atoms(CeMoment) if condition(m)})
 
-    condition = lambda m:  m.ceIdx == 0 and m.name == momentName
+    condition = lambda m: m.superscript == 0 and m.name == momentName
     subsDict.update({m: lbMethodMoments(m) for m in eqn.atoms(CeMoment) if condition(m)})
     return eqn.subs(subsDict)
 
@@ -223,7 +223,7 @@ def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), 
     velocityTerms = tuple(expandedSymbol(velocityName, subscript=i) for i in range(3))
 
     def determineFIndex(factor):
-        FIndex = namedtuple("FIndex", ['momentName', 'ceIdx'])
+        FIndex = namedtuple("FIndex", ['momentName', 'superscript'])
         for symbolListId, pdfSymbolsElement in enumerate(pdfSymbols):
             try:
                 return FIndex(pdfToMomentName[symbolListId][1], pdfSymbolsElement.index(factor))
@@ -258,7 +258,7 @@ def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), 
 
         if useOneNeighborhoodAliasing:
             momentTuple = momentAliasing(momentTuple)
-        result = CeMoment(fIndex.momentName, momentTuple, fIndex.ceIdx)
+        result = CeMoment(fIndex.momentName, momentTuple, fIndex.superscript)
         if derivativeTerm is not None:
             result = derivativeTerm.changeArgRecursive(result)
         result *= rest
@@ -275,7 +275,7 @@ def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), 
 
 
 def timeDiffSelector(eq):
-    return [d for d in eq.atoms(Diff) if d.label == sp.Symbol("t")]
+    return [d for d in eq.atoms(Diff) if d.target == sp.Symbol("t")]
 
 
 def momentSelector(eq):
@@ -360,8 +360,8 @@ def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="\
     pdf = sp.Symbol(pdfSymbolName)
     collidedPdf = sp.Symbol(pdfsAfterCollisionOperator)
 
-    Dt = DiffOperator(label=t)
-    Dx = sp.Matrix([DiffOperator(label=l) for l in dimLabels])
+    Dt = DiffOperator(target=t)
+    Dx = sp.Matrix([DiffOperator(target=l) for l in dimLabels])
 
     taylorOperator = sum(dt ** k * (Dt + c.dot(Dx)) ** k / sp.functions.factorial(k)
                          for k in range(1, taylorOrder + 1))
@@ -393,8 +393,8 @@ def useChapmanEnskogAnsatz(equation, timeDerivativeOrders=(1, 3), spatialDerivat
 
     # expand spatial derivatives
     if spatialDerivativeOrders:
-        spatialDerivatives = [a for a in equation.atoms(Diff) if str(a.label) != 't']
-        labels = set(a.label for a in spatialDerivatives)
+        spatialDerivatives = [a for a in equation.atoms(Diff) if str(a.target) != 't']
+        labels = set(a.target for a in spatialDerivatives)
         for label in labels:
             equation = chapmanEnskogDerivativeExpansion(equation, label, eps, *spatialDerivativeOrders)
 
@@ -450,7 +450,7 @@ def matchEquationsToNavierStokes(conservationEquations, rho=sp.Symbol("rho"), u=
             for term in eq.args:
                 if term.atoms(CeMoment):
                     continue
-                candidateList = [e for e in term.atoms(Diff) if e.label == i]
+                candidateList = [e for e in term.atoms(Diff) if e.target == i]
                 if len(candidateList) != 1:
                     continue
                 coefficentArgSets[i].add((term / candidateList[0], candidateList[0].arg))
@@ -462,7 +462,7 @@ def matchEquationsToNavierStokes(conservationEquations, rho=sp.Symbol("rho"), u=
             eqWithoutPressure = shearAndPressureEq - sum(coeff * Diff(arg, i) for coeff, arg in pressureTerms)
             for d in eqWithoutPressure.atoms(Diff):
                 eqWithoutPressure = eqWithoutPressure.collect(d)
-                sigma[i, d.label] += eqWithoutPressure.coeff(d) * d.arg
+                sigma[i, d.target] += eqWithoutPressure.coeff(d) * d.arg
                 eqWithoutPressure = eqWithoutPressure.subs(d, 0)
 
             errorTerms.append(eqWithoutPressure)
@@ -663,7 +663,7 @@ class SteadyStateChapmanEnskogAnalysis(object):
         expandedPdfSymbols = [expandedSymbol("f", superscript=i) for i in range(0, order + 1)]
         feq = expandedPdfSymbols[0]
         c = sp.Matrix([expandedSymbol("c", subscript=i) for i in range(dim)])
-        Dx = sp.Matrix([DiffOperator(label=l) for l in range(dim)])
+        Dx = sp.Matrix([DiffOperator(target=l) for l in range(dim)])
         differentialOperator = sum((dt * eps * c.dot(Dx)) ** n / sp.factorial(n) for n in range(1, order + 1))
         taylorExpansion = DiffOperator.apply(differentialOperator.expand(), f)
         epsDict = useChapmanEnskogAnsatz(taylorExpansion,

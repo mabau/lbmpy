@@ -66,7 +66,7 @@ class SteadyStateChapmanEnskogAnalysis(object):
         Collision operator and force terms are represented symbolically.
         """
         c = self.velocitySyms
-        Dx = sp.Matrix([DiffOperator(label=l) for l in range(self.dim)])
+        Dx = sp.Matrix([DiffOperator(target=l) for l in range(self.dim)])
 
         differentialOperator = sum((self.eps * c.dot(Dx)) ** n / sp.factorial(n)
                                    for n in range(1, self.order + 1))
