@@ -103,10 +103,9 @@ class CeMoment(sp.Symbol):
         return self.name, self.momentTuple, self.superscript
 
     def _latex(self, printer, *args):
-        coordNames = ['x', 'y', 'z']
         coordStr = []
         for i, comp in enumerate(self.momentTuple):
-            coordStr += [coordNames[i]] * comp
+            coordStr += [str(i)] * comp
         coordStr = "".join(coordStr)
         result = "{%s_{%s}" % (self.name, coordStr)
         if self.superscript >= 0:
@@ -384,7 +383,14 @@ def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="\
 
 def useChapmanEnskogAnsatz(equation, timeDerivativeOrders=(1, 3), spatialDerivativeOrders=(1, 2),
                            pdfs=(['f', 0, 3], ['\Omega f', 1, 3]), **kwargs):
-
+    """
+    Uses a Chapman Enskog Ansatz to expand given equation.
+    :param equation: equation to expand
+    :param timeDerivativeOrders: tuple describing range for time derivative to expand
+    :param spatialDerivativeOrders: tuple describing range for spatial derivatives to expand
+    :param pdfs: symbols to expand: sequence of triples (symbolName, startOrder, endOrder)
+    :return: tuple mapping epsilon order to equation
+    """
     t, eps = sp.symbols("t epsilon")
 
     # expand time derivatives
