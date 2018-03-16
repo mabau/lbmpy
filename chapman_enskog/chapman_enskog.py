@@ -367,11 +367,12 @@ def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="\
 
     functions = [pdf, collidedPdf]
     eq_4_5 = taylorOperator - dt * collidedPdf
-    applied_eq_4_5 = expandUsingLinearity(DiffOperator.apply(eq_4_5, pdf), functions)
+    applied_eq_4_5 = expandUsingLinearity(DiffOperator.apply(eq_4_5, pdf, applyToConstants=False), functions)
 
     if shift:
         operator = ((dt / 2) * (Dt + c.dot(Dx))).expand()
-        opTimesEq_4_5 = expandUsingLinearity(DiffOperator.apply(operator, applied_eq_4_5), functions).expand()
+        opTimesEq_4_5 = expandUsingLinearity(DiffOperator.apply(operator, applied_eq_4_5, applyToConstants=False),
+                                             functions).expand()
         opTimesEq_4_5 = normalizeDiffOrder(opTimesEq_4_5, functions)
         eq_4_7 = (applied_eq_4_5 - opTimesEq_4_5).subs(dt ** (taylorOrder+1), 0)
     else:
@@ -671,7 +672,7 @@ class SteadyStateChapmanEnskogAnalysis(object):
         c = sp.Matrix([expandedSymbol("c", subscript=i) for i in range(dim)])
         Dx = sp.Matrix([DiffOperator(target=l) for l in range(dim)])
         differentialOperator = sum((dt * eps * c.dot(Dx)) ** n / sp.factorial(n) for n in range(1, order + 1))
-        taylorExpansion = DiffOperator.apply(differentialOperator.expand(), f)
+        taylorExpansion = DiffOperator.apply(differentialOperator.expand(), f, applyToConstants=False)
         epsDict = useChapmanEnskogAnsatz(taylorExpansion,
                                          spatialDerivativeOrders=None,  # do not expand the differential operator itself
                                          pdfs=(['f', 0, order + 1],))  # expand only the 'f' terms

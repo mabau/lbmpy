@@ -195,7 +195,8 @@ def chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters=None):
         orderParameters.sort(key=lambda e: e.name)
         orderParameters = orderParameters[:-1]
     constants = [s for s in syms if s not in orderParameters]
-    return sp.Matrix([functionalDerivative(freeEnergy, op, constants) for op in orderParameters])
+    return sp.Matrix([expandUsingLinearity(functionalDerivative(freeEnergy, op),constants=constants)
+                      for op in orderParameters])
 
 
 def forceFromPhiAndMu(orderParameters, dim, mu=None):
