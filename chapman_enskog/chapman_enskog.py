@@ -538,19 +538,19 @@ class ChapmanEnskogAnalysis(object):
         self._equationsWithHigherOrderMoments = [self._ceRecombine(ord1 * self.epsilon + ord2 * self.epsilon ** 2)
                                                  for ord1, ord2 in zip(oEpsMoments1, oEpsSqMoments1)]
 
-        self._higherOrderMomentSubsDict = computeHigherOrderMomentSubsDict(tuple(oEpsMoments1 + oEpsMoments2))
+        self.higherOrderMomentSubsDict = computeHigherOrderMomentSubsDict(tuple(oEpsMoments1 + oEpsMoments2))
 
         # Match to Navier stokes
         compressible, pressure, sigma = matchEquationsToNavierStokes(self._equationsWithHigherOrderMoments)
         self.compressible = compressible
         self.pressureEquation = pressure
         self._sigmaWithHigherOrderMoments = sigma
-        self._sigma = sigma.subs(self._higherOrderMomentSubsDict).expand().applyfunc(self._ceRecombine)
+        self._sigma = sigma.subs(self.higherOrderMomentSubsDict).expand().applyfunc(self._ceRecombine)
         self._sigmaWithoutErrorTerms = removeErrorTerms(self._sigma)
 
     def getMacroscopicEquations(self, substituteHigherOrderMoments=False):
         if substituteHigherOrderMoments:
-            return self._equationsWithHigherOrderMoments.subs(self._higherOrderMomentSubsDict)
+            return self._equationsWithHigherOrderMoments.subs(self.higherOrderMomentSubsDict)
         else:
             return self._equationsWithHigherOrderMoments
 

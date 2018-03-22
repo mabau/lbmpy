@@ -151,12 +151,12 @@ from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTy
     createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
 from lbmpy.methods.entropic_eq_srt import createEntropicSRT
-from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber
+from lbmpy.relaxationrates import relaxationRateFromMagicNumber
 from lbmpy.stencils import getStencil, stencilsHaveSameEntries
 import lbmpy.forcemodels as forcemodels
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor, \
-    createLBMKernel, createStreamPullOnlyKernel, createStreamPullWithOutputKernel
+    createLBMKernel, createStreamPullWithOutputKernel
 from pystencils.data_types import collateTypes
 from pystencils.equationcollection.equationcollection import EquationCollection
 from pystencils.field import getLayoutOfArray, Field

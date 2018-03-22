@@ -270,6 +270,13 @@ def getMomentIndices(momentExponentTuple):
     return result
 
 
+def getExponentTupleFromIndices(momentIndices, dim):
+    result = [0] * dim
+    for i in momentIndices:
+        result[i] += 1
+    return tuple(result)
+
+
 def getOrder(moment):
     """
     Computes polynomial order of given moment

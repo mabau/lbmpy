@@ -86,7 +86,7 @@ second moment nonzero   :class:`Luo`         :class:`Guo`
 """
 
 import sympy as sp
-from lbmpy.methods.relaxationrates import getShearRelaxationRate
+from lbmpy.relaxationrates import getShearRelaxationRate
 
 
 class ScalarSource(object):

@@ -4,13 +4,13 @@ from lbmpy.moments import isShearMoment, getOrder
 
 def relaxationRateFromLatticeViscosity(nu):
     """Computes relaxation rate from lattice viscosity: :math:`\omega = \frac{1}{3\nu_L + \frac{1}{2}}`"""
-    return 1 / (3 * nu + 1/2)
+    return 2 / (6 * nu + 1)
 
 
 def latticeViscosityFromRelaxationRate(omega):
     """Computes lattice viscosity from relaxation rate: 
     :math:`\nu_L=\frac{1}{3}\left(\frac{1}{\omega}-\frac{1}{2}\right)`"""
-    return (2 - omega) / (6* omega )
+    return (2 - omega) / (6 * omega)
 
 
 def relaxationRateFromMagicNumber(hydrodynamicRelaxationRate, magicNumber=sp.Rational(3, 16)):

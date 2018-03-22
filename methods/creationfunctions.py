@@ -1,7 +1,7 @@
 from warnings import warn
 
 import sympy as sp
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 from functools import reduce
 import operator
 import itertools
@@ -17,7 +17,7 @@ from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
     getMomentsOfContinuousMaxwellianEquilibrium, getCumulantsOfDiscreteMaxwellianEquilibrium, \
     getCumulantsOfContinuousMaxwellianEquilibrium, compressibleToIncompressibleMomentValue
-from lbmpy.methods.relaxationrates import relaxationRateFromMagicNumber, defaultRelaxationRateNames
+from lbmpy.relaxationrates import relaxationRateFromMagicNumber, defaultRelaxationRateNames
 
 
 def createWithDiscreteMaxwellianEqMoments(stencil, momentToRelaxationRateDict, compressible=False, forceModel=None,

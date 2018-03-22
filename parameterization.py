@@ -1,7 +1,7 @@
 import ipywidgets.widgets as widgets
 from IPython.display import display
 from ipywidgets.widgets import FloatText, Label, VBox, HBox, Select, BoundedFloatText, Button
-from lbmpy.methods.relaxationrates import relaxationRateFromLatticeViscosity, latticeViscosityFromRelaxationRate
+from lbmpy.relaxationrates import relaxationRateFromLatticeViscosity, latticeViscosityFromRelaxationRate
 
 
 class ScalingWidget:

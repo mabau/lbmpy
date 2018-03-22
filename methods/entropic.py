@@ -1,6 +1,6 @@
 import sympy as sp
 from pystencils.transformations import fastSubs
-from lbmpy.methods.relaxationrates import getShearRelaxationRate
+from lbmpy.relaxationrates import getShearRelaxationRate
 
 
 def addEntropyCondition(collisionRule, omegaOutputField=None):
