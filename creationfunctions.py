@@ -68,6 +68,11 @@ Entropic methods:
 - ``omegaOutputField=None``: you can pass a pystencils Field here, where the calculated free relaxation
   rate is written to
 
+LES methods:
+
+- ``smagorinsky=False``: set to Smagorinsky constant to activate turbulence model, `omegaOutputField` can be set to
+                         write out adapted relaxation rates
+
 
 Optimization Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -146,6 +151,8 @@ For example, to modify the AST one can run::
 """
 import sympy as sp
 from copy import copy
+
+from lbmpy.turbulence_models import addSmagorinskyModel
 from pystencils.cache import diskcacheNoFallback
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
     createRawMRT, createThreeRelaxationRateMRT
@@ -220,6 +227,10 @@ def createLatticeBoltzmannUpdateRule(collisionRule=None, optimizationParams={}, 
                                                          omegaOutputField=params['omegaOutputField'])
         else:
             collisionRule = addEntropyCondition(collisionRule, omegaOutputField=params['omegaOutputField'])
+    elif params['smagorinsky']:
+        smagorinskyConstant = 0.12 if params['smagorinsky'] is True else params['smagorinsky']
+        collisionRule = addSmagorinskyModel(collisionRule, smagorinskyConstant,
+                                            omegaOutputField=params['omegaOutputField'])
 
     fieldDtype = 'float64' if optParams['doublePrecision'] else 'float32'
 
@@ -372,12 +383,12 @@ def forceModelFromString(forceModelName, forceValues):
     return forceModelClass(forceValues)
 
 
-def switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, kernelParams):
+def switchToSymbolicRelaxationRatesForOmegaAdaptingMethods(methodParameters, kernelParams):
     """
     For entropic kernels the relaxation rate has to be a variable. If a constant was passed a
     new dummy variable is inserted and the value of this variable is later on passed to the kernel
     """
-    if methodParameters['entropic']:
+    if methodParameters['entropic'] or methodParameters['smagorinsky']:
         valueToSymbolMap = {}
         newRelaxationRates = []
         for rr in methodParameters['relaxationRates']:
@@ -412,6 +423,7 @@ def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
         'entropic': False,
         'entropicNewtonIterations': None,
         'omegaOutputField': None,
+        'smagorinsky': False,
 
         'output': {},
         'velocityInput': None,

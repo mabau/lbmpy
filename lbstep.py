@@ -1,6 +1,7 @@
 import numpy as np
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
-from lbmpy.creationfunctions import switchToSymbolicRelaxationRatesForEntropicMethods, createLatticeBoltzmannFunction, \
+from lbmpy.creationfunctions import switchToSymbolicRelaxationRatesForOmegaAdaptingMethods, \
+    createLatticeBoltzmannFunction, \
     updateWithDefaultParameters
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.stencils import getStencil
@@ -71,12 +72,14 @@ class LatticeBoltzmannStep:
             methodParameters['output']['density'] = densityField
         if velocityInputArrayName is not None:
             methodParameters['velocityInput'] = self._dataHandling.fields[velocityInputArrayName]
+        if methodParameters['omegaOutputField'] and isinstance(methodParameters['omegaOutputField'], str):
+            methodParameters['omegaOutputField'] = dataHandling.addArray(methodParameters['omegaOutputField'])
 
         self.kernelParams = kernelParams
 
         # --- Kernel creation ---
         if lbmKernel is None:
-            switchToSymbolicRelaxationRatesForEntropicMethods(methodParameters, self.kernelParams)
+            switchToSymbolicRelaxationRatesForOmegaAdaptingMethods(methodParameters, self.kernelParams)
             optimizationParams['symbolicField'] = dataHandling.fields[self._pdfArrName]
             methodParameters['fieldName'] = self._pdfArrName
             methodParameters['secondFieldName'] = self._tmpArrName
