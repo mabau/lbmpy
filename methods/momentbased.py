@@ -1,10 +1,10 @@
 import sympy as sp
 from collections import OrderedDict
-
+from pystencils import Assignment
+from pystencils.sympyextensions import replaceAdditive
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, momentMatrix
-from pystencils.sympyextensions import replaceAdditive
 
 
 class MomentBasedLbMethod(AbstractLbMethod):
@@ -81,7 +81,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     def getEquilibriumTerms(self):
         equilibrium = self.getEquilibrium()
-        return sp.Matrix([eq.rhs for eq in equilibrium.mainEquations])
+        return sp.Matrix([eq.rhs for eq in equilibrium.mainAssignments])
 
     def getCollisionRule(self, conservedQuantityEquations=None):
         D = sp.diag(*self.relaxationRates)
@@ -156,13 +156,13 @@ class MomentBasedLbMethod(AbstractLbMethod):
         eqColl = self.getEquilibrium(includeForceTerms=False)
         eqColl = eqColl.copyWithSubstitutionsApplied(replacements, substituteOnLhs=False).insertSubexpressions()
 
-        newMainEqs = [sp.Eq(e.lhs,
+        newMainEqs = [Assignment(e.lhs,
                             replaceAdditive(e.rhs, 1, sum(self.preCollisionPdfSymbols), requiredMatchReplacement=1.0))
-                      for e in eqColl.mainEquations]
+                      for e in eqColl.mainAssignments]
         eqColl = eqColl.copy(newMainEqs)
 
         weights = []
-        for eq in eqColl.mainEquations:
+        for eq in eqColl.mainAssignments:
             value = eq.rhs.expand()
             assert len(value.atoms(sp.Symbol)) == 0, "Failed to compute weights " + str(value)
             weights.append(value)
@@ -175,7 +175,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         m_eq = sp.Matrix(self.momentEquilibriumValues)
 
         collisionRule = f + M.inv() * D * (m_eq - M * f)
-        collisionEqs = [sp.Eq(lhs, rhs) for lhs, rhs in zip(self.postCollisionPdfSymbols, collisionRule)]
+        collisionEqs = [Assignment(lhs, rhs) for lhs, rhs in zip(self.postCollisionPdfSymbols, collisionRule)]
 
         if conservedQuantityEquations is None:
             conservedQuantityEquations = self._conservedQuantityComputation.equilibriumInputEquationsFromPdfs(f)
@@ -189,10 +189,10 @@ class MomentBasedLbMethod(AbstractLbMethod):
         if self._forceModel is not None and includeForceTerms:
             forceModelTerms = self._forceModel(self)
             forceTermSymbols = sp.symbols("forceTerm_:%d" % (len(forceModelTerms,)))
-            forceSubexpressions = [sp.Eq(sym, forceModelTerm)
+            forceSubexpressions = [Assignment(sym, forceModelTerm)
                                    for sym, forceModelTerm in zip(forceTermSymbols, forceModelTerms)]
             allSubexpressions += forceSubexpressions
-            collisionEqs = [sp.Eq(eq.lhs, eq.rhs + forceTermSymbol)
+            collisionEqs = [Assignment(eq.lhs, eq.rhs + forceTermSymbol)
                             for eq, forceTermSymbol in zip(collisionEqs, forceTermSymbols)]
             simplificationHints['forceTerms'] = forceTermSymbols
 
@@ -219,7 +219,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
             newRR = [subexpressions[sp.sympify(e)] if sp.sympify(e) in subexpressions else e
                      for e in rr]
-            substitutions = [sp.Eq(e[1], e[0]) for e in subexpressions.items()]
+            substitutions = [Assignment(e[1], e[0]) for e in subexpressions.items()]
             return substitutions, sp.diag(*newRR)
         else:
             return [], relaxationMatrix

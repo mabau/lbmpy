@@ -77,7 +77,7 @@ class CeMoment(sp.Symbol):
 
 class LbMethodEqMoments:
     def __init__(self, lbMethod):
-        self._eq = tuple(e.rhs for e in lbMethod.getEquilibrium().mainEquations)
+        self._eq = tuple(e.rhs for e in lbMethod.getEquilibrium().mainAssignments)
         self._momentCache = dict()
         self._postCollisionMomentCache = dict()
         self._stencil = lbMethod.stencil

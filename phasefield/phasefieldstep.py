@@ -10,7 +10,7 @@ from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, symmet
 from pystencils.boundaries.boundaryhandling import FlagInterface
 from pystencils.boundaries.inkernel import addNeumannBoundary
 from pystencils.datahandling import SerialDataHandling
-from pystencils.equationcollection.simplifications import sympyCseOnEquationList
+from pystencils.assignment_collection.simplifications import sympyCseOnEquationList
 from pystencils.slicing import makeSlice, SlicedGetter
 
 

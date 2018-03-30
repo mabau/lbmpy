@@ -1,10 +1,10 @@
 import numpy as np
 import sympy as sp
-from lbmpy.stencils import inverseDirection
-from pystencils import TypedSymbol, createIndexedKernel
+from pystencils import TypedSymbol, createIndexedKernel, Assignment
 from pystencils.backends.cbackend import CustomCppCode
 from pystencils.boundaries import BoundaryHandling
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
+from lbmpy.stencils import inverseDirection
 
 
 class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
@@ -99,6 +99,6 @@ def createLatticeBoltzmannBoundaryKernel(pdfField, indexField, lbMethod, boundar
     elements = [BoundaryOffsetInfo(lbMethod.stencil), LbmWeightInfo(lbMethod)]
     indexArrDtype = indexField.dtype.numpyDtype
     dirSymbol = TypedSymbol("dir", indexArrDtype.fields['dir'][0])
-    elements += [sp.Eq(dirSymbol, indexField[0]('dir'))]
+    elements += [Assignment(dirSymbol, indexField[0]('dir'))]
     elements += boundaryFunctor(pdfField=pdfField, directionSymbol=dirSymbol, lbMethod=lbMethod, indexField=indexField)
     return createIndexedKernel(elements, [indexField], target=target, cpuOpenMP=openMP)

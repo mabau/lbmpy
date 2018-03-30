@@ -1,4 +1,5 @@
 import sympy as sp
+from pystencils import Assignment
 from pystencils.finitedifferences import Discretization2ndOrder
 from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, substituteLaplacianBySum, \
     forceFromPhiAndMu, symmetricTensorLinearization, pressureTensorFromFreeEnergy, forceFromPressureTensor
@@ -15,7 +16,7 @@ def muKernel(freeEnergy, orderParameters, phiField, muField, dx=1):
     chemicalPotential = substituteLaplacianBySum(chemicalPotential, dim)
     chemicalPotential = chemicalPotential.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
     discretize = Discretization2ndOrder(dx=dx)
-    return [sp.Eq(muField(i), discretize(mu_i)) for i, mu_i in enumerate(chemicalPotential)]
+    return [Assignment(muField(i), discretize(mu_i)) for i, mu_i in enumerate(chemicalPotential)]
 
 
 def forceKernelUsingMu(forceField, phiField, muField, dx=1):
@@ -23,7 +24,7 @@ def forceKernelUsingMu(forceField, phiField, muField, dx=1):
     assert muField.indexDimensions == 1
     force = forceFromPhiAndMu(phiField.vecCenter, mu=muField.vecCenter, dim=muField.spatialDimensions)
     discretize = Discretization2ndOrder(dx=dx)
-    return [sp.Eq(forceField(i),
+    return [Assignment(forceField(i),
                   discretize(f_i)).expand() for i, f_i in enumerate(force)]
 
 
@@ -35,8 +36,7 @@ def pressureTensorKernel(freeEnergy, orderParameters, phiField, pressureTensorFi
     discretize = Discretization2ndOrder(dx=dx)
     eqs = []
     for index, linIndex in indexMap.items():
-        eq = sp.Eq(pressureTensorField(linIndex),
-                   discretize(p[index]).expand())
+        eq = Assignment(pressureTensorField(linIndex), discretize(p[index]).expand())
         eqs.append(eq)
     return eqs
 
@@ -50,7 +50,7 @@ def forceKernelUsingPressureTensor(forceField, pressureTensorField, extraForce=N
     if extraForce:
         f += extraForce
     discretize = Discretization2ndOrder(dx=dx)
-    return [sp.Eq(forceField(i), discretize(f_i).expand())
+    return [Assignment(forceField(i), discretize(f_i).expand())
             for i, f_i in enumerate(f)]
 
 
@@ -81,7 +81,7 @@ class CahnHilliardFDStep:
         updateEqs = []
         for i in range(numPhases):
             rhs = cahnHilliardFdEq(i, self.phiField, muField, velField, mobilities[i], dx, dt)
-            updateEqs.append(sp.Eq(self.tmpField(i), rhs))
+            updateEqs.append(Assignment(self.tmpField(i), rhs))
         self.updateEqs = updateEqs
         self.updateEqs = equationModifier(updateEqs)
         self.kernel = createKernel(self.updateEqs, target=target).compile()

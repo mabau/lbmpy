@@ -3,12 +3,12 @@ import sympy as sp
 
 from lbmpy.innerloopsplit import createLbmSplitGroups
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
-from pystencils.equationcollection.simplifications import applyOnAllEquations, \
-    subexpressionSubstitutionInMainEquations, sympyCSE, addSubexpressionsForDivisions
+from pystencils.assignment_collection.simplifications import applyOnAllEquations, \
+    subexpressionSubstitutionInmainAssignments, sympyCSE, addSubexpressionsForDivisions
 
 
 def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doOverallCse=False, splitInnerLoop=False):
-    from pystencils.equationcollection import SimplificationStrategy
+    from pystencils.assignment_collection import SimplificationStrategy
     from lbmpy.methods import MomentBasedLbMethod
     from lbmpy.methods.momentbasedsimplifications import replaceSecondOrderVelocityProducts, \
         factorDensityAfterFactoringRelaxationTimes, factorRelaxationRates, cseInOpposingDirections, \
@@ -27,7 +27,7 @@ def createSimplificationStrategy(lbmMethod, doCseInOpposingDirections=False, doO
         s.add(replaceDensityAndVelocity)
         s.add(replaceCommonQuadraticAndConstantTerm)
         s.add(factorDensityAfterFactoringRelaxationTimes)
-        s.add(subexpressionSubstitutionInMainEquations)
+        s.add(subexpressionSubstitutionInmainAssignments)
         if splitInnerLoop:
             s.add(createLbmSplitGroups)
     elif isinstance(lbmMethod, CumulantBasedLbMethod):

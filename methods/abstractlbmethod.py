@@ -1,13 +1,13 @@
 import abc
 import sympy as sp
 from collections import namedtuple
-from pystencils.equationcollection import EquationCollection
+from pystencils.assignment_collection import AssignmentCollection
 
 
 RelaxationInfo = namedtuple('RelaxationInfo', ['equilibriumValue', 'relaxationRate'])
 
 
-class LbmCollisionRule(EquationCollection):
+class LbmCollisionRule(AssignmentCollection):
     def __init__(self, lbmMethod, *args, **kwargs):
         super(LbmCollisionRule, self).__init__(*args, **kwargs)
         self.method = lbmMethod

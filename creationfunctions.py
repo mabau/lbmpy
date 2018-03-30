@@ -152,8 +152,12 @@ For example, to modify the AST one can run::
 import sympy as sp
 from copy import copy
 
-from lbmpy.turbulence_models import addSmagorinskyModel
 from pystencils.cache import diskcacheNoFallback
+from pystencils.data_types import collateTypes
+from pystencils.assignment_collection.assignment_collection import AssignmentCollection
+from pystencils.field import getLayoutOfArray, Field
+from pystencils import createKernel, Assignment
+from lbmpy.turbulence_models import addSmagorinskyModel
 from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
     createRawMRT, createThreeRelaxationRateMRT
 from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
@@ -164,10 +168,6 @@ import lbmpy.forcemodels as forcemodels
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.updatekernels import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor, \
     createLBMKernel, createStreamPullWithOutputKernel
-from pystencils.data_types import collateTypes
-from pystencils.equationcollection.equationcollection import EquationCollection
-from pystencils.field import getLayoutOfArray, Field
-from pystencils import createKernel
 
 
 def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
@@ -275,10 +275,10 @@ def createLatticeBoltzmannCollisionRule(lbMethod=None, optimizationParams={}, **
     cqc = lbMethod.conservedQuantityComputation
 
     if params['velocityInput'] is not None:
-        eqs = [sp.Eq(cqc.zerothOrderMomentSymbol, sum(lbMethod.preCollisionPdfSymbols))]
+        eqs = [Assignment(cqc.zerothOrderMomentSymbol, sum(lbMethod.preCollisionPdfSymbols))]
         velocityField = params['velocityInput']
-        eqs += [sp.Eq(uSym, velocityField(i)) for i, uSym in enumerate(cqc.firstOrderMomentSymbols)]
-        eqs = EquationCollection(eqs, [])
+        eqs += [Assignment(uSym, velocityField(i)) for i, uSym in enumerate(cqc.firstOrderMomentSymbols)]
+        eqs = AssignmentCollection(eqs, [])
         collisionRule = lbMethod.getCollisionRule(conservedQuantityEquations=eqs)
     else:
         collisionRule = lbMethod.getCollisionRule()

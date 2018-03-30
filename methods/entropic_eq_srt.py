@@ -1,4 +1,5 @@
 import sympy as sp
+from pystencils import Assignment
 from lbmpy.maxwellian_equilibrium import getWeights
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
@@ -52,16 +53,16 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
                 f_i *= (2 - B) * ((2 * u_a + B) / (1 - u_a)) ** e_ia
             eq.append(f_i)
 
-        collisionEqs = [sp.Eq(lhs, (1 - relaxationRate) * f_i + relaxationRate * eq_i)
+        collisionEqs = [Assignment(lhs, (1 - relaxationRate) * f_i + relaxationRate * eq_i)
                         for lhs, f_i, eq_i in zip(self.postCollisionPdfSymbols, self.preCollisionPdfSymbols, eq)]
 
         if (self._forceModel is not None) and includeForceTerms:
             forceModelTerms = self._forceModel(self)
             forceTermSymbols = sp.symbols("forceTerm_:%d" % (len(forceModelTerms, )))
-            forceSubexpressions = [sp.Eq(sym, forceModelTerm)
+            forceSubexpressions = [Assignment(sym, forceModelTerm)
                                    for sym, forceModelTerm in zip(forceTermSymbols, forceModelTerms)]
             allSubexpressions += forceSubexpressions
-            collisionEqs = [sp.Eq(eq.lhs, eq.rhs + forceTermSymbol)
+            collisionEqs = [Assignment(eq.lhs, eq.rhs + forceTermSymbol)
                             for eq, forceTermSymbol in zip(collisionEqs, forceTermSymbols)]
 
         return LbmCollisionRule(self, collisionEqs, allSubexpressions)

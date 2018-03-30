@@ -1,13 +1,12 @@
 import numpy as np
 import sympy as sp
 
-from lbmpy.methods.abstractlbmethod import LbmCollisionRule
-from pystencils import Field
-from pystencils.equationcollection.equationcollection import EquationCollection
+from pystencils import Field, Assignment
+from pystencils.assignment_collection.assignment_collection import AssignmentCollection
 from pystencils.field import createNumpyArrayWithLayout, layoutStringToTuple
 from pystencils.sympyextensions import fastSubs
-from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, Pseudo2DTwoFieldsAccessor, PeriodicTwoFieldsAccessor, \
-    CollideOnlyInplaceAccessor
+from lbmpy.methods.abstractlbmethod import LbmCollisionRule
+from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor
 
 
 # -------------------------------------------- LBM Kernel Creation -----------------------------------------------------
@@ -117,9 +116,9 @@ def createStreamPullOnlyKernel(stencil, numpyField=None, srcFieldName="src", dst
         dst = Field.createFromNumpyArray(dstFieldName, numpyField, indexDimensions=1)
 
     accessor = StreamPullTwoFieldsAccessor()
-    eqs = [sp.Eq(a, b) for a, b in zip(accessor.write(dst, stencil), accessor.read(src, stencil))
-           if sp.Eq(a, b) != True]
-    return EquationCollection(eqs, [])
+    eqs = [Assignment(a, b) for a, b in zip(accessor.write(dst, stencil), accessor.read(src, stencil))
+           if Assignment(a, b) != True]
+    return AssignmentCollection(eqs, [])
 
 
 def createStreamPullWithOutputKernel(lbMethod, srcField, dstField, output):
@@ -127,13 +126,13 @@ def createStreamPullWithOutputKernel(lbMethod, srcField, dstField, output):
     cqc = lbMethod.conservedQuantityComputation
     streamed = sp.symbols("streamed_:%d" % (len(stencil),))
     accessor = StreamPullTwoFieldsAccessor()
-    streamEqs = [sp.Eq(a, b) for a, b in zip(streamed, accessor.read(srcField, stencil))
-                 if sp.Eq(a, b) != True]
+    streamEqs = [Assignment(a, b) for a, b in zip(streamed, accessor.read(srcField, stencil))
+                 if Assignment(a, b) != True]
     outputEqCollection = cqc.outputEquationsFromPdfs(streamed, output)
-    writeEqs = [sp.Eq(a, b) for a, b in zip(accessor.write(dstField, stencil), streamed)]
+    writeEqs = [Assignment(a, b) for a, b in zip(accessor.write(dstField, stencil), streamed)]
 
     subExprs = streamEqs + outputEqCollection.subexpressions
-    mainEqs = outputEqCollection.mainEquations + writeEqs
+    mainEqs = outputEqCollection.mainAssignments + writeEqs
     return LbmCollisionRule(lbMethod, mainEqs, subExprs, simplificationHints=outputEqCollection.simplificationHints)
 
 # ---------------------------------- Pdf array creation for various layouts --------------------------------------------
@@ -173,5 +172,5 @@ def addOutputFieldForConservedQuantities(collisionRule, conservedQuantitiesToOut
 def writeQuantitiesToField(collisionRule, symbols, outputField):
     if not hasattr(symbols, "__len__"):
         symbols = [symbols]
-    eqs = [sp.Eq(outputField(i), s) for i, s in enumerate(symbols)]
-    return collisionRule.copy(collisionRule.mainEquations + eqs)
+    eqs = [Assignment(outputField(i), s) for i, s in enumerate(symbols)]
+    return collisionRule.copy(collisionRule.mainAssignments + eqs)

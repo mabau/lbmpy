@@ -1,5 +1,6 @@
 import sympy as sp
 
+from pystencils import Assignment
 from lbmpy.relaxationrates import getShearRelaxationRate
 
 
@@ -27,13 +28,13 @@ def addSmagorinskyModel(collisionRule, smagorinskyConstant, omegaOutputField=Non
     adaptedOmega = sp.Symbol("smagorinskyOmega")
 
     # for derivation see notebook demo_custom_LES_model.pynb
-    eqs = [sp.Eq(tau_0, 1 / omega_s),
-           sp.Eq(secondOrderNeqMoments, frobeniusNorm(secondOrderMomentTensor(fNeq, method.stencil), factor=2) / rho),
-           sp.Eq(adaptedOmega, 2 / (tau_0 + sp.sqrt(18 * smagorinskyConstant**2 * secondOrderNeqMoments + tau_0**2)))]
+    eqs = [Assignment(tau_0, 1 / omega_s),
+           Assignment(secondOrderNeqMoments, frobeniusNorm(secondOrderMomentTensor(fNeq, method.stencil), factor=2) / rho),
+           Assignment(adaptedOmega, 2 / (tau_0 + sp.sqrt(18 * smagorinskyConstant**2 * secondOrderNeqMoments + tau_0**2)))]
     collisionRule.subexpressions += eqs
-    collisionRule.topologicalSort(subexpressions=True, mainEquations=False)
+    collisionRule.topologicalSort(subexpressions=True, mainAssignments=False)
 
     if omegaOutputField:
-        collisionRule.mainEquations.append(sp.Eq(omegaOutputField.center, adaptedOmega))
+        collisionRule.mainAssignments.append(Assignment(omegaOutputField.center, adaptedOmega))
 
     return collisionRule

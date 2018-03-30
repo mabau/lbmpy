@@ -29,7 +29,7 @@ def createLbmSplitGroups(lbmCollisionEqs):
                                if preCollisionSymbols.intersection(lbmCollisionEqs.getDependentSymbols([e.lhs]))}
 
     otherWrittenFields = []
-    for eq in lbmCollisionEqs.mainEquations:
+    for eq in lbmCollisionEqs.mainAssignments:
         if eq.lhs not in postCollisionSymbols and isinstance(eq.lhs, Field.Access):
             otherWrittenFields.append(eq.lhs)
         if eq.lhs not in nonCenterPostCollisionSymbols:
@@ -44,7 +44,7 @@ def createLbmSplitGroups(lbmCollisionEqs):
     directionGroups = defaultdict(list)
     dim = len(stencil[0])
 
-    for direction, eq in zip(stencil, lbmCollisionEqs.mainEquations):
+    for direction, eq in zip(stencil, lbmCollisionEqs.mainAssignments):
         if direction == tuple([0]*dim):
             splitGroups[0].append(eq.lhs)
             continue

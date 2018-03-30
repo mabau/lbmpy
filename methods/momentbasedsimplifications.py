@@ -1,9 +1,10 @@
 """
 This module holds special transformations for simplifying the collision equations of moment-based methods.
-All of these transformations operate on :class:`pystencils.equationcollection.EquationCollection` and need special
+All of these transformations operate on :class:`pystencils.AssignmentCollection` and need special
 simplification hints, which are set by the MomentBasedLbMethod.
 """
 import sympy as sp
+from pystencils import Assignment
 from pystencils.sympyextensions import replaceAdditive, replaceSecondOrderProducts, extractMostCommonFactor
 
 
@@ -19,9 +20,9 @@ def replaceSecondOrderVelocityProducts(lbmCollisionEqs):
     result = []
     substitutions = []
     u = sh['velocity']
-    for i, s in enumerate(lbmCollisionEqs.mainEquations):
+    for i, s in enumerate(lbmCollisionEqs.mainAssignments):
         newRhs = replaceSecondOrderProducts(s.rhs, u, positive=None, replaceMixed=substitutions)
-        result.append(sp.Eq(s.lhs, newRhs))
+        result.append(Assignment(s.lhs, newRhs))
     res = lbmCollisionEqs.copy(result)
     res.subexpressions += substitutions
     return res
@@ -41,11 +42,11 @@ def factorRelaxationRates(lbmCollisionEqs):
     relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)
 
     result = []
-    for s in lbmCollisionEqs.mainEquations:
+    for s in lbmCollisionEqs.mainAssignments:
         newRhs = s.rhs
         for rp in relaxationRates:
             newRhs = newRhs.collect(rp)
-        result.append(sp.Eq(s.lhs, newRhs))
+        result.append(Assignment(s.lhs, newRhs))
     return lbmCollisionEqs.copy(result)
 
 
@@ -67,12 +68,12 @@ def factorDensityAfterFactoringRelaxationTimes(lbmCollisionEqs):
     relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)
     result = []
     rho = sh['density']
-    for s in lbmCollisionEqs.mainEquations:
+    for s in lbmCollisionEqs.mainAssignments:
         newRhs = s.rhs
         for rp in relaxationRates:
             coeff = newRhs.coeff(rp)
             newRhs = newRhs.subs(coeff, coeff.collect(rho))
-        result.append(sp.Eq(s.lhs, newRhs))
+        result.append(Assignment(s.lhs, newRhs))
     return lbmCollisionEqs.copy(result)
 
 
@@ -89,13 +90,13 @@ def replaceDensityAndVelocity(lbmCollisionEqs):
     rho = sh['density']
     u = sh['velocity']
 
-    substitutions = lbmCollisionEqs.extract([rho] + list(u)).insertSubexpressions().mainEquations
+    substitutions = lbmCollisionEqs.extract([rho] + list(u)).insertSubexpressions().mainAssignments
     result = []
-    for s in lbmCollisionEqs.mainEquations:
+    for s in lbmCollisionEqs.mainAssignments:
         newRhs = s.rhs
         for replacement in substitutions:
             newRhs = replaceAdditive(newRhs, replacement.lhs, replacement.rhs, requiredMatchReplacement=0.5)
-        result.append(sp.Eq(s.lhs, newRhs))
+        result.append(Assignment(s.lhs, newRhs))
     return lbmCollisionEqs.copy(result)
 
 
@@ -122,11 +123,11 @@ def replaceCommonQuadraticAndConstantTerm(lbmCollisionEqs):
         return lbmCollisionEqs
 
     if len(f_eq_common.args) > 1:
-        f_eq_common = sp.Eq(sp.Symbol('f_eq_common'), f_eq_common)
+        f_eq_common = Assignment(sp.Symbol('f_eq_common'), f_eq_common)
         result = []
-        for s in lbmCollisionEqs.mainEquations:
+        for s in lbmCollisionEqs.mainAssignments:
             newRhs = replaceAdditive(s.rhs, f_eq_common.lhs, f_eq_common.rhs, requiredMatchReplacement=0.5)
-            result.append(sp.Eq(s.lhs, newRhs))
+            result.append(Assignment(s.lhs, newRhs))
         res = lbmCollisionEqs.copy(result)
         res.subexpressions.append(f_eq_common)
         return res
@@ -145,7 +146,7 @@ def cseInOpposingDirections(lbmCollisionEqs):
     sh = lbmCollisionEqs.simplificationHints
     assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rates"
 
-    updateRules = lbmCollisionEqs.mainEquations
+    updateRules = lbmCollisionEqs.mainAssignments
     stencil = lbmCollisionEqs.method.stencil
     relaxationRates = sp.Matrix(sh['relaxationRates']).atoms(sp.Symbol)
 
@@ -171,7 +172,7 @@ def cseInOpposingDirections(lbmCollisionEqs):
         if len(relaxationRates) == 0:
             foundSubexpressions, newTerms = sp.cse(updateRules, symbols=replacementSymbolGenerator,
                                                    order='None', optimizations=[])
-            substitutions += [sp.Eq(f[0], f[1]) for f in foundSubexpressions]
+            substitutions += [Assignment(f[0], f[1]) for f in foundSubexpressions]
 
             updateRules = newTerms
         else:
@@ -193,15 +194,15 @@ def cseInOpposingDirections(lbmCollisionEqs):
 
                 foundSubexpressions, newTerms = sp.cse(handledTerms, symbols=replacementSymbolGenerator,
                                                        order='None', optimizations=[])
-                substitutions += [sp.Eq(f[0], f[1]) for f in foundSubexpressions]
+                substitutions += [Assignment(f[0], f[1]) for f in foundSubexpressions]
 
-                updateRules = [sp.Eq(ur.lhs, ur.rhs.subs(relaxationRate * oldTerm, newCoefficient * newTerm))
+                updateRules = [Assignment(ur.lhs, ur.rhs.subs(relaxationRate * oldTerm, newCoefficient * newTerm))
                                for ur, newTerm, oldTerm in zip(updateRules, newTerms, terms)]
 
         result += updateRules
 
     for term, substitutedVar in newCoefficientSubstitutions.items():
-        substitutions.append(sp.Eq(substitutedVar, term))
+        substitutions.append(Assignment(substitutedVar, term))
 
     result.sort(key=lambda e: lbmCollisionEqs.method.postCollisionPdfSymbols.index(e.lhs))
     res = lbmCollisionEqs.copy(result)
@@ -223,7 +224,7 @@ def __getCommonQuadraticAndConstantTerms(lbmCollisionEqs):
     pdfSymbols = lbmCollisionEqs.freeSymbols - relaxationRates
 
     center = tuple([0] * dim)
-    t = lbmCollisionEqs.mainEquations[stencil.index(center)].rhs
+    t = lbmCollisionEqs.mainAssignments[stencil.index(center)].rhs
     for rp in relaxationRates:
         t = t.subs(rp, 1)
 
