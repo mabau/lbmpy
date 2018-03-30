@@ -8,21 +8,14 @@ from lbmpy.chapman_enskog import Diff, expandUsingLinearity, expandUsingProductR
 from lbmpy.chapman_enskog import DiffOperator, normalizeDiffOrder, chapmanEnskogDerivativeExpansion, \
     chapmanEnskogDerivativeRecombination
 from lbmpy.chapman_enskog.derivative import collectDerivatives, createNestedDiff
-from lbmpy.moments import discreteMoment, momentMatrix, polynomialToExponentRepresentation, getMomentIndices
+from lbmpy.moments import discreteMoment, momentMatrix, polynomialToExponentRepresentation, getMomentIndices, \
+    nonAliasedMoment
 from pystencils.cache import diskcache
 from pystencils.sympyextensions import normalizeProduct, multidimensionalSummation, kroneckerDelta
 from pystencils.sympyextensions import productSymmetric
 
 
 # --------------------------------------------- Helper Functions -------------------------------------------------------
-
-
-def getExpandedName(originalObject, number):
-    import warnings
-    warnings.warn("Deprecated!")
-    name = originalObject.name
-    newName = name + "^{(%i)}" % (number,)
-    return originalObject.func(newName)
 
 
 def expandedSymbol(name, subscript=None, superscript=None, **kwargs):
@@ -32,47 +25,8 @@ def expandedSymbol(name, subscript=None, superscript=None, **kwargs):
         name += "^{(%s)}" % (superscript,)
     return sp.Symbol(name, **kwargs)
 
-# --------------------------------   Summation Convention  -------------------------------------------------------------
-
-
-def getOccurrenceCountOfIndex(term, index):
-    if isinstance(term, Diff):
-        return getOccurrenceCountOfIndex(term.arg, index) + (1 if term.target == index else 0)
-    elif isinstance(term, sp.Symbol):
-        return 1 if term.name.endswith("_" + str(index)) else 0
-    else:
-        return 0
-
-
-def replaceIndex(term, oldIndex, newIndex):
-    if isinstance(term, Diff):
-        newArg = replaceIndex(term.arg, oldIndex, newIndex)
-        newLabel = newIndex if term.target == oldIndex else term.target
-        return Diff(newArg, newLabel, term.superscript)
-    elif isinstance(term, sp.Symbol):
-        if term.name.endswith("_" + str(oldIndex)):
-            baseName = term.name[:-(len(str(oldIndex))+1)]
-            return sp.Symbol(baseName + "_" + str(newIndex))
-        else:
-            return term
-    else:
-        newArgs = [replaceIndex(a, oldIndex, newIndex) for a in term.args]
-        return term.func(*newArgs) if newArgs else term
-
-# Problem: when there are more than two repeated indices... which one to replace?
 
 # ----------------------------------------------------------------------------------------------------------------------
-
-
-def momentAliasing(momentTuple):
-    moment = list(momentTuple)
-    result = []
-    for element in moment:
-        if element > 2:
-            result.append(2 - (element % 2))
-        else:
-            result.append(element)
-    return tuple(result)
 
 
 class CeMoment(sp.Symbol):
@@ -256,7 +210,7 @@ def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), 
         momentTuple = tuple(momentTuple)
 
         if useOneNeighborhoodAliasing:
-            momentTuple = momentAliasing(momentTuple)
+            momentTuple = nonAliasedMoment(momentTuple)
         result = CeMoment(fIndex.momentName, momentTuple, fIndex.superscript)
         if derivativeTerm is not None:
             result = derivativeTerm.changeArgRecursive(result)

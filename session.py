@@ -1,6 +1,5 @@
 import sympy as sp
 import numpy as np
-from pystencils.jupytersetup import *
 from lbmpy.scenarios import *
 from lbmpy.creationfunctions import *
 from pystencils import makeSlice, showCode

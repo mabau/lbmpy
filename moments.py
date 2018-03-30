@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 """
-
 Module Overview
 ~~~~~~~~~~~~~~~
 
@@ -25,9 +25,9 @@ All moment polynomials have to use ``MOMENT_SYMBOLS`` (which is a module variabl
 
 Example ::
 
-    from lbmpy.moments import MOMENT_SYMBOLS
-    x, y, z = MOMENT_SYMBOLS
-    secondOrderMoment = x*y + y*z
+    >>> from lbmpy.moments import MOMENT_SYMBOLS
+    >>> x, y, z = MOMENT_SYMBOLS
+    >>> secondOrderMoment = x*y + y*z
 
 
 Functions
@@ -36,65 +36,17 @@ Functions
 """
 import itertools
 import math
-from collections import Counter, defaultdict
 from copy import copy
-
+from collections import Counter, defaultdict
+from typing import Iterable, List, Sequence, Tuple, TypeVar, Optional
 import sympy as sp
 
 from pystencils.cache import memorycache
 from pystencils.sympyextensions import removeHigherOrderTerms
 
-MOMENT_SYMBOLS = sp.symbols("x y z")
 
-
-def __uniqueList(seq):
-    seen = {}
-    result = []
-    for item in seq:
-        if item in seen:
-            continue
-        seen[item] = 1
-        result.append(item)
-    return result
-
-
-def __uniquePermutations(elements):
-    if len(elements) == 1:
-        yield (elements[0],)
-    else:
-        unique_elements = set(elements)
-        for first_element in unique_elements:
-            remaining_elements = list(elements)
-            remaining_elements.remove(first_element)
-            for sub_permutation in __uniquePermutations(remaining_elements):
-                yield (first_element,) + sub_permutation
-
-
-def __generateFixedSumTuples(tupleLength, tupleSum, allowedValues=None, ordered=False):
-    if not allowedValues:
-        allowedValues = list(range(0, tupleSum + 1))
-
-    assert (0 in allowedValues)
-
-    def recursive_helper(currentList, position, totalSum):
-        newPosition = position + 1
-        if newPosition < len(currentList):
-            for i in allowedValues:
-                currentList[position] = i
-                newSum = totalSum - i
-                if newSum < 0:
-                    continue
-                for item in recursive_helper(currentList, newPosition, newSum):
-                    yield item
-        else:
-            if totalSum in allowedValues:
-                currentList[-1] = totalSum
-                if not ordered:
-                    yield tuple(currentList)
-                if ordered and currentList == sorted(currentList, reverse=True):
-                    yield tuple(currentList)
-
-    return recursive_helper([0] * tupleLength, 0, tupleSum)
+MOMENT_SYMBOLS = sp.symbols('x y z')
+T = TypeVar('T')
 
 
 # ------------------------------ Discrete (Exponent Tuples) ------------------------------------------------------------
@@ -128,12 +80,12 @@ def pickRepresentativeMoments(moments):
 
 def momentPermutations(exponentTuple):
     """Returns all (unique) permutations of the given tuple"""
-    return __uniquePermutations(exponentTuple)
+    return __unique_permutations(exponentTuple)
 
 
 def momentsOfOrder(order, dim=3, includePermutations=True):
     """All tuples of length 'dim' which sum equals 'order'"""
-    for item in __generateFixedSumTuples(dim, order, ordered=not includePermutations):
+    for item in __fixed_sum_tuples(dim, order, ordered=not includePermutations):
         assert(len(item) == dim)
         assert(sum(item) == order)
         yield item
@@ -155,7 +107,7 @@ def extendMomentsWithPermutations(exponentTuples):
     allMoments = []
     for i in exponentTuples:
         allMoments += list(momentPermutations(i))
-    return __uniqueList(allMoments)
+    return __unique(allMoments)
 
 
 # ------------------------------ Representation Conversions ------------------------------------------------------------
@@ -278,8 +230,7 @@ def getExponentTupleFromIndices(momentIndices, dim):
 
 
 def getOrder(moment):
-    """
-    Computes polynomial order of given moment
+    """Computes polynomial order of given moment.
 
     Examples:
         >>> x , y, z = MOMENT_SYMBOLS
@@ -294,9 +245,32 @@ def getOrder(moment):
         return sum(moment)
     if len(moment.atoms(sp.Symbol)) == 0:
         return 0
-    leadingCoefficient = sp.polys.polytools.LM(moment)
-    symbolsInLeadingCoefficient = leadingCoefficient.atoms(sp.Symbol)
-    return sum([sp.degree(leadingCoefficient, gen=m) for m in symbolsInLeadingCoefficient])
+    leading_coefficient = sp.polys.polytools.LM(moment)
+    symbols_in_leading_coefficient = leading_coefficient.atoms(sp.Symbol)
+    return sum([sp.degree(leading_coefficient, gen=m) for m in symbols_in_leading_coefficient])
+
+
+def nonAliasedMoment(moment_tuple: Sequence[int]) -> Tuple[int, ...]:
+    """Takes a moment exponent tuple and returns the non-aliased version of it.
+
+    For first neighborhood stencils, all moments with exponents 3, 5, 7... are equal to exponent 1,
+    and exponents 4, 6, 8... are equal to exponent 2. This is because first neighborhood stencils only have values
+    d ∈ {+1, 0, -1}. So for example d**5 is always the same as d**3 and d, and d**6 == d**4 == d**2
+
+    Example:
+         >>> nonAliasedMoment((5, 4, 2))
+         (1, 2, 2)
+         >>> nonAliasedMoment((9, 1, 2))
+         (1, 1, 2)
+    """
+    moment = list(moment_tuple)
+    result = []
+    for element in moment:
+        if element > 2:
+            result.append(2 - (element % 2))
+        else:
+            result.append(element)
+    return tuple(result)
 
 
 def isShearMoment(moment):
@@ -605,3 +579,93 @@ def monomialToPolynomialTransformationMatrix(monomials, polynomials):
             exponentTuple = exponentTuple[:dim]
             result[polynomialIdx, monomials.index(exponentTuple)] = factor
     return result
+
+
+# --------------------------------------- Internal Functions -----------------------------------------------------------
+
+def __unique(seq: Sequence[T]) -> List[T]:
+    """Removes duplicates from a sequence in an order preserving way.
+
+    Example:
+        >>> __unique((1, 2, 3, 1, 4, 6, 3))
+        [1, 2, 3, 4, 6]
+    """
+    seen = {}
+    result = []
+    for item in seq:
+        if item in seen:
+            continue
+        seen[item] = 1
+        result.append(item)
+    return result
+
+
+def __unique_permutations(elements: Sequence[T]) -> Iterable[T]:
+    """Generates all unique permutations of the passed sequence.
+
+    Example:
+        >>> list(__unique_permutations([1, 1, 2]))
+        [(1, 1, 2), (1, 2, 1), (2, 1, 1)]
+
+    """
+    if len(elements) == 1:
+        yield (elements[0],)
+    else:
+        unique_elements = set(elements)
+        for first_element in unique_elements:
+            remaining_elements = list(elements)
+            remaining_elements.remove(first_element)
+            for sub_permutation in __unique_permutations(remaining_elements):
+                yield (first_element,) + sub_permutation
+
+
+def __fixed_sum_tuples(tuple_length: int, tuple_sum: int,
+                       allowed_values: Optional[Sequence[int]] = None,
+                       ordered: bool = False) -> Iterable[Tuple[int, ...]]:
+    """Generates all possible tuples of positive integers with a fixed sum of all entries.
+
+    Args:
+        tuple_length: length of the returned tuples
+        tuple_sum: summing over the entries of a yielded tuple should give this number
+        allowed_values: optional sequence of positive integers that are considered as tuple entries
+                        zero has to be in the set of allowed values
+                        if None, all possible positive integers are allowed
+        ordered: if True, only tuples are returned where the entries are descending, i.e. where the entries are ordered
+
+    Examples:
+        Generate all 2-tuples where the sum of entries is 3
+        >>> list(__fixed_sum_tuples(tuple_length=2, tuple_sum=3))
+        [(0, 3), (1, 2), (2, 1), (3, 0)]
+
+        Same with ordered tuples only
+        >>> list(__fixed_sum_tuples(tuple_length=2, tuple_sum=3, ordered=True))
+        [(2, 1), (3, 0)]
+
+        Restricting the allowed values, note that zero has to be in the allowed values!
+        >>> list(__fixed_sum_tuples(tuple_length=3, tuple_sum=4, allowed_values=(0, 1, 3)))
+        [(0, 1, 3), (0, 3, 1), (1, 0, 3), (1, 3, 0), (3, 0, 1), (3, 1, 0)]
+    """
+    if not allowed_values:
+        allowed_values = set(range(0, tuple_sum + 1))
+
+    assert 0 in allowed_values and all(i >= 0 for i in allowed_values)
+
+    def recursive_helper(current_list, position, total_sum):
+        new_position = position + 1
+        if new_position < len(current_list):
+            for i in allowed_values:
+                current_list[position] = i
+                new_sum = total_sum - i
+                if new_sum < 0:
+                    continue
+                for item in recursive_helper(current_list, new_position, new_sum):
+                    yield item
+        else:
+            if total_sum in allowed_values:
+                current_list[-1] = total_sum
+                if not ordered:
+                    yield tuple(current_list)
+                if ordered and current_list == sorted(current_list, reverse=True):
+                    yield tuple(current_list)
+
+    return recursive_helper([0] * tuple_length, 0, tuple_sum)
