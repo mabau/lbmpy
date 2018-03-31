@@ -9,8 +9,8 @@ from lbmpy.continuous_distribution_measures import multiDifferentiation
 from lbmpy.moments import momentsUpToComponentOrder
 from pystencils.cache import memorycache
 # ------------------------------------------- Internal Functions -------------------------------------------------------
-from pystencils.sympyextensions import fastSubs
-from pystencils.sympyextensions import scalarProduct
+from pystencils.sympyextensions import fast_subs
+from pystencils.sympyextensions import scalar_product
 
 
 def __getIndexedSymbols(passedSymbols, prefix, indices):
@@ -79,7 +79,7 @@ def __cumulantRawMomentTransform(index, dependentVarDict, outerFunction, default
             partitionList.append(i)
 
     if len(partitionList) == 0:  # special case for zero index
-        return fastSubs(outerFunction(zerothMoment), subsDict)
+        return fast_subs(outerFunction(zerothMoment), subsDict)
 
     # implementation of Faa di Bruno's formula:
     result = 0
@@ -98,14 +98,14 @@ def __cumulantRawMomentTransform(index, dependentVarDict, outerFunction, default
             index[i] = 1
             result = result.subs(createMomentSymbol(index), 0)
 
-    return fastSubs(result, subsDict)
+    return fast_subs(result, subsDict)
 
 
 @memorycache(maxsize=16)
 def __getDiscreteCumulantGeneratingFunction(function, stencil, waveNumbers):
     assert len(stencil) == len(function)
 
-    laplaceTrafo = sum([factor * sp.exp(scalarProduct(waveNumbers, e)) for factor, e in zip(function, stencil)])
+    laplaceTrafo = sum([factor * sp.exp(scalar_product(waveNumbers, e)) for factor, e in zip(function, stencil)])
     return sp.ln(laplaceTrafo)
 
 

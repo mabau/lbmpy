@@ -16,7 +16,7 @@ def createLbmSplitGroups(lbmCollisionEqs):
     Required simplification hints:
         - velocity: sequence of velocity symbols
     """
-    sh = lbmCollisionEqs.simplificationHints
+    sh = lbmCollisionEqs.simplification_hints
     assert 'velocity' in sh, "Needs simplification hint 'velocity': Sequence of velocity symbols"
 
     preCollisionSymbols = set(lbmCollisionEqs.method.preCollisionPdfSymbols)
@@ -26,10 +26,10 @@ def createLbmSplitGroups(lbmCollisionEqs):
     stencil = lbmCollisionEqs.method.stencil
 
     importantSubExpressions = {e.lhs for e in lbmCollisionEqs.subexpressions
-                               if preCollisionSymbols.intersection(lbmCollisionEqs.getDependentSymbols([e.lhs]))}
+                               if preCollisionSymbols.intersection(lbmCollisionEqs.dependent_symbols([e.lhs]))}
 
     otherWrittenFields = []
-    for eq in lbmCollisionEqs.mainAssignments:
+    for eq in lbmCollisionEqs.main_assignments:
         if eq.lhs not in postCollisionSymbols and isinstance(eq.lhs, Field.Access):
             otherWrittenFields.append(eq.lhs)
         if eq.lhs not in nonCenterPostCollisionSymbols:
@@ -44,7 +44,7 @@ def createLbmSplitGroups(lbmCollisionEqs):
     directionGroups = defaultdict(list)
     dim = len(stencil[0])
 
-    for direction, eq in zip(stencil, lbmCollisionEqs.mainAssignments):
+    for direction, eq in zip(stencil, lbmCollisionEqs.main_assignments):
         if direction == tuple([0]*dim):
             splitGroups[0].append(eq.lhs)
             continue
@@ -57,5 +57,5 @@ def createLbmSplitGroups(lbmCollisionEqs):
             directionGroups[direction].append(eq.lhs)
     splitGroups += directionGroups.values()
 
-    lbmCollisionEqs.simplificationHints['splitGroups'] = splitGroups
+    lbmCollisionEqs.simplification_hints['splitGroups'] = splitGroups
     return lbmCollisionEqs

@@ -32,7 +32,7 @@ class AbstractConservedQuantityComputation(abc.ABCMeta('ABC', (object,), {})):
         and :func:`equilibriumInputEquationsFromInitValues`
         """
 
-    def definedSymbols(self, order='all'):
+    def defined_symbols(self, order='all'):
         """
         Returns a dict, mapping names of conserved quantities to their symbols
         """
@@ -98,7 +98,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
     def compressible(self):
         return self._compressible
 
-    def definedSymbols(self, order='all'):
+    def defined_symbols(self, order='all'):
         if order == 'all':
             return {'density': self._symbolOrder0,
                     'velocity': self._symbolsOrder1}
@@ -171,7 +171,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         ac = applyForceModelShift('macroscopicVelocityShift', dim, ac, self._forceModel, self._compressible)
 
         main_assignments = []
-        eqs = OrderedDict([(eq.lhs, eq.rhs) for eq in ac.allEquations])
+        eqs = OrderedDict([(eq.lhs, eq.rhs) for eq in ac.all_assignments])
 
         if 'density' in outputQuantityNamesToSymbols:
             density_output_symbol = outputQuantityNamesToSymbols['density']
@@ -203,11 +203,11 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                                                                         self._symbolOrder0, self._symbolsOrder1)
             mom_density_eq_coll = applyForceModelShift('macroscopicVelocityShift', dim, mom_density_eq_coll,
                                                     self._forceModel, self._compressible)
-            for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.mainAssignments[1:]):
+            for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.main_assignments[1:]):
                 main_assignments.append(Assignment(sym, val.rhs))
 
         ac = ac.copy(main_assignments, [Assignment(a, b) for a, b in eqs.items()])
-        return ac.newWithoutUnusedSubexpressions()
+        return ac.new_without_unused_subexpressions()
 
     def __repr__(self):
         return "ConservedValueComputation for %s" % (", " .join(self.conservedQuantities.keys()),)
@@ -278,10 +278,10 @@ def divideFirstOrderMomentsByRho(assignment_collection, dim):
     Returns a new equation collection where the u terms (first order moments) are divided by rho.
     The dim parameter specifies the number of first order moments. All subsequent equations are just copied over.
     """
-    oldEqs = assignment_collection.mainAssignments
-    rho = oldEqs[0].lhs
-    new_first_order_moment_eq = [Assignment(eq.lhs, eq.rhs / rho) for eq in oldEqs[1:dim+1]]
-    new_eqs = [oldEqs[0]] + new_first_order_moment_eq + oldEqs[dim+1:]
+    old_eqs = assignment_collection.main_assignments
+    rho = old_eqs[0].lhs
+    new_first_order_moment_eq = [Assignment(eq.lhs, eq.rhs / rho) for eq in old_eqs[1:dim+1]]
+    new_eqs = [old_eqs[0]] + new_first_order_moment_eq + old_eqs[dim+1:]
     return assignment_collection.copy(new_eqs)
 
 
@@ -289,9 +289,9 @@ def addDensityOffset(assignment_collection, offset=sp.Rational(1, 1)):
     """
     Assumes that first equation is the density (zeroth moment). Changes the density equations by adding offset to it.
     """
-    oldEqs = assignment_collection.mainAssignments
-    newDensity = Assignment(oldEqs[0].lhs, oldEqs[0].rhs + offset)
-    return assignment_collection.copy([newDensity] + oldEqs[1:])
+    old_eqs = assignment_collection.main_assignments
+    new_density = Assignment(old_eqs[0].lhs, old_eqs[0].rhs + offset)
+    return assignment_collection.copy([new_density] + old_eqs[1:])
 
 
 def applyForceModelShift(shiftMemberName, dim, assignment_collection, forceModel, compressible, reverse=False):
@@ -301,7 +301,7 @@ def applyForceModelShift(shiftMemberName, dim, assignment_collection, forceModel
     equation collection are assumed to be the velocity equations.
     """
     if forceModel is not None and hasattr(forceModel, shiftMemberName):
-        old_eqs = assignment_collection.mainAssignments
+        old_eqs = assignment_collection.main_assignments
         density = old_eqs[0].lhs if compressible else sp.Rational(1, 1)
         old_vel_eqs = old_eqs[1:dim + 1]
         shift_func = getattr(forceModel, shiftMemberName)

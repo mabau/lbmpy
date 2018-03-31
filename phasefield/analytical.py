@@ -1,7 +1,7 @@
 import sympy as sp
 from collections import defaultdict
 
-from pystencils.sympyextensions import multidimensionalSummation as multiSum, normalizeProduct, prod
+from pystencils.sympyextensions import multidimensional_sum as multiSum, normalize_product, prod
 from pystencils.derivative import functionalDerivative, expandUsingLinearity, Diff, fullDiffExpand
 
 orderParameterSymbolName = "phi"
@@ -250,13 +250,13 @@ def extractGamma(freeEnergy, orderParameters):
     freeEnergy = freeEnergy.expand()
     assert freeEnergy.func == sp.Add
     for product in freeEnergy.args:
-        product = normalizeProduct(product)
+        product = normalize_product(product)
         diffFactors = [e for e in product if e.func == Diff]
         if len(diffFactors) == 0:
             continue
 
         if len(diffFactors) != 2:
-            raise ValueError("Could not extract Λ because of term " + str(product))
+            raise ValueError("Could not new_filtered Λ because of term " + str(product))
 
         indices = sorted([orderParameters.index(d.args[0]) for d in diffFactors])
         result[tuple(indices)] += prod(e for e in product if e.func != Diff)

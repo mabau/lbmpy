@@ -157,7 +157,7 @@ def getMomentsOfContinuousMaxwellianEquilibrium(moments, dim, rho=sp.Symbol("rho
     >>> getMomentsOfContinuousMaxwellianEquilibrium( ( (0,0,0), (1,0,0), (0,1,0), (0,0,1), (2,0,0) ), dim=3 )
     [rho, rho*u_0, rho*u_1, rho*u_2, rho*(c_s**2 + u_0**2)]
     """
-    from pystencils.sympyextensions import removeHigherOrderTerms
+    from pystencils.sympyextensions import remove_higher_order_terms
     from lbmpy.moments import MOMENT_SYMBOLS
     from lbmpy.continuous_distribution_measures import continuousMoment
 
@@ -167,7 +167,7 @@ def getMomentsOfContinuousMaxwellianEquilibrium(moments, dim, rho=sp.Symbol("rho
     mb = continuousMaxwellianEquilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
     result = [continuousMoment(mb, moment, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq) for moment in moments]
     if order is not None:
-        result = [removeHigherOrderTerms(r, order, u) for r in result]
+        result = [remove_higher_order_terms(r, order=order, symbols=u) for r in result]
 
     return result
 
@@ -219,7 +219,7 @@ def getCumulantsOfContinuousMaxwellianEquilibrium(cumulants, dim, rho=sp.Symbol(
                                                   c_s_sq=sp.Symbol("c_s") ** 2, order=None):
     from lbmpy.moments import MOMENT_SYMBOLS
     from lbmpy.continuous_distribution_measures import continuousCumulant
-    from pystencils.sympyextensions import removeHigherOrderTerms
+    from pystencils.sympyextensions import remove_higher_order_terms
 
     # trick to speed up sympy integration (otherwise it takes multiple minutes, or aborts):
     # use a positive, real symbol to represent c_s_sq -> then replace this symbol afterwards with the real c_s_sq
@@ -227,7 +227,7 @@ def getCumulantsOfContinuousMaxwellianEquilibrium(cumulants, dim, rho=sp.Symbol(
     mb = continuousMaxwellianEquilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
     result = [continuousCumulant(mb, cumulant, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq) for cumulant in cumulants]
     if order is not None:
-        result = [removeHigherOrderTerms(r, order, u) for r in result]
+        result = [remove_higher_order_terms(r, order=order, symbols=u) for r in result]
 
     return result
 

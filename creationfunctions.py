@@ -192,7 +192,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         params['optimizationParams'] = optimizationParams
         updateRule = createLatticeBoltzmannUpdateRule(**params)
 
-    fieldTypes = set(fa.field.dtype for fa in updateRule.definedSymbols if isinstance(fa, Field.Access))
+    fieldTypes = set(fa.field.dtype for fa in updateRule.defined_symbols if isinstance(fa, Field.Access))
     res = createKernel(updateRule, target=optParams['target'], dataType=collateTypes(fieldTypes),
                        cpuOpenMP=optParams['openMP'], cpuVectorizeInfo=optParams['vectorization'],
                        gpuIndexing=optParams['gpuIndexing'], gpuIndexingParams=optParams['gpuIndexingParams'],
@@ -205,17 +205,17 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
 
 @diskcacheNoFallback
 def createLatticeBoltzmannUpdateRule(collisionRule=None, optimizationParams={}, **kwargs):
-    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
+    params, opt_params = updateWithDefaultParameters(kwargs, optimizationParams)
 
     if collisionRule is None:
-        collisionRule = createLatticeBoltzmannCollisionRule(**params, optimizationParams=optParams)
+        collisionRule = createLatticeBoltzmannCollisionRule(**params, optimizationParams=opt_params)
 
-    lbMethod = collisionRule.method
+    lb_method = collisionRule.method
 
     if params['output'] and params['kernelType'] == 'streamPullCollide':
-        cqc = lbMethod.conservedQuantityComputation
-        outputEqs = cqc.outputEquationsFromPdfs(lbMethod.preCollisionPdfSymbols, params['output'])
-        collisionRule = collisionRule.merge(outputEqs)
+        cqc = lb_method.conservedQuantityComputation
+        output_eqs = cqc.outputEquationsFromPdfs(lb_method.preCollisionPdfSymbols, params['output'])
+        collisionRule = collisionRule.new_merged(output_eqs)
 
     if params['entropic']:
         if params['entropicNewtonIterations']:
@@ -228,33 +228,33 @@ def createLatticeBoltzmannUpdateRule(collisionRule=None, optimizationParams={}, 
         else:
             collisionRule = addEntropyCondition(collisionRule, omegaOutputField=params['omegaOutputField'])
     elif params['smagorinsky']:
-        smagorinskyConstant = 0.12 if params['smagorinsky'] is True else params['smagorinsky']
-        collisionRule = addSmagorinskyModel(collisionRule, smagorinskyConstant,
+        smagorinsky_constant = 0.12 if params['smagorinsky'] is True else params['smagorinsky']
+        collisionRule = addSmagorinskyModel(collisionRule, smagorinsky_constant,
                                             omegaOutputField=params['omegaOutputField'])
 
-    fieldDtype = 'float64' if optParams['doublePrecision'] else 'float32'
+    field_data_type = 'float64' if opt_params['doublePrecision'] else 'float32'
 
-    if optParams['symbolicField'] is not None:
-        srcField = optParams['symbolicField']
-    elif optParams['fieldSize']:
-        fieldSize = [s + 2 for s in optParams['fieldSize']] + [len(collisionRule.stencil)]
-        srcField = Field.createFixedSize(params['fieldName'], fieldSize, indexDimensions=1,
-                                         layout=optParams['fieldLayout'], dtype=fieldDtype)
+    if opt_params['symbolicField'] is not None:
+        src_field = opt_params['symbolicField']
+    elif opt_params['fieldSize']:
+        field_size = [s + 2 for s in opt_params['fieldSize']] + [len(collisionRule.stencil)]
+        src_field = Field.createFixedSize(params['fieldName'], field_size, indexDimensions=1,
+                                          layout=opt_params['fieldLayout'], dtype=field_data_type)
     else:
-        srcField = Field.createGeneric(params['fieldName'], spatialDimensions=collisionRule.method.dim,
-                                       indexDimensions=1, layout=optParams['fieldLayout'], dtype=fieldDtype)
+        src_field = Field.createGeneric(params['fieldName'], spatialDimensions=collisionRule.method.dim,
+                                        indexDimensions=1, layout=opt_params['fieldLayout'], dtype=field_data_type)
 
-    dstField = srcField.newFieldWithDifferentName(params['secondFieldName'])
+    dst_field = src_field.newFieldWithDifferentName(params['secondFieldName'])
 
     if params['kernelType'] == 'streamPullCollide':
         accessor = StreamPullTwoFieldsAccessor
-        if any(optParams['builtinPeriodicity']):
-            accessor = PeriodicTwoFieldsAccessor(optParams['builtinPeriodicity'], ghostLayers=1)
-        return createLBMKernel(collisionRule, srcField, dstField, accessor)
+        if any(opt_params['builtinPeriodicity']):
+            accessor = PeriodicTwoFieldsAccessor(opt_params['builtinPeriodicity'], ghostLayers=1)
+        return createLBMKernel(collisionRule, src_field, dst_field, accessor)
     elif params['kernelType'] == 'collideOnly':
-        return createLBMKernel(collisionRule, srcField, srcField, CollideOnlyInplaceAccessor)
+        return createLBMKernel(collisionRule, src_field, src_field, CollideOnlyInplaceAccessor)
     elif params['kernelType'] == 'streamPullOnly':
-        return createStreamPullWithOutputKernel(lbMethod, srcField, dstField, params['output'])
+        return createStreamPullWithOutputKernel(lb_method, src_field, dst_field, params['output'])
     else:
         raise ValueError("Invalid value of parameter 'kernelType'", params['kernelType'])
 

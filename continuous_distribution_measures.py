@@ -6,18 +6,18 @@ import sympy as sp
 
 from lbmpy.moments import polynomialToExponentRepresentation
 from pystencils.cache import diskcache, memorycache
-from pystencils.sympyextensions import makeExponentialFuncArgumentSquares
+from pystencils.sympyextensions import complete_the_squares_in_exp
 
 
 @memorycache()
-def momentGeneratingFunction(function, symbols, symbolsInResult):
+def momentGeneratingFunction(generating_function, symbols, symbolsInResult):
     """
     Computes the moment generating function of a probability distribution. It is defined as:
 
     .. math ::
         F[f(\mathbf{x})](\mathbf{t}) = \int e^{<\mathbf{x}, \mathbf{t}>} f(x)\; dx
 
-    :param function: sympy expression
+    :param generating_function: sympy expression
     :param symbols: a sequence of symbols forming the vector x
     :param symbolsInResult: a sequence forming the vector t
     :return: transformation result F: an expression that depends now on symbolsInResult
@@ -33,7 +33,7 @@ def momentGeneratingFunction(function, symbols, symbolsInResult):
     """
     assert len(symbols) == len(symbolsInResult)
     for t_i, v_i in zip(symbolsInResult, symbols):
-        function *= sp.exp(t_i * v_i)
+        generating_function *= sp.exp(t_i * v_i)
 
     # This is a custom transformation that speeds up the integrating process
     # of a MaxwellBoltzmann distribution
@@ -43,11 +43,11 @@ def momentGeneratingFunction(function, symbols, symbolsInResult):
     # Without this transformation the following assumptions are required for the u and v variables of Maxwell Boltzmann
     #  2D: real=True ( without assumption it will not work)
     #  3D: no assumption ( with assumptions it will not work )
-    function = makeExponentialFuncArgumentSquares(function, symbols)
-    function = function.collect(symbols)
+    generating_function = complete_the_squares_in_exp(generating_function.simplify(), symbols)
+    generating_function = generating_function.collect(symbols)
 
     bounds = [(s_i, -sp.oo, sp.oo) for s_i in symbols]
-    result = sp.integrate(function, *bounds)
+    result = sp.integrate(generating_function, *bounds)
 
     return sp.simplify(result)
 

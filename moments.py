@@ -42,7 +42,7 @@ from typing import Iterable, List, Sequence, Tuple, TypeVar, Optional
 import sympy as sp
 
 from pystencils.cache import memorycache
-from pystencils.sympyextensions import removeHigherOrderTerms
+from pystencils.sympyextensions import remove_higher_order_terms
 
 
 MOMENT_SYMBOLS = sp.symbols('x y z')
@@ -412,15 +412,15 @@ def getDefaultMomentSetForStencil(stencil):
 # ---------------------------------- Visualization ---------------------------------------------------------------------
 
 
-def momentEqualityTable(stencil, discreteEquilibrium=None, continuousEquilibrium=None, maxOrder=4, truncateOrder=None):
+def momentEqualityTable(stencil, discrete_equilibrium=None, continuous_equilibrium=None, maxOrder=4, truncateOrder=None):
     """
     Creates a table showing which moments of a discrete stencil/equilibrium coincide with the
     corresponding continuous moments
 
     :param stencil: list of stencil velocities
-    :param discreteEquilibrium: list of sympy expr to compute discrete equilibrium for each direction, if left
+    :param discrete_equilibrium: list of sympy expr to compute discrete equilibrium for each direction, if left
                                 to default the standard discrete Maxwellian equilibrium is used
-    :param continuousEquilibrium: continuous equilibrium, if left to default, the continuous Maxwellian is used
+    :param continuous_equilibrium: continuous equilibrium, if left to default, the continuous Maxwellian is used
     :param maxOrder: compare moments up to this order (number of rows in table)
     :param truncateOrder: moments are considered equal if they match up to this order
     :return: Object to display in an Jupyter notebook
@@ -429,58 +429,58 @@ def momentEqualityTable(stencil, discreteEquilibrium=None, continuousEquilibrium
     from lbmpy.continuous_distribution_measures import continuousMoment
 
     dim = len(stencil[0])
-
-    if discreteEquilibrium is None:
+    u = sp.symbols(f"u_:{dim}")
+    if discrete_equilibrium is None:
         from lbmpy.maxwellian_equilibrium import discreteMaxwellianEquilibrium
-        discreteEquilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
-                                                            order=truncateOrder)
-    if continuousEquilibrium is None:
+        discrete_equilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
+                                                             u=u, order=truncateOrder)
+    if continuous_equilibrium is None:
         from lbmpy.maxwellian_equilibrium import continuousMaxwellianEquilibrium
-        continuousEquilibrium = continuousMaxwellianEquilibrium(dim=dim, c_s_sq=sp.Rational(1, 3))
+        continuous_equilibrium = continuousMaxwellianEquilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
 
     table = []
-    matchedMoments = 0
-    nonMatchedMoments = 0
+    matched_moments = 0
+    non_matched_moments = 0
 
-    momentsList = [list(momentsOfOrder(o, dim, includePermutations=False)) for o in range(maxOrder + 1)]
+    moments_list = [list(momentsOfOrder(o, dim, includePermutations=False)) for o in range(maxOrder + 1)]
 
     colors = dict()
-    nrOfColumns = max([len(v) for v in momentsList]) + 1
+    nr_of_columns = max([len(v) for v in moments_list]) + 1
 
-    headerRow = [' '] * nrOfColumns
-    headerRow[0] = 'order'
-    table.append(headerRow)
+    header_row = [' '] * nr_of_columns
+    header_row[0] = 'order'
+    table.append(header_row)
 
-    for order, moments in enumerate(momentsList):
-        row = [' '] * nrOfColumns
+    for order, moments in enumerate(moments_list):
+        row = [' '] * nr_of_columns
         row[0] = '%d' % (order,)
         for moment, colIdx in zip(moments, range(1, len(row))):
             multiplicity = momentMultiplicity(moment)
-            dm = discreteMoment(discreteEquilibrium, moment, stencil)
-            cm = continuousMoment(continuousEquilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
+            dm = discreteMoment(discrete_equilibrium, moment, stencil)
+            cm = continuousMoment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
             difference = sp.simplify(dm - cm)
             if truncateOrder:
-                difference = sp.simplify(removeHigherOrderTerms(difference, order=truncateOrder))
+                difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncateOrder))
             if difference != 0:
                 colors[(order + 1, colIdx)] = 'Orange'
-                nonMatchedMoments += multiplicity
+                non_matched_moments += multiplicity
             else:
                 colors[(order + 1, colIdx)] = 'lightGreen'
-                matchedMoments += multiplicity
+                matched_moments += multiplicity
 
             row[colIdx] = '%s  x %d' % (moment, momentMultiplicity(moment))
 
         table.append(row)
 
-    tableDisplay = ipy_table.make_table(table)
+    table_display = ipy_table.make_table(table)
     ipy_table.set_row_style(0, color='#ddd')
     for cellIdx, color in colors.items():
         ipy_table.set_cell_style(cellIdx[0], cellIdx[1], color=color)
 
     print("Matched moments %d - non matched moments %d - total %d" %
-          (matchedMoments, nonMatchedMoments, matchedMoments + nonMatchedMoments))
+          (matched_moments, non_matched_moments, matched_moments + non_matched_moments))
 
-    return tableDisplay
+    return table_display
 
 
 def momentEqualityTableByStencil(nameToStencilDict, moments, truncateOrder=None):
@@ -498,10 +498,10 @@ def momentEqualityTableByStencil(nameToStencilDict, moments, truncateOrder=None)
     from lbmpy.maxwellian_equilibrium import continuousMaxwellianEquilibrium
     from lbmpy.continuous_distribution_measures import continuousMoment
 
-    stencilNames = []
+    stencil_names = []
     stencils = []
     for key, value in nameToStencilDict.items():
-        stencilNames.append(key)
+        stencil_names.append(key)
         stencils.append(value)
 
     moments = list(pickRepresentativeMoments(moments))
@@ -509,32 +509,33 @@ def momentEqualityTableByStencil(nameToStencilDict, moments, truncateOrder=None)
     colors = {}
     for stencilIdx, stencil in enumerate(stencils):
         dim = len(stencil[0])
-        discreteEquilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
-                                                            order=truncateOrder)
-        continuousEquilibrium = continuousMaxwellianEquilibrium(dim=dim, c_s_sq=sp.Rational(1, 3))
+        u = sp.symbols(f"u_:{dim}")
+        discrete_equilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
+                                                             u=u, order=truncateOrder)
+        continuous_equilibrium = continuousMaxwellianEquilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
 
         for momentIdx, moment in enumerate(moments):
             moment = moment[:dim]
-            dm = discreteMoment(discreteEquilibrium, moment, stencil)
-            cm = continuousMoment(continuousEquilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
+            dm = discreteMoment(discrete_equilibrium, moment, stencil)
+            cm = continuousMoment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
             difference = sp.simplify(dm - cm)
             if truncateOrder:
-                difference = sp.simplify(removeHigherOrderTerms(difference, order=truncateOrder))
+                difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncateOrder))
             colors[(momentIdx + 1, stencilIdx + 2)] = 'Orange' if difference != 0 else 'lightGreen'
 
     table = []
-    headerRow = [' ', '#'] + stencilNames
-    table.append(headerRow)
+    header_row = [' ', '#'] + stencil_names
+    table.append(header_row)
     for moment in moments:
         row = [str(moment), str(momentMultiplicity(moment))] + [' '] * len(stencils)
         table.append(row)
 
-    tableDisplay = ipy_table.make_table(table)
+    table_display = ipy_table.make_table(table)
     ipy_table.set_row_style(0, color='#ddd')
     for cellIdx, color in colors.items():
         ipy_table.set_cell_style(cellIdx[0], cellIdx[1], color=color)
 
-    return tableDisplay
+    return table_display
 
 
 def extractMonomials(sequenceOfPolynomials, dim=3):

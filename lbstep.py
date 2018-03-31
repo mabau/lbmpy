@@ -251,8 +251,8 @@ class LatticeBoltzmannStep:
 
         inpEqs = cqc.equilibriumInputEquationsFromInitValues(rhoField, [velField(i) for i in range(D)])
         setterEqs = lbMethod.getEquilibrium(conservedQuantityEquations=inpEqs)
-        setterEqs = setterEqs.copyWithSubstitutionsApplied({sym: pdfField(i)
-                                                            for i, sym in enumerate(lbMethod.postCollisionPdfSymbols)})
+        setterEqs = setterEqs.new_with_substitutions({sym: pdfField(i)
+                                                      for i, sym in enumerate(lbMethod.postCollisionPdfSymbols)})
 
         setterEqs = createSimplificationStrategy(lbMethod)(setterEqs)
         setterKernel = createKernel(setterEqs, target='cpu').compile()

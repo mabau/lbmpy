@@ -32,9 +32,9 @@ def addSmagorinskyModel(collisionRule, smagorinskyConstant, omegaOutputField=Non
            Assignment(secondOrderNeqMoments, frobeniusNorm(secondOrderMomentTensor(fNeq, method.stencil), factor=2) / rho),
            Assignment(adaptedOmega, 2 / (tau_0 + sp.sqrt(18 * smagorinskyConstant**2 * secondOrderNeqMoments + tau_0**2)))]
     collisionRule.subexpressions += eqs
-    collisionRule.topologicalSort(subexpressions=True, mainAssignments=False)
+    collisionRule.topological_sort(sort_subexpressions=True, sort_main_assignments=False)
 
     if omegaOutputField:
-        collisionRule.mainAssignments.append(Assignment(omegaOutputField.center, adaptedOmega))
+        collisionRule.main_assignments.append(Assignment(omegaOutputField.center, adaptedOmega))
 
     return collisionRule

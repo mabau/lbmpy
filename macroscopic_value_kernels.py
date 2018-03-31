@@ -53,7 +53,7 @@ def compileMacroscopicValuesGetter(lbMethod, outputQuantities, pdfArr=None, fiel
 
     stencil = lbMethod.stencil
     pdfSymbols = [pdfField(i) for i in range(len(stencil))]
-    eqs = cqc.outputEquationsFromPdfs(pdfSymbols, outputMapping).allEquations
+    eqs = cqc.outputEquationsFromPdfs(pdfSymbols, outputMapping).all_assignments
 
     if target == 'cpu':
         import pystencils.cpu as cpu
@@ -118,10 +118,10 @@ def compileMacroscopicValuesSetter(lbMethod, quantitiesToSet, pdfArr=None, field
         simplification = createSimplificationStrategy(lbMethod)
         eq = simplification(eq)
     else:
-        eq = eq.insertSubexpressions()
+        eq = eq.new_without_subexpressions()
 
     substitutions = {sym: pdfField(i) for i, sym in enumerate(lbMethod.postCollisionPdfSymbols)}
-    eq = eq.copyWithSubstitutionsApplied(substitutions).allEquations
+    eq = eq.new_with_substitutions(substitutions).all_assignments
 
     if target == 'cpu':
         import pystencils.cpu as cpu
@@ -146,18 +146,18 @@ def createAdvancedVelocitySetterCollisionRule(lbMethod, velocityArray, velocityR
     velocityField = Field.createFromNumpyArray('velInput', velocityArray, indexDimensions=1)
 
     cqc = lbMethod.conservedQuantityComputation
-    densitySymbol = cqc.definedSymbols(order=0)[1]
-    velocitySymbols = cqc.definedSymbols(order=1)[1]
+    densitySymbol = cqc.defined_symbols(order=0)[1]
+    velocitySymbols = cqc.defined_symbols(order=1)[1]
 
     # density is computed from pdfs
     eqInputFromPdfs = cqc.equilibriumInputEquationsFromPdfs(lbMethod.preCollisionPdfSymbols)
-    eqInputFromPdfs = eqInputFromPdfs.extract([densitySymbol])
+    eqInputFromPdfs = eqInputFromPdfs.new_filtered([densitySymbol])
     # velocity is read from input field
     velSymbols = [velocityField(i) for i in range(lbMethod.dim)]
     eqInputFromField = cqc.equilibriumInputEquationsFromInitValues(velocity=velSymbols)
-    eqInputFromField = eqInputFromField.extract(velocitySymbols)
+    eqInputFromField = eqInputFromField.new_filtered(velocitySymbols)
     # then both are merged together
-    eqInput = eqInputFromPdfs.merge(eqInputFromField)
+    eqInput = eqInputFromPdfs.new_merged(eqInputFromField)
 
     # set first order relaxation rate
     lbMethod = deepcopy(lbMethod)

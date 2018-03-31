@@ -11,8 +11,8 @@ from lbmpy.chapman_enskog.derivative import collectDerivatives, createNestedDiff
 from lbmpy.moments import discreteMoment, momentMatrix, polynomialToExponentRepresentation, getMomentIndices, \
     nonAliasedMoment
 from pystencils.cache import diskcache
-from pystencils.sympyextensions import normalizeProduct, multidimensionalSummation, kroneckerDelta
-from pystencils.sympyextensions import productSymmetric
+from pystencils.sympyextensions import normalize_product, multidimensional_sum, kronecker_delta
+from pystencils.sympyextensions import symmetric_product
 
 
 # --------------------------------------------- Helper Functions -------------------------------------------------------
@@ -77,7 +77,7 @@ class CeMoment(sp.Symbol):
 
 class LbMethodEqMoments:
     def __init__(self, lbMethod):
-        self._eq = tuple(e.rhs for e in lbMethod.getEquilibrium().mainAssignments)
+        self._eq = tuple(e.rhs for e in lbMethod.getEquilibrium().main_assignments)
         self._momentCache = dict()
         self._postCollisionMomentCache = dict()
         self._stencil = lbMethod.stencil
@@ -189,7 +189,7 @@ def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), 
         derivativeTerm = None
         cIndices = []
         rest = 1
-        for factor in normalizeProduct(productTerm):
+        for factor in normalize_product(productTerm):
             if isinstance(factor, Diff):
                 assert fIndex is None
                 fIndex = determineFIndex(factor.getArgRecursive())
@@ -269,13 +269,13 @@ def chainSolveAndSubstitute(eqSequence, unknownSelector, normalizingFunc=diffExp
 
 
 def countVars(expr, variables):
-    factorList = normalizeProduct(expr)
+    factorList = normalize_product(expr)
     diffsToUnpack = [e for e in factorList if isinstance(e, Diff)]
     factorList = [e for e in factorList if not isinstance(e, Diff)]
 
     while diffsToUnpack:
         d = diffsToUnpack.pop()
-        args = normalizeProduct(d.arg)
+        args = normalize_product(d.arg)
         for a in args:
             if isinstance(a, Diff):
                 diffsToUnpack.append(a)
@@ -402,7 +402,7 @@ def matchEquationsToNavierStokes(conservationEquations, rho=sp.Symbol("rho"), u=
             ref = diffSimplify(Diff(factor * u[i], t) + sum(Diff(factor * u[i] * u[j], j) for j in range(dim)))
             shearAndPressureEqs.append(diffSimplify(momentEqs[i]) - ref)
 
-        # extract pressure term
+        # new_filtered pressure term
         coefficentArgSets = []
         for i, eq in enumerate(shearAndPressureEqs):
             coefficentArgSets.append(set())
@@ -460,8 +460,8 @@ class ChapmanEnskogAnalysis(object):
         cqc = method.conservedQuantityComputation
         self._method = method
         self._momentCache = LbMethodEqMoments(method)
-        self.rho = cqc.definedSymbols(order=0)[1]
-        self.u = cqc.definedSymbols(order=1)[1]
+        self.rho = cqc.defined_symbols(order=0)[1]
+        self.u = cqc.defined_symbols(order=1)[1]
         self.t = sp.Symbol("t")
         self.epsilon = sp.Symbol("epsilon")
 
@@ -471,7 +471,7 @@ class ChapmanEnskogAnalysis(object):
         # Taking moments
         c = sp.Matrix([expandedSymbol("c", subscript=i) for i in range(self._method.dim)])
         momentsUntilOrder1 = [1] + list(c)
-        momentsOrder2 = [c_i * c_j for c_i, c_j in productSymmetric(c, c)]
+        momentsOrder2 = [c_i * c_j for c_i, c_j in symmetric_product(c, c)]
 
         symbolicRelaxationRates = [rr for rr in method.relaxationRates if isinstance(rr, sp.Symbol)]
         if constants is None:
@@ -541,7 +541,7 @@ class ChapmanEnskogAnalysis(object):
     def getShearViscosityCandidates(self):
         result = set()
         dim = self._method.dim
-        for i, j in productSymmetric(range(dim), range(dim), withDiagonal=False):
+        for i, j in symmetric_product(range(dim), range(dim), with_diagonal=False):
             result.add(-sp.cancel(self._sigmaWithoutErrorTerms[i, j] / (Diff(self.u[i], j) + Diff(self.u[j], i))))
         return result
 
@@ -554,7 +554,7 @@ class ChapmanEnskogAnalysis(object):
         # Check that shear viscosity does not depend on any u derivatives - create conditions (equations) that
         # have to be fulfilled for this to be the case
         viscosityReference = self._sigmaWithoutErrorTerms[0, 1].expand().coeff(Diff(self.u[0], 1))
-        for i, j in productSymmetric(range(dim), range(dim), withDiagonal=False):
+        for i, j in symmetric_product(range(dim), range(dim), with_diagonal=False):
             term = self._sigmaWithoutErrorTerms[i, j]
             equalCrossTermCondition = sp.expand(term.coeff(Diff(self.u[i], j)) - viscosityReference)
             term = term.subs({Diff(self.u[i], j): 0,
@@ -656,7 +656,7 @@ class SteadyStateChapmanEnskogAnalysis(object):
 
                 moment = summand.atoms(CeMoment)
                 moment = moment.pop()
-                collisionOperatorExponent = normalizeProduct(summand).count(B)
+                collisionOperatorExponent = normalize_product(summand).count(B)
                 if collisionOperatorExponent == 0:
                     result += summand
                 else:
@@ -716,8 +716,8 @@ class SteadyStateChapmanEnskogAnalysis(object):
         dim = self.method.dim
 
         D = createNestedDiff
-        s = functools.partial(multidimensionalSummation, dim=dim)
-        kd = kroneckerDelta
+        s = functools.partial(multidimensional_sum, dim=dim)
+        kd = kronecker_delta
 
         eta, eta_b = sp.symbols("nu nu_B")
         u = sp.symbols("u_:3")[:dim]

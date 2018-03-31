@@ -1,7 +1,7 @@
 import sympy as sp
 from pystencils import Field, Assignment
 from pystencils.astnodes import SympyAssignment
-from pystencils.sympyextensions import getSymmetricPart
+from pystencils.sympyextensions import get_symmetric_part
 from pystencils.data_types import createType
 from lbmpy.simplificationfactory import createSimplificationStrategy
 from lbmpy.boundaries.boundaryhandling import BoundaryOffsetInfo, LbmWeightInfo
@@ -126,7 +126,7 @@ class UBB(Boundary):
         if self._adaptVelocityToForce:
             cqc = lbMethod.conservedQuantityComputation
             shiftedVelEqs = cqc.equilibriumInputEquationsFromInitValues(velocity=velocity)
-            velocity = [eq.rhs for eq in shiftedVelEqs.extract(cqc.firstOrderMomentSymbols).mainAssignments]
+            velocity = [eq.rhs for eq in shiftedVelEqs.new_filtered(cqc.firstOrderMomentSymbols).main_assignments]
 
         c_s_sq = sp.Rational(1, 3)
         weightOfDirection = LbmWeightInfo.weightOfDirection
@@ -140,8 +140,8 @@ class UBB(Boundary):
             densitySymbol = sp.Symbol("rho")
             pdfFieldAccesses = [pdfField(i) for i in range(len(lbMethod.stencil))]
             densityEquations = cqc.outputEquationsFromPdfs(pdfFieldAccesses, {'density': densitySymbol})
-            densitySymbol = lbMethod.conservedQuantityComputation.definedSymbols()['density']
-            result = densityEquations.allEquations
+            densitySymbol = lbMethod.conservedQuantityComputation.defined_symbols()['density']
+            result = densityEquations.all_assignments
             result += [Assignment(pdfField[neighbor](inverseDir),
                                   pdfField(direction) - velTerm * densitySymbol)]
             return result
@@ -159,31 +159,31 @@ class FixedDensity(Boundary):
     def __call__(self, pdfField, directionSymbol, lbMethod, **kwargs):
         """Boundary condition that fixes the density/pressure at the obstacle"""
 
-        def removeAsymmetricPartOfmainAssignments(eqColl, dofs):
-            newmainAssignments = [Assignment(e.lhs, getSymmetricPart(e.rhs, dofs)) for e in eqColl.mainAssignments]
-            return eqColl.copy(newmainAssignments)
+        def removeAsymmetricPartOfmain_assignments(eqColl, dofs):
+            newmain_assignments = [Assignment(e.lhs, get_symmetric_part(e.rhs, dofs)) for e in eqColl.main_assignments]
+            return eqColl.copy(newmain_assignments)
 
         neighbor = BoundaryOffsetInfo.offsetFromDir(directionSymbol, lbMethod.dim)
         inverseDir = BoundaryOffsetInfo.invDir(directionSymbol)
 
         cqc = lbMethod.conservedQuantityComputation
-        velocity = cqc.definedSymbols()['velocity']
-        symmetricEq = removeAsymmetricPartOfmainAssignments(lbMethod.getEquilibrium(), dofs=velocity)
+        velocity = cqc.defined_symbols()['velocity']
+        symmetricEq = removeAsymmetricPartOfmain_assignments(lbMethod.getEquilibrium(), dofs=velocity)
         substitutions = {sym: pdfField(i) for i, sym in enumerate(lbMethod.preCollisionPdfSymbols)}
-        symmetricEq = symmetricEq.copyWithSubstitutionsApplied(substitutions)
+        symmetricEq = symmetricEq.new_with_substitutions(substitutions)
 
         simplification = createSimplificationStrategy(lbMethod)
         symmetricEq = simplification(symmetricEq)
 
-        densitySymbol = cqc.definedSymbols()['density']
+        densitySymbol = cqc.defined_symbols()['density']
 
         density = self._density
-        densityEq = cqc.equilibriumInputEquationsFromInitValues(density=density).insertSubexpressions().mainAssignments[0]
+        densityEq = cqc.equilibriumInputEquationsFromInitValues(density=density).new_without_subexpressions().main_assignments[0]
         assert densityEq.lhs == densitySymbol
         transformedDensity = densityEq.rhs
 
         conditions = [(eq_i.rhs, sp.Equality(directionSymbol, i))
-                      for i, eq_i in enumerate(symmetricEq.mainAssignments)] + [(0, True)]
+                      for i, eq_i in enumerate(symmetricEq.main_assignments)] + [(0, True)]
         eq_component = sp.Piecewise(*conditions)
 
         subExprs = [Assignment(eq.lhs, transformedDensity if eq.lhs == densitySymbol else eq.rhs)

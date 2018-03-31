@@ -1,5 +1,5 @@
 import sympy as sp
-from pystencils.sympyextensions import normalizeProduct
+from pystencils.sympyextensions import normalize_product
 from lbmpy.chapman_enskog.derivative import Diff, DiffOperator, expandUsingLinearity, normalizeDiffOrder
 from lbmpy.chapman_enskog.chapman_enskog import expandedSymbol, useChapmanEnskogAnsatz
 
@@ -133,7 +133,7 @@ class SteadyStateChapmanEnskogAnalysis(object):
             derivative = None
 
             newProd = 1
-            for arg in reversed(normalizeProduct(product)):
+            for arg in reversed(normalize_product(product)):
                 if isinstance(arg, Diff):
                     assert derivative is None, "More than one derivative term in the product"
                     derivative = arg

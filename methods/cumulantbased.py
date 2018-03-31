@@ -1,7 +1,7 @@
 import sympy as sp
 from collections import OrderedDict
 from pystencils import Assignment
-from pystencils.sympyextensions import fastSubs, replaceAdditive
+from pystencils.sympyextensions import fast_subs, subs_additive
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, extractMonomials, momentMatrix, monomialToPolynomialTransformationMatrix
@@ -101,7 +101,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
 
     def getEquilibriumTerms(self):
         equilibrium = self.getEquilibrium()
-        return sp.Matrix([eq.rhs for eq in equilibrium.mainAssignments])
+        return sp.Matrix([eq.rhs for eq in equilibrium.main_assignments])
 
     def getCollisionRule(self, conservedQuantityEquations=None, momentSubexpressions=False,
                          preCollisionSubexpressions=True, postCollisionSubexpressions=False):
@@ -112,102 +112,102 @@ class CumulantBasedLbMethod(AbstractLbMethod):
     def _computeWeights(self):
         replacements = self._conservedQuantityComputation.defaultValues
         eq = self.getEquilibrium()
-        eqColl = eq.copyWithSubstitutionsApplied(replacements, substituteOnLhs=False).insertSubexpressions()
+        eqColl = eq.new_with_substitutions(replacements, substitute_on_lhs=False).new_without_subexpressions()
         newMainEqs = [Assignment(e.lhs,
-                                 replaceAdditive(e.rhs, 1, sum(self.preCollisionPdfSymbols),
-                                                 requiredMatchReplacement=1.0))
-                      for e in eqColl.mainAssignments]
+                                 subs_additive(e.rhs, 1, sum(self.preCollisionPdfSymbols),
+                                               required_match_replacement=1.0))
+                      for e in eqColl.main_assignments]
         eqColl = eqColl.copy(newMainEqs)
 
         weights = []
-        for eq in eqColl.mainAssignments:
+        for eq in eqColl.main_assignments:
             value = eq.rhs.expand()
             assert len(value.atoms(sp.Symbol)) == 0, "Failed to compute weights"
             weights.append(value)
         return weights
 
-    def _getCollisionRuleWithRelaxationMatrix(self, relaxationMatrix, conservedQuantityEquations=None,
+    def _getCollisionRuleWithRelaxationMatrix(self, relaxationMatrix, conserved_quantity_equations=None,
                                               momentSubexpressions=False, preCollisionSubexpressions=True,
                                               postCollisionSubexpressions=False, includeForceTerms=True):
-        def tupleToSymbol(exp, prefix):
+        def tuple_to_symbol(exp, prefix):
             dim = len(exp)
-            formatString = prefix + "_" + "_".join(["%d"]*dim)
-            return sp.Symbol(formatString % exp)
+            format_string = prefix + "_" + "_".join(["%d"]*dim)
+            return sp.Symbol(format_string % exp)
 
-        def substituteConservedQuantities(expressions, cqe):
-            cqe = cqe.insertSubexpressions()
-            substitutionDict = {eq.rhs: eq.lhs for eq in cqe.mainAssignments}
-            density = cqe.mainAssignments[0].lhs
-            substitutionDict.update({density * eq.rhs: density * eq.lhs for eq in cqe.mainAssignments[1:]})
-            return [fastSubs(e, substitutionDict) for e in expressions]
+        def substitute_conserved_quantities(expressions, cqe):
+            cqe = cqe.new_without_subexpressions()
+            substitution_dict = {eq.rhs: eq.lhs for eq in cqe.main_assignments}
+            density = cqe.main_assignments[0].lhs
+            substitution_dict.update({density * eq.rhs: density * eq.lhs for eq in cqe.main_assignments[1:]})
+            return [fast_subs(e, substitution_dict) for e in expressions]
 
         f = self.preCollisionPdfSymbols
-        if conservedQuantityEquations is None:
-            conservedQuantityEquations = self._conservedQuantityComputation.equilibriumInputEquationsFromPdfs(f)
+        if conserved_quantity_equations is None:
+            conserved_quantity_equations = self._conservedQuantityComputation.equilibriumInputEquationsFromPdfs(f)
 
-        subexpressions = conservedQuantityEquations.allEquations
+        subexpressions = conserved_quantity_equations.all_assignments
 
         # 1) Determine monomial indices, and arrange them such that the zeroth and first order indices come first
         indices = list(extractMonomials(self.cumulants, dim=len(self.stencil[0])))
-        zerothMomentExponent = (0,) * self.dim
-        firstMomentExponents = [tuple([1 if i == j else 0 for i in range(self.dim)]) for j in range(self.dim)]
-        lowerOrderIndices = [zerothMomentExponent] + firstMomentExponents
-        numLowerOrderIndices = len(lowerOrderIndices)
-        assert all(e in indices for e in lowerOrderIndices), \
+        zeroth_moment_exponent = (0,) * self.dim
+        first_moment_exponents = [tuple([1 if i == j else 0 for i in range(self.dim)]) for j in range(self.dim)]
+        lower_order_indices = [zeroth_moment_exponent] + first_moment_exponents
+        num_lower_order_indices = len(lower_order_indices)
+        assert all(e in indices for e in lower_order_indices), \
             "Cumulant system does not contain relaxation rules for zeroth and first order cumulants"
-        higherOrderIndices = [e for e in indices if e not in lowerOrderIndices]
-        indices = lowerOrderIndices + higherOrderIndices  # reorder
+        higher_order_indices = [e for e in indices if e not in lower_order_indices]
+        indices = lower_order_indices + higher_order_indices  # reorder
 
         # 2) Transform pdfs to moments
-        momentTransformationMatrix = momentMatrix(indices, self.stencil)
-        moments = momentTransformationMatrix * sp.Matrix(f)
-        moments = substituteConservedQuantities(moments, conservedQuantityEquations)
+        moment_transformation_matrix = momentMatrix(indices, self.stencil)
+        moments = moment_transformation_matrix * sp.Matrix(f)
+        moments = substitute_conserved_quantities(moments, conserved_quantity_equations)
         if momentSubexpressions:
-            symbols = [tupleToSymbol(t, "m") for t in higherOrderIndices]
-            subexpressions += [Assignment(sym, moment) for sym, moment in zip(symbols, moments[numLowerOrderIndices:])]
-            moments = moments[:numLowerOrderIndices] + symbols
+            symbols = [tuple_to_symbol(t, "m") for t in higher_order_indices]
+            subexpressions += [Assignment(sym, moment) for sym, moment in zip(symbols, moments[num_lower_order_indices:])]
+            moments = moments[:num_lower_order_indices] + symbols
 
         # 3) Transform moments to monomial cumulants
-        momentsDict = {idx: m for idx, m in zip(indices, moments)}
-        monomialCumulants = [cumulantAsFunctionOfRawMoments(idx, momentsDict) for idx in indices]
+        moments_dict = {idx: m for idx, m in zip(indices, moments)}
+        monomial_cumulants = [cumulantAsFunctionOfRawMoments(idx, moments_dict) for idx in indices]
 
         if preCollisionSubexpressions:
-            symbols = [tupleToSymbol(t, "preC") for t in higherOrderIndices]
+            symbols = [tuple_to_symbol(t, "preC") for t in higher_order_indices]
             subexpressions += [Assignment(sym, c)
-                               for sym, c in zip(symbols, monomialCumulants[numLowerOrderIndices:])]
-            monomialCumulants = monomialCumulants[:numLowerOrderIndices] + symbols
+                               for sym, c in zip(symbols, monomial_cumulants[num_lower_order_indices:])]
+            monomial_cumulants = monomial_cumulants[:num_lower_order_indices] + symbols
 
         # 4) Transform monomial to polynomial cumulants which are then relaxed and transformed back
-        monToPoly = monomialToPolynomialTransformationMatrix(indices, self.cumulants)
-        polyValues = monToPoly * sp.Matrix(monomialCumulants)
-        eqValues = sp.Matrix(self.cumulantEquilibriumValues)
-        collidedPolyValues = polyValues + relaxationMatrix * (eqValues - polyValues)  # collision
-        relaxedMonomialCumulants = monToPoly.inv() * collidedPolyValues
+        mon_to_poly = monomialToPolynomialTransformationMatrix(indices, self.cumulants)
+        poly_values = mon_to_poly * sp.Matrix(monomial_cumulants)
+        eq_values = sp.Matrix(self.cumulantEquilibriumValues)
+        collided_poly_values = poly_values + relaxationMatrix * (eq_values - poly_values)  # collision
+        relaxed_monomial_cumulants = mon_to_poly.inv() * collided_poly_values
 
         if postCollisionSubexpressions:
-            symbols = [tupleToSymbol(t, "postC") for t in higherOrderIndices]
+            symbols = [tuple_to_symbol(t, "postC") for t in higher_order_indices]
             subexpressions += [Assignment(sym, c)
-                               for sym, c in zip(symbols, relaxedMonomialCumulants[numLowerOrderIndices:])]
-            relaxedMonomialCumulants = relaxedMonomialCumulants[:numLowerOrderIndices] + symbols
+                               for sym, c in zip(symbols, relaxed_monomial_cumulants[num_lower_order_indices:])]
+            relaxed_monomial_cumulants = relaxed_monomial_cumulants[:num_lower_order_indices] + symbols
 
         # 5) Transform post-collision cumulant back to moments and from there to pdfs
-        cumulantDict = {idx: value for idx, value in zip(indices, relaxedMonomialCumulants)}
-        collidedMoments = [rawMomentAsFunctionOfCumulants(idx, cumulantDict) for idx in indices]
-        result = momentTransformationMatrix.inv() * sp.Matrix(collidedMoments)
-        mainAssignments = [Assignment(sym, val) for sym, val in zip(self.postCollisionPdfSymbols, result)]
+        cumulant_dict = {idx: value for idx, value in zip(indices, relaxed_monomial_cumulants)}
+        collided_moments = [rawMomentAsFunctionOfCumulants(idx, cumulant_dict) for idx in indices]
+        result = moment_transformation_matrix.inv() * sp.Matrix(collided_moments)
+        main_assignments = [Assignment(sym, val) for sym, val in zip(self.postCollisionPdfSymbols, result)]
 
         # 6) Add forcing terms
         if self._forceModel is not None and includeForceTerms:
-            forceModelTerms = self._forceModel(self)
-            forceTermSymbols = sp.symbols("forceTerm_:%d" % (len(forceModelTerms,)))
-            forceSubexpressions = [Assignment(sym, forceModelTerm)
-                                   for sym, forceModelTerm in zip(forceTermSymbols, forceModelTerms)]
-            subexpressions += forceSubexpressions
-            mainAssignments = [Assignment(eq.lhs, eq.rhs + forceTermSymbol)
-                             for eq, forceTermSymbol in zip(mainAssignments, forceTermSymbols)]
+            force_model_terms = self._forceModel(self)
+            force_term_symbols = sp.symbols("forceTerm_:%d" % (len(force_model_terms,)))
+            force_subexpressions = [Assignment(sym, forceModelTerm)
+                                    for sym, forceModelTerm in zip(force_term_symbols, force_model_terms)]
+            subexpressions += force_subexpressions
+            main_assignments = [Assignment(eq.lhs, eq.rhs + forceTermSymbol)
+                                for eq, forceTermSymbol in zip(main_assignments, force_term_symbols)]
 
         sh = {'relaxationRates': list(self.relaxationRates)}
-        return LbmCollisionRule(self, mainAssignments, subexpressions, simplificationHints=sh)
+        return LbmCollisionRule(self, main_assignments, subexpressions, simplification_hints=sh)
 
 
 

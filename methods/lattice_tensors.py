@@ -1,6 +1,6 @@
 import sympy as sp
 import itertools
-from pystencils.sympyextensions import kroneckerDelta as kd
+from pystencils.sympyextensions import kronecker_delta as kd
 
 
 def delta4(i, j, k, l):

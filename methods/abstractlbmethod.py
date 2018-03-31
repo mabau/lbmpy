@@ -8,9 +8,9 @@ RelaxationInfo = namedtuple('RelaxationInfo', ['equilibriumValue', 'relaxationRa
 
 
 class LbmCollisionRule(AssignmentCollection):
-    def __init__(self, lbmMethod, *args, **kwargs):
+    def __init__(self, lb_method, *args, **kwargs):
         super(LbmCollisionRule, self).__init__(*args, **kwargs)
-        self.method = lbmMethod
+        self.method = lb_method
 
 
 class AbstractLbMethod(abc.ABCMeta('ABC', (object,), {})):

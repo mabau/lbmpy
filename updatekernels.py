@@ -4,7 +4,7 @@ import sympy as sp
 from pystencils import Field, Assignment
 from pystencils.assignment_collection.assignment_collection import AssignmentCollection
 from pystencils.field import createNumpyArrayWithLayout, layoutStringToTuple
-from pystencils.sympyextensions import fastSubs
+from pystencils.sympyextensions import fast_subs
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor
 
@@ -35,13 +35,13 @@ def createLBMKernel(collisionRule, inputField, outputField, accessor):
         substitutions[preCollisionSymbols[idx]] = inputAccess
         substitutions[postCollisionSymbols[idx]] = outputAccess
 
-    result = collisionRule.copyWithSubstitutionsApplied(substitutions)
+    result = collisionRule.new_with_substitutions(substitutions)
 
-    if 'splitGroups' in result.simplificationHints:
+    if 'splitGroups' in result.simplification_hints:
         newSplitGroups = []
-        for splitGroup in result.simplificationHints['splitGroups']:
-            newSplitGroups.append([fastSubs(e, substitutions) for e in splitGroup])
-        result.simplificationHints['splitGroups'] = newSplitGroups
+        for splitGroup in result.simplification_hints['splitGroups']:
+            newSplitGroups.append([fast_subs(e, substitutions) for e in splitGroup])
+        result.simplification_hints['splitGroups'] = newSplitGroups
 
     return result
 
@@ -132,8 +132,8 @@ def createStreamPullWithOutputKernel(lbMethod, srcField, dstField, output):
     writeEqs = [Assignment(a, b) for a, b in zip(accessor.write(dstField, stencil), streamed)]
 
     subExprs = streamEqs + outputEqCollection.subexpressions
-    mainEqs = outputEqCollection.mainAssignments + writeEqs
-    return LbmCollisionRule(lbMethod, mainEqs, subExprs, simplificationHints=outputEqCollection.simplificationHints)
+    mainEqs = outputEqCollection.main_assignments + writeEqs
+    return LbmCollisionRule(lbMethod, mainEqs, subExprs, simplification_hints=outputEqCollection.simplification_hints)
 
 # ---------------------------------- Pdf array creation for various layouts --------------------------------------------
 
@@ -166,11 +166,11 @@ def addOutputFieldForConservedQuantities(collisionRule, conservedQuantitiesToOut
     method = collisionRule.method
     cqc = method.conservedQuantityComputation.outputEquationsFromPdfs(method.preCollisionPdfSymbols,
                                                                       conservedQuantitiesToOutputFieldDict)
-    return collisionRule.merge(cqc)
+    return collisionRule.new_merged(cqc)
 
 
 def writeQuantitiesToField(collisionRule, symbols, outputField):
     if not hasattr(symbols, "__len__"):
         symbols = [symbols]
     eqs = [Assignment(outputField(i), s) for i, s in enumerate(symbols)]
-    return collisionRule.copy(collisionRule.mainAssignments + eqs)
+    return collisionRule.copy(collisionRule.main_assignments + eqs)

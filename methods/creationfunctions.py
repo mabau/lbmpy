@@ -11,7 +11,7 @@ from lbmpy.stencils import stencilsHaveSameEntries, getStencil
 from lbmpy.moments import isEven, gramSchmidt, getDefaultMomentSetForStencil, MOMENT_SYMBOLS, \
     exponentsToPolynomialRepresentations, momentsOfOrder, momentsUpToComponentOrder, sortMomentsIntoGroupsOfSameOrder, \
     getOrder, discreteMoment
-from pystencils.sympyextensions import commonDenominator
+from pystencils.sympyextensions import common_denominator
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.maxwellian_equilibrium import getMomentsOfDiscreteMaxwellianEquilibrium, \
@@ -91,8 +91,8 @@ def createWithContinuousMaxwellianEqMoments(stencil, momentToRelaxationRateDict,
     if not compressible:
         if not compressible and cumulant:
             raise NotImplementedError("Incompressible cumulants not yet supported")
-        rho = densityVelocityComputation.definedSymbols(order=0)[1]
-        u = densityVelocityComputation.definedSymbols(order=1)[1]
+        rho = densityVelocityComputation.defined_symbols(order=0)[1]
+        u = densityVelocityComputation.defined_symbols(order=1)[1]
         eqValues = [compressibleToIncompressibleMomentValue(em, rho, u) for em in eqValues]
 
     rrDict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
@@ -365,7 +365,7 @@ def createOrthogonalMRT(stencil, relaxationRateGetter=None, useContinuousMaxwell
     if stencilsHaveSameEntries(stencil, getStencil("D2Q9")):
         moments = getDefaultMomentSetForStencil(stencil)
         orthogonalMoments = gramSchmidt(moments, stencil)
-        orthogonalMomentsScaled = [e * commonDenominator(e) for e in orthogonalMoments]
+        orthogonalMomentsScaled = [e * common_denominator(e) for e in orthogonalMoments]
         nestedMoments = list(sortMomentsIntoGroupsOfSameOrder(orthogonalMomentsScaled).values())
     elif stencilsHaveSameEntries(stencil, getStencil("D3Q15")):
         sq = x ** 2 + y ** 2 + z ** 2

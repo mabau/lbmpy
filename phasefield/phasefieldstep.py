@@ -10,7 +10,7 @@ from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, symmet
 from pystencils.boundaries.boundaryhandling import FlagInterface
 from pystencils.boundaries.inkernel import addNeumannBoundary
 from pystencils.datahandling import SerialDataHandling
-from pystencils.assignment_collection.simplifications import sympyCseOnEquationList
+from pystencils.assignment_collection.simplifications import sympy_cse_on_assignment_list
 from pystencils.slicing import makeSlice, SlicedGetter
 
 
@@ -78,7 +78,7 @@ class PhaseFieldStep:
                                                       self.phiField, self.pressureTensorField, dx)
         muAndPressureTensorEqs = self.muEqs + self.pressureTensorEqs
         muAndPressureTensorEqs = applyNeumannBoundaries(muAndPressureTensorEqs)
-        self.muAndPressureTensorKernel = createKernel(sympyCseOnEquationList(muAndPressureTensorEqs),
+        self.muAndPressureTensorKernel = createKernel(sympy_cse_on_assignment_list(muAndPressureTensorEqs),
                                                       target=target, cpuOpenMP=openMP).compile()
 
         # F Kernel

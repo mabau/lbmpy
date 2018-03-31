@@ -5,7 +5,7 @@ Wolf-Gladrow, section 5.4
 
 import sympy as sp
 import numpy as np
-from pystencils.sympyextensions import scalarProduct
+from pystencils.sympyextensions import scalar_product
 from lbmpy.moments import discreteMoment
 from lbmpy.maxwellian_equilibrium import compressibleToIncompressibleMomentValue
 
@@ -21,8 +21,8 @@ def genericEquilibriumAnsatz(stencil, u=sp.symbols("u_:3")):
     for direction in stencil:
         speed = np.abs(direction).sum()
         weight, linear, mixQuadratic, quadratic = getParameterSymbols(speed)
-        uTimesD = scalarProduct(u, direction)
-        eq = weight + linear * uTimesD + mixQuadratic * uTimesD ** 2 + quadratic * scalarProduct(u, u)
+        uTimesD = scalar_product(u, direction)
+        eq = weight + linear * uTimesD + mixQuadratic * uTimesD ** 2 + quadratic * scalar_product(u, u)
         equilibrium.append(eq)
     return tuple(equilibrium)
 
@@ -48,8 +48,8 @@ def matchGenericEquilibriumAnsatz(stencil, equilibrium, u=sp.symbols("u_:3")):
     for direction, actualEquilibrium in zip(stencil, equilibrium):
         speed = np.abs(direction).sum()
         A, B, C, D = getParameterSymbols(speed)
-        uTimesD = scalarProduct(u, direction)
-        genericEquation = A + B * uTimesD + C * uTimesD ** 2 + D * scalarProduct(u, u)
+        uTimesD = scalar_product(u, direction)
+        genericEquation = A + B * uTimesD + C * uTimesD ** 2 + D * scalar_product(u, u)
 
         equations = sp.poly(actualEquilibrium - genericEquation, *u).coeffs()
         solveRes = sp.solve(equations, [A, B, C, D])

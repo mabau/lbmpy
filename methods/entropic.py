@@ -1,6 +1,6 @@
 import sympy as sp
 from pystencils import Assignment
-from pystencils.transformations import fastSubs
+from pystencils.sympyextensions import fast_subs
 from lbmpy.relaxationrates import getShearRelaxationRate
 
 
@@ -58,13 +58,13 @@ def addEntropyCondition(collisionRule, omegaOutputField=None):
     newUpdateEquations = []
 
     constPart = decomp.constantExprs()
-    for updateEq in collisionRule.mainAssignments:
+    for updateEq in collisionRule.main_assignments:
         index = collisionRule.method.postCollisionPdfSymbols.index(updateEq.lhs)
         newEq = Assignment(updateEq.lhs, constPart[index] + omega_s * dsSymbols[index] + omega_h * dhSymbols[index])
         newUpdateEquations.append(newEq)
     newCollisionRule = collisionRule.copy(newUpdateEquations, collisionRule.subexpressions + subexprs)
-    newCollisionRule.simplificationHints['entropic'] = True
-    newCollisionRule.simplificationHints['entropicNewtonIterations'] = None
+    newCollisionRule.simplification_hints['entropic'] = True
+    newCollisionRule.simplification_hints['entropicNewtonIterations'] = None
 
     if omegaOutputField:
         from lbmpy.updatekernels import writeQuantitiesToField
@@ -117,7 +117,7 @@ def addIterativeEntropyCondition(collisionRule, freeOmega=None, newtonIterations
         newUpdateEquations.append(Assignment(collisionRule.method.postCollisionPdfSymbols[i], rrPolynomial))
 
     # 2) get equilibrium from method and define subexpressions for it
-    eqTerms = [eq.rhs for eq in collisionRule.method.getEquilibrium().mainAssignments]
+    eqTerms = [eq.rhs for eq in collisionRule.method.getEquilibrium().main_assignments]
     eqSymbols = sp.symbols("entropicFeq_:%d" % (len(eqTerms,)))
     eqSubexpressions = [Assignment(a, b) for a, b in zip(eqSymbols, eqTerms)]
 
@@ -144,8 +144,8 @@ def addIterativeEntropyCondition(collisionRule, freeOmega=None, newtonIterations
     # 5) final update equations
     newSubExprs = polynomialSubexpressions + eqSubexpressions + coefficientEqs + newtonIterationEquations
     newCollisionRule = collisionRule.copy(newUpdateEquations, collisionRule.subexpressions + newSubExprs)
-    newCollisionRule.simplificationHints['entropic'] = True
-    newCollisionRule.simplificationHints['entropicNewtonIterations'] = newtonIterations
+    newCollisionRule.simplification_hints['entropic'] = True
+    newCollisionRule.simplification_hints['entropicNewtonIterations'] = newtonIterations
 
     if omegaOutputField:
         from lbmpy.updatekernels import writeQuantitiesToField
@@ -206,7 +206,7 @@ class RelaxationRatePolynomialDecomposition(object):
         return [sp.Symbol("entFacOmega_%d_%d_%d" % (i, omegaIdx, power)) for i in range(Q)]
 
     def relaxationRateFactors(self, relaxationRate):
-        updateEquations = self._collisionRule.mainAssignments
+        updateEquations = self._collisionRule.main_assignments
 
         result = []
         for updateEquation in updateEquations:
@@ -233,14 +233,14 @@ class RelaxationRatePolynomialDecomposition(object):
     def constantExprs(self):
         subsDict = {rr: 0 for rr in self._freeRelaxationRates}
         subsDict.update({rr: 0 for rr in self._fixedRelaxationRates})
-        updateEquations = self._collisionRule.mainAssignments
-        return [fastSubs(eq.rhs, subsDict) for eq in updateEquations]
+        updateEquations = self._collisionRule.main_assignments
+        return [fast_subs(eq.rhs, subsDict) for eq in updateEquations]
 
     def equilibriumExprs(self):
         subsDict = {rr: 1 for rr in self._freeRelaxationRates}
         subsDict.update({rr: 1 for rr in self._fixedRelaxationRates})
-        updateEquations = self._collisionRule.mainAssignments
-        return [fastSubs(eq.rhs, subsDict) for eq in updateEquations]
+        updateEquations = self._collisionRule.main_assignments
+        return [fast_subs(eq.rhs, subsDict) for eq in updateEquations]
 
     def symbolicEquilibrium(self):
         Q = len(self._collisionRule.method.stencil)
@@ -248,7 +248,7 @@ class RelaxationRatePolynomialDecomposition(object):
 
 
 def _getRelaxationRates(collisionRule):
-    sh = collisionRule.simplificationHints
+    sh = collisionRule.simplification_hints
     assert 'relaxationRates' in sh, "Needs simplification hint 'relaxationRates': Sequence of relaxation rates"
 
     relaxationRates = set(sh['relaxationRates'])

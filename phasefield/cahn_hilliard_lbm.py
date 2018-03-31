@@ -1,7 +1,7 @@
 import sympy as sp
 from lbmpy.methods.creationfunctions import createFromEquilibrium
 from lbmpy.stencils import getStencil
-from pystencils.sympyextensions import kroneckerDelta, multidimensionalSummation
+from pystencils.sympyextensions import kronecker_delta, multidimensional_sum
 from lbmpy.maxwellian_equilibrium import getWeights
 
 
@@ -21,10 +21,10 @@ def cahnHilliardLbmMethod(stencil, mu, relaxationRate=sp.Symbol("omega"), gamma=
         stencil = getStencil(stencil)
     weights = getWeights(stencil, c_s_sq=sp.Rational(1, 3))
 
-    kd = kroneckerDelta
+    kd = kronecker_delta
 
     def s(*args):
-        for r in multidimensionalSummation(*args, dim=len(stencil[0])):
+        for r in multidimensional_sum(*args, dim=len(stencil[0])):
             yield r
 
     op = sp.Symbol("rho")
