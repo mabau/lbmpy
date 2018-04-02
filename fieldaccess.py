@@ -94,7 +94,7 @@ class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
                 lowerLimit = self._ghostLayers
                 upperLimit = field.spatialShape[coordId] - 1 - self._ghostLayers
                 limitDiff = upperLimit - lowerLimit
-                loopCounter = LoopOverCoordinate.getLoopCounterSymbol(coordId)
+                loopCounter = LoopOverCoordinate.get_loop_counter_symbol(coordId)
                 if dirElement == 0:
                     periodicPullDirection.append(0)
                 elif dirElement == 1:

@@ -153,7 +153,7 @@ import sympy as sp
 from copy import copy
 
 from pystencils.cache import diskcacheNoFallback
-from pystencils.data_types import collateTypes
+from pystencils.data_types import collate_types
 from pystencils.assignment_collection.assignment_collection import AssignmentCollection
 from pystencils.field import getLayoutOfArray, Field
 from pystencils import createKernel, Assignment
@@ -193,7 +193,7 @@ def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
         updateRule = createLatticeBoltzmannUpdateRule(**params)
 
     fieldTypes = set(fa.field.dtype for fa in updateRule.defined_symbols if isinstance(fa, Field.Access))
-    res = createKernel(updateRule, target=optParams['target'], dataType=collateTypes(fieldTypes),
+    res = createKernel(updateRule, target=optParams['target'], dataType=collate_types(fieldTypes),
                        cpuOpenMP=optParams['openMP'], cpuVectorizeInfo=optParams['vectorization'],
                        gpuIndexing=optParams['gpuIndexing'], gpuIndexingParams=optParams['gpuIndexingParams'],
                        ghostLayers=1)

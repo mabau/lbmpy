@@ -91,13 +91,13 @@ class LbmWeightInfo(CustomCppCode):
     def __init__(self, lbMethod):
         weights = [str(w.evalf()) for w in lbMethod.weights]
         code = "const double %s [] = { %s };\n" % (LbmWeightInfo.WEIGHTS_SYMBOL.name, ",".join(weights))
-        super(LbmWeightInfo, self).__init__(code, symbolsRead=set(),
-                                            symbolsDefined=set([LbmWeightInfo.WEIGHTS_SYMBOL]))
+        super(LbmWeightInfo, self).__init__(code, symbols_read=set(),
+                                            symbols_defined=set([LbmWeightInfo.WEIGHTS_SYMBOL]))
 
 
 def createLatticeBoltzmannBoundaryKernel(pdfField, indexField, lbMethod, boundaryFunctor, target='cpu', openMP=True):
     elements = [BoundaryOffsetInfo(lbMethod.stencil), LbmWeightInfo(lbMethod)]
-    indexArrDtype = indexField.dtype.numpyDtype
+    indexArrDtype = indexField.dtype.numpy_dtype
     dirSymbol = TypedSymbol("dir", indexArrDtype.fields['dir'][0])
     elements += [Assignment(dirSymbol, indexField[0]('dir'))]
     elements += boundaryFunctor(pdfField=pdfField, directionSymbol=dirSymbol, lbMethod=lbMethod, indexField=indexField)
