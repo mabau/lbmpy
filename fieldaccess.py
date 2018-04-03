@@ -1,6 +1,6 @@
 import sympy as sp
 import abc
-from lbmpy.stencils import inverseDirection
+from lbmpy.stencils import inverse_direction
 from pystencils import Field
 
 
@@ -45,7 +45,7 @@ class CollideOnlyInplaceAccessor(PdfFieldAccessor):
 class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
     @staticmethod
     def read(field, stencil):
-        return [field[inverseDirection(d)](i) for i, d in enumerate(stencil)]
+        return [field[inverse_direction(d)](i) for i, d in enumerate(stencil)]
 
     @staticmethod
     def write(field, stencil):
@@ -63,7 +63,7 @@ class Pseudo2DTwoFieldsAccessor(PdfFieldAccessor):
         for i, d in enumerate(stencil):
             direction = list(d)
             direction[self._collapsedDim] = 0
-            result.append(field[inverseDirection(tuple(direction))](i))
+            result.append(field[inverse_direction(tuple(direction))](i))
         return result
 
     @staticmethod
@@ -74,38 +74,38 @@ class Pseudo2DTwoFieldsAccessor(PdfFieldAccessor):
 class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
     """Access scheme that builds periodicity into the kernel, by introducing a condition on every load,
     such that at the borders the periodic value is loaded. The periodicity is specified as a tuple of booleans, one for
-    each direction. The second parameter `ghostLayers` specifies the number of assumed ghost layers of the field. 
+    each direction. The second parameter `ghost_layers` specifies the number of assumed ghost layers of the field.
     For the periodic kernel itself no ghost layers are required, however other kernels might need them. 
     """
-    def __init__(self, periodicity, ghostLayers=0):
+    def __init__(self, periodicity, ghost_layers=0):
         self._periodicity = periodicity
-        self._ghostLayers = ghostLayers
+        self._ghostLayers = ghost_layers
 
     def read(self, field, stencil):
         result = []
         for i, d in enumerate(stencil):
-            pullDirection = inverseDirection(d)
-            periodicPullDirection = []
-            for coordId, dirElement in enumerate(pullDirection):
+            pull_direction = inverse_direction(d)
+            periodic_pull_direction = []
+            for coordId, dirElement in enumerate(pull_direction):
                 if not self._periodicity[coordId]:
-                    periodicPullDirection.append(dirElement)
+                    periodic_pull_direction.append(dirElement)
                     continue
 
-                lowerLimit = self._ghostLayers
-                upperLimit = field.spatialShape[coordId] - 1 - self._ghostLayers
-                limitDiff = upperLimit - lowerLimit
-                loopCounter = LoopOverCoordinate.get_loop_counter_symbol(coordId)
+                lower_limit = self._ghostLayers
+                upper_limit = field.spatial_shape[coordId] - 1 - self._ghostLayers
+                limit_diff = upper_limit - lower_limit
+                loop_counter = LoopOverCoordinate.get_loop_counter_symbol(coordId)
                 if dirElement == 0:
-                    periodicPullDirection.append(0)
+                    periodic_pull_direction.append(0)
                 elif dirElement == 1:
-                    newDirElement = sp.Piecewise((dirElement, loopCounter < upperLimit), (-limitDiff, True))
-                    periodicPullDirection.append(newDirElement)
+                    new_dir_element = sp.Piecewise((dirElement, loop_counter < upper_limit), (-limit_diff, True))
+                    periodic_pull_direction.append(new_dir_element)
                 elif dirElement == -1:
-                    newDirElement = sp.Piecewise((dirElement, loopCounter > lowerLimit), (limitDiff, True))
-                    periodicPullDirection.append(newDirElement)
+                    new_dir_element = sp.Piecewise((dirElement, loop_counter > lower_limit), (limit_diff, True))
+                    periodic_pull_direction.append(new_dir_element)
                 else:
                     raise NotImplementedError("This accessor supports only nearest neighbor stencils")
-            result.append(field[tuple(periodicPullDirection)](i))
+            result.append(field[tuple(periodic_pull_direction)](i))
         return result
 
     @staticmethod
@@ -120,7 +120,7 @@ class AABBEvenTimeStepAccessor(PdfFieldAccessor):
 
     @staticmethod
     def write(field, stencil):
-        return [field(stencil.index(inverseDirection(d))) for d in stencil]
+        return [field(stencil.index(inverse_direction(d))) for d in stencil]
 
 
 class AABBOddTimeStepAccessor(PdfFieldAccessor):
@@ -128,9 +128,9 @@ class AABBOddTimeStepAccessor(PdfFieldAccessor):
     def read(field, stencil):
         res = []
         for i, d in enumerate(stencil):
-            invDir = inverseDirection(d)
-            fieldAccess = field[invDir](stencil.index(invDir))
-            res.append(fieldAccess)
+            inv_dir = inverse_direction(d)
+            field_access = field[inv_dir](stencil.index(inv_dir))
+            res.append(field_access)
         return
 
     @staticmethod
@@ -143,59 +143,59 @@ class EsotericTwistAccessor(PdfFieldAccessor):
     def read(field, stencil):
         result = []
         for i, direction in enumerate(stencil):
-            direction = inverseDirection(direction)
-            neighborOffset = tuple([-e if e <= 0 else 0 for e in direction])
-            result.append(field[neighborOffset](i))
+            direction = inverse_direction(direction)
+            neighbor_offset = tuple([-e if e <= 0 else 0 for e in direction])
+            result.append(field[neighbor_offset](i))
         return result
 
     @staticmethod
     def write(field, stencil):
         result = []
         for i, direction in enumerate(stencil):
-            neighborOffset = tuple([e if e >= 0 else 0 for e in direction])
-            inverseIndex = stencil.index(inverseDirection(direction))
-            result.append(field[neighborOffset](inverseIndex))
+            neighbor_offset = tuple([e if e >= 0 else 0 for e in direction])
+            inverse_index = stencil.index(inverse_direction(direction))
+            result.append(field[neighbor_offset](inverse_index))
         return result
 
 
 # -------------------------------------------- Visualization -----------------------------------------------------------
 
 
-def visualizeFieldMapping(axes, stencil, fieldMapping, color='b'):
-    from lbmpy.gridvisualization import Grid
-    grid = Grid(3, 3)
-    grid.fillWithDefaultArrows()
-    for fieldAccess, direction in zip(fieldMapping, stencil):
-        fieldPosition = stencil[fieldAccess.index[0]]
+def visualize_field_mapping(axes, stencil, field_mapping, color='b'):
+    from lbmpy.plot2d import LbGrid
+    grid = LbGrid(3, 3)
+    grid.fill_with_default_arrows()
+    for fieldAccess, direction in zip(field_mapping, stencil):
+        field_position = stencil[fieldAccess.index[0]]
         neighbor = fieldAccess.offsets
-        grid.addArrow((1 + neighbor[0], 1 + neighbor[1]),
-                      arrowPosition=fieldPosition, arrowDirection=direction, color=color)
+        grid.add_arrow((1 + neighbor[0], 1 + neighbor[1]),
+                       arrow_position=field_position, arrow_direction=direction, color=color)
     grid.draw(axes)
 
 
-def visualizePdfFieldAccessor(pdfFieldAccessor, figure=None):
-    from lbmpy.stencils import getStencil
+def visualize_pdf_field_accessor(pdf_field_accessor, figure=None):
+    from lbmpy.stencils import get_stencil
 
     if figure is None:
         import matplotlib.pyplot as plt
         figure = plt.gcf()
 
-    stencil = getStencil('D2Q9')
+    stencil = get_stencil('D2Q9')
 
     figure.patch.set_facecolor('white')
 
-    field = Field.createGeneric('f', spatialDimensions=2, indexDimensions=1)
-    preCollisionAccesses = pdfFieldAccessor.read(field, stencil)
-    postCollisionAccesses = pdfFieldAccessor.write(field, stencil)
+    field = Field.create_generic('f', spatial_dimensions=2, index_dimensions=1)
+    pre_collision_accesses = pdf_field_accessor.read(field, stencil)
+    post_collision_accesses = pdf_field_accessor.write(field, stencil)
 
-    axLeft = figure.add_subplot(1, 2, 1)
-    axRight = figure.add_subplot(1, 2, 2)
+    ax_left = figure.add_subplot(1, 2, 1)
+    ax_right = figure.add_subplot(1, 2, 2)
 
-    visualizeFieldMapping(axLeft, stencil, preCollisionAccesses, color='k')
-    visualizeFieldMapping(axRight, stencil, postCollisionAccesses, color='r')
+    visualize_field_mapping(ax_left, stencil, pre_collision_accesses, color='k')
+    visualize_field_mapping(ax_right, stencil, post_collision_accesses, color='r')
 
-    axLeft.set_title("Read")
-    axRight.set_title("Write")
+    ax_left.set_title("Read")
+    ax_right.set_title("Write")
 
 
 

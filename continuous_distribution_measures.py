@@ -4,13 +4,13 @@
 
 import sympy as sp
 
-from lbmpy.moments import polynomialToExponentRepresentation
-from pystencils.cache import diskcache, memorycache
+from lbmpy.moments import polynomial_to_exponent_representation
+from pystencils.cache import disk_cache, memorycache
 from pystencils.sympyextensions import complete_the_squares_in_exp
 
 
 @memorycache()
-def momentGeneratingFunction(generating_function, symbols, symbolsInResult):
+def moment_generating_function(generating_function, symbols, symbols_in_result):
     """
     Computes the moment generating function of a probability distribution. It is defined as:
 
@@ -19,7 +19,7 @@ def momentGeneratingFunction(generating_function, symbols, symbolsInResult):
 
     :param generating_function: sympy expression
     :param symbols: a sequence of symbols forming the vector x
-    :param symbolsInResult: a sequence forming the vector t
+    :param symbols_in_result: a sequence forming the vector t
     :return: transformation result F: an expression that depends now on symbolsInResult
              (symbols have been integrated out)
 
@@ -31,8 +31,8 @@ def momentGeneratingFunction(generating_function, symbols, symbolsInResult):
          of functions can be integrated quickly.
 
     """
-    assert len(symbols) == len(symbolsInResult)
-    for t_i, v_i in zip(symbolsInResult, symbols):
+    assert len(symbols) == len(symbols_in_result)
+    for t_i, v_i in zip(symbols_in_result, symbols):
         generating_function *= sp.exp(t_i * v_i)
 
     # This is a custom transformation that speeds up the integrating process
@@ -52,35 +52,35 @@ def momentGeneratingFunction(generating_function, symbols, symbolsInResult):
     return sp.simplify(result)
 
 
-def cumulantGeneratingFunction(function, symbols, symbolsInResult):
+def cumulant_generating_function(func, symbols, symbols_in_result):
     """
-    Computes cumulant generating function, which is the logarithm of the moment generating function.
-    For parameter description see :func:`momentGeneratingFunction`.
+    Computes cumulant generating func, which is the logarithm of the moment generating func.
+    For parameter description see :func:`moment_generating_function`.
     """
-    return sp.ln(momentGeneratingFunction(function, symbols, symbolsInResult))
+    return sp.ln(moment_generating_function(func, symbols, symbols_in_result))
 
 
-@diskcache
-def multiDifferentiation(generatingFunction, index, symbols):
+@disk_cache
+def multi_differentiation(generating_function, index, symbols):
     """
     Computes moment from moment-generating function or cumulant from cumulant-generating function,
     by differentiating the generating function, as specified by index and evaluating the derivative at symbols=0
 
-    :param generatingFunction: function with is differentiated
+    :param generating_function: function with is differentiated
     :param index: the i'th index specifies how often to differentiate w.r.t. to symbols[i]
     :param symbols: symbol to differentiate
     """
     assert len(index) == len(symbols), "Length of index and length of symbols has to match"
 
-    diffArgs = []
+    diff_args = []
     for order, t_i in zip(index, symbols):
         for i in range(order):
-            diffArgs.append(t_i)
+            diff_args.append(t_i)
 
-    if len(diffArgs) > 0:
-        r = sp.diff(generatingFunction, *diffArgs)
+    if len(diff_args) > 0:
+        r = sp.diff(generating_function, *diff_args)
     else:
-        r = generatingFunction
+        r = generating_function
 
     for t_i in symbols:
         r = r.subs(t_i, 0)
@@ -89,7 +89,7 @@ def multiDifferentiation(generatingFunction, index, symbols):
 
 
 @memorycache(maxsize=512)
-def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
+def __continuous_moment_or_cumulant(func, moment, symbols, generating_function):
     if type(moment) is tuple and not symbols:
         symbols = sp.symbols("xvar yvar zvar")
 
@@ -98,36 +98,34 @@ def __continuousMomentOrCumulant(function, moment, symbols, generatingFunction):
     # not using sp.Dummy here - since it prohibits caching
     t = tuple([sp.Symbol("tmpvar_%d" % i, ) for i in range(dim)])
     symbols = symbols[:dim]
-    genFunc = generatingFunction(function, symbols, t)
+    generating_function = generating_function(func, symbols, t)
 
     if type(moment) is tuple:
-        return multiDifferentiation(genFunc, moment, t)
+        return multi_differentiation(generating_function, moment, t)
     else:
         assert symbols is not None, "When passing a polynomial as moment, also the moment symbols have to be passed"
         moment = sp.sympify(moment)
 
         result = 0
-        for coefficient, exponents in polynomialToExponentRepresentation(moment, dim=dim):
-            result += coefficient * multiDifferentiation(genFunc, exponents, t)
+        for coefficient, exponents in polynomial_to_exponent_representation(moment, dim=dim):
+            result += coefficient * multi_differentiation(generating_function, exponents, t)
 
         return result
 
 
-def continuousMoment(function, moment, symbols=None):
-    """
-    Computes moment of given function
+def continuous_moment(func, moment, symbols=None):
+    """Computes moment of given function.
 
-    :param function: function to compute moments of
+    :param func: function to compute moments of
     :param moment: tuple or polynomial describing the moment
     :param symbols: if moment is given as polynomial, pass the moment symbols, i.e. the dof of the polynomial
     """
-    return __continuousMomentOrCumulant(function, moment, symbols, momentGeneratingFunction)
+    return __continuous_moment_or_cumulant(func, moment, symbols, moment_generating_function)
 
 
-def continuousCumulant(function, moment, symbols=None):
+def continuous_cumulant(func, moment, symbols=None):
+    """Computes cumulant of continuous function.
+
+    for parameter description see :func:`continuous_moment`
     """
-    Computes cumulant of continuous function
-    for parameter description see :func:`continuousMoment`
-    """
-    return __continuousMomentOrCumulant(function, moment, symbols, cumulantGeneratingFunction)
-
+    return __continuous_moment_or_cumulant(func, moment, symbols, cumulant_generating_function)

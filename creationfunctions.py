@@ -13,48 +13,48 @@ Method parameters
 
 General:
 
-- ``stencil='D2Q9'``: stencil name e.g. 'D2Q9', 'D3Q19'. See :func:`pystencils.stencils.getStencil` for details
+- ``stencil='D2Q9'``: stencil name e.g. 'D2Q9', 'D3Q19'. See :func:`pystencils.stencils.get_stencil` for details
 - ``method='srt'``: name of lattice Boltzmann method. This determines the selection and relaxation pattern of
   moments/cumulants, i.e. which moment/cumulant basis is chosen, and which of the basis vectors are relaxed together
-    - ``srt``: single relaxation time (:func:`lbmpy.methods.createSRT`)
+    - ``srt``: single relaxation time (:func:`lbmpy.methods.create_srt`)
     - ``trt``: two relaxation time, first relaxation rate is for even moments and determines the viscosity (as in SRT),
       the second relaxation rate is used for relaxing odd moments, and controls the bulk viscosity.
-      (:func:`lbmpy.methods.createTRT`)
+      (:func:`lbmpy.methods.create_trt`)
     - ``mrt``: orthogonal multi relaxation time model, number of relaxation rates depends on the stencil
-      (:func:`lbmpy.methods.createOrthogonalMRT`)
+      (:func:`lbmpy.methods.create_mrt_orthogonal`)
     - ``mrt3``: three relaxation time method, where shear moments are relaxed with first relaxation rate (and therefore
       determine viscosity, second rate relaxes the shear tensor trace (determines bulk viscosity) and last rate relaxes
       all other, higher order moments. If two relaxation rates are chosen the same this is equivalent to a KBC type
-      relaxation (:func:`lbmpy.methods.createThreeRelaxationRateMRT`)
+      relaxation (:func:`lbmpy.methods.create_mrt3`)
     - ``mrt_raw``: non-orthogonal MRT where all relaxation rates can be specified independently i.e. there are as many
       relaxation rates as stencil entries. Look at the generated method in Jupyter to see which moment<->relaxation rate
-      mapping (:func:`lbmpy.methods.createRawMRT`)
+      mapping (:func:`lbmpy.methods.create_mrt_raw`)
     - ``trt-kbc-n<N>`` where <N> is 1,2,3 or 4. Special two-relaxation rate method. This is not the entropic method
       yet, only the relaxation pattern. To get the entropic method, see parameters below!
-      (:func:`lbmpy.methods.createKBCTypeTRT`)
-- ``relaxationRates``: sequence of relaxation rates, number depends on selected method. If you specify more rates than
+      (:func:`lbmpy.methods.create_trt_kbc`)
+- ``relaxation_rates``: sequence of relaxation rates, number depends on selected method. If you specify more rates than
   method needs, the additional rates are ignored. For SRT and TRT models it is possible ot define a single
-  ``relaxationRate`` instead of a list, the second rate for TRT is then determined via magic number.
+  ``relaxation_rate`` instead of a list, the second rate for TRT is then determined via magic number.
 - ``compressible=False``: affects the selection of equilibrium moments. Both options approximate the *incompressible*
   Navier Stokes Equations. However when chosen as False, the approximation is better, the standard LBM derivation is
   compressible.
-- ``equilibriumAccuracyOrder=2``: order in velocity, at which the equilibrium moment/cumulant approximation is
+- ``equilibrium_order=2``: order in velocity, at which the equilibrium moment/cumulant approximation is
   truncated. Order 2 is sufficient to approximate Navier-Stokes
-- ``forceModel=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'`` ``'buick'``, or an instance of a
+- ``force_model=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'`` ``'buick'``, or an instance of a
   class implementing the same methods as the classes in :mod:`lbmpy.forcemodels`. For details, see
   :mod:`lbmpy.forcemodels`
 - ``force=(0,0,0)``: either constant force or a symbolic expression depending on field value
-- ``useContinuousMaxwellianEquilibrium=True``: way to compute equilibrium moments/cumulants, if False the standard
+- ``maxwellian_moments=True``: way to compute equilibrium moments/cumulants, if False the standard
   discretized LBM equilibrium is used, otherwise the equilibrium moments are computed from the continuous Maxwellian.
   This makes only a difference if sparse stencils are used e.g. D2Q9 and D3Q27 are not affected, D319 and DQ15 are
 - ``cumulant=False``: use cumulants instead of moments
-- ``initialVelocity=None``: initial velocity in domain, can either be a tuple (x,y,z) velocity to set a constant
+- ``initial_velocity=None``: initial velocity in domain, can either be a tuple (x,y,z) velocity to set a constant
   velocity everywhere, or a numpy array with the same size of the domain, with a last coordinate of shape dim to set
   velocities on cell level
 - ``output={}``: a dictionary mapping macroscopic quantites e.g. the strings 'density' and 'velocity' to pystencils
                 fields. In each timestep the corresponding quantities are written to the given fields.
-- ``velocityInput``: symbolic field where the velocities are read from (for advection diffusion LBM)
-- ``kernelType``: supported values: 'streamPullCollide' (default), 'collideOnly' 
+- ``velocity_input``: symbolic field where the velocities are read from (for advection diffusion LBM)
+- ``kernel_type``: supported values: 'stream_pull_collide' (default), 'collide_only'
 
 
 Entropic methods:
@@ -62,15 +62,15 @@ Entropic methods:
 - ``entropic=False``: In case there are two distinct relaxation rate in a method, one of them (usually the one, not
   determining the viscosity) can be automatically chosen w.r.t an entropy condition. For details see
   :mod:`lbmpy.methods.entropic`
-- ``entropicNewtonIterations=None``: For moment methods the entropy optimum can be calculated in closed form.
+- ``entropic_newton_iterations=None``: For moment methods the entropy optimum can be calculated in closed form.
   For cumulant methods this is not possible, in that case it is computed using Newton iterations. This parameter can be
   used to force Newton iterations and specify how many should be done
-- ``omegaOutputField=None``: you can pass a pystencils Field here, where the calculated free relaxation
+- ``omega_output_field=None``: you can pass a pystencils Field here, where the calculated free relaxation
   rate is written to
 
 LES methods:
 
-- ``smagorinsky=False``: set to Smagorinsky constant to activate turbulence model, `omegaOutputField` can be set to
+- ``smagorinsky=False``: set to Smagorinsky constant to activate turbulence model, `omega_output_field` can be set to
                          write out adapted relaxation rates
 
 
@@ -79,11 +79,11 @@ Optimization Parameters
 
 Simplifications / Transformations:
 
-- ``doCseInOpposingDirections=False``: run common subexpression elimination for opposing stencil directions
-- ``doOverallCse=False``: run common subexpression elimination after all other simplifications have been executed
+- ``cse_pdfs=False``: run common subexpression elimination for opposing stencil directions
+- ``cse_global=False``: run common subexpression elimination after all other simplifications have been executed
 - ``split=False``: split innermost loop, to handle only 2 directions per loop. This reduces the number of parallel
   load/store streams and thus speeds up the kernel on most architectures
-- ``builtinPeriodicity=(False,False,False)``: instead of handling periodicity by copying ghost layers, the periodicity
+- ``builtin_periodicity=(False,False,False)``: instead of handling periodicity by copying ghost layers, the periodicity
   is built into the kernel. This parameters specifies if the domain is periodic in (x,y,z) direction. Even if the
   periodicity is built into the kernel, the fields have one ghost layer to be consistent with other functions. 
     
@@ -92,23 +92,23 @@ Field size information:
 
 - ``pdfArr=None``: pass a numpy array here to create kernels with fixed size and create the loop nest according to layout
   of this array
-- ``fieldSize=None``: create kernel for fixed field size
-- ``fieldLayout='c'``:   ``'c'`` or ``'numpy'`` for standard numpy layout, ``'reverseNumpy'`` or ``'f'`` for fortran
+- ``field_size=None``: create kernel for fixed field size
+- ``field_layout='c'``:   ``'c'`` or ``'numpy'`` for standard numpy layout, ``'reverseNumpy'`` or ``'f'`` for fortran
   layout, this does not apply when pdfArr was given, then the same layout as pdfArr is used
 
 GPU:
 
 - ``target='cpu'``: ``'cpu'`` or ``'gpu'``, last option requires a CUDA enabled graphics card
   and installed *pycuda* package
-- ``gpuIndexing='block'``: determines mapping of CUDA threads to cells. Can be either ``'block'`` or ``'line'``
-- ``gpuIndexingParams='block'``: parameters passed to init function of gpu indexing.
+- ``gpu_indexing='block'``: determines mapping of CUDA threads to cells. Can be either ``'block'`` or ``'line'``
+- ``gpu_indexing_params='block'``: parameters passed to init function of gpu indexing.
   For ``'block'`` indexing one can e.g. specify the block size ``{'blockSize' : (128, 4, 1)}``
 
 Other:
 
-- ``openMP=True``: only applicable for cpu simulations. Can be a boolean to turn multi threading on/off, or an integer
+- ``openmp=True``: only applicable for cpu simulations. Can be a boolean to turn multi threading on/off, or an integer
   specifying the number of threads. If True is specified OpenMP chooses the number of threads
-- ``doublePrecision=True``:  by default simulations run with double precision floating point numbers, by setting this
+- ``double_precision=True``:  by default simulations run with double precision floating point numbers, by setting this
   parameter to False, single precision is used, which is much faster, especially on GPUs
 
 
@@ -139,222 +139,222 @@ Kernel functions are created in three steps:
         This step compiles the AST into an executable function, either for CPU or GPUs. This function
         behaves like a normal Python function and runs one LBM time step.
 
-The function :func:`createLatticeBoltzmannFunction` runs the whole pipeline, the other functions in this module
+The function :func:`create_lb_function` runs the whole pipeline, the other functions in this module
 execute this pipeline only up to a certain step. Each function optionally also takes the result of the previous step.
 
 For example, to modify the AST one can run::
 
-    ast = createLatticeBoltzmannAst(...)
+    ast = create_lb_ast(...)
     # modify ast here
-    func = createLatticeBoltzmannFunction(ast=ast, ...)
+    func = create_lb_function(ast=ast, ...)
 
 """
 import sympy as sp
 from copy import copy
 
-from pystencils.cache import diskcacheNoFallback
+from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
 from pystencils.assignment_collection.assignment_collection import AssignmentCollection
-from pystencils.field import getLayoutOfArray, Field
-from pystencils import createKernel, Assignment
-from lbmpy.turbulence_models import addSmagorinskyModel
-from lbmpy.methods import createSRT, createTRT, createOrthogonalMRT, createKBCTypeTRT, \
-    createRawMRT, createThreeRelaxationRateMRT
-from lbmpy.methods.entropic import addIterativeEntropyCondition, addEntropyCondition
-from lbmpy.methods.entropic_eq_srt import createEntropicSRT
-from lbmpy.relaxationrates import relaxationRateFromMagicNumber
-from lbmpy.stencils import getStencil, stencilsHaveSameEntries
+from pystencils.field import get_layout_of_array, Field
+from pystencils import create_kernel, Assignment
+from lbmpy.turbulence_models import add_smagorinsky_model
+from lbmpy.methods import create_srt, create_trt, create_mrt_orthogonal, create_trt_kbc, \
+    create_mrt_raw, create_mrt3
+from lbmpy.methods.entropic import add_iterative_entropy_condition, add_entropy_condition
+from lbmpy.methods.entropic_eq_srt import create_srt_entropic
+from lbmpy.relaxationrates import relaxation_rate_from_magic_number
+from lbmpy.stencils import get_stencil, stencils_have_same_entries
 import lbmpy.forcemodels as forcemodels
-from lbmpy.simplificationfactory import createSimplificationStrategy
+from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.updatekernels import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor, \
-    createLBMKernel, createStreamPullWithOutputKernel
+    create_lbm_kernel, create_stream_pull_with_output_kernel
 
 
-def createLatticeBoltzmannFunction(ast=None, optimizationParams={}, **kwargs):
-    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
+def create_lb_function(ast=None, optimization={}, **kwargs):
+    params, optParams = update_with_default_parameters(kwargs, optimization)
 
     if ast is None:
-        params['optimizationParams'] = optParams
-        ast = createLatticeBoltzmannAst(**params)
+        params['optimization'] = optParams
+        ast = create_lb_ast(**params)
 
     res = ast.compile()
 
     res.method = ast.method
-    res.updateRule = ast.updateRule
+    res.update_rule = ast.update_rule
     res.ast = ast
     return res
 
 
-def createLatticeBoltzmannAst(updateRule=None, optimizationParams={}, **kwargs):
-    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
+def create_lb_ast(update_rule=None, optimization={}, **kwargs):
+    params, opt_params = update_with_default_parameters(kwargs, optimization)
 
-    if updateRule is None:
-        params['optimizationParams'] = optimizationParams
-        updateRule = createLatticeBoltzmannUpdateRule(**params)
+    if update_rule is None:
+        params['optimization'] = optimization
+        update_rule = create_lb_update_rule(**params)
 
-    fieldTypes = set(fa.field.dtype for fa in updateRule.defined_symbols if isinstance(fa, Field.Access))
-    res = createKernel(updateRule, target=optParams['target'], dataType=collate_types(fieldTypes),
-                       cpuOpenMP=optParams['openMP'], cpuVectorizeInfo=optParams['vectorization'],
-                       gpuIndexing=optParams['gpuIndexing'], gpuIndexingParams=optParams['gpuIndexingParams'],
-                       ghostLayers=1)
+    field_types = set(fa.field.dtype for fa in update_rule.defined_symbols if isinstance(fa, Field.Access))
+    res = create_kernel(update_rule, target=opt_params['target'], data_type=collate_types(field_types),
+                        cpu_openmp=opt_params['openmp'], cpu_vectorize_info=opt_params['vectorization'],
+                        gpu_indexing=opt_params['gpu_indexing'], gpu_indexing_params=opt_params['gpu_indexing_params'],
+                        ghost_layers=1)
 
-    res.method = updateRule.method
-    res.updateRule = updateRule
+    res.method = update_rule.method
+    res.update_rule = update_rule
     return res
 
 
-@diskcacheNoFallback
-def createLatticeBoltzmannUpdateRule(collisionRule=None, optimizationParams={}, **kwargs):
-    params, opt_params = updateWithDefaultParameters(kwargs, optimizationParams)
+@disk_cache_no_fallback
+def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
+    params, opt_params = update_with_default_parameters(kwargs, optimization)
 
-    if collisionRule is None:
-        collisionRule = createLatticeBoltzmannCollisionRule(**params, optimizationParams=opt_params)
+    if collision_rule is None:
+        collision_rule = create_lattice_boltzmann_collision_rule(**params, optimization=opt_params)
 
-    lb_method = collisionRule.method
+    lb_method = collision_rule.method
 
-    if params['output'] and params['kernelType'] == 'streamPullCollide':
-        cqc = lb_method.conservedQuantityComputation
-        output_eqs = cqc.outputEquationsFromPdfs(lb_method.preCollisionPdfSymbols, params['output'])
-        collisionRule = collisionRule.new_merged(output_eqs)
+    if params['output'] and params['kernel_type'] == 'stream_pull_collide':
+        cqc = lb_method.conserved_quantity_computation
+        output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, params['output'])
+        collision_rule = collision_rule.new_merged(output_eqs)
 
     if params['entropic']:
-        if params['entropicNewtonIterations']:
-            if isinstance(params['entropicNewtonIterations'], bool):
+        if params['entropic_newton_iterations']:
+            if isinstance(params['entropic_newton_iterations'], bool):
                 iterations = 3
             else:
-                iterations = params['entropicNewtonIterations']
-            collisionRule = addIterativeEntropyCondition(collisionRule, newtonIterations=iterations,
-                                                         omegaOutputField=params['omegaOutputField'])
+                iterations = params['entropic_newton_iterations']
+            collision_rule = add_iterative_entropy_condition(collision_rule, newton_iterations=iterations,
+                                                             omega_output_field=params['omega_output_field'])
         else:
-            collisionRule = addEntropyCondition(collisionRule, omegaOutputField=params['omegaOutputField'])
+            collision_rule = add_entropy_condition(collision_rule, omega_output_field=params['omega_output_field'])
     elif params['smagorinsky']:
         smagorinsky_constant = 0.12 if params['smagorinsky'] is True else params['smagorinsky']
-        collisionRule = addSmagorinskyModel(collisionRule, smagorinsky_constant,
-                                            omegaOutputField=params['omegaOutputField'])
+        collision_rule = add_smagorinsky_model(collision_rule, smagorinsky_constant,
+                                               omega_output_field=params['omega_output_field'])
 
-    field_data_type = 'float64' if opt_params['doublePrecision'] else 'float32'
+    field_data_type = 'float64' if opt_params['double_precision'] else 'float32'
 
-    if opt_params['symbolicField'] is not None:
-        src_field = opt_params['symbolicField']
-    elif opt_params['fieldSize']:
-        field_size = [s + 2 for s in opt_params['fieldSize']] + [len(collisionRule.stencil)]
-        src_field = Field.createFixedSize(params['fieldName'], field_size, indexDimensions=1,
-                                          layout=opt_params['fieldLayout'], dtype=field_data_type)
+    if opt_params['symbolic_field'] is not None:
+        src_field = opt_params['symbolic_field']
+    elif opt_params['field_size']:
+        field_size = [s + 2 for s in opt_params['field_size']] + [len(collision_rule.stencil)]
+        src_field = Field.create_fixed_size(params['field_name'], field_size, index_dimensions=1,
+                                            layout=opt_params['field_layout'], dtype=field_data_type)
     else:
-        src_field = Field.createGeneric(params['fieldName'], spatialDimensions=collisionRule.method.dim,
-                                        indexDimensions=1, layout=opt_params['fieldLayout'], dtype=field_data_type)
+        src_field = Field.create_generic(params['field_name'], spatial_dimensions=collision_rule.method.dim,
+                                         index_dimensions=1, layout=opt_params['field_layout'], dtype=field_data_type)
 
-    dst_field = src_field.newFieldWithDifferentName(params['secondFieldName'])
+    dst_field = src_field.new_field_with_different_name(params['temporary_field_name'])
 
-    if params['kernelType'] == 'streamPullCollide':
+    if params['kernel_type'] == 'stream_pull_collide':
         accessor = StreamPullTwoFieldsAccessor
-        if any(opt_params['builtinPeriodicity']):
-            accessor = PeriodicTwoFieldsAccessor(opt_params['builtinPeriodicity'], ghostLayers=1)
-        return createLBMKernel(collisionRule, src_field, dst_field, accessor)
-    elif params['kernelType'] == 'collideOnly':
-        return createLBMKernel(collisionRule, src_field, src_field, CollideOnlyInplaceAccessor)
-    elif params['kernelType'] == 'streamPullOnly':
-        return createStreamPullWithOutputKernel(lb_method, src_field, dst_field, params['output'])
+        if any(opt_params['builtin_periodicity']):
+            accessor = PeriodicTwoFieldsAccessor(opt_params['builtin_periodicity'], ghost_layers=1)
+        return create_lbm_kernel(collision_rule, src_field, dst_field, accessor)
+    elif params['kernel_type'] == 'collide_only':
+        return create_lbm_kernel(collision_rule, src_field, src_field, CollideOnlyInplaceAccessor)
+    elif params['kernel_type'] == 'stream_pull_only':
+        return create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, params['output'])
     else:
-        raise ValueError("Invalid value of parameter 'kernelType'", params['kernelType'])
+        raise ValueError("Invalid value of parameter 'kernel_type'", params['kernel_type'])
 
 
-@diskcacheNoFallback
-def createLatticeBoltzmannCollisionRule(lbMethod=None, optimizationParams={}, **kwargs):
-    params, optParams = updateWithDefaultParameters(kwargs, optimizationParams)
+@disk_cache_no_fallback
+def create_lattice_boltzmann_collision_rule(lb_method=None, optimization={}, **kwargs):
+    params, opt_params = update_with_default_parameters(kwargs, optimization)
 
-    if lbMethod is None:
-        lbMethod = createLatticeBoltzmannMethod(**params)
+    if lb_method is None:
+        lb_method = create_lb_method(**params)
 
-    splitInnerLoop = 'split' in optParams and optParams['split']
+    split_inner_loop = 'split' in opt_params and opt_params['split']
 
-    dirCSE = 'doCseInOpposingDirections'
-    doCseInOpposingDirections = False if dirCSE not in optParams else optParams[dirCSE]
-    doOverallCse = False if 'doOverallCse' not in optParams else optParams['doOverallCse']
-    simplification = createSimplificationStrategy(lbMethod, doCseInOpposingDirections, doOverallCse, splitInnerLoop)
-    cqc = lbMethod.conservedQuantityComputation
+    dir_cse = 'cse_pdfs'
+    cse_pdfs = False if dir_cse not in opt_params else opt_params[dir_cse]
+    cse_global = False if 'cse_global' not in opt_params else opt_params['cse_global']
+    simplification = create_simplification_strategy(lb_method, cse_pdfs, cse_global, split_inner_loop)
+    cqc = lb_method.conserved_quantity_computation
 
-    if params['velocityInput'] is not None:
-        eqs = [Assignment(cqc.zerothOrderMomentSymbol, sum(lbMethod.preCollisionPdfSymbols))]
-        velocityField = params['velocityInput']
-        eqs += [Assignment(uSym, velocityField(i)) for i, uSym in enumerate(cqc.firstOrderMomentSymbols)]
+    if params['velocity_input'] is not None:
+        eqs = [Assignment(cqc.zeroth_order_moment_symbol, sum(lb_method.pre_collision_pdf_symbols))]
+        velocity_field = params['velocity_input']
+        eqs += [Assignment(uSym, velocity_field(i)) for i, uSym in enumerate(cqc.first_order_moment_symbols)]
         eqs = AssignmentCollection(eqs, [])
-        collisionRule = lbMethod.getCollisionRule(conservedQuantityEquations=eqs)
+        collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=eqs)
     else:
-        collisionRule = lbMethod.getCollisionRule()
+        collision_rule = lb_method.get_collision_rule()
 
-    return simplification(collisionRule)
+    return simplification(collision_rule)
 
 
-def createLatticeBoltzmannMethod(**params):
-    params, _ = updateWithDefaultParameters(params, {}, failOnUnknownParameter=False)
+def create_lb_method(**params):
+    params, _ = update_with_default_parameters(params, {}, fail_on_unknown_parameter=False)
 
     if isinstance(params['stencil'], tuple) or isinstance(params['stencil'], list):
-        stencilEntries = params['stencil']
+        stencil_entries = params['stencil']
     else:
-        stencilEntries = getStencil(params['stencil'])
+        stencil_entries = get_stencil(params['stencil'])
 
-    dim = len(stencilEntries[0])
+    dim = len(stencil_entries[0])
 
     if isinstance(params['force'], Field):
         params['force'] = tuple(params['force'](i) for i in range(dim))
 
-    forceIsZero = True
+    force_is_zero = True
     for f_i in params['force']:
         if f_i != 0:
-            forceIsZero = False
+            force_is_zero = False
 
-    noForceModel = 'forceModel' not in params or params['forceModel'] == 'none' or params['forceModel'] is None
-    if not forceIsZero and noForceModel:
-        params['forceModel'] = 'guo'
+    no_force_model = 'force_model' not in params or params['force_model'] == 'none' or params['force_model'] is None
+    if not force_is_zero and no_force_model:
+        params['force_model'] = 'guo'
 
-    if 'forceModel' in params:
-        forceModel = forceModelFromString(params['forceModel'], params['force'][:dim])
+    if 'force_model' in params:
+        force_model = force_model_from_string(params['force_model'], params['force'][:dim])
     else:
-        forceModel = None
+        force_model = None
 
-    commonParams = {
+    common_params = {
         'compressible': params['compressible'],
-        'equilibriumAccuracyOrder': params['equilibriumAccuracyOrder'],
-        'forceModel': forceModel,
-        'useContinuousMaxwellianEquilibrium': params['useContinuousMaxwellianEquilibrium'],
+        'equilibrium_order': params['equilibrium_order'],
+        'force_model': force_model,
+        'maxwellian_moments': params['maxwellian_moments'],
         'cumulant': params['cumulant'],
         'c_s_sq': params['c_s_sq'],
     }
-    methodName = params['method']
-    relaxationRates = params['relaxationRates']
+    method_name = params['method']
+    relaxation_rates = params['relaxation_rates']
 
-    if methodName.lower() == 'srt':
-        assert len(relaxationRates) >= 1, "Not enough relaxation rates"
-        method = createSRT(stencilEntries, relaxationRates[0], **commonParams)
-    elif methodName.lower() == 'trt':
-        assert len(relaxationRates) >= 2, "Not enough relaxation rates"
-        method = createTRT(stencilEntries, relaxationRates[0], relaxationRates[1], **commonParams)
-    elif methodName.lower() == 'mrt':
-        nextRelaxationRate = [0]
+    if method_name.lower() == 'srt':
+        assert len(relaxation_rates) >= 1, "Not enough relaxation rates"
+        method = create_srt(stencil_entries, relaxation_rates[0], **common_params)
+    elif method_name.lower() == 'trt':
+        assert len(relaxation_rates) >= 2, "Not enough relaxation rates"
+        method = create_trt(stencil_entries, relaxation_rates[0], relaxation_rates[1], **common_params)
+    elif method_name.lower() == 'mrt':
+        next_relaxation_rate = [0]
 
-        def relaxationRateGetter(momentGroup):
-            res = relaxationRates[nextRelaxationRate[0]]
-            nextRelaxationRate[0] += 1
+        def relaxation_rate_getter(_):
+            res = relaxation_rates[next_relaxation_rate[0]]
+            next_relaxation_rate[0] += 1
             return res
-        method = createOrthogonalMRT(stencilEntries, relaxationRateGetter, **commonParams)
-    elif methodName.lower() == 'mrt_raw':
-        method = createRawMRT(stencilEntries, relaxationRates, **commonParams)
-    elif methodName.lower() == 'mrt3':
-        method = createThreeRelaxationRateMRT(stencilEntries, relaxationRates, **commonParams)
-    elif methodName.lower().startswith('trt-kbc-n'):
-        if stencilsHaveSameEntries(stencilEntries, getStencil("D2Q9")):
+        method = create_mrt_orthogonal(stencil_entries, relaxation_rate_getter, **common_params)
+    elif method_name.lower() == 'mrt_raw':
+        method = create_mrt_raw(stencil_entries, relaxation_rates, **common_params)
+    elif method_name.lower() == 'mrt3':
+        method = create_mrt3(stencil_entries, relaxation_rates, **common_params)
+    elif method_name.lower().startswith('trt-kbc-n'):
+        if stencils_have_same_entries(stencil_entries, get_stencil("D2Q9")):
             dim = 2
-        elif stencilsHaveSameEntries(stencilEntries, getStencil("D3Q27")):
+        elif stencils_have_same_entries(stencil_entries, get_stencil("D3Q27")):
             dim = 3
         else:
             raise NotImplementedError("KBC type TRT methods can only be constructed for D2Q9 and D3Q27 stencils")
-        methodNr = methodName[-1]
-        method = createKBCTypeTRT(dim, relaxationRates[0], relaxationRates[1], 'KBC-N' + methodNr, **commonParams)
-    elif methodName.lower() == 'entropic-srt':
-        method = createEntropicSRT(stencilEntries, relaxationRates[0], forceModel, params['compressible'])
+        method_nr = method_name[-1]
+        method = create_trt_kbc(dim, relaxation_rates[0], relaxation_rates[1], 'KBC-N' + method_nr, **common_params)
+    elif method_name.lower() == 'entropic-srt':
+        method = create_srt_entropic(stencil_entries, relaxation_rates[0], force_model, params['compressible'])
     else:
-        raise ValueError("Unknown method %s" % (methodName,))
+        raise ValueError("Unknown method %s" % (method_name,))
 
     return method
 
@@ -362,13 +362,13 @@ def createLatticeBoltzmannMethod(**params):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-def forceModelFromString(forceModelName, forceValues):
-    if type(forceModelName) is not str:
-        return forceModelName
-    if forceModelName == 'none':
+def force_model_from_string(force_model_name, force_values):
+    if type(force_model_name) is not str:
+        return force_model_name
+    if force_model_name == 'none':
         return None
 
-    forceModelDict = {
+    force_model_dict = {
         'simple': forcemodels.Simple,
         'luo': forcemodels.Luo,
         'guo': forcemodels.Guo,
@@ -376,124 +376,126 @@ def forceModelFromString(forceModelName, forceValues):
         'silva': forcemodels.Buick,
         'edm': forcemodels.EDM,
     }
-    if forceModelName.lower() not in forceModelDict:
-        raise ValueError("Unknown force model %s" % (forceModelName,))
+    if force_model_name.lower() not in force_model_dict:
+        raise ValueError("Unknown force model %s" % (force_model_name,))
 
-    forceModelClass = forceModelDict[forceModelName.lower()]
-    return forceModelClass(forceValues)
+    force_model_class = force_model_dict[force_model_name.lower()]
+    return force_model_class(force_values)
 
 
-def switchToSymbolicRelaxationRatesForOmegaAdaptingMethods(methodParameters, kernelParams):
+def switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, kernel_params):
     """
     For entropic kernels the relaxation rate has to be a variable. If a constant was passed a
     new dummy variable is inserted and the value of this variable is later on passed to the kernel
     """
-    if methodParameters['entropic'] or methodParameters['smagorinsky']:
-        valueToSymbolMap = {}
-        newRelaxationRates = []
-        for rr in methodParameters['relaxationRates']:
+    if method_parameters['entropic'] or method_parameters['smagorinsky']:
+        value_to_symbol_map = {}
+        new_relaxation_rates = []
+        for rr in method_parameters['relaxation_rates']:
             if not isinstance(rr, sp.Symbol):
-                if rr not in valueToSymbolMap:
-                    valueToSymbolMap[rr] = sp.Dummy()
-                dummyVar = valueToSymbolMap[rr]
-                newRelaxationRates.append(dummyVar)
-                kernelParams[dummyVar.name] = rr
+                if rr not in value_to_symbol_map:
+                    value_to_symbol_map[rr] = sp.Dummy()
+                dummy_var = value_to_symbol_map[rr]
+                new_relaxation_rates.append(dummy_var)
+                kernel_params[dummy_var.name] = rr
             else:
-                newRelaxationRates.append(rr)
-        if len(newRelaxationRates) < 2:
-            newRelaxationRates.append(sp.Dummy())
-        methodParameters['relaxationRates'] = newRelaxationRates
+                new_relaxation_rates.append(rr)
+        if len(new_relaxation_rates) < 2:
+            new_relaxation_rates.append(sp.Dummy())
+        method_parameters['relaxation_rates'] = new_relaxation_rates
 
 
-def updateWithDefaultParameters(params, optParams, failOnUnknownParameter=True):
-    defaultMethodDescription = {
+def update_with_default_parameters(params, opt_params=None, fail_on_unknown_parameter=True):
+    opt_params = opt_params if opt_params is not None else {}
+
+    default_method_description = {
         'stencil': 'D2Q9',
         'method': 'srt',  # can be srt, trt or mrt
-        'relaxationRates': None,
+        'relaxation_rates': None,
         'compressible': False,
-        'equilibriumAccuracyOrder': 2,
+        'equilibrium_order': 2,
         'c_s_sq': sp.Rational(1, 3),
 
-        'forceModel': 'none',
+        'force_model': 'none',
         'force': (0, 0, 0),
-        'useContinuousMaxwellianEquilibrium': True,
+        'maxwellian_moments': True,
         'cumulant': False,
-        'initialVelocity': None,
+        'initial_velocity': None,
 
         'entropic': False,
-        'entropicNewtonIterations': None,
-        'omegaOutputField': None,
+        'entropic_newton_iterations': None,
+        'omega_output_field': None,
         'smagorinsky': False,
 
         'output': {},
-        'velocityInput': None,
+        'velocity_input': None,
 
-        'kernelType': 'streamPullCollide',
+        'kernel_type': 'stream_pull_collide',
 
-        'fieldName': 'src',
-        'secondFieldName': 'dst',
+        'field_name': 'src',
+        'temporary_field_name': 'dst',
 
-        'lbMethod': None,
-        'collisionRule': None,
-        'updateRule': None,
+        'lb_method': None,
+        'collision_rule': None,
+        'update_rule': None,
         'ast': None,
     }
 
-    defaultOptimizationDescription = {
-        'doCseInOpposingDirections': False,
-        'doOverallCse': False,
+    default_optimization_description = {
+        'cse_pdfs': False,
+        'cse_global': False,
         'split': False,
 
-        'fieldSize': None,
-        'fieldLayout': 'fzyx',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
-        'symbolicField': None,
+        'field_size': None,
+        'field_layout': 'fzyx',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
+        'symbolic_field': None,
 
         'target': 'cpu',
-        'openMP': False,
-        'doublePrecision': True,
+        'openmp': False,
+        'double_precision': True,
 
-        'gpuIndexing': 'block',
-        'gpuIndexingParams': {},
+        'gpu_indexing': 'block',
+        'gpu_indexing_params': {},
 
         'vectorization': None,
 
-        'builtinPeriodicity': (False, False, False),
+        'builtin_periodicity': (False, False, False),
     }
-    if 'relaxationRate' in params:
-        if 'relaxationRates' not in params:
+    if 'relaxation_rate' in params:
+        if 'relaxation_rates' not in params:
             if 'entropic' in params and params['entropic']:
-                params['relaxationRates'] = [params['relaxationRate']]
+                params['relaxation_rates'] = [params['relaxation_rate']]
             else:
-                params['relaxationRates'] = [params['relaxationRate'],
-                                             relaxationRateFromMagicNumber(params['relaxationRate'])]
+                params['relaxation_rates'] = [params['relaxation_rate'],
+                                              relaxation_rate_from_magic_number(params['relaxation_rate'])]
 
-            del params['relaxationRate']
+            del params['relaxation_rate']
 
-    if 'pdfArr' in optParams:
-        arr = optParams['pdfArr']
-        optParams['fieldSize'] = tuple(e - 2 for e in arr.shape[:-1])
-        optParams['fieldLayout'] = getLayoutOfArray(arr)
-        del optParams['pdfArr']
+    if 'pdf_arr' in opt_params:
+        arr = opt_params['pdf_arr']
+        opt_params['field_size'] = tuple(e - 2 for e in arr.shape[:-1])
+        opt_params['field_layout'] = get_layout_of_array(arr)
+        del opt_params['pdf_arr']
 
-    if failOnUnknownParameter:
-        unknownParams = [k for k in params.keys() if k not in defaultMethodDescription]
-        unknownOptParams = [k for k in optParams.keys() if k not in defaultOptimizationDescription]
-        if unknownParams:
-            raise ValueError("Unknown parameter(s): " + ", ".join(unknownParams))
-        if unknownOptParams:
-            raise ValueError("Unknown optimization parameter(s): " + ",".join(unknownOptParams))
+    if fail_on_unknown_parameter:
+        unknown_params = [k for k in params.keys() if k not in default_method_description]
+        unknown_opt_params = [k for k in opt_params.keys() if k not in default_optimization_description]
+        if unknown_params:
+            raise ValueError("Unknown parameter(s): " + ", ".join(unknown_params))
+        if unknown_opt_params:
+            raise ValueError("Unknown optimization parameter(s): " + ",".join(unknown_opt_params))
 
-    paramsResult = copy(defaultMethodDescription)
-    paramsResult.update(params)
-    optParamsResult = copy(defaultOptimizationDescription)
-    optParamsResult.update(optParams)
+    params_result = copy(default_method_description)
+    params_result.update(params)
+    opt_params_result = copy(default_optimization_description)
+    opt_params_result.update(opt_params)
 
-    if paramsResult['relaxationRates'] is None:
-        stencilParam = paramsResult['stencil']
-        if isinstance(stencilParam, tuple) or isinstance(stencilParam, list):
-            stencilEntries = stencilParam
+    if params_result['relaxation_rates'] is None:
+        stencil_param = params_result['stencil']
+        if isinstance(stencil_param, tuple) or isinstance(stencil_param, list):
+            stencil_entries = stencil_param
         else:
-            stencilEntries = getStencil(paramsResult['stencil'])
-        paramsResult['relaxationRates'] = sp.symbols("omega_:%d" % len(stencilEntries))
+            stencil_entries = get_stencil(params_result['stencil'])
+        params_result['relaxation_rates'] = sp.symbols("omega_:%d" % len(stencil_entries))
 
-    return paramsResult, optParamsResult
+    return params_result, opt_params_result

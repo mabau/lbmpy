@@ -2,13 +2,13 @@ import sympy as sp
 import numpy as np
 
 from lbmpy.lbstep import LatticeBoltzmannStep
-from lbmpy.phasefield.cahn_hilliard_lbm import cahnHilliardLbmMethod
-from lbmpy.phasefield.kerneleqs import muKernel, CahnHilliardFDStep, pressureTensorKernel, \
-    forceKernelUsingPressureTensor
-from pystencils import createKernel
-from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, symmetricTensorLinearization
+from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
+from lbmpy.phasefield.kerneleqs import mu_kernel, CahnHilliardFDStep, pressure_tensor_kernel, \
+    force_kernel_using_pressure_tensor
+from pystencils import create_kernel
+from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, symmetric_tensor_linearization
 from pystencils.boundaries.boundaryhandling import FlagInterface
-from pystencils.boundaries.inkernel import addNeumannBoundary
+from pystencils.boundaries.inkernel import add_neumann_boundary
 from pystencils.datahandling import SerialDataHandling
 from pystencils.assignment_collection.simplifications import sympy_cse_on_assignment_list
 from pystencils.slicing import makeSlice, SlicedGetter
@@ -16,267 +16,272 @@ from pystencils.slicing import makeSlice, SlicedGetter
 
 class PhaseFieldStep:
 
-    def __init__(self, freeEnergy, orderParameters, domainSize=None, dataHandling=None,
-                 name='pf', hydroLbmParameters={},
-                 hydroDynamicRelaxationRate=1.0, cahnHilliardRelaxationRates=1.0, densityOrderParameter=None,
-                 optimizationParams=None, kernelParams={}, dx=1, dt=1, solveCahnHilliardWithFiniteDifferences=False,
-                 orderParameterForce=None, concentrationToOrderParameters=None, orderParametersToConcentrations=None,
-                 activateHomogenousNeumannBoundaries=False):
+    def __init__(self, free_energy, order_parameters, domain_size=None, data_handling=None,
+                 name='pf', hydro_lbm_parameters={},
+                 hydro_dynamic_relaxation_rate=1.0, cahn_hilliard_relaxation_rates=1.0, density_order_parameter=None,
+                 optimization=None, kernel_params={}, dx=1, dt=1, solve_cahn_hilliard_with_finite_differences=False,
+                 order_parameter_force=None, concentration_to_order_parameters=None,
+                 order_parameters_to_concentrations=None, homogeneous_neumann_boundaries=False):
 
-        if optimizationParams is None:
-            optimizationParams = {'openMP': False, 'target': 'cpu'}
-        openMP, target = optimizationParams['openMP'], optimizationParams['target']
+        if optimization is None:
+            optimization = {'openmp': False, 'target': 'cpu'}
+        openmp, target = optimization['openmp'], optimization['target']
 
-        if dataHandling is None:
-            dataHandling = SerialDataHandling(domainSize, periodicity=True)
+        if data_handling is None:
+            data_handling = SerialDataHandling(domain_size, periodicity=True)
 
-        self.freeEnergy = freeEnergy
-        self.concentrationToOrderParameter = concentrationToOrderParameters
-        self.orderParametersToConcentrations = orderParametersToConcentrations
+        self.freeEnergy = free_energy
+        self.concentrationToOrderParameter = concentration_to_order_parameters
+        self.orderParametersToConcentrations = order_parameters_to_concentrations
 
-        self.chemicalPotentials = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
+        self.chemicalPotentials = chemical_potentials_from_free_energy(free_energy, order_parameters)
 
         # ------------------ Adding arrays ---------------------
         gpu = target == 'gpu'
         self.gpu = gpu
-        self.numOrderParameters = len(orderParameters)
-        pressureTensorSize = len(symmetricTensorLinearization(dataHandling.dim))
+        self.num_order_parameters = len(order_parameters)
+        pressure_tensor_size = len(symmetric_tensor_linearization(data_handling.dim))
 
-        self.phiFieldName = name + "_phi"
-        self.muFieldName = name + "_mu"
-        self.velFieldName = name + "_u"
-        self.forceFieldName = name + "_F"
-        self.pressureTensorFieldName = name + "_P"
-        self.dataHandling = dataHandling
-        self.phiField = dataHandling.addArray(self.phiFieldName, fSize=len(orderParameters), gpu=gpu, latexName='φ')
-        self.muField = dataHandling.addArray(self.muFieldName, fSize=len(orderParameters), gpu=gpu, latexName="μ")
-        self.velField = dataHandling.addArray(self.velFieldName, fSize=dataHandling.dim, gpu=gpu, latexName="u")
-        self.forceField = dataHandling.addArray(self.forceFieldName, fSize=dataHandling.dim, gpu=gpu, latexName="F")
-        self.pressureTensorField = dataHandling.addArray(self.pressureTensorFieldName,
-                                                         fSize=pressureTensorSize, latexName='P')
-        self.flagInterface = FlagInterface(dataHandling, 'flags')
+        self.phi_field_name = name + "_phi"
+        self.mu_field_name = name + "_mu"
+        self.vel_field_name = name + "_u"
+        self.force_field_name = name + "_F"
+        self.pressure_tensor_field_name = name + "_P"
+        self.data_handling = data_handling
+
+        dh = self.data_handling
+        phi_size = len(order_parameters)
+        self.phi_field = dh.add_array(self.phi_field_name, values_per_cell=phi_size, gpu=gpu, latex_name='φ')
+        self.mu_field = dh.add_array(self.mu_field_name, values_per_cell=phi_size, gpu=gpu, latex_name="μ")
+        self.vel_field = dh.add_array(self.vel_field_name, values_per_cell=data_handling.dim, gpu=gpu, latex_name="u")
+        self.force_field = dh.add_array(self.force_field_name, values_per_cell=dh.dim, gpu=gpu, latex_name="F")
+        self.pressure_tensor_field = data_handling.add_array(self.pressure_tensor_field_name,
+                                                             values_per_cell=pressure_tensor_size, latex_name='P')
+        self.flagInterface = FlagInterface(data_handling, 'flags')
 
         # ------------------ Creating kernels ------------------
-        phi = tuple(self.phiField(i) for i in range(len(orderParameters)))
-        F = self.freeEnergy.subs({old: new for old, new in zip(orderParameters, phi)})
+        phi = tuple(self.phi_field(i) for i in range(len(order_parameters)))
+        F = self.freeEnergy.subs({old: new for old, new in zip(order_parameters, phi)})
 
-        if activateHomogenousNeumannBoundaries:
-            def applyNeumannBoundaries(eqs):
-                fields = [dataHandling.fields[self.phiFieldName],
-                          dataHandling.fields[self.pressureTensorFieldName],
+        if homogeneous_neumann_boundaries:
+            def apply_neumann_boundaries(eqs):
+                fields = [data_handling.fields[self.phi_field_name],
+                          data_handling.fields[self.pressure_tensor_field_name],
                           ]
-                flagField = dataHandling.fields[self.flagInterface.flagFieldName]
-                return addNeumannBoundary(eqs, fields, flagField, "neumannFlag", inverseFlag=False)
+                flag_field = data_handling.fields[self.flagInterface.flag_field_name]
+                return add_neumann_boundary(eqs, fields, flag_field, "neumannFlag", inverse_flag=False)
         else:
-            def applyNeumannBoundaries(eqs):
+            def apply_neumann_boundaries(eqs):
                 return eqs
 
         # μ and pressure tensor update
-        self.phiSync = dataHandling.synchronizationFunction([self.phiFieldName], target=target)
-        self.muEqs = muKernel(F, phi, self.phiField, self.muField, dx)
-        self.pressureTensorEqs = pressureTensorKernel(self.freeEnergy, orderParameters,
-                                                      self.phiField, self.pressureTensorField, dx)
-        muAndPressureTensorEqs = self.muEqs + self.pressureTensorEqs
-        muAndPressureTensorEqs = applyNeumannBoundaries(muAndPressureTensorEqs)
-        self.muAndPressureTensorKernel = createKernel(sympy_cse_on_assignment_list(muAndPressureTensorEqs),
-                                                      target=target, cpuOpenMP=openMP).compile()
+        self.phiSync = data_handling.synchronization_function([self.phi_field_name], target=target)
+        self.muEqs = mu_kernel(F, phi, self.phi_field, self.mu_field, dx)
+        self.pressureTensorEqs = pressure_tensor_kernel(self.freeEnergy, order_parameters,
+                                                        self.phi_field, self.pressure_tensor_field, dx)
+        mu_and_pressure_tensor_eqs = self.muEqs + self.pressureTensorEqs
+        mu_and_pressure_tensor_eqs = apply_neumann_boundaries(mu_and_pressure_tensor_eqs)
+        self.muAndPressureTensorKernel = create_kernel(sympy_cse_on_assignment_list(mu_and_pressure_tensor_eqs),
+                                                       target=target, cpu_openmp=openmp).compile()
 
         # F Kernel
-        extraForce = sp.Matrix([0] * self.dataHandling.dim)
-        if orderParameterForce is not None:
-            for orderParameterIdx, force in orderParameterForce.items():
-                extraForce += self.phiField(orderParameterIdx) * sp.Matrix(force)
-        self.forceEqs = forceKernelUsingPressureTensor(self.forceField, self.pressureTensorField, dx=dx,
-                                                       extraForce=extraForce)
-        self.forceFromPressureTensorKernel = createKernel(applyNeumannBoundaries(self.forceEqs),
-                                                          target=target, cpuOpenMP=openMP).compile()
-        self.pressureTensorSync = dataHandling.synchronizationFunction([self.pressureTensorFieldName], target=target)
+        extra_force = sp.Matrix([0] * self.data_handling.dim)
+        if order_parameter_force is not None:
+            for orderParameterIdx, force in order_parameter_force.items():
+                extra_force += self.phi_field(orderParameterIdx) * sp.Matrix(force)
+        self.forceEqs = force_kernel_using_pressure_tensor(self.force_field, self.pressure_tensor_field, dx=dx,
+                                                           extra_force=extra_force)
+        self.forceFromPressureTensorKernel = create_kernel(apply_neumann_boundaries(self.forceEqs),
+                                                           target=target, cpu_openmp=openmp).compile()
+        self.pressureTensorSync = data_handling.synchronization_function([self.pressure_tensor_field_name],
+                                                                         target=target)
 
         # Hydrodynamic LBM
-        if densityOrderParameter is not None:
-            densityIdx = orderParameters.index(densityOrderParameter)
-            hydroLbmParameters['computeDensityInEveryStep'] = True
-            hydroLbmParameters['densityDataName'] = self.phiFieldName
-            hydroLbmParameters['densityDataIndex'] = densityIdx
+        if density_order_parameter is not None:
+            density_idx = order_parameters.index(density_order_parameter)
+            hydro_lbm_parameters['compute_density_in_every_step'] = True
+            hydro_lbm_parameters['density_data_name'] = self.phi_field_name
+            hydro_lbm_parameters['density_data_index'] = density_idx
 
-        if 'optimizationParams' not in hydroLbmParameters:
-            hydroLbmParameters['optimizationParams'] = optimizationParams
+        if 'optimization' not in hydro_lbm_parameters:
+            hydro_lbm_parameters['optimization'] = optimization
         else:
-            hydroLbmParameters['optimizationParams'].update(optimizationParams)
+            hydro_lbm_parameters['optimization'].update(optimization)
 
-        self.hydroLbmStep = LatticeBoltzmannStep(dataHandling=dataHandling, name=name + '_hydroLBM',
-                                                 relaxationRate=hydroDynamicRelaxationRate,
-                                                 computeVelocityInEveryStep=True, force=self.forceField,
-                                                 velocityDataName=self.velFieldName, kernelParams=kernelParams,
-                                                 flagInterface=self.flagInterface,
-                                                 timeStepOrder='collideStream',
-                                                 **hydroLbmParameters)
+        self.hydroLbmStep = LatticeBoltzmannStep(data_handling=data_handling, name=name + '_hydroLBM',
+                                                 relaxation_rate=hydro_dynamic_relaxation_rate,
+                                                 compute_velocity_in_every_step=True, force=self.force_field,
+                                                 velocity_data_name=self.vel_field_name, kernel_params=kernel_params,
+                                                 flag_interface=self.flagInterface,
+                                                 time_step_order='collideStream',
+                                                 **hydro_lbm_parameters)
 
         # Cahn-Hilliard LBMs
-        if not hasattr(cahnHilliardRelaxationRates, '__len__'):
-            cahnHilliardRelaxationRates = [cahnHilliardRelaxationRates] * len(orderParameters)
+        if not hasattr(cahn_hilliard_relaxation_rates, '__len__'):
+            cahn_hilliard_relaxation_rates = [cahn_hilliard_relaxation_rates] * len(order_parameters)
 
         self.cahnHilliardSteps = []
 
-        if solveCahnHilliardWithFiniteDifferences:
-            if densityOrderParameter is not None:
-                raise NotImplementedError("densityOrderParameter not supported when "
+        if solve_cahn_hilliard_with_finite_differences:
+            if density_order_parameter is not None:
+                raise NotImplementedError("density_order_parameter not supported when "
                                           "CH is solved with finite differences")
-            chStep = CahnHilliardFDStep(self.dataHandling, self.phiFieldName, self.muFieldName, self.velFieldName,
-                                        target=target, dx=dx, dt=dt, mobilities=1,
-                                        equationModifier=applyNeumannBoundaries)
-            self.cahnHilliardSteps.append(chStep)
+            ch_step = CahnHilliardFDStep(self.data_handling, self.phi_field_name, self.mu_field_name,
+                                         self.vel_field_name, target=target, dx=dx, dt=dt, mobilities=1,
+                                         equation_modifier=apply_neumann_boundaries)
+            self.cahnHilliardSteps.append(ch_step)
         else:
-            for i, op in enumerate(orderParameters):
-                if op == densityOrderParameter:
+            for i, op in enumerate(order_parameters):
+                if op == density_order_parameter:
                     continue
 
-                chMethod = cahnHilliardLbmMethod(self.hydroLbmStep.method.stencil, self.muField(i),
-                                                 relaxationRate=cahnHilliardRelaxationRates[i])
-                chStep = LatticeBoltzmannStep(dataHandling=dataHandling, relaxationRate=1, lbMethod=chMethod,
-                                              velocityInputArrayName=self.velField.name,
-                                              densityDataName=self.phiField.name,
-                                              stencil='D3Q19' if self.dataHandling.dim == 3 else 'D2Q9',
-                                              computeDensityInEveryStep=True,
-                                              densityDataIndex=i,
-                                              flagInterface=self.hydroLbmStep.boundaryHandling.flagInterface,
-                                              name=name + "_chLbm_%d" % (i,),
-                                              optimizationParams=optimizationParams)
-                self.cahnHilliardSteps.append(chStep)
+                ch_method = cahn_hilliard_lb_method(self.hydroLbmStep.method.stencil, self.mu_field(i),
+                                                    relaxation_rate=cahn_hilliard_relaxation_rates[i])
+                ch_step = LatticeBoltzmannStep(data_handling=data_handling, relaxation_rate=1, lb_method=ch_method,
+                                               velocity_input_array_name=self.vel_field.name,
+                                               density_data_name=self.phi_field.name,
+                                               stencil='D3Q19' if self.data_handling.dim == 3 else 'D2Q9',
+                                               compute_density_in_every_step=True,
+                                               density_data_index=i,
+                                               flag_interface=self.hydroLbmStep.boundary_handling.flag_interface,
+                                               name=name + "_chLbm_%d" % (i,),
+                                               optimization=optimization)
+                self.cahnHilliardSteps.append(ch_step)
 
-        self.vtkWriter = self.dataHandling.vtkWriter(name, [self.phiFieldName, self.muFieldName, self.velFieldName,
-                                                            self.forceFieldName])
+        self.vtk_writer = self.data_handling.create_vtk_writer(name, [self.phi_field_name, self.mu_field_name,
+                                                                      self.vel_field_name, self.force_field_name])
 
-        self.runHydroLbm = True
-        self.densityOrderParameter = densityOrderParameter
-        self.timeStepsRun = 0
+        self.run_hydro_lbm = True
+        self.density_order_parameter = density_order_parameter
+        self.time_steps_run = 0
         self.reset()
 
         self.neumannFlag = 0
 
-    def writeVTK(self):
-        self.vtkWriter(self.timeStepsRun)
+    def write_vtk(self):
+        self.vtk_writer(self.time_steps_run)
 
     def reset(self):
         # Init φ and μ
-        self.dataHandling.fill(self.phiFieldName, 0.0)
-        self.dataHandling.fill(self.phiFieldName, 1.0 if self.densityOrderParameter is not None else 0.0, fValue=0)
-        self.dataHandling.fill(self.muFieldName, 0.0)
-        self.dataHandling.fill(self.forceFieldName, 0.0)
-        self.dataHandling.fill(self.velFieldName, 0.0)
-        self.setPdfFieldsFromMacroscopicValues()
+        self.data_handling.fill(self.phi_field_name, 0.0)
+        self.data_handling.fill(self.phi_field_name, 1.0 if self.density_order_parameter is not None else 0.0,
+                                value_idx=0)
+        self.data_handling.fill(self.mu_field_name, 0.0)
+        self.data_handling.fill(self.force_field_name, 0.0)
+        self.data_handling.fill(self.vel_field_name, 0.0)
+        self.set_pdf_fields_from_macroscopic_values()
 
-        self.timeStepsRun = 0
+        self.time_steps_run = 0
 
-    def setPdfFieldsFromMacroscopicValues(self):
-        self.hydroLbmStep.setPdfFieldsFromMacroscopicValues()
+    def set_pdf_fields_from_macroscopic_values(self):
+        self.hydroLbmStep.set_pdf_fields_from_macroscopic_values()
         for chStep in self.cahnHilliardSteps:
-            chStep.setPdfFieldsFromMacroscopicValues()
+            chStep.set_pdf_fields_from_macroscopic_values()
 
-    def preRun(self):
+    def pre_run(self):
         if self.gpu:
-            self.dataHandling.toGpu(self.phiFieldName)
-            self.dataHandling.toGpu(self.muFieldName)
-            self.dataHandling.toGpu(self.forceFieldName)
-        self.hydroLbmStep.preRun()
+            self.data_handling.to_gpu(self.phi_field_name)
+            self.data_handling.to_gpu(self.mu_field_name)
+            self.data_handling.to_gpu(self.force_field_name)
+        self.hydroLbmStep.pre_run()
         for chStep in self.cahnHilliardSteps:
-            chStep.preRun()
+            chStep.pre_run()
 
-    def postRun(self):
+    def post_run(self):
         if self.gpu:
-            self.dataHandling.toCpu(self.phiFieldName)
-            self.dataHandling.toCpu(self.muFieldName)
-            self.dataHandling.toCpu(self.forceFieldName)
-        if self.runHydroLbm:
-            self.hydroLbmStep.postRun()
+            self.data_handling.to_cpu(self.phi_field_name)
+            self.data_handling.to_cpu(self.mu_field_name)
+            self.data_handling.to_cpu(self.force_field_name)
+        if self.run_hydro_lbm:
+            self.hydroLbmStep.post_run()
         for chStep in self.cahnHilliardSteps:
-            chStep.postRun()
+            chStep.post_run()
 
-    def timeStep(self):
+    def time_step(self):
         neumannFlag = self.neumannFlag
-        #for b in self.dataHandling.iterate(sliceObj=makeSlice[:, 0]):
-        #    b[self.phiFieldName][..., 0] = 0.0
-        #    b[self.phiFieldName][..., 1] = 1.0
-        #for b in self.dataHandling.iterate(sliceObj=makeSlice[0, :]):
-        #    b[self.phiFieldName][..., 0] = 1.0
-        #    b[self.phiFieldName][..., 1] = 0.0
+        #for b in self.data_handling.iterate(sliceObj=makeSlice[:, 0]):
+        #    b[self.phi_field_name][..., 0] = 0.0
+        #    b[self.phi_field_name][..., 1] = 1.0
+        #for b in self.data_handling.iterate(sliceObj=makeSlice[0, :]):
+        #    b[self.phi_field_name][..., 0] = 1.0
+        #    b[self.phi_field_name][..., 1] = 0.0
 
         self.phiSync()
-        self.dataHandling.runKernel(self.muAndPressureTensorKernel, neumannFlag=neumannFlag)
+        self.data_handling.run_kernel(self.muAndPressureTensorKernel, neumannFlag=neumannFlag)
         self.pressureTensorSync()
-        self.dataHandling.runKernel(self.forceFromPressureTensorKernel, neumannFlag=neumannFlag)
+        self.data_handling.run_kernel(self.forceFromPressureTensorKernel, neumannFlag=neumannFlag)
 
-        if self.runHydroLbm:
-            self.hydroLbmStep.timeStep()
+        if self.run_hydro_lbm:
+            self.hydroLbmStep.time_step()
 
         for chLbm in self.cahnHilliardSteps:
-            #chLbm.timeStep(neumannFlag=neumannFlag)
-            chLbm.timeStep()
+            #chLbm.time_step(neumannFlag=neumannFlag)
+            chLbm.time_step()
 
-        self.timeStepsRun += 1
+        self.time_steps_run += 1
 
     @property
-    def boundaryHandling(self):
-        return self.hydroLbmStep.boundaryHandling
+    def boundary_handling(self):
+        return self.hydroLbmStep.boundary_handling
 
-    def setConcentration(self, sliceObj, concentration):
+    def set_concentration(self, slice_obj, concentration):
         if self.concentrationToOrderParameter is not None:
             phi = self.concentrationToOrderParameter(concentration)
         else:
             phi = np.array(concentration)
 
-        for b in self.dataHandling.iterate(sliceObj):
+        for b in self.data_handling.iterate(slice_obj):
             for i in range(phi.shape[-1]):
-                b[self.phiFieldName][..., i] = phi[i]
+                b[self.phi_field_name][..., i] = phi[i]
 
-    def setDensity(self, sliceObj, value):
-        for b in self.dataHandling.iterate(sliceObj):
-            for i in range(self.numOrderParameters):
-                b[self.hydroLbmStep.densityDataName].fill(value)
+    def set_density(self, slice_obj, value):
+        for b in self.data_handling.iterate(slice_obj):
+            for i in range(self.num_order_parameters):
+                b[self.hydroLbmStep.density_data_name].fill(value)
 
-    def run(self, timeSteps):
-        self.preRun()
-        for i in range(timeSteps):
-            self.timeStep()
-        self.postRun()
+    def run(self, time_steps):
+        self.pre_run()
+        for i in range(time_steps):
+            self.time_step()
+        self.post_run()
 
-    def _getSlice(self, dataName, sliceObj):
-        if sliceObj is None:
-            sliceObj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
-        return self.dataHandling.gatherArray(dataName, sliceObj).squeeze()
+    def _get_slice(self, data_name, slice_obj):
+        if slice_obj is None:
+            slice_obj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
+        return self.data_handling.gather_array(data_name, slice_obj).squeeze()
 
-    def phiSlice(self, sliceObj=None):
-        return self._getSlice(self.phiFieldName, sliceObj)
+    def phi_slice(self, slice_obj=None):
+        return self._get_slice(self.phi_field_name, slice_obj)
 
-    def concentrationSlice(self, sliceObj=None):
-        phi = self.phiSlice(sliceObj)
+    def concentration_slice(self, slice_obj=None):
+        phi = self.phi_slice(slice_obj)
         return phi if self.orderParametersToConcentrations is None else self.orderParametersToConcentrations(phi)
 
-    def muSlice(self, sliceObj=None):
-        return self._getSlice(self.muFieldName, sliceObj)
+    def mu_slice(self, slice_obj=None):
+        return self._get_slice(self.mu_field_name, slice_obj)
 
-    def velocitySlice(self, sliceObj=None):
-        return self._getSlice(self.velFieldName, sliceObj)
+    def velocity_slice(self, slice_obj=None):
+        return self._get_slice(self.vel_field_name, slice_obj)
 
-    def forceSlice(self, sliceObj=None):
-        return self._getSlice(self.forceFieldName, sliceObj)
+    def force_slice(self, slice_obj=None):
+        return self._get_slice(self.force_field_name, slice_obj)
 
     @property
     def phi(self):
-        return SlicedGetter(self.phiSlice)
+        return SlicedGetter(self.phi_slice)
 
     @property
     def concentration(self):
-        return SlicedGetter(self.concentrationSlice)
+        return SlicedGetter(self.concentration_slice)
 
     @property
     def mu(self):
-        return SlicedGetter(self.muSlice)
+        return SlicedGetter(self.mu_slice)
 
     @property
     def velocity(self):
-        return SlicedGetter(self.velocitySlice)
+        return SlicedGetter(self.velocity_slice)
 
     @property
     def force(self):
-        return SlicedGetter(self.forceSlice)
+        return SlicedGetter(self.force_slice)

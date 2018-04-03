@@ -6,11 +6,11 @@ Wolf-Gladrow, section 5.4
 import sympy as sp
 import numpy as np
 from pystencils.sympyextensions import scalar_product
-from lbmpy.moments import discreteMoment
-from lbmpy.maxwellian_equilibrium import compressibleToIncompressibleMomentValue
+from lbmpy.moments import discrete_moment
+from lbmpy.maxwellian_equilibrium import compressible_to_incompressible_moment_value
 
 
-def genericEquilibriumAnsatz(stencil, u=sp.symbols("u_:3")):
+def generic_equilibrium_ansatz(stencil, u=sp.symbols("u_:3")):
     """Returns a generic quadratic equilibrium with coefficients A, B, C, D according to 
     Wolf Gladrow Book equation (5.4.1) """
     dim = len(stencil[0])
@@ -20,24 +20,24 @@ def genericEquilibriumAnsatz(stencil, u=sp.symbols("u_:3")):
 
     for direction in stencil:
         speed = np.abs(direction).sum()
-        weight, linear, mixQuadratic, quadratic = getParameterSymbols(speed)
-        uTimesD = scalar_product(u, direction)
-        eq = weight + linear * uTimesD + mixQuadratic * uTimesD ** 2 + quadratic * scalar_product(u, u)
+        weight, linear, mix_quadratic, quadratic = get_parameter_symbols(speed)
+        u_times_d = scalar_product(u, direction)
+        eq = weight + linear * u_times_d + mix_quadratic * u_times_d ** 2 + quadratic * scalar_product(u, u)
         equilibrium.append(eq)
     return tuple(equilibrium)
 
 
-def genericEquilibriumAnsatzParameters(stencil):
-    degreesOfFreedom = set()
+def generic_equilibrium_ansatz_parameters(stencil):
+    degrees_of_freedom = set()
     for direction in stencil:
         speed = np.abs(direction).sum()
-        params = getParameterSymbols(speed)
-        degreesOfFreedom.update(params)
-    degreesOfFreedom.add(sp.Symbol("p"))
-    return sorted(list(degreesOfFreedom), key=lambda e: e.name)
+        params = get_parameter_symbols(speed)
+        degrees_of_freedom.update(params)
+    degrees_of_freedom.add(sp.Symbol("p"))
+    return sorted(list(degrees_of_freedom), key=lambda e: e.name)
 
 
-def matchGenericEquilibriumAnsatz(stencil, equilibrium, u=sp.symbols("u_:3")):
+def match_generic_equilibrium_ansatz(stencil, equilibrium, u=sp.symbols("u_:3")):
     """Given a quadratic equilibrium, the generic coefficients A,B,C,D are determined. 
     Returns a dict that maps these coefficients to their values. If the equilibrium does not have a
     generic quadratic form, a ValueError is raised"""
@@ -47,15 +47,15 @@ def matchGenericEquilibriumAnsatz(stencil, equilibrium, u=sp.symbols("u_:3")):
     result = dict()
     for direction, actualEquilibrium in zip(stencil, equilibrium):
         speed = np.abs(direction).sum()
-        A, B, C, D = getParameterSymbols(speed)
-        uTimesD = scalar_product(u, direction)
-        genericEquation = A + B * uTimesD + C * uTimesD ** 2 + D * scalar_product(u, u)
+        a, b, c, d = get_parameter_symbols(speed)
+        u_times_d = scalar_product(u, direction)
+        generic_equation = a + b * u_times_d + c * u_times_d ** 2 + d * scalar_product(u, u)
 
-        equations = sp.poly(actualEquilibrium - genericEquation, *u).coeffs()
-        solveRes = sp.solve(equations, [A, B, C, D])
-        if not solveRes:
+        equations = sp.poly(actualEquilibrium - generic_equation, *u).coeffs()
+        solve_res = sp.solve(equations, [a, b, c, d])
+        if not solve_res:
             raise ValueError("This equilibrium does not match the generic quadratic standard form")
-        for dof, value in solveRes.items():
+        for dof, value in solve_res.items():
             if dof in result and result[dof] != value:
                 raise ValueError("This equilibrium does not match the generic quadratic standard form")
             result[dof] = value
@@ -63,34 +63,34 @@ def matchGenericEquilibriumAnsatz(stencil, equilibrium, u=sp.symbols("u_:3")):
     return result
 
 
-def momentConstraintEquations(stencil, equilibrium, momentToValueDict, u=sp.symbols("u_:3")):
+def moment_constraint_equations(stencil, equilibrium, moment_to_value_dict, u=sp.symbols("u_:3")):
     """Returns a set of equations that have to be fulfilled for a generic equilibrium match moment conditions 
-    passed in momentToValueDict. This dict is expected to map moment tuples to values."""
+    passed in moment_to_value_dict. This dict is expected to map moment tuples to values."""
     dim = len(stencil[0])
     u = u[:dim]
     equilibrium = tuple(equilibrium)
-    constraintEquations = set()
-    for moment, desiredValue in momentToValueDict.items():
-        genericMoment = discreteMoment(equilibrium, moment, stencil)
-        equations = sp.poly(genericMoment - desiredValue, *u).coeffs()
-        constraintEquations.update(equations)
-    return list(constraintEquations)
+    constraint_equations = set()
+    for moment, desiredValue in moment_to_value_dict.items():
+        generic_moment = discrete_moment(equilibrium, moment, stencil)
+        equations = sp.poly(generic_moment - desiredValue, *u).coeffs()
+        constraint_equations.update(equations)
+    return list(constraint_equations)
 
 
-def hydrodynamicMomentValues(upToOrder=3, dim=3, compressible=True):
-    """Returns the values of moments that are required to approximate Navier Stokes (if upToOrder=3)"""
-    from lbmpy.maxwellian_equilibrium import getMomentsOfContinuousMaxwellianEquilibrium
-    from lbmpy.moments import momentsUpToOrder
+def hydrodynamic_moment_values(up_to_order=3, dim=3, compressible=True):
+    """Returns the values of moments that are required to approximate Navier Stokes (if up_to_order=3)"""
+    from lbmpy.maxwellian_equilibrium import get_moments_of_continuous_maxwellian_equilibrium
+    from lbmpy.moments import moments_up_to_order
 
-    moms = momentsUpToOrder(upToOrder, dim)
+    moms = moments_up_to_order(up_to_order, dim)
     c_s_sq = sp.Symbol("p") / sp.Symbol("rho")
-    momValues = getMomentsOfContinuousMaxwellianEquilibrium(moms, dim=dim, c_s_sq=c_s_sq, order=2)
+    moment_values = get_moments_of_continuous_maxwellian_equilibrium(moms, dim=dim, c_s_sq=c_s_sq, order=2)
     if not compressible:
-        momValues = [compressibleToIncompressibleMomentValue(m, sp.Symbol("rho"), sp.symbols("u_:3")[:dim])
-                     for m in momValues]
+        moment_values = [compressible_to_incompressible_moment_value(m, sp.Symbol("rho"), sp.symbols("u_:3")[:dim])
+                         for m in moment_values]
 
-    return {a: b.expand() for a, b in zip(moms, momValues)}
+    return {a: b.expand() for a, b in zip(moms, moment_values)}
 
 
-def getParameterSymbols(i):
+def get_parameter_symbols(i):
     return sp.symbols("A_%d B_%d C_%d D_%d" % (i, i, i, i))

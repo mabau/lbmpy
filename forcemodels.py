@@ -86,15 +86,15 @@ second moment nonzero   :class:`Luo`         :class:`Guo`
 """
 
 import sympy as sp
-from lbmpy.relaxationrates import getShearRelaxationRate
+from lbmpy.relaxationrates import get_shear_relaxation_rate
 
 
 class ScalarSource(object):
     def __init__(self, source):
         self._source = source
 
-    def __call__(self, lbMethod, **kwargs):
-        return [w_i * self._source for w_i in lbMethod.weights]
+    def __call__(self, lb_method, **kwargs):
+        return [w_i * self._source for w_i in lb_method.weights]
 
 
 class Simple(object):
@@ -107,39 +107,38 @@ class Simple(object):
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, lbMethod, **kwargs):
-        assert len(self._force) == lbMethod.dim
+    def __call__(self, lb_method, **kwargs):
+        assert len(self._force) == lb_method.dim
 
         def scalarProduct(a, b):
             return sum(a_i * b_i for a_i, b_i in zip(a, b))
 
         return [3 * w_i * scalarProduct(self._force, direction)
-                for direction, w_i in zip(lbMethod.stencil, lbMethod.weights)]
+                for direction, w_i in zip(lb_method.stencil, lb_method.weights)]
 
-    def macroscopicVelocityShift(self, density):
+    def macroscopic_velocity_shift(self, density):
         return defaultVelocityShift(density, self._force)
 
 
 class Luo(object):
-    r"""
-    Force model by Luo :cite:`luo1993lattice`
+    r"""Force model by Luo :cite:`luo1993lattice`.
 
     Shifts the macroscopic velocity by F/2, but does not change the equilibrium velocity.
     """
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, lbMethod):
-        u = sp.Matrix(lbMethod.firstOrderEquilibriumMomentSymbols)
+    def __call__(self, lb_method):
+        u = sp.Matrix(lb_method.first_order_equilibrium_moment_symbols)
         force = sp.Matrix(self._force)
 
         result = []
-        for direction, w_i in zip(lbMethod.stencil, lbMethod.weights):
+        for direction, w_i in zip(lb_method.stencil, lb_method.weights):
             direction = sp.Matrix(direction)
             result.append(3 * w_i * force.dot(direction - u + 3 * direction * direction.dot(u)))
         return result
 
-    def macroscopicVelocityShift(self, density):
+    def macroscopic_velocity_shift(self, density):
         return defaultVelocityShift(density, self._force)
 
 
@@ -151,14 +150,14 @@ class Guo(object):
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, lbMethod):
+    def __call__(self, lb_method):
         luo = Luo(self._force)
 
-        shearRelaxationRate = getShearRelaxationRate(lbMethod)
+        shearRelaxationRate = get_shear_relaxation_rate(lb_method)
         correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
-        return [correctionFactor * t for t in luo(lbMethod)]
+        return [correctionFactor * t for t in luo(lb_method)]
 
-    def macroscopicVelocityShift(self, density):
+    def macroscopic_velocity_shift(self, density):
         return defaultVelocityShift(density, self._force)
 
     def equilibriumVelocityShift(self, density):
@@ -174,14 +173,14 @@ class Buick(object):
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, lbMethod, **kwargs):
+    def __call__(self, lb_method, **kwargs):
         simple = Simple(self._force)
 
-        shearRelaxationRate = getShearRelaxationRate(lbMethod)
+        shearRelaxationRate = get_shear_relaxation_rate(lb_method)
         correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
-        return [correctionFactor * t for t in simple(lbMethod)]
+        return [correctionFactor * t for t in simple(lb_method)]
 
-    def macroscopicVelocityShift(self, density):
+    def macroscopic_velocity_shift(self, density):
         return defaultVelocityShift(density, self._force)
 
     def equilibriumVelocityShift(self, density):
@@ -194,17 +193,17 @@ class EDM(object):
     def __init__(self, force):
         self._force = force
 
-    def __call__(self, lbMethod, **kwargs):
-        cqc = lbMethod.conservedQuantityComputation
-        rho = cqc.zerothOrderMomentSymbol if cqc.compressible else 1
-        u = cqc.firstOrderMomentSymbols
+    def __call__(self, lb_method, **kwargs):
+        cqc = lb_method.conserved_quantity_computation
+        rho = cqc.zeroth_order_moment_symbol if cqc.compressible else 1
+        u = cqc.first_order_moment_symbols
 
         shiftedU = (u_i + f_i / rho for u_i, f_i in zip(u, self._force))
-        eqTerms = lbMethod.getEquilibriumTerms()
+        eqTerms = lb_method.get_equilibrium_terms()
         shiftedEq = eqTerms.subs({u_i: su_i for u_i, su_i in zip(u, shiftedU)})
         return shiftedEq - eqTerms
 
-    def macroscopicVelocityShift(self, density):
+    def macroscopic_velocity_shift(self, density):
         return defaultVelocityShift(density, self._force)
 
 

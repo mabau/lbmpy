@@ -1,58 +1,58 @@
 import sympy as sp
 from pystencils.sympyextensions import normalize_product
-from lbmpy.chapman_enskog.derivative import Diff, DiffOperator, expandUsingLinearity, normalizeDiffOrder
-from lbmpy.chapman_enskog.chapman_enskog import expandedSymbol, useChapmanEnskogAnsatz
+from lbmpy.chapman_enskog.derivative import Diff, DiffOperator, expand_using_linearity, normalize_diff_order
+from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol, use_chapman_enskog_ansatz
 
 
 class SteadyStateChapmanEnskogAnalysis(object):
 
-    def __init__(self, method, forceModelClass=None, order=4):
+    def __init__(self, method, force_model_class=None, order=4):
         self.method = method
         self.dim = method.dim
         self.order = order
-        self.physicalVariables = list(sp.Matrix(self.method.momentEquilibriumValues).atoms(sp.Symbol))  # rho, u..
+        self.physicalVariables = list(sp.Matrix(self.method.moment_equilibrium_values).atoms(sp.Symbol))  # rho, u..
         self.eps = sp.Symbol("epsilon")
 
-        self.fSym = sp.Symbol("f", commutative=False)
-        self.fSyms = [expandedSymbol("f", superscript=i, commutative=False) for i in range(order + 1)]
+        self.f_sym = sp.Symbol("f", commutative=False)
+        self.f_syms = [expanded_symbol("f", superscript=i, commutative=False) for i in range(order + 1)]
         self.collisionOpSym = sp.Symbol("A", commutative=False)
-        self.forceSym = sp.Symbol("F_q", commutative=False)
-        self.velocitySyms = sp.Matrix([expandedSymbol("c", subscript=i, commutative=False) for i in range(self.dim)])
+        self.force_sym = sp.Symbol("F_q", commutative=False)
+        self.velocity_syms = sp.Matrix([expanded_symbol("c", subscript=i, commutative=False) for i in range(self.dim)])
 
         self.F_q = [0] * len(self.method.stencil)
-        self.forceModel = None
-        if forceModelClass:
-            accelerationSymbols = sp.symbols("a_:%d" % (self.dim,), commutative=False)
-            self.physicalVariables += accelerationSymbols
-            self.forceModel = forceModelClass(accelerationSymbols)
-            self.F_q = self.forceModel(self.method)
+        self.force_model = None
+        if force_model_class:
+            acceleration_symbols = sp.symbols("a_:%d" % (self.dim,), commutative=False)
+            self.physicalVariables += acceleration_symbols
+            self.force_model = force_model_class(acceleration_symbols)
+            self.F_q = self.force_model(self.method)
 
         # Perform the analysis
-        self.tayloredEquation = self._createTaylorExpandedEquation()
-        insertedHierarchy, rawHierarchy = self._createPdfHierarchy(self.tayloredEquation)
-        self.pdfHierarchy = insertedHierarchy
-        self.pdfHierarchyRaw = rawHierarchy
-        self.recombinedEq = self._recombinePdfs(self.pdfHierarchy)
+        self.tayloredEquation = self._create_taylor_expanded_equation()
+        inserted_hierarchy, raw_hierarchy = self._create_pdf_hierarchy(self.tayloredEquation)
+        self.pdfHierarchy = inserted_hierarchy
+        self.pdfHierarchyRaw = raw_hierarchy
+        self.recombinedEq = self._recombine_pdfs(self.pdfHierarchy)
 
-        symbolsToValues = self._getSymbolsToValuesDict()
-        self.continuityEquation = self._computeContinuityEquation(self.recombinedEq, symbolsToValues)
-        self.momentumEquations = [self._computeMomentumEquation(self.recombinedEq, symbolsToValues, h)
+        symbols_to_values = self._get_symbols_to_values_dict()
+        self.continuityEquation = self._compute_continuity_equation(self.recombinedEq, symbols_to_values)
+        self.momentumEquations = [self._compute_momentum_equation(self.recombinedEq, symbols_to_values, h)
                                   for h in range(self.dim)]
 
-    def getPdfHierarchy(self, order, collisionOperatorSymbol=sp.Symbol("omega")):
-        def substituteNonCommutingSymbols(eq):
+    def get_pdf_hierarchy(self, order, collision_operator_symbol=sp.Symbol("omega")):
+        def substitute_non_commuting_symbols(eq):
             return eq.subs({a: sp.Symbol(a.name) for a in eq.atoms(sp.Symbol)})
-        result = self.pdfHierarchy[order].subs(self.collisionOpSym, collisionOperatorSymbol)
-        result = normalizeDiffOrder(result, functions=(self.fSyms[0], self.forceSym))
-        return substituteNonCommutingSymbols(result)
+        result = self.pdfHierarchy[order].subs(self.collisionOpSym, collision_operator_symbol)
+        result = normalize_diff_order(result, functions=(self.f_syms[0], self.force_sym))
+        return substitute_non_commuting_symbols(result)
 
-    def getContinuityEquation(self, onlyOrder=None):
-        return self._extractOrder(self.continuityEquation, onlyOrder)
+    def get_continuity_equation(self, only_order=None):
+        return self._extract_order(self.continuityEquation, only_order)
 
-    def getMomentumEquation(self, onlyOrder=None):
-        return [self._extractOrder(e, onlyOrder) for e in self.momentumEquations]
+    def get_momentum_equation(self, only_order=None):
+        return [self._extract_order(e, only_order) for e in self.momentumEquations]
 
-    def _extractOrder(self, eq, order):
+    def _extract_order(self, eq, order):
         if order is None:
             return eq
         elif order == 0:
@@ -60,99 +60,99 @@ class SteadyStateChapmanEnskogAnalysis(object):
         else:
             return eq.coeff(self.eps ** order)
 
-    def _createTaylorExpandedEquation(self):
+    def _create_taylor_expanded_equation(self):
         """
         Creates a generic, Taylor expanded lattice Boltzmann update equation with collision and force term.
         Collision operator and force terms are represented symbolically.
         """
-        c = self.velocitySyms
-        Dx = sp.Matrix([DiffOperator(target=l) for l in range(self.dim)])
+        c = self.velocity_syms
+        dx = sp.Matrix([DiffOperator(target=l) for l in range(self.dim)])
 
-        differentialOperator = sum((self.eps * c.dot(Dx)) ** n / sp.factorial(n)
-                                   for n in range(1, self.order + 1))
-        taylorExpansion = DiffOperator.apply(differentialOperator.expand(), self.fSym)
+        differential_operator = sum((self.eps * c.dot(dx)) ** n / sp.factorial(n)
+                                    for n in range(1, self.order + 1))
+        taylor_expansion = DiffOperator.apply(differential_operator.expand(), self.f_sym)
 
-        fNonEq = self.fSym - self.fSyms[0]
-        return taylorExpansion + self.collisionOpSym * fNonEq - self.eps * self.forceSym
+        f_non_eq = self.f_sym - self.f_syms[0]
+        return taylor_expansion + self.collisionOpSym * f_non_eq - self.eps * self.force_sym
 
-    def _createPdfHierarchy(self, tayloredEquation):
+    def _create_pdf_hierarchy(self, taylored_equation):
         """
         Expresses the expanded pdfs f^1, f^2, ..  as functions of the equilibrium f^0.
         Returns a list where element [1] is the equation for f^1 etc.
         """
-        chapmanEnskogHierarchy = useChapmanEnskogAnsatz(tayloredEquation, spatialDerivativeOrders=None,
-                                                        pdfs=(['f', 0, self.order + 1],), commutative=False)
-        chapmanEnskogHierarchy = [chapmanEnskogHierarchy[i] for i in range(self.order + 1)]
+        chapman_enskog_hierarchy = use_chapman_enskog_ansatz(taylored_equation, spatial_derivative_orders=None,
+                                                             pdfs=(['f', 0, self.order + 1],), commutative=False)
+        chapman_enskog_hierarchy = [chapman_enskog_hierarchy[i] for i in range(self.order + 1)]
 
-        insertedHierarchy = []
-        rawHierarchy = []
-        substitutionDict = {}
-        for ceEq, f_i in zip(chapmanEnskogHierarchy, self.fSyms):
-            newEq = -1 / self.collisionOpSym * (ceEq - self.collisionOpSym * f_i)
-            rawHierarchy.append(newEq)
-            newEq = expandUsingLinearity(newEq.subs(substitutionDict), functions=self.fSyms + [self.forceSym])
-            if newEq:
-                substitutionDict[f_i] = newEq
-            insertedHierarchy.append(newEq)
+        inserted_hierarchy = []
+        raw_hierarchy = []
+        substitution_dict = {}
+        for ceEq, f_i in zip(chapman_enskog_hierarchy, self.f_syms):
+            new_eq = -1 / self.collisionOpSym * (ceEq - self.collisionOpSym * f_i)
+            raw_hierarchy.append(new_eq)
+            new_eq = expand_using_linearity(new_eq.subs(substitution_dict), functions=self.f_syms + [self.force_sym])
+            if new_eq:
+                substitution_dict[f_i] = new_eq
+            inserted_hierarchy.append(new_eq)
 
-        return insertedHierarchy, rawHierarchy
+        return inserted_hierarchy, raw_hierarchy
 
-    def _recombinePdfs(self, pdfHierarchy):
-        return sum(pdfHierarchy[i] * self.eps**(i-1) for i in range(1, self.order+1))
+    def _recombine_pdfs(self, pdf_hierarchy):
+        return sum(pdf_hierarchy[i] * self.eps ** (i - 1) for i in range(1, self.order + 1))
 
-    def _computeContinuityEquation(self, recombinedEq, symbolsToValues):
-        return self._computeMoments(recombinedEq, symbolsToValues)
+    def _compute_continuity_equation(self, recombined_eq, symbols_to_values):
+        return self._compute_moments(recombined_eq, symbols_to_values)
 
-    def _computeMomentumEquation(self, recombinedEq, symbolsToValues, coordinate):
-        eq = sp.expand(self.velocitySyms[coordinate] * recombinedEq)
+    def _compute_momentum_equation(self, recombined_eq, symbols_to_values, coordinate):
+        eq = sp.expand(self.velocity_syms[coordinate] * recombined_eq)
 
-        result = self._computeMoments(eq, symbolsToValues)
-        if self.forceModel and hasattr(self.forceModel, 'equilibriumVelocityShift'):
-            compressible = self.method.conservedQuantityComputation.compressible
-            shift = self.forceModel.equilibriumVelocityShift(sp.Symbol("rho") if compressible else 1)
+        result = self._compute_moments(eq, symbols_to_values)
+        if self.force_model and hasattr(self.force_model, 'equilibriumVelocityShift'):
+            compressible = self.method.conserved_quantity_computation.compressible
+            shift = self.force_model.equilibriumVelocityShift(sp.Symbol("rho") if compressible else 1)
             result += shift[coordinate]
         return result
 
-    def _getSymbolsToValuesDict(self):
-        result = {1 / self.collisionOpSym: self.method.inverseCollisionMatrix,
-                  self.forceSym: sp.Matrix(self.forceModel(self.method)) if self.forceModel else 0,
-                  self.fSyms[0]: self.method.getEquilibriumTerms()}
-        for i, c_i in enumerate(self.velocitySyms):
+    def _get_symbols_to_values_dict(self):
+        result = {1 / self.collisionOpSym: self.method.inverse_collision_matrix,
+                  self.force_sym: sp.Matrix(self.force_model(self.method)) if self.force_model else 0,
+                  self.f_syms[0]: self.method.get_equilibrium_terms()}
+        for i, c_i in enumerate(self.velocity_syms):
             result[c_i] = sp.Matrix([d[i] for d in self.method.stencil])
 
         return result
 
-    def _computeMoments(self, recombinedEq, symbolsToValues):
-        eq = recombinedEq.expand()
+    def _compute_moments(self, recombined_eq, symbols_to_values):
+        eq = recombined_eq.expand()
         assert eq.func is sp.Add
 
-        newProducts = []
+        new_products = []
         for product in eq.args:
             assert product.func is sp.Mul
 
             derivative = None
 
-            newProd = 1
+            new_prod = 1
             for arg in reversed(normalize_product(product)):
                 if isinstance(arg, Diff):
                     assert derivative is None, "More than one derivative term in the product"
                     derivative = arg
-                    arg = arg.getArgRecursive()  # new argument is inner part of derivative
+                    arg = arg.get_arg_recursive()  # new argument is inner part of derivative
 
-                if arg in symbolsToValues:
-                    arg = symbolsToValues[arg]
+                if arg in symbols_to_values:
+                    arg = symbols_to_values[arg]
 
-                haveShape = hasattr(arg, 'shape') and hasattr(newProd, 'shape')
-                if haveShape and arg.shape == newProd.shape and arg.shape[1] == 1:
-                    newProd = sp.matrix_multiply_elementwise(newProd, arg)
+                have_shape = hasattr(arg, 'shape') and hasattr(new_prod, 'shape')
+                if have_shape and arg.shape == new_prod.shape and arg.shape[1] == 1:
+                    new_prod = sp.matrix_multiply_elementwise(new_prod, arg)
                 else:
-                    newProd = arg * newProd
+                    new_prod = arg * new_prod
 
-            newProd = sp.expand(sum(newProd))
+            new_prod = sp.expand(sum(new_prod))
 
             if derivative is not None:
-                newProd = derivative.changeArgRecursive(newProd)
+                new_prod = derivative.change_arg_recursive(new_prod)
 
-            newProducts.append(newProd)
+            new_products.append(new_prod)
 
-        return normalizeDiffOrder(expandUsingLinearity(sp.Add(*newProducts), functions=self.physicalVariables))
+        return normalize_diff_order(expand_using_linearity(sp.Add(*new_products), functions=self.physicalVariables))

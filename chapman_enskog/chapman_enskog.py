@@ -4,13 +4,13 @@ from collections import namedtuple
 import sympy as sp
 from sympy.core.cache import cacheit
 
-from lbmpy.chapman_enskog import Diff, expandUsingLinearity, expandUsingProductRule
-from lbmpy.chapman_enskog import DiffOperator, normalizeDiffOrder, chapmanEnskogDerivativeExpansion, \
-    chapmanEnskogDerivativeRecombination
-from lbmpy.chapman_enskog.derivative import collectDerivatives, createNestedDiff
-from lbmpy.moments import discreteMoment, momentMatrix, polynomialToExponentRepresentation, getMomentIndices, \
-    nonAliasedMoment
-from pystencils.cache import diskcache
+from lbmpy.chapman_enskog import Diff, expand_using_linearity, expand_using_product_rule
+from lbmpy.chapman_enskog import DiffOperator, normalize_diff_order, chapman_enskog_derivative_expansion, \
+    chapman_enskog_derivative_recombination
+from lbmpy.chapman_enskog.derivative import collect_derivatives, create_nested_diff
+from lbmpy.moments import discrete_moment, moment_matrix, polynomial_to_exponent_representation, get_moment_indices, \
+    non_aliased_moment
+from pystencils.cache import disk_cache
 from pystencils.sympyextensions import normalize_product, multidimensional_sum, kronecker_delta
 from pystencils.sympyextensions import symmetric_product
 
@@ -18,7 +18,7 @@ from pystencils.sympyextensions import symmetric_product
 # --------------------------------------------- Helper Functions -------------------------------------------------------
 
 
-def expandedSymbol(name, subscript=None, superscript=None, **kwargs):
+def expanded_symbol(name, subscript=None, superscript=None, **kwargs):
     if subscript is not None:
         name += "_{%s}" % (subscript,)
     if superscript is not None:
@@ -34,9 +34,9 @@ class CeMoment(sp.Symbol):
         obj = CeMoment.__xnew_cached_(cls, name, *args, **kwds)
         return obj
 
-    def __new_stage2__(cls, name, momentTuple, superscript=-1):
+    def __new_stage2__(cls, name, moment_tuple, superscript=-1):
         obj = super(CeMoment, cls).__xnew__(cls, name)
-        obj.momentTuple = momentTuple
+        obj.momentTuple = moment_tuple
         while len(obj.momentTuple) < 3:
             obj.momentTuple = obj.momentTuple + (0,)
         obj.superscript = superscript
@@ -46,22 +46,22 @@ class CeMoment(sp.Symbol):
     __xnew_cached_ = staticmethod(cacheit(__new_stage2__))
 
     def _hashable_content(self):
-        superClassContents = list(super(CeMoment, self)._hashable_content())
-        return tuple(superClassContents + [hash(repr(self.momentTuple)), hash(repr(self.superscript))])
+        super_class_contents = list(super(CeMoment, self)._hashable_content())
+        return tuple(super_class_contents + [hash(repr(self.momentTuple)), hash(repr(self.superscript))])
 
     @property
     def indices(self):
-        return getMomentIndices(self.momentTuple)
+        return get_moment_indices(self.momentTuple)
 
     def __getnewargs__(self):
         return self.name, self.momentTuple, self.superscript
 
     def _latex(self, printer, *args):
-        coordStr = []
+        coord_str = []
         for i, comp in enumerate(self.momentTuple):
-            coordStr += [str(i)] * comp
-        coordStr = "".join(coordStr)
-        result = "{%s_{%s}" % (self.name, coordStr)
+            coord_str += [str(i)] * comp
+        coord_str = "".join(coord_str)
+        result = "{%s_{%s}" % (self.name, coord_str)
         if self.superscript >= 0:
             result += "^{(%d)}}" % (self.superscript,)
         else:
@@ -76,56 +76,58 @@ class CeMoment(sp.Symbol):
 
 
 class LbMethodEqMoments:
-    def __init__(self, lbMethod):
-        self._eq = tuple(e.rhs for e in lbMethod.getEquilibrium().main_assignments)
+    def __init__(self, lb_method):
+        self._eq = tuple(e.rhs for e in lb_method.get_equilibrium().main_assignments)
         self._momentCache = dict()
         self._postCollisionMomentCache = dict()
-        self._stencil = lbMethod.stencil
-        self._inverseMomentMatrix = momentMatrix(lbMethod.moments, lbMethod.stencil).inv()
-        self._method = lbMethod
+        self._stencil = lb_method.stencil
+        self._inverseMomentMatrix = moment_matrix(lb_method.moments, lb_method.stencil).inv()
+        self._method = lb_method
 
-    def __call__(self, ceMoment):
-        return self.getPreCollisionMoment(ceMoment)
+    def __call__(self, ce_moment):
+        return self.get_pre_collision_moment(ce_moment)
 
-    def getPreCollisionMoment(self, ceMoment):
-        assert ceMoment.superscript == 0, "Only equilibrium moments can be obtained with this function"
-        if ceMoment not in self._momentCache:
-            self._momentCache[ceMoment] = discreteMoment(self._eq, ceMoment.momentTuple, self._stencil)
-        return self._momentCache[ceMoment]
+    def get_pre_collision_moment(self, ce_moment):
+        assert ce_moment.superscript == 0, "Only equilibrium moments can be obtained with this function"
+        if ce_moment not in self._momentCache:
+            self._momentCache[ce_moment] = discrete_moment(self._eq, ce_moment.momentTuple, self._stencil)
+        return self._momentCache[ce_moment]
 
-    def getPostCollisionMoment(self, ceMoment, exponent=1, preCollisionMomentName="\\Pi"):
+    def get_post_collision_moment(self, ceMoment, exponent=1, preCollisionMomentName="\\Pi"):
         if (ceMoment, exponent) in self._postCollisionMomentCache:
             return self._postCollisionMomentCache[(ceMoment, exponent)]
 
         stencil = self._method.stencil
-        Minv = self._inverseMomentMatrix
+        moment2pdf = self._inverseMomentMatrix
 
-        momentTuple = ceMoment.momentTuple
+        moment_tuple = ceMoment.momentTuple
 
-        momentSymbols = []
-        for moment, (eqValue, rr) in self._method.relaxationInfoDict.items():
+        moment_symbols = []
+        for moment, (eqValue, rr) in self._method.relaxation_info_dict.items():
             if isinstance(moment, tuple):
-                momentSymbols.append(-rr**exponent * CeMoment(preCollisionMomentName, moment, ceMoment.superscript))
+                moment_symbols.append(-rr**exponent * CeMoment(preCollisionMomentName, moment, ceMoment.superscript))
             else:
-                momentSymbols.append(-rr**exponent * sum(coeff * CeMoment(preCollisionMomentName, momentTuple, ceMoment.superscript)
-                                     for coeff, momentTuple in polynomialToExponentRepresentation(moment)))
-        momentSymbols = sp.Matrix(momentSymbols)
-        postCollisionValue = discreteMoment(tuple(Minv * momentSymbols), momentTuple, stencil)
-        self._postCollisionMomentCache[(ceMoment, exponent)] = postCollisionValue
+                moment_symbols.append(-rr**exponent * sum(coeff * CeMoment(preCollisionMomentName, momentTuple,
+                                                                           ceMoment.superscript)
+                                                          for coeff, momentTuple in polynomial_to_exponent_representation(moment)))
+        moment_symbols = sp.Matrix(moment_symbols)
+        post_collision_value = discrete_moment(tuple(moment2pdf * moment_symbols), moment_tuple, stencil)
+        self._postCollisionMomentCache[(ceMoment, exponent)] = post_collision_value
 
-        return postCollisionValue
+        return post_collision_value
 
-    def substitutePreCollisionMoments(self, expr, preCollisionMomentName="\\Pi"):
-        substitutions = {m: self.getPreCollisionMoment(m) for m in expr.atoms(CeMoment)
-                         if m.superscript == 0 and m.name == preCollisionMomentName}
+    def substitute_pre_collision_moments(self, expr, pre_collision_moment_name="\\Pi"):
+        substitutions = {m: self.get_pre_collision_moment(m) for m in expr.atoms(CeMoment)
+                         if m.superscript == 0 and m.name == pre_collision_moment_name}
         return expr.subs(substitutions)
 
-    def substitutePostCollisionMoments(self, expr, preCollisionMomentName="\\Pi", postCollisionMomentName="\\Upsilon"):
+    def substitute_post_collision_moments(self, expr,
+                                          pre_collision_moment_name="\\Pi", post_collision_moment_name="\\Upsilon"):
         """
         Substitutes post-collision equilibrium moments 
         :param expr: expression with fully expanded derivatives
-        :param preCollisionMomentName: post-collision moments are replaced by CeMoments with this name
-        :param postCollisionMomentName: name of post-collision CeMoments
+        :param pre_collision_moment_name: post-collision moments are replaced by CeMoments with this name
+        :param post_collision_moment_name: name of post-collision CeMoments
         :return: expressions where equilibrium post-collision moments have been replaced
         """
         expr = sp.expand(expr)
@@ -134,418 +136,420 @@ class LbMethodEqMoments:
             if node.func == sp.Pow:
                 base, exp = node.args
                 return visit(base, exp)
-            elif isinstance(node, CeMoment) and node.name == postCollisionMomentName:
-                return self.getPostCollisionMoment(node, exponent, preCollisionMomentName)
+            elif isinstance(node, CeMoment) and node.name == post_collision_moment_name:
+                return self.get_post_collision_moment(node, exponent, pre_collision_moment_name)
             else:
                 return node**exponent if not node.args else node.func(*[visit(k, 1) for k in node.args])
         return visit(expr, 1)
 
-    def substitute(self, expr,  preCollisionMomentName="\\Pi", postCollisionMomentName="\\Upsilon"):
-        result = self.substitutePostCollisionMoments(expr, preCollisionMomentName, postCollisionMomentName)
-        result = self.substitutePreCollisionMoments(result, preCollisionMomentName)
+    def substitute(self, expr, pre_collision_moment_name="\\Pi", post_collision_moment_name="\\Upsilon"):
+        result = self.substitute_post_collision_moments(expr, pre_collision_moment_name, post_collision_moment_name)
+        result = self.substitute_pre_collision_moments(result, pre_collision_moment_name)
         return result
 
 
-def insertMoments(eqn, lbMethodMoments, momentName="\\Pi", useSolvabilityConditions=True):
-    subsDict = {}
-    if useSolvabilityConditions:
-        condition = lambda m: m.superscript > 0 and sum(m.momentTuple) <= 1 and m.name == momentName
-        subsDict.update({m: 0 for m in eqn.atoms(CeMoment) if condition(m)})
+def insert_moments(eqn, lb_method_moments, moment_name="\\Pi", use_solvability_conditions=True):
+    substitutions = {}
+    if use_solvability_conditions:
+        condition = lambda m: m.superscript > 0 and sum(m.momentTuple) <= 1 and m.name == moment_name
+        substitutions.update({m: 0 for m in eqn.atoms(CeMoment) if condition(m)})
 
-    condition = lambda m: m.superscript == 0 and m.name == momentName
-    subsDict.update({m: lbMethodMoments(m) for m in eqn.atoms(CeMoment) if condition(m)})
-    return eqn.subs(subsDict)
-
-
-def substituteCollisionOperatorMoments(expr, lbMomentComputation, collisionOpMomentName='\\Upsilon',
-                                       preCollisionMomentName="\\Pi"):
-    momentsToReplace = [m for m in expr.atoms(CeMoment) if m.name == collisionOpMomentName]
-    subsDict = {}
-    for ceMoment in momentsToReplace:
-        subsDict[ceMoment] = lbMomentComputation.getPostCollisionMoment(ceMoment, 1, preCollisionMomentName)
-
-    return expr.subs(subsDict)
+    condition = lambda m: m.superscript == 0 and m.name == moment_name
+    substitutions.update({m: lb_method_moments(m) for m in eqn.atoms(CeMoment) if condition(m)})
+    return eqn.subs(substitutions)
 
 
-def takeMoments(eqn, pdfToMomentName=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), velocityName='c', maxExpansion=5,
-                useOneNeighborhoodAliasing=False):
+def substitute_collision_operator_moments(expr, lb_moment_computation, collision_op_moment_name='\\Upsilon',
+                                          pre_collision_moment_name="\\Pi"):
+    moments_to_replace = [m for m in expr.atoms(CeMoment) if m.name == collision_op_moment_name]
+    subs_dict = {}
+    for ceMoment in moments_to_replace:
+        subs_dict[ceMoment] = lb_moment_computation.get_post_collision_moment(ceMoment, 1, pre_collision_moment_name)
 
-    pdfSymbols = [tuple(expandedSymbol(name, superscript=i) for i in range(maxExpansion))
-                  for name, _ in pdfToMomentName]
+    return expr.subs(subs_dict)
 
-    velocityTerms = tuple(expandedSymbol(velocityName, subscript=i) for i in range(3))
 
-    def determineFIndex(factor):
+def take_moments(eqn, pdf_to_moment_name=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), velocity_name='c', max_expansion=5,
+                 use_one_neighborhood_aliasing=False):
+
+    pdf_symbols = [tuple(expanded_symbol(name, superscript=i) for i in range(max_expansion))
+                   for name, _ in pdf_to_moment_name]
+
+    velocity_terms = tuple(expanded_symbol(velocity_name, subscript=i) for i in range(3))
+
+    def determine_f_index(factor):
         FIndex = namedtuple("FIndex", ['momentName', 'superscript'])
-        for symbolListId, pdfSymbolsElement in enumerate(pdfSymbols):
+        for symbolListId, pdfSymbolsElement in enumerate(pdf_symbols):
             try:
-                return FIndex(pdfToMomentName[symbolListId][1], pdfSymbolsElement.index(factor))
+                return FIndex(pdf_to_moment_name[symbolListId][1], pdfSymbolsElement.index(factor))
             except ValueError:
                 pass
         return None
 
-    def handleProduct(productTerm):
-        fIndex = None
-        derivativeTerm = None
-        cIndices = []
+    def handle_product(product_term):
+        f_index = None
+        derivative_term = None
+        c_indices = []
         rest = 1
-        for factor in normalize_product(productTerm):
+        for factor in normalize_product(product_term):
             if isinstance(factor, Diff):
-                assert fIndex is None
-                fIndex = determineFIndex(factor.getArgRecursive())
-                derivativeTerm = factor
-            elif factor in velocityTerms:
-                cIndices += [velocityTerms.index(factor)]
+                assert f_index is None
+                f_index = determine_f_index(factor.get_arg_recursive())
+                derivative_term = factor
+            elif factor in velocity_terms:
+                c_indices += [velocity_terms.index(factor)]
             else:
-                newFIndex = determineFIndex(factor)
-                if newFIndex is None:
+                new_f_index = determine_f_index(factor)
+                if new_f_index is None:
                     rest *= factor
                 else:
-                    assert not(newFIndex and fIndex)
-                    fIndex = newFIndex
+                    assert not(new_f_index and f_index)
+                    f_index = new_f_index
 
-        momentTuple = [0] * len(velocityTerms)
-        for cIdx in cIndices:
-            momentTuple[cIdx] += 1
-        momentTuple = tuple(momentTuple)
+        moment_tuple = [0] * len(velocity_terms)
+        for cIdx in c_indices:
+            moment_tuple[cIdx] += 1
+        moment_tuple = tuple(moment_tuple)
 
-        if useOneNeighborhoodAliasing:
-            momentTuple = nonAliasedMoment(momentTuple)
-        result = CeMoment(fIndex.momentName, momentTuple, fIndex.superscript)
-        if derivativeTerm is not None:
-            result = derivativeTerm.changeArgRecursive(result)
+        if use_one_neighborhood_aliasing:
+            moment_tuple = non_aliased_moment(moment_tuple)
+        result = CeMoment(f_index.momentName, moment_tuple, f_index.superscript)
+        if derivative_term is not None:
+            result = derivative_term.change_arg_recursive(result)
         result *= rest
         return result
 
-    functions = sum(pdfSymbols, ())
-    eqn = expandUsingLinearity(eqn, functions).expand()
+    functions = sum(pdf_symbols, ())
+    eqn = expand_using_linearity(eqn, functions).expand()
 
     if eqn.func == sp.Mul:
-        return handleProduct(eqn)
+        return handle_product(eqn)
     else:
         assert eqn.func == sp.Add
-        return sum(handleProduct(t) for t in eqn.args)
+        return sum(handle_product(t) for t in eqn.args)
 
 
-def timeDiffSelector(eq):
+def time_diff_selector(eq):
     return [d for d in eq.atoms(Diff) if d.target == sp.Symbol("t")]
 
 
-def momentSelector(eq):
+def moment_selector(eq):
     return list(eq.atoms(CeMoment))
 
 
-def diffExpandNormalizer(eq):
-    return expandUsingProductRule(eq).expand()
+def diff_expand_normalizer(eq):
+    return expand_using_product_rule(eq).expand()
 
 
-def chainSolveAndSubstitute(eqSequence, unknownSelector, normalizingFunc=diffExpandNormalizer):
+def chain_solve_and_substitute(assignments, unknown_selector, normalizing_func=diff_expand_normalizer):
     """Takes a list (hierarchy) of equations and does the following:
        Loops over given equations and for every equation:
-        - normalizes the equation with the provided normalizingFunc
+        - normalizes the equation with the provided normalizing_func
         - substitute symbols that have been already solved for
-        - calls the unknownSelector function with an equation. This function should return a list of unknown symbols,
+        - calls the unknown_selector function with an equation. This function should return a list of unknown symbols,
           and has to have length 0 or 1
-        - if unknown was returned, the equation is solved for, and the pair (unknown-> solution) is entered into the dict
+        - if unknown was returned, the equation is solved for, and the pair (unknown-> solution)
+          is entered into the dict
     """
-    resultEquations = []
-    subsDict = {}
-    for i, eq in enumerate(eqSequence):
-        eq = normalizingFunc(eq)
-        eq = eq.subs(subsDict)
-        eq = normalizingFunc(eq)
-        resultEquations.append(eq)
+    result_assignments = []
+    subs_dict = {}
+    for i, eq in enumerate(assignments):
+        eq = normalizing_func(eq)
+        eq = eq.subs(subs_dict)
+        eq = normalizing_func(eq)
+        result_assignments.append(eq)
 
-        symbolsToSolveFor = unknownSelector(eq)
-        if len(symbolsToSolveFor) == 0:
+        symbols_to_solve_for = unknown_selector(eq)
+        if len(symbols_to_solve_for) == 0:
             continue
-        assert len(symbolsToSolveFor) <= 1, "Unknown Selector return multiple unknowns - expected <=1\n" + str(
-            symbolsToSolveFor)
-        symbolToSolveFor = symbolsToSolveFor[0]
-        solveRes = sp.solve(eq, symbolToSolveFor)
-        assert len(solveRes) == 1, "Could not solve uniquely for unknown" + str(symbolToSolveFor)
-        subsDict[symbolToSolveFor] = normalizingFunc(solveRes[0])
-    return resultEquations, subsDict
+        assert len(symbols_to_solve_for) <= 1, "Unknown Selector return multiple unknowns - expected <=1\n" + str(
+            symbols_to_solve_for)
+        symbol_to_solve_for = symbols_to_solve_for[0]
+        solve_res = sp.solve(eq, symbol_to_solve_for)
+        assert len(solve_res) == 1, "Could not solve uniquely for unknown" + str(symbol_to_solve_for)
+        subs_dict[symbol_to_solve_for] = normalizing_func(solve_res[0])
+    return result_assignments, subs_dict
 
 
-def countVars(expr, variables):
-    factorList = normalize_product(expr)
-    diffsToUnpack = [e for e in factorList if isinstance(e, Diff)]
-    factorList = [e for e in factorList if not isinstance(e, Diff)]
+def count_vars(expr, variables):
+    factor_list = normalize_product(expr)
+    diffs_to_unpack = [e for e in factor_list if isinstance(e, Diff)]
+    factor_list = [e for e in factor_list if not isinstance(e, Diff)]
 
-    while diffsToUnpack:
-        d = diffsToUnpack.pop()
+    while diffs_to_unpack:
+        d = diffs_to_unpack.pop()
         args = normalize_product(d.arg)
         for a in args:
             if isinstance(a, Diff):
-                diffsToUnpack.append(a)
+                diffs_to_unpack.append(a)
             else:
-                factorList.append(a)
+                factor_list.append(a)
 
     result = 0
     for v in variables:
-        result += factorList.count(v)
+        result += factor_list.count(v)
     return result
 
 
-def removeHigherOrderU(expr, order=1, u=sp.symbols("u_:3")):
-    return sum(a for a in expr.args if countVars(a, u) <= order)
+def remove_higher_order_u(expr, order=1, u=sp.symbols("u_:3")):
+    return sum(a for a in expr.args if count_vars(a, u) <= order)
 
 
-def removeErrorTerms(expr):
-    rhoDiffsToZero = {Diff(sp.Symbol("rho"), i): 0 for i in range(3)}
-    expr = expr.subs(rhoDiffsToZero)
+def remove_error_terms(expr):
+    rho_diffs_to_zero = {Diff(sp.Symbol("rho"), i): 0 for i in range(3)}
+    expr = expr.subs(rho_diffs_to_zero)
     if isinstance(expr, sp.Matrix):
-        expr = expr.applyfunc(removeHigherOrderU)
+        expr = expr.applyfunc(remove_higher_order_u)
     else:
-        expr = removeHigherOrderU(expr.expand())
+        expr = remove_higher_order_u(expr.expand())
     return sp.cancel(expr.expand())
 
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-def getTaylorExpandedLbEquation(pdfSymbolName="f", pdfsAfterCollisionOperator="\Omega f", velocityName="c",
-                                dim=3, taylorOrder=2, shift=True):
-    dimLabels = [sp.Rational(i, 1) for i in range(dim)]
+def get_taylor_expanded_lb_equation(pdf_symbol_name="f", pdfs_after_collision_operator="\Omega f", velocity_name="c",
+                                    dim=3, taylor_order=2, shift=True):
+    dim_labels = [sp.Rational(i, 1) for i in range(dim)]
 
-    c = sp.Matrix([expandedSymbol(velocityName, subscript=label) for label in dimLabels])
+    c = sp.Matrix([expanded_symbol(velocity_name, subscript=label) for label in dim_labels])
     dt, t = sp.symbols("Delta_t t")
-    pdf = sp.Symbol(pdfSymbolName)
-    collidedPdf = sp.Symbol(pdfsAfterCollisionOperator)
+    pdf = sp.Symbol(pdf_symbol_name)
+    collided_pdf = sp.Symbol(pdfs_after_collision_operator)
 
-    Dt = DiffOperator(target=t)
-    Dx = sp.Matrix([DiffOperator(target=l) for l in dimLabels])
+    dt_operator = DiffOperator(target=t)
+    dx_operator = sp.Matrix([DiffOperator(target=l) for l in dim_labels])
 
-    taylorOperator = sum(dt ** k * (Dt + c.dot(Dx)) ** k / sp.functions.factorial(k)
-                         for k in range(1, taylorOrder + 1))
+    taylor_operator = sum(dt ** k * (dt_operator + c.dot(dx_operator)) ** k / sp.functions.factorial(k)
+                          for k in range(1, taylor_order + 1))
 
-    functions = [pdf, collidedPdf]
-    eq_4_5 = taylorOperator - dt * collidedPdf
-    applied_eq_4_5 = expandUsingLinearity(DiffOperator.apply(eq_4_5, pdf, applyToConstants=False), functions)
+    functions = [pdf, collided_pdf]
+    eq_4_5 = taylor_operator - dt * collided_pdf
+    applied_eq_4_5 = expand_using_linearity(DiffOperator.apply(eq_4_5, pdf, apply_to_constants=False), functions)
 
     if shift:
-        operator = ((dt / 2) * (Dt + c.dot(Dx))).expand()
-        opTimesEq_4_5 = expandUsingLinearity(DiffOperator.apply(operator, applied_eq_4_5, applyToConstants=False),
-                                             functions).expand()
-        opTimesEq_4_5 = normalizeDiffOrder(opTimesEq_4_5, functions)
-        eq_4_7 = (applied_eq_4_5 - opTimesEq_4_5).subs(dt ** (taylorOrder+1), 0)
+        operator = ((dt / 2) * (dt_operator + c.dot(dx_operator))).expand()
+        op_times_eq_4_5 = expand_using_linearity(DiffOperator.apply(operator, applied_eq_4_5, apply_to_constants=False),
+                                                 functions).expand()
+        op_times_eq_4_5 = normalize_diff_order(op_times_eq_4_5, functions)
+        eq_4_7 = (applied_eq_4_5 - op_times_eq_4_5).subs(dt ** (taylor_order + 1), 0)
     else:
-        eq_4_7 = applied_eq_4_5.subs(dt ** (taylorOrder + 1), 0)
+        eq_4_7 = applied_eq_4_5.subs(dt ** (taylor_order + 1), 0)
 
     eq_4_7 = eq_4_7.subs(dt, 1)
     return eq_4_7.expand()
 
 
-def useChapmanEnskogAnsatz(equation, timeDerivativeOrders=(1, 3), spatialDerivativeOrders=(1, 2),
-                           pdfs=(['f', 0, 3], ['\Omega f', 1, 3]), **kwargs):
+def use_chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_derivative_orders=(1, 2),
+                              pdfs=(['f', 0, 3], ['\Omega f', 1, 3]), **kwargs):
     """
     Uses a Chapman Enskog Ansatz to expand given equation.
     :param equation: equation to expand
-    :param timeDerivativeOrders: tuple describing range for time derivative to expand
-    :param spatialDerivativeOrders: tuple describing range for spatial derivatives to expand
+    :param time_derivative_orders: tuple describing range for time derivative to expand
+    :param spatial_derivative_orders: tuple describing range for spatial derivatives to expand
     :param pdfs: symbols to expand: sequence of triples (symbolName, startOrder, endOrder)
     :return: tuple mapping epsilon order to equation
     """
     t, eps = sp.symbols("t epsilon")
 
     # expand time derivatives
-    if timeDerivativeOrders:
-        equation = chapmanEnskogDerivativeExpansion(equation, t, eps, *timeDerivativeOrders)
+    if time_derivative_orders:
+        equation = chapman_enskog_derivative_expansion(equation, t, eps, *time_derivative_orders)
 
     # expand spatial derivatives
-    if spatialDerivativeOrders:
-        spatialDerivatives = [a for a in equation.atoms(Diff) if str(a.target) != 't']
-        labels = set(a.target for a in spatialDerivatives)
+    if spatial_derivative_orders:
+        spatial_derivatives = [a for a in equation.atoms(Diff) if str(a.target) != 't']
+        labels = set(a.target for a in spatial_derivatives)
         for label in labels:
-            equation = chapmanEnskogDerivativeExpansion(equation, label, eps, *spatialDerivativeOrders)
+            equation = chapman_enskog_derivative_expansion(equation, label, eps, *spatial_derivative_orders)
 
     # expand pdfs
-    subsDict = {}
-    expandedPdfSymbols = []
+    subs_dict = {}
+    expanded_pdf_symbols = []
 
-    maxExpansionOrder = spatialDerivativeOrders[1] if spatialDerivativeOrders else 10
-    for pdfName, startOrder, stopOrder in pdfs:
-        if isinstance(pdfName, sp.Symbol):
-            pdfName = pdfName.name
-        expandedPdfSymbols += [expandedSymbol(pdfName, superscript=i, **kwargs) for i in range(startOrder, stopOrder)]
-        subsDict[sp.Symbol(pdfName, **kwargs)] = sum(eps ** i * expandedSymbol(pdfName, superscript=i, **kwargs)
-                                                     for i in range(startOrder, stopOrder))
-        maxExpansionOrder = max(maxExpansionOrder, stopOrder)
-    equation = equation.subs(subsDict)
-    equation = expandUsingLinearity(equation, functions=expandedPdfSymbols).expand().collect(eps)
-    result = {epsOrder: equation.coeff(eps ** epsOrder) for epsOrder in range(1, 2*maxExpansionOrder)}
+    max_expansion_order = spatial_derivative_orders[1] if spatial_derivative_orders else 10
+    for pdf_name, startOrder, stopOrder in pdfs:
+        if isinstance(pdf_name, sp.Symbol):
+            pdf_name = pdf_name.name
+        expanded_pdf_symbols += [expanded_symbol(pdf_name, superscript=i, **kwargs)
+                                 for i in range(startOrder, stopOrder)]
+        subs_dict[sp.Symbol(pdf_name, **kwargs)] = sum(eps ** i * expanded_symbol(pdf_name, superscript=i, **kwargs)
+                                                       for i in range(startOrder, stopOrder))
+        max_expansion_order = max(max_expansion_order, stopOrder)
+    equation = equation.subs(subs_dict)
+    equation = expand_using_linearity(equation, functions=expanded_pdf_symbols).expand().collect(eps)
+    result = {eps_order: equation.coeff(eps ** eps_order) for eps_order in range(1, 2*max_expansion_order)}
     result[0] = equation.subs(eps, 0)
     return result
 
 
-def matchEquationsToNavierStokes(conservationEquations, rho=sp.Symbol("rho"), u=sp.symbols("u_:3"), t=sp.Symbol("t")):
-    dim = len(conservationEquations) - 1
+def match_to_navier_stokes(conservation_equations, rho=sp.Symbol("rho"), u=sp.symbols("u_:3"), t=sp.Symbol("t")):
+    dim = len(conservation_equations) - 1
     u = u[:dim]
     funcs = u + (rho,)
 
-    def diffSimplify(eq):
+    def diff_simplify(eq):
         variables = eq.atoms(CeMoment)
         variables.update(funcs)
-        return expandUsingProductRule(expandUsingLinearity(eq, variables)).expand()
+        return expand_using_product_rule(expand_using_linearity(eq, variables)).expand()
 
-    def matchContinuityEq(continuityEq):
-        continuityEq = diffSimplify(continuityEq)
-        compressible = u[0] * Diff(rho, 0) in continuityEq.args
-        factor = rho if compressible else 1
-        refContinuityEq = diffSimplify(Diff(rho, t) + sum(Diff(factor * u[i], i) for i in range(dim)))
-        return refContinuityEq - continuityEq, compressible
+    def match_continuity_eq(continuity_eq):
+        continuity_eq = diff_simplify(continuity_eq)
+        is_compressible = u[0] * Diff(rho, 0) in continuity_eq.args
+        factor = rho if is_compressible else 1
+        ref_continuity_eq = diff_simplify(Diff(rho, t) + sum(Diff(factor * u[i], i) for i in range(dim)))
+        return ref_continuity_eq - continuity_eq, is_compressible
 
-    def matchMomentEqs(momentEqs, compressible):
-        shearAndPressureEqs = []
-        for i, momEq in enumerate(momentEqs):
-            factor = rho if compressible else 1
-            ref = diffSimplify(Diff(factor * u[i], t) + sum(Diff(factor * u[i] * u[j], j) for j in range(dim)))
-            shearAndPressureEqs.append(diffSimplify(momentEqs[i]) - ref)
+    def match_moment_eqs(moment_eqs, is_compressible):
+        shear_and_pressure_eqs = []
+        for i, momEq in enumerate(moment_eqs):
+            factor = rho if is_compressible else 1
+            ref = diff_simplify(Diff(factor * u[i], t) + sum(Diff(factor * u[i] * u[j], j) for j in range(dim)))
+            shear_and_pressure_eqs.append(diff_simplify(moment_eqs[i]) - ref)
 
         # new_filtered pressure term
-        coefficentArgSets = []
-        for i, eq in enumerate(shearAndPressureEqs):
-            coefficentArgSets.append(set())
+        coefficient_arg_sets = []
+        for i, eq in enumerate(shear_and_pressure_eqs):
+            coefficient_arg_sets.append(set())
             eq = eq.expand()
             assert eq.func == sp.Add
             for term in eq.args:
                 if term.atoms(CeMoment):
                     continue
-                candidateList = [e for e in term.atoms(Diff) if e.target == i]
-                if len(candidateList) != 1:
+                candidate_list = [e for e in term.atoms(Diff) if e.target == i]
+                if len(candidate_list) != 1:
                     continue
-                coefficentArgSets[i].add((term / candidateList[0], candidateList[0].arg))
-        pressureTerms = set.intersection(*coefficentArgSets)
+                coefficient_arg_sets[i].add((term / candidate_list[0], candidate_list[0].arg))
+        pressure_terms = set.intersection(*coefficient_arg_sets)
 
         sigma = sp.zeros(dim)
-        errorTerms = []
-        for i, shearAndPressureEq in enumerate(shearAndPressureEqs):
-            eqWithoutPressure = shearAndPressureEq - sum(coeff * Diff(arg, i) for coeff, arg in pressureTerms)
-            for d in eqWithoutPressure.atoms(Diff):
-                eqWithoutPressure = eqWithoutPressure.collect(d)
-                sigma[i, d.target] += eqWithoutPressure.coeff(d) * d.arg
-                eqWithoutPressure = eqWithoutPressure.subs(d, 0)
+        error_terms = []
+        for i, shearAndPressureEq in enumerate(shear_and_pressure_eqs):
+            eq_without_pressure = shearAndPressureEq - sum(coeff * Diff(arg, i) for coeff, arg in pressure_terms)
+            for d in eq_without_pressure.atoms(Diff):
+                eq_without_pressure = eq_without_pressure.collect(d)
+                sigma[i, d.target] += eq_without_pressure.coeff(d) * d.arg
+                eq_without_pressure = eq_without_pressure.subs(d, 0)
 
-            errorTerms.append(eqWithoutPressure)
-        pressure = [coeff * arg for coeff, arg in pressureTerms]
+            error_terms.append(eq_without_pressure)
+        pressure = [coeff * arg for coeff, arg in pressure_terms]
 
-        return pressure, sigma, errorTerms
+        return pressure, sigma, error_terms
 
-    continuityErrorTerms, compressible = matchContinuityEq(conservationEquations[0])
-    pressure, sigma, momentErrorTerms = matchMomentEqs(conservationEquations[1:], compressible)
+    continuity_error_terms, compressible = match_continuity_eq(conservation_equations[0])
+    pressure, sigma, moment_error_terms = match_moment_eqs(conservation_equations[1:], compressible)
 
-    errorTerms = [continuityErrorTerms] + momentErrorTerms
-    for et in errorTerms:
+    error_terms = [continuity_error_terms] + moment_error_terms
+    for et in error_terms:
         assert et == 0
 
     return compressible, pressure, sigma
 
 
-@diskcache
-def computeHigherOrderMomentSubsDict(momentEquations):
-    oEpsWithoutTimeDiffs, timeDiffSubstitutions = chainSolveAndSubstitute(momentEquations, timeDiffSelector)
-    momentsToSolveFor = set()
+@disk_cache
+def compute_higher_order_moment_subs_dict(moment_equations):
+    o_eps_without_time_diffs, time_diff_substitutions = chain_solve_and_substitute(moment_equations, time_diff_selector)
+    moments_to_solve_for = set()
     pi_ab_equations = []
-    for eq in oEpsWithoutTimeDiffs:
-        foundMoments = momentSelector(eq)
-        if foundMoments:
-            momentsToSolveFor.update(foundMoments)
+    for eq in o_eps_without_time_diffs:
+        found_moments = moment_selector(eq)
+        if found_moments:
+            moments_to_solve_for.update(found_moments)
             pi_ab_equations.append(eq)
-    return sp.solve(pi_ab_equations, momentsToSolveFor)
+    return sp.solve(pi_ab_equations, moments_to_solve_for)
 
 
 class ChapmanEnskogAnalysis(object):
 
     def __init__(self, method, constants=None):
-        cqc = method.conservedQuantityComputation
+        cqc = method.conserved_quantity_computation
         self._method = method
-        self._momentCache = LbMethodEqMoments(method)
+        self._moment_cache = LbMethodEqMoments(method)
         self.rho = cqc.defined_symbols(order=0)[1]
         self.u = cqc.defined_symbols(order=1)[1]
         self.t = sp.Symbol("t")
         self.epsilon = sp.Symbol("epsilon")
 
-        tayloredLbEq = getTaylorExpandedLbEquation(dim=self._method.dim)
-        self.equationsGroupedByOrder = useChapmanEnskogAnsatz(tayloredLbEq)
+        taylored_lb_eq = get_taylor_expanded_lb_equation(dim=self._method.dim)
+        self.equations_by_order = use_chapman_enskog_ansatz(taylored_lb_eq)
 
         # Taking moments
-        c = sp.Matrix([expandedSymbol("c", subscript=i) for i in range(self._method.dim)])
-        momentsUntilOrder1 = [1] + list(c)
-        momentsOrder2 = [c_i * c_j for c_i, c_j in symmetric_product(c, c)]
+        c = sp.Matrix([expanded_symbol("c", subscript=i) for i in range(self._method.dim)])
+        moments_until_order1 = [1] + list(c)
+        moments_order2 = [c_i * c_j for c_i, c_j in symmetric_product(c, c)]
 
-        symbolicRelaxationRates = [rr for rr in method.relaxationRates if isinstance(rr, sp.Symbol)]
+        symbolic_relaxation_rates = [rr for rr in method.relaxation_rates if isinstance(rr, sp.Symbol)]
         if constants is None:
-            constants = set(symbolicRelaxationRates)
+            constants = set(symbolic_relaxation_rates)
         else:
-            constants.update(symbolicRelaxationRates)
+            constants.update(symbolic_relaxation_rates)
 
-        oEpsMoments1 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[1] * moment),
-                                             constants=constants)
-                        for moment in momentsUntilOrder1]
-        oEpsMoments2 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[1] * moment),
-                                             constants=constants)
-                        for moment in momentsOrder2]
-        oEpsSqMoments1 = [expandUsingLinearity(self._takeAndInsertMoments(self.equationsGroupedByOrder[2] * moment),
-                                               constants=constants)
-                          for moment in momentsUntilOrder1]
+        o_eps_moments1 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[1] * moment),
+                                                 constants=constants)
+                          for moment in moments_until_order1]
+        o_eps_moments2 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[1] * moment),
+                                                 constants=constants)
+                          for moment in moments_order2]
+        o_eps_sq_moments1 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[2] * moment),
+                                                    constants=constants)
+                             for moment in moments_until_order1]
 
-        self._equationsWithHigherOrderMoments = [self._ceRecombine(ord1 * self.epsilon + ord2 * self.epsilon ** 2)
-                                                 for ord1, ord2 in zip(oEpsMoments1, oEpsSqMoments1)]
+        self._equationsWithHigherOrderMoments = [self._ce_recombine(ord1 * self.epsilon + ord2 * self.epsilon ** 2)
+                                                 for ord1, ord2 in zip(o_eps_moments1, o_eps_sq_moments1)]
 
-        self.higherOrderMomentSubsDict = computeHigherOrderMomentSubsDict(tuple(oEpsMoments1 + oEpsMoments2))
+        self.higherOrderMomentSubsDict = compute_higher_order_moment_subs_dict(tuple(o_eps_moments1 + o_eps_moments2))
 
         # Match to Navier stokes
-        compressible, pressure, sigma = matchEquationsToNavierStokes(self._equationsWithHigherOrderMoments)
+        compressible, pressure, sigma = match_to_navier_stokes(self._equationsWithHigherOrderMoments)
         self.compressible = compressible
         self.pressureEquation = pressure
         self._sigmaWithHigherOrderMoments = sigma
-        self._sigma = sigma.subs(self.higherOrderMomentSubsDict).expand().applyfunc(self._ceRecombine)
-        self._sigmaWithoutErrorTerms = removeErrorTerms(self._sigma)
+        self._sigma = sigma.subs(self.higherOrderMomentSubsDict).expand().applyfunc(self._ce_recombine)
+        self._sigmaWithoutErrorTerms = remove_error_terms(self._sigma)
 
-    def getMacroscopicEquations(self, substituteHigherOrderMoments=False):
-        if substituteHigherOrderMoments:
+    def get_macroscopic_equations(self, substitute_higher_order_moments=False):
+        if substitute_higher_order_moments:
             return self._equationsWithHigherOrderMoments.subs(self.higherOrderMomentSubsDict)
         else:
             return self._equationsWithHigherOrderMoments
 
-    def getViscousStressTensor(self, substituteHigherOrderMoments=True):
-        if substituteHigherOrderMoments:
+    def get_viscous_stress_tensor(self, substitute_higher_order_moments=True):
+        if substitute_higher_order_moments:
             return self._sigma
         else:
             return self._sigmaWithHigherOrderMoments
 
-    def _takeAndInsertMoments(self, eq):
-        eq = takeMoments(eq)
-        eq = substituteCollisionOperatorMoments(eq, self._momentCache)
-        return insertMoments(eq, self._momentCache).expand()
+    def _take_and_insert_moments(self, eq):
+        eq = take_moments(eq)
+        eq = substitute_collision_operator_moments(eq, self._moment_cache)
+        return insert_moments(eq, self._moment_cache).expand()
 
-    def _ceRecombine(self, expr):
-        expr = chapmanEnskogDerivativeRecombination(expr, self.t, stopOrder=3)
+    def _ce_recombine(self, expr):
+        expr = chapman_enskog_derivative_recombination(expr, self.t, stop_order=3)
         for l in range(self._method.dim):
-            expr = chapmanEnskogDerivativeRecombination(expr, l, stopOrder=2)
+            expr = chapman_enskog_derivative_recombination(expr, l, stop_order=2)
         return expr
 
-    def getDynamicViscosity(self):
-        candidates = self.getShearViscosityCandidates()
+    def get_dynamic_viscosity(self):
+        candidates = self.get_shear_viscosity_candidates()
         if len(candidates) != 1:
             raise ValueError("Could not find expression for kinematic viscosity. "
                              "Probably method does not approximate Navier Stokes.")
         return candidates.pop()
 
-    def getKinematicViscosity(self):
+    def get_kinematic_viscosity(self):
         if self.compressible:
-            return (self.getDynamicViscosity() / self.rho).expand()
+            return (self.get_dynamic_viscosity() / self.rho).expand()
         else:
-            return self.getDynamicViscosity()
+            return self.get_dynamic_viscosity()
 
-    def getShearViscosityCandidates(self):
+    def get_shear_viscosity_candidates(self):
         result = set()
         dim = self._method.dim
         for i, j in symmetric_product(range(dim), range(dim), with_diagonal=False):
             result.add(-sp.cancel(self._sigmaWithoutErrorTerms[i, j] / (Diff(self.u[i], j) + Diff(self.u[j], i))))
         return result
 
-    def doesApproximateNavierStokes(self):
+    def does_approximate_navier_stokes(self):
         """Returns a set of equations that are required in order for the method to approximate Navier Stokes equations
         up to second order"""
         conditions = set([0])
@@ -553,59 +557,59 @@ class ChapmanEnskogAnalysis(object):
         assert dim > 1
         # Check that shear viscosity does not depend on any u derivatives - create conditions (equations) that
         # have to be fulfilled for this to be the case
-        viscosityReference = self._sigmaWithoutErrorTerms[0, 1].expand().coeff(Diff(self.u[0], 1))
+        viscosity_reference = self._sigmaWithoutErrorTerms[0, 1].expand().coeff(Diff(self.u[0], 1))
         for i, j in symmetric_product(range(dim), range(dim), with_diagonal=False):
             term = self._sigmaWithoutErrorTerms[i, j]
-            equalCrossTermCondition = sp.expand(term.coeff(Diff(self.u[i], j)) - viscosityReference)
+            equal_cross_term_condition = sp.expand(term.coeff(Diff(self.u[i], j)) - viscosity_reference)
             term = term.subs({Diff(self.u[i], j): 0,
                               Diff(self.u[j], i): 0})
 
-            conditions.add(equalCrossTermCondition)
+            conditions.add(equal_cross_term_condition)
             for k in range(dim):
-                symmetricTermCondition = term.coeff(Diff(self.u[k], k))
-                conditions.add(symmetricTermCondition)
+                symmetric_term_condition = term.coeff(Diff(self.u[k], k))
+                conditions.add(symmetric_term_condition)
             term = term.subs({Diff(self.u[k], k): 0 for k in range(dim)})
             conditions.add(term)
 
-        bulkCandidates = list(self.getBulkViscosityCandidates(-viscosityReference))
-        if len(bulkCandidates) > 0:
-            for i in range(1, len(bulkCandidates)):
-                conditions.add(bulkCandidates[0] - bulkCandidates[i])
+        bulk_candidates = list(self.get_bulk_viscosity_candidates(-viscosity_reference))
+        if len(bulk_candidates) > 0:
+            for i in range(1, len(bulk_candidates)):
+                conditions.add(bulk_candidates[0] - bulk_candidates[i])
 
         return conditions
 
-    def getBulkViscosityCandidates(self, viscosity=None):
+    def get_bulk_viscosity_candidates(self, viscosity=None):
         sigma = self._sigmaWithoutErrorTerms
         assert self._sigmaWithHigherOrderMoments.is_square
         result = set()
         if viscosity is None:
-            viscosity = self.getDynamicViscosity()
+            viscosity = self.get_dynamic_viscosity()
         for i in range(sigma.shape[0]):
-            bulkTerm = sigma[i, i] + 2 * viscosity * Diff(self.u[i], i)
-            bulkTerm = bulkTerm.expand()
-            for d in bulkTerm.atoms(Diff):
-                bulkTerm = bulkTerm.collect(d)
-                result.add(bulkTerm.coeff(d))
-                bulkTerm = bulkTerm.subs(d, 0)
-            if bulkTerm != 0:
+            bulk_term = sigma[i, i] + 2 * viscosity * Diff(self.u[i], i)
+            bulk_term = bulk_term.expand()
+            for d in bulk_term.atoms(Diff):
+                bulk_term = bulk_term.collect(d)
+                result.add(bulk_term.coeff(d))
+                bulk_term = bulk_term.subs(d, 0)
+            if bulk_term != 0:
                 return set()
         if len(result) == 0:
             result.add(0)
         return result
 
-    def getBulkViscosity(self):
-        candidates = self.getBulkViscosityCandidates()
+    def get_bulk_viscosity(self):
+        candidates = self.get_bulk_viscosity_candidates()
         if len(candidates) != 1:
             raise ValueError("Could not find expression for bulk viscosity. "
                              "Probably method does not approximate Navier Stokes.")
 
-        viscosity = self.getDynamicViscosity()
+        viscosity = self.get_dynamic_viscosity()
         return (candidates.pop() + 2 * viscosity / 3).expand()
 
-    def relaxationRateFromKinematicViscosity(self, nu):
-        kinematicViscosity = self.getKinematicViscosity()
-        solveRes = sp.solve(kinematicViscosity - nu, kinematicViscosity.atoms(sp.Symbol), dict=True)
-        return solveRes[0]
+    def relaxation_rate_from_kinematic_viscosity(self, nu):
+        kinematic_viscosity = self.get_kinematic_viscosity()
+        solve_res = sp.solve(kinematic_viscosity - nu, kinematic_viscosity.atoms(sp.Symbol), dict=True)
+        return solve_res[0]
 
 
 class SteadyStateChapmanEnskogAnalysis(object):
@@ -617,38 +621,38 @@ class SteadyStateChapmanEnskogAnalysis(object):
     def __init__(self, method, order=4):
         self.method = method
         dim = method.dim
-        momentComputation = LbMethodEqMoments(method)
+        moment_computation = LbMethodEqMoments(method)
 
         eps, B, f, dt = sp.symbols("epsilon B f Delta_t")
         self.dt = dt
-        expandedPdfSymbols = [expandedSymbol("f", superscript=i) for i in range(0, order + 1)]
-        feq = expandedPdfSymbols[0]
-        c = sp.Matrix([expandedSymbol("c", subscript=i) for i in range(dim)])
-        Dx = sp.Matrix([DiffOperator(target=l) for l in range(dim)])
-        differentialOperator = sum((dt * eps * c.dot(Dx)) ** n / sp.factorial(n) for n in range(1, order + 1))
-        taylorExpansion = DiffOperator.apply(differentialOperator.expand(), f, applyToConstants=False)
-        epsDict = useChapmanEnskogAnsatz(taylorExpansion,
-                                         spatialDerivativeOrders=None,  # do not expand the differential operator itself
-                                         pdfs=(['f', 0, order + 1],))  # expand only the 'f' terms
+        expanded_pdf_symbols = [expanded_symbol("f", superscript=i) for i in range(0, order + 1)]
+        feq = expanded_pdf_symbols[0]
+        c = sp.Matrix([expanded_symbol("c", subscript=i) for i in range(dim)])
+        dx = sp.Matrix([DiffOperator(target=l) for l in range(dim)])
+        differential_operator = sum((dt * eps * c.dot(dx)) ** n / sp.factorial(n) for n in range(1, order + 1))
+        taylor_expansion = DiffOperator.apply(differential_operator.expand(), f, apply_to_constants=False)
+        eps_dict = use_chapman_enskog_ansatz(taylor_expansion,
+                                             spatial_derivative_orders=None,  # do not expand the differential operator
+                                             pdfs=(['f', 0, order + 1],))  # expand only the 'f' terms
 
-        self.scaleHierarchy = [-B * epsDict[i] for i in range(0, order+1)]
+        self.scaleHierarchy = [-B * eps_dict[i] for i in range(0, order+1)]
         self.scaleHierarchyRaw = self.scaleHierarchy.copy()
 
-        expandedPdfs = [feq, self.scaleHierarchy[1]]
-        subsDict = {expandedPdfSymbols[1]: self.scaleHierarchy[1]}
+        expanded_pdfs = [feq, self.scaleHierarchy[1]]
+        subs_dict = {expanded_pdf_symbols[1]: self.scaleHierarchy[1]}
         for i in range(2, 5):
-            eq = self.scaleHierarchy[i].subs(subsDict)
-            eq = expandUsingLinearity(eq, functions=expandedPdfSymbols)
-            eq = normalizeDiffOrder(eq, functions=expandedPdfSymbols)
-            subsDict[expandedPdfSymbols[i]] = eq
-            expandedPdfs.append(eq)
-        self.scaleHierarchy = expandedPdfs
+            eq = self.scaleHierarchy[i].subs(subs_dict)
+            eq = expand_using_linearity(eq, functions=expanded_pdf_symbols)
+            eq = normalize_diff_order(eq, functions=expanded_pdf_symbols)
+            subs_dict[expanded_pdf_symbols[i]] = eq
+            expanded_pdfs.append(eq)
+        self.scaleHierarchy = expanded_pdfs
 
-        constants = sp.Matrix(method.relaxationRates).atoms(sp.Symbol)
+        constants = sp.Matrix(method.relaxation_rates).atoms(sp.Symbol)
         recombined = -sum(self.scaleHierarchy[n] for n in range(1, order + 1))  # Eq 18a
         recombined = sp.cancel(recombined / (dt * B)).expand()  # cancel common factors
 
-        def handlePostcollisionValues(eq):
+        def handle_postcollision_values(eq):
             eq = eq.expand()
             assert isinstance(eq, sp.Add)
             result = 0
@@ -656,54 +660,54 @@ class SteadyStateChapmanEnskogAnalysis(object):
 
                 moment = summand.atoms(CeMoment)
                 moment = moment.pop()
-                collisionOperatorExponent = normalize_product(summand).count(B)
-                if collisionOperatorExponent == 0:
+                collision_operator_exponent = normalize_product(summand).count(B)
+                if collision_operator_exponent == 0:
                     result += summand
                 else:
                     substitutions = {
                         B: 1,
-                        moment: -momentComputation.getPostCollisionMoment(moment, -collisionOperatorExponent),
+                        moment: -moment_computation.get_post_collision_moment(moment, -collision_operator_exponent),
                     }
                     result += summand.subs(substitutions)
 
             return result
 
         # Continuity equation (mass transport)
-        contEq = takeMoments(recombined, maxExpansion=(order + 1) * 2)
-        contEq = handlePostcollisionValues(contEq)
-        contEq = expandUsingLinearity(contEq, constants=constants).expand().collect(dt)
-        self.continuityEquationWithMoments = contEq
-        contEq = insertMoments(contEq, momentComputation, useSolvabilityConditions=False)
-        contEq = expandUsingLinearity(contEq, constants=constants).expand().collect(dt)
-        self.continuityEquation = contEq
+        cont_eq = take_moments(recombined, max_expansion=(order + 1) * 2)
+        cont_eq = handle_postcollision_values(cont_eq)
+        cont_eq = expand_using_linearity(cont_eq, constants=constants).expand().collect(dt)
+        self.continuityEquationWithMoments = cont_eq
+        cont_eq = insert_moments(cont_eq, moment_computation, use_solvability_conditions=False)
+        cont_eq = expand_using_linearity(cont_eq, constants=constants).expand().collect(dt)
+        self.continuityEquation = cont_eq
 
         # Momentum equation (momentum transport)
         self.momentumEquationsWithMoments = []
         self.momentumEquations = []
         for h in range(dim):
-            momEq = takeMoments(recombined * c[h], maxExpansion=(order + 1) * 2)
-            momEq = handlePostcollisionValues(momEq)
-            momEq = expandUsingLinearity(momEq, constants=constants).expand().collect(dt)
-            self.momentumEquationsWithMoments.append(momEq)
-            momEq = insertMoments(momEq, momentComputation, useSolvabilityConditions=False)
-            momEq = expandUsingLinearity(momEq, constants=constants).expand().collect(dt)
-            self.momentumEquations.append(momEq)
+            mom_eq = take_moments(recombined * c[h], max_expansion=(order + 1) * 2)
+            mom_eq = handle_postcollision_values(mom_eq)
+            mom_eq = expand_using_linearity(mom_eq, constants=constants).expand().collect(dt)
+            self.momentumEquationsWithMoments.append(mom_eq)
+            mom_eq = insert_moments(mom_eq, moment_computation, use_solvability_conditions=False)
+            mom_eq = expand_using_linearity(mom_eq, constants=constants).expand().collect(dt)
+            self.momentumEquations.append(mom_eq)
 
-    def getMassTransportEquation(self, order):
+    def get_mass_transport_equation(self, order):
         if order == 0:
             result = self.continuityEquation.subs(self.dt, 0)
         else:
             result = self.continuityEquation.coeff(self.dt ** order)
-        return collectDerivatives(result)
+        return collect_derivatives(result)
 
-    def getMomentumTransportEquation(self, coordinate, order):
+    def get_momentum_transport_equation(self, coordinate, order):
         if order == 0:
             result = self.momentumEquations[coordinate].subs(self.dt, 0)
         else:
             result = self.momentumEquations[coordinate].coeff(self.dt ** order)
-        return collectDerivatives(result)
+        return collect_derivatives(result)
 
-    def determineViscosities(self, coordinate):
+    def determine_viscosities(self, coordinate):
         """
         Matches the first order term of the momentum equation to Navier stokes
         Automatically neglects higher order velocity terms and rho derivatives
@@ -715,28 +719,27 @@ class SteadyStateChapmanEnskogAnalysis(object):
         """
         dim = self.method.dim
 
-        D = createNestedDiff
+        D = create_nested_diff
         s = functools.partial(multidimensional_sum, dim=dim)
         kd = kronecker_delta
 
         eta, eta_b = sp.symbols("nu nu_B")
         u = sp.symbols("u_:3")[:dim]
         a = coordinate
-        navierStokesRef = eta * sum(D(b, b, arg=u[a]) + D(b, a, arg=u[b]) for b, in s(1)) + \
-                          (eta_b - 2 * eta / 3) * sum(D(b, g, arg=u[g]) * kd(a, b) for b, g in s(2))
-        navierStokesRef = -navierStokesRef.expand()
+        navier_stokes_ref = eta * sum(D(b, b, arg=u[a]) + D(b, a, arg=u[b]) for b, in s(1)) + \
+                            (eta_b - 2 * eta / 3) * sum(D(b, g, arg=u[g]) * kd(a, b) for b, g in s(2))
+        navier_stokes_ref = -navier_stokes_ref.expand()
 
-        firstOrderTerms = self.getMomentumTransportEquation(coordinate, order=1)
-        firstOrderTerms = removeHigherOrderU(firstOrderTerms)
-        firstOrderTerms = expandUsingLinearity(firstOrderTerms, constants=[sp.Symbol("rho")])
+        first_order_terms = self.get_momentum_transport_equation(coordinate, order=1)
+        first_order_terms = remove_higher_order_u(first_order_terms)
+        first_order_terms = expand_using_linearity(first_order_terms, constants=[sp.Symbol("rho")])
 
-        matchCoeffEquations = []
-        for diff in navierStokesRef.atoms(Diff):
-            matchCoeffEquations.append(navierStokesRef.coeff(diff) - firstOrderTerms.coeff(diff))
-        return sp.solve(matchCoeffEquations, [eta, eta_b])
+        match_coeff_equations = []
+        for diff in navier_stokes_ref.atoms(Diff):
+            match_coeff_equations.append(navier_stokes_ref.coeff(diff) - first_order_terms.coeff(diff))
+        return sp.solve(match_coeff_equations, [eta, eta_b])
 
 
-if __name__ == '__main__':
-    from lbmpy.creationfunctions import createLatticeBoltzmannMethod
-    m = createLatticeBoltzmannMethod(stencil='D2Q9')
-    ce = ChapmanEnskogAnalysis(m)
+
+
+

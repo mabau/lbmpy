@@ -1,15 +1,15 @@
 import sympy as sp
-from lbmpy.chapman_enskog import CeMoment, Diff, takeMoments
-from lbmpy.chapman_enskog.derivative import fullDiffExpand
-from lbmpy.chapman_enskog.chapman_enskog import expandedSymbol
-from lbmpy.moments import momentsUpToOrder, momentsOfOrder
+from lbmpy.chapman_enskog import CeMoment, Diff, take_moments
+from lbmpy.chapman_enskog.derivative import full_diff_expand
+from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol
+from lbmpy.moments import moments_up_to_order, moments_of_order
 from collections import OrderedDict
 
 
 def polyMoments(order, dim):
     from pystencils.sympyextensions import prod
-    c = sp.Matrix([expandedSymbol("c", subscript=i) for i in range(dim)])
-    return [prod(c_i ** m_i for c_i, m_i in zip(c, m)) for m in momentsOfOrder(order, dim=dim)]
+    c = sp.Matrix([expanded_symbol("c", subscript=i) for i in range(dim)])
+    return [prod(c_i ** m_i for c_i, m_i in zip(c, m)) for m in moments_of_order(order, dim=dim)]
 
 
 def specialLinSolve(eqs, dofs):
@@ -31,7 +31,7 @@ def specialLinSolve(eqs, dofs):
 def getSolvabilityConditions(dim, order):
     solvabilityConditions = {}
     for name in ["\Pi", "\\Upsilon"]:
-        for momentTuple in momentsUpToOrder(1, dim=dim):
+        for momentTuple in moments_up_to_order(1, dim=dim):
             for k in range(order+1):
                 solvabilityConditions[CeMoment(name, superscript=k, momentTuple=momentTuple)] = 0
     return solvabilityConditions
@@ -41,10 +41,10 @@ def determineHigherOrderMoments(epsilonHierarchy, relaxationRates, momentComputa
     solvabilityConditions = getSolvabilityConditions(dim, order)
 
     def fullExpand(expr):
-        return fullDiffExpand(expr, constants=relaxationRates)
+        return full_diff_expand(expr, constants=relaxationRates)
 
     def tm(expr):
-        expr = takeMoments(expr, useOneNeighborhoodAliasing=True)
+        expr = take_moments(expr, use_one_neighborhood_aliasing=True)
         return momentComputation.substitute(expr).subs(solvabilityConditions)
 
     timeDiffs = OrderedDict()

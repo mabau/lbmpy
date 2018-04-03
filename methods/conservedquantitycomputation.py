@@ -5,7 +5,7 @@ from pystencils.assignment_collection import AssignmentCollection
 from pystencils.field import Field, Assignment
 
 
-class AbstractConservedQuantityComputation(abc.ABCMeta('ABC', (object,), {})):
+class AbstractConservedQuantityComputation(abc.ABC):
     """
 
     This class defines how conserved quantities are computed as functions of the pdfs.
@@ -24,12 +24,12 @@ class AbstractConservedQuantityComputation(abc.ABCMeta('ABC', (object,), {})):
 
     @property
     @abc.abstractmethod
-    def conservedQuantities(self):
+    def conserved_quantities(self):
         """
         Dict, mapping names (symbol) to dimensionality (int)
         For example: {'density' : 1, 'velocity' : 3}
-        The naming strings can be used in :func:`outputEquationsFromPdfs`
-        and :func:`equilibriumInputEquationsFromInitValues`
+        The naming strings can be used in :func:`output_equations_from_pdfs`
+        and :func:`equilibrium_input_equations_from_init_values`
         """
 
     def defined_symbols(self, order='all'):
@@ -39,7 +39,7 @@ class AbstractConservedQuantityComputation(abc.ABCMeta('ABC', (object,), {})):
 
     @property
     @abc.abstractmethod
-    def defaultValues(self):
+    def default_values(self):
         """
         Returns a dict of symbol to default value, where "default" means that
         the equilibrium simplifies to the weights if these values are inserted.
@@ -47,7 +47,7 @@ class AbstractConservedQuantityComputation(abc.ABCMeta('ABC', (object,), {})):
         """
 
     @abc.abstractmethod
-    def equilibriumInputEquationsFromPdfs(self, pdfs):
+    def equilibrium_input_equations_from_pdfs(self, pdfs):
         """
         Returns an equation collection that defines all necessary quantities to compute the equilibrium as functions
         of the pdfs.
@@ -57,40 +57,40 @@ class AbstractConservedQuantityComputation(abc.ABCMeta('ABC', (object,), {})):
         """
 
     @abc.abstractmethod
-    def outputEquationsFromPdfs(self, pdfs, outputQuantityNamesToSymbols):
+    def output_equations_from_pdfs(self, pdfs, output_quantity_names_to_symbols):
         """
         Returns an equation collection that defines conserved quantities for output. These conserved quantities might
         be slightly different that the ones used as input for the equilibrium e.g. due to a force model.
 
         :param pdfs: values for the pdf entries
-        :param outputQuantityNamesToSymbols: dict mapping of conserved quantity names (See :func:`conservedQuantities`)
+        :param output_quantity_names_to_symbols: dict mapping of conserved quantity names (See :func:`conserved_quantities`)
                                             to symbols or field accesses where they should be written to
         """
 
     @abc.abstractmethod
-    def equilibriumInputEquationsFromInitValues(self, **kwargs):
+    def equilibrium_input_equations_from_init_values(self, **kwargs):
         """
         Returns an equation collection that defines all necessary quantities to compute the equilibrium as function of
         given conserved quantities. Parameters can be names that are given by
-        symbol names of :func:`conservedQuantities`.
+        symbol names of :func:`conserved_quantities`.
         For all parameters not specified each implementation should use sensible defaults. For example hydrodynamic
         schemes use density=1 and velocity=0.
         """
 
 
 class DensityVelocityComputation(AbstractConservedQuantityComputation):
-    def __init__(self, stencil, compressible, forceModel=None,
-                 zerothOrderMomentSymbol=sp.Symbol("rho"),
-                 firstOrderMomentSymbols=sp.symbols("u_:3")):
+    def __init__(self, stencil, compressible, force_model=None,
+                 zeroth_order_moment_symbol=sp.Symbol("rho"),
+                 first_order_moment_symbols=sp.symbols("u_:3")):
         dim = len(stencil[0])
         self._stencil = stencil
         self._compressible = compressible
-        self._forceModel = forceModel
-        self._symbolOrder0 = zerothOrderMomentSymbol
-        self._symbolsOrder1 = firstOrderMomentSymbols[:dim]
+        self._forceModel = force_model
+        self._symbolOrder0 = zeroth_order_moment_symbol
+        self._symbolsOrder1 = first_order_moment_symbols[:dim]
 
     @property
-    def conservedQuantities(self):
+    def conserved_quantities(self):
         return {'density': 1,
                 'velocity': len(self._stencil[0])}
 
@@ -110,71 +110,72 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             return None
 
     @property
-    def zeroCenteredPdfs(self):
+    def zero_centered_pdfs(self):
         return not self._compressible
 
     @property
-    def zerothOrderMomentSymbol(self):
+    def zeroth_order_moment_symbol(self):
         return self._symbolOrder0
 
     @property
-    def firstOrderMomentSymbols(self):
+    def first_order_moment_symbols(self):
         return self._symbolsOrder1
 
     @property
-    def defaultValues(self):
+    def default_values(self):
         result = {self._symbolOrder0: 1}
         for s in self._symbolsOrder1:
             result[s] = 0
         return result
 
-    def equilibriumInputEquationsFromPdfs(self, pdfs):
+    def equilibrium_input_equations_from_pdfs(self, pdfs):
         dim = len(self._stencil[0])
-        eq_coll = getEquationsForZerothAndFirstOrderMoment(self._stencil, pdfs, self._symbolOrder0,
+        eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs, self._symbolOrder0,
                                                           self._symbolsOrder1[:dim])
         if self._compressible:
-            eq_coll = divideFirstOrderMomentsByRho(eq_coll, dim)
+            eq_coll = divide_first_order_moments_by_rho(eq_coll, dim)
 
-        eq_coll = applyForceModelShift('equilibriumVelocityShift', dim, eq_coll, self._forceModel, self._compressible)
+        eq_coll = apply_force_model_shift('equilibriumVelocityShift', dim, eq_coll, self._forceModel, self._compressible)
         return eq_coll
 
-    def equilibriumInputEquationsFromInitValues(self, density=1, velocity=(0, 0, 0)):
+    def equilibrium_input_equations_from_init_values(self, density=1, velocity=(0, 0, 0)):
         dim = len(self._stencil[0])
-        zerothOrderMoment = density
+        zeroth_order_moment = density
         first_order_moments = velocity[:dim]
         vel_offset = [0] * dim
 
         if self._compressible:
-            if self._forceModel and hasattr(self._forceModel, 'macroscopicVelocityShift'):
-                vel_offset = self._forceModel.macroscopicVelocityShift(zerothOrderMoment)
+            if self._forceModel and hasattr(self._forceModel, 'macroscopic_velocity_shift'):
+                vel_offset = self._forceModel.macroscopic_velocity_shift(zeroth_order_moment)
         else:
-            if self._forceModel and hasattr(self._forceModel, 'macroscopicVelocityShift'):
-                vel_offset = self._forceModel.macroscopicVelocityShift(sp.Rational(1, 1))
-            zerothOrderMoment -= sp.Rational(1, 1)
-        eqs = [Assignment(self._symbolOrder0, zerothOrderMoment)]
+            if self._forceModel and hasattr(self._forceModel, 'macroscopic_velocity_shift'):
+                vel_offset = self._forceModel.macroscopic_velocity_shift(sp.Rational(1, 1))
+            zeroth_order_moment -= sp.Rational(1, 1)
+        eqs = [Assignment(self._symbolOrder0, zeroth_order_moment)]
 
         first_order_moments = [a - b for a, b in zip(first_order_moments, vel_offset)]
         eqs += [Assignment(l, r) for l, r in zip(self._symbolsOrder1, first_order_moments)]
 
         return AssignmentCollection(eqs, [])
 
-    def outputEquationsFromPdfs(self, pdfs, outputQuantityNamesToSymbols):
+    def output_equations_from_pdfs(self, pdfs, output_quantity_names_to_symbols):
         dim = len(self._stencil[0])
 
-        ac = getEquationsForZerothAndFirstOrderMoment(self._stencil, pdfs, self._symbolOrder0, self._symbolsOrder1)
+        ac = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
+                                                             self._symbolOrder0, self._symbolsOrder1)
 
         if self._compressible:
-            ac = divideFirstOrderMomentsByRho(ac, dim)
+            ac = divide_first_order_moments_by_rho(ac, dim)
         else:
-            ac = addDensityOffset(ac)
+            ac = add_density_offset(ac)
 
-        ac = applyForceModelShift('macroscopicVelocityShift', dim, ac, self._forceModel, self._compressible)
+        ac = apply_force_model_shift('macroscopic_velocity_shift', dim, ac, self._forceModel, self._compressible)
 
         main_assignments = []
         eqs = OrderedDict([(eq.lhs, eq.rhs) for eq in ac.all_assignments])
 
-        if 'density' in outputQuantityNamesToSymbols:
-            density_output_symbol = outputQuantityNamesToSymbols['density']
+        if 'density' in output_quantity_names_to_symbols:
+            density_output_symbol = output_quantity_names_to_symbols['density']
             if isinstance(density_output_symbol, Field):
                 density_output_symbol = density_output_symbol()
             if density_output_symbol != self._symbolOrder0:
@@ -182,8 +183,8 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             else:
                 main_assignments.append(Assignment(self._symbolOrder0, eqs[self._symbolOrder0]))
                 del eqs[self._symbolOrder0]
-        if 'velocity' in outputQuantityNamesToSymbols:
-            vel_output_symbols = outputQuantityNamesToSymbols['velocity']
+        if 'velocity' in output_quantity_names_to_symbols:
+            vel_output_symbols = output_quantity_names_to_symbols['velocity']
             if isinstance(vel_output_symbols, Field):
                 field = vel_output_symbols
                 vel_output_symbols = [field(i) for i in range(len(self._symbolsOrder1))]
@@ -193,16 +194,17 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                 for u_i in self._symbolsOrder1:
                     main_assignments.append(Assignment(u_i, eqs[u_i]))
                     del eqs[u_i]
-        if 'momentumDensity' in outputQuantityNamesToSymbols:
+        if 'momentum_density' in output_quantity_names_to_symbols:
             # get zeroth and first moments again - force-shift them if necessary
             # and add their values directly to the main equations assuming that subexpressions are already in
             # main equation collection
-            # Is not optimal when velocity and momentumDensity are calculated together, but this is usually not the case
-            momentum_density_output_symbols = outputQuantityNamesToSymbols['momentumDensity']
-            mom_density_eq_coll = getEquationsForZerothAndFirstOrderMoment(self._stencil, pdfs,
-                                                                        self._symbolOrder0, self._symbolsOrder1)
-            mom_density_eq_coll = applyForceModelShift('macroscopicVelocityShift', dim, mom_density_eq_coll,
-                                                    self._forceModel, self._compressible)
+            # Is not optimal when velocity and momentum_density are calculated together,
+            # but this is usually not the case
+            momentum_density_output_symbols = output_quantity_names_to_symbols['momentum_density']
+            mom_density_eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
+                                                                                  self._symbolOrder0, self._symbolsOrder1)
+            mom_density_eq_coll = apply_force_model_shift('macroscopic_velocity_shift', dim, mom_density_eq_coll,
+                                                          self._forceModel, self._compressible)
             for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.main_assignments[1:]):
                 main_assignments.append(Assignment(sym, val.rhs))
 
@@ -210,13 +212,14 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         return ac.new_without_unused_subexpressions()
 
     def __repr__(self):
-        return "ConservedValueComputation for %s" % (", " .join(self.conservedQuantities.keys()),)
+        return "ConservedValueComputation for %s" % (", " .join(self.conserved_quantities.keys()),)
 
 
 # -----------------------------------------  Helper functions ----------------------------------------------------------
 
 
-def getEquationsForZerothAndFirstOrderMoment(stencil, symbolicPdfs, symbolicZerothMoment, symbolicFirstMoments):
+def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs,
+                                                    symbolic_zeroth_moment, symbolic_first_moments):
     """
     Returns an equation system that computes the zeroth and first order moments with the least amount of operations
 
@@ -228,9 +231,9 @@ def getEquationsForZerothAndFirstOrderMoment(stencil, symbolicPdfs, symbolicZero
         u_j = \sum_{d \in S} f_d u_jd
 
     :param stencil: called :math:`S` above
-    :param symbolicPdfs: called :math:`f` above
-    :param symbolicZerothMoment:  called :math:`\rho` above
-    :param symbolicFirstMoments: called :math:`u` above
+    :param symbolic_pdfs: called :math:`f` above
+    :param symbolic_zeroth_moment:  called :math:`\rho` above
+    :param symbolic_first_moments: called :math:`u` above
     """
     def filter_out_plus_terms(expr):
         result = 0
@@ -242,9 +245,9 @@ def getEquationsForZerothAndFirstOrderMoment(stencil, symbolicPdfs, symbolicZero
     dim = len(stencil[0])
 
     subexpressions = []
-    pdf_sum = sum(symbolicPdfs)
+    pdf_sum = sum(symbolic_pdfs)
     u = [0] * dim
-    for f, offset in zip(symbolicPdfs, stencil):
+    for f, offset in zip(symbolic_pdfs, stencil):
         for i in range(dim):
             u[i] += f * int(offset[i])
 
@@ -263,13 +266,13 @@ def getEquationsForZerothAndFirstOrderMoment(stencil, symbolicPdfs, symbolicZero
         u[i] = u[i].subs(subexpressions[i].rhs, subexpressions[i].lhs)
 
     equations = []
-    equations += [Assignment(symbolicZerothMoment, pdf_sum)]
-    equations += [Assignment(u_i_sym, u_i) for u_i_sym, u_i in zip(symbolicFirstMoments, u)]
+    equations += [Assignment(symbolic_zeroth_moment, pdf_sum)]
+    equations += [Assignment(u_i_sym, u_i) for u_i_sym, u_i in zip(symbolic_first_moments, u)]
 
     return AssignmentCollection(equations, subexpressions)
 
 
-def divideFirstOrderMomentsByRho(assignment_collection, dim):
+def divide_first_order_moments_by_rho(assignment_collection, dim):
     """
     Assumes that the equations of the passed equation collection are the following
         - rho = f_0  + f_1 + ...
@@ -285,7 +288,7 @@ def divideFirstOrderMomentsByRho(assignment_collection, dim):
     return assignment_collection.copy(new_eqs)
 
 
-def addDensityOffset(assignment_collection, offset=sp.Rational(1, 1)):
+def add_density_offset(assignment_collection, offset=sp.Rational(1, 1)):
     """
     Assumes that first equation is the density (zeroth moment). Changes the density equations by adding offset to it.
     """
@@ -294,17 +297,17 @@ def addDensityOffset(assignment_collection, offset=sp.Rational(1, 1)):
     return assignment_collection.copy([new_density] + old_eqs[1:])
 
 
-def applyForceModelShift(shiftMemberName, dim, assignment_collection, forceModel, compressible, reverse=False):
+def apply_force_model_shift(shift_member_name, dim, assignment_collection, force_model, compressible, reverse=False):
     """
     Modifies the first order moment equations in assignment collection according to the force model shift.
-    It is applied if force model has a method named shiftMemberName. The equations 1: dim+1 of the passed
+    It is applied if force model has a method named shift_member_name. The equations 1: dim+1 of the passed
     equation collection are assumed to be the velocity equations.
     """
-    if forceModel is not None and hasattr(forceModel, shiftMemberName):
+    if force_model is not None and hasattr(force_model, shift_member_name):
         old_eqs = assignment_collection.main_assignments
         density = old_eqs[0].lhs if compressible else sp.Rational(1, 1)
         old_vel_eqs = old_eqs[1:dim + 1]
-        shift_func = getattr(forceModel, shiftMemberName)
+        shift_func = getattr(force_model, shift_member_name)
         vel_offsets = shift_func(density)
         if reverse:
             vel_offsets = [-v for v in vel_offsets]

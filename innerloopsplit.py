@@ -1,13 +1,14 @@
 import sympy as sp
 from collections import defaultdict
 from pystencils import Field
+from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 
 
-def createLbmSplitGroups(lbmCollisionEqs):
+def create_lbm_split_groups(cr: LbmCollisionRule):
     """
     Creates split groups for LBM collision equations. For details about split groups see
-    :func:`pystencils.transformation.splitInnerLoop` .
-    The split groups are added as simplification hint 'splitGroups'
+    :func:`pystencils.transformation.split_inner_loop` .
+    The split groups are added as simplification hint 'split_groups'
 
     Split groups are created in the following way: Opposing directions are put into a single group.
     The velocity subexpressions are pre-computed as well as all subexpressions which are used in all
@@ -16,46 +17,46 @@ def createLbmSplitGroups(lbmCollisionEqs):
     Required simplification hints:
         - velocity: sequence of velocity symbols
     """
-    sh = lbmCollisionEqs.simplification_hints
+    sh = cr.simplification_hints
     assert 'velocity' in sh, "Needs simplification hint 'velocity': Sequence of velocity symbols"
 
-    preCollisionSymbols = set(lbmCollisionEqs.method.preCollisionPdfSymbols)
-    nonCenterPostCollisionSymbols = set(lbmCollisionEqs.method.postCollisionPdfSymbols[1:])
-    postCollisionSymbols = set(lbmCollisionEqs.method.postCollisionPdfSymbols)
+    pre_collision_symbols = set(cr.method.pre_collision_pdf_symbols)
+    non_center_post_collision_symbols = set(cr.method.post_collision_pdf_symbols[1:])
+    post_collision_symbols = set(cr.method.post_collision_pdf_symbols)
 
-    stencil = lbmCollisionEqs.method.stencil
+    stencil = cr.method.stencil
 
-    importantSubExpressions = {e.lhs for e in lbmCollisionEqs.subexpressions
-                               if preCollisionSymbols.intersection(lbmCollisionEqs.dependent_symbols([e.lhs]))}
+    important_sub_expressions = {e.lhs for e in cr.subexpressions
+                                 if pre_collision_symbols.intersection(cr.dependent_symbols([e.lhs]))}
 
-    otherWrittenFields = []
-    for eq in lbmCollisionEqs.main_assignments:
-        if eq.lhs not in postCollisionSymbols and isinstance(eq.lhs, Field.Access):
-            otherWrittenFields.append(eq.lhs)
-        if eq.lhs not in nonCenterPostCollisionSymbols:
+    other_written_fields = []
+    for eq in cr.main_assignments:
+        if eq.lhs not in post_collision_symbols and isinstance(eq.lhs, Field.Access):
+            other_written_fields.append(eq.lhs)
+        if eq.lhs not in non_center_post_collision_symbols:
             continue
-        importantSubExpressions.intersection_update(eq.rhs.atoms(sp.Symbol))
+        important_sub_expressions.intersection_update(eq.rhs.atoms(sp.Symbol))
 
-    importantSubExpressions.update(sh['velocity'])
+    important_sub_expressions.update(sh['velocity'])
 
-    subexpressionsToPreCompute = list(importantSubExpressions)
-    splitGroups = [subexpressionsToPreCompute + otherWrittenFields, ]
+    subexpressions_to_pre_compute = list(important_sub_expressions)
+    split_groups = [subexpressions_to_pre_compute + other_written_fields, ]
 
-    directionGroups = defaultdict(list)
+    direction_groups = defaultdict(list)
     dim = len(stencil[0])
 
-    for direction, eq in zip(stencil, lbmCollisionEqs.main_assignments):
+    for direction, eq in zip(stencil, cr.main_assignments):
         if direction == tuple([0]*dim):
-            splitGroups[0].append(eq.lhs)
+            split_groups[0].append(eq.lhs)
             continue
 
-        inverseDir = tuple([-i for i in direction])
+        inverse_dir = tuple([-i for i in direction])
 
-        if inverseDir in directionGroups:
-            directionGroups[inverseDir].append(eq.lhs)
+        if inverse_dir in direction_groups:
+            direction_groups[inverse_dir].append(eq.lhs)
         else:
-            directionGroups[direction].append(eq.lhs)
-    splitGroups += directionGroups.values()
+            direction_groups[direction].append(eq.lhs)
+    split_groups += direction_groups.values()
 
-    lbmCollisionEqs.simplification_hints['splitGroups'] = splitGroups
-    return lbmCollisionEqs
+    cr.simplification_hints['split_groups'] = split_groups
+    return cr

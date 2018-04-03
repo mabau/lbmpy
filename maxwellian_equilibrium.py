@@ -9,20 +9,22 @@ import warnings
 import sympy as sp
 from sympy import Rational as R
 
-from pystencils.cache import diskcache
+from pystencils.cache import disk_cache
 
 
-def getWeights(stencil, c_s_sq):
-    Q = len(stencil)
+def get_weights(stencil, c_s_sq):
+    q = len(stencil)
 
     if c_s_sq != sp.Rational(1, 3):
-        warnings.warn("Weigths of discrete equilibrium are only valid if c_s^2 = 1/3")
+        warnings.warn("Weights of discrete equilibrium are only valid if c_s^2 = 1/3")
 
-    def weightForDirection(direction):
-        absSum = sum([abs(d) for d in direction])
-        return getWeights.weights[Q][absSum]
-    return [weightForDirection(d) for d in stencil]
-getWeights.weights = {
+    def weight_for_direction(direction):
+        abs_sum = sum([abs(d) for d in direction])
+        return get_weights.weights[q][abs_sum]
+    return [weight_for_direction(d) for d in stencil]
+
+
+get_weights.weights = {
     9: {
         0: R(4, 9),
         1: R(1, 9),
@@ -47,9 +49,9 @@ getWeights.weights = {
 }
 
 
-@diskcache
-def discreteMaxwellianEquilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")), order=2,
-                                  c_s_sq=sp.Symbol("c_s") ** 2, compressible=True):
+@disk_cache
+def discrete_maxwellian_equilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")), order=2,
+                                    c_s_sq=sp.Symbol("c_s") ** 2, compressible=True):
     """
     Returns the common discrete LBM equilibrium as a list of sympy expressions
 
@@ -60,67 +62,67 @@ def discreteMaxwellianEquilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.symb
     :param c_s_sq: square of speed of sound
     :param compressible: compressibility
     """
-    weights = getWeights(stencil, c_s_sq)
+    weights = get_weights(stencil, c_s_sq)
     assert len(stencil) == len(weights)
 
     dim = len(stencil[0])
     u = u[:dim]
 
-    rhoOutside = rho if compressible else sp.Rational(1, 1)
-    rhoInside = rho if not compressible else sp.Rational(1, 1)
+    rho_outside = rho if compressible else sp.Rational(1, 1)
+    rho_inside = rho if not compressible else sp.Rational(1, 1)
 
     res = []
     for w_q, e_q in zip(weights, stencil):
-        eTimesU = 0
+        e_times_u = 0
         for c_q_alpha, u_alpha in zip(e_q, u):
-            eTimesU += c_q_alpha * u_alpha
+            e_times_u += c_q_alpha * u_alpha
 
-        fq = rhoInside + eTimesU / c_s_sq
+        fq = rho_inside + e_times_u / c_s_sq
 
         if order <= 1:
-            res.append(fq * rhoOutside * w_q)
+            res.append(fq * rho_outside * w_q)
             continue
 
-        uTimesU = 0
+        u_times_u = 0
         for u_alpha in u:
-            uTimesU += u_alpha * u_alpha
-        fq += sp.Rational(1, 2) / c_s_sq**2 * eTimesU ** 2 - sp.Rational(1, 2) / c_s_sq * uTimesU
+            u_times_u += u_alpha * u_alpha
+        fq += sp.Rational(1, 2) / c_s_sq**2 * e_times_u ** 2 - sp.Rational(1, 2) / c_s_sq * u_times_u
 
         if order <= 2:
-            res.append(fq * rhoOutside * w_q)
+            res.append(fq * rho_outside * w_q)
             continue
 
-        fq += sp.Rational(1, 6) / c_s_sq**3 * eTimesU**3 - sp.Rational(1, 2) / c_s_sq**2 * uTimesU * eTimesU
+        fq += sp.Rational(1, 6) / c_s_sq**3 * e_times_u**3 - sp.Rational(1, 2) / c_s_sq**2 * u_times_u * e_times_u
 
-        res.append(sp.expand(fq * rhoOutside * w_q))
+        res.append(sp.expand(fq * rho_outside * w_q))
 
     return tuple(res)
 
 
-@diskcache
-def generateEquilibriumByMatchingMoments(stencil, moments, rho=sp.Symbol("rho"),
-                                         u=tuple(sp.symbols("u_0 u_1 u_2")), c_s_sq=sp.Symbol("c_s") ** 2, order=None):
+@disk_cache
+def generate_equilibrium_by_matching_moments(stencil, moments, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
+                                             c_s_sq=sp.Symbol("c_s") ** 2, order=None):
     """
     Computes discrete equilibrium, by setting the discrete moments to values taken from the continuous Maxwellian.
     The number of moments has to match the number of directions in the stencil. For documentation of other parameters
-    see :func:`getMomentsOfContinuousMaxwellianEquilibrium`
+    see :func:`get_moments_of_continuous_maxwellian_equilibrium`
     """
-    from lbmpy.moments import momentMatrix
+    from lbmpy.moments import moment_matrix
     dim = len(stencil[0])
     Q = len(stencil)
     assert len(moments) == Q, "Moment count(%d) does not match stencil size(%d)" % (len(moments), Q)
-    continuousMomentsVector = getMomentsOfContinuousMaxwellianEquilibrium(moments, dim, rho, u, c_s_sq, order)
-    continuousMomentsVector = sp.Matrix(continuousMomentsVector)
-    M = momentMatrix(moments, stencil)
+    continuous_moments_vector = get_moments_of_continuous_maxwellian_equilibrium(moments, dim, rho, u, c_s_sq, order)
+    continuous_moments_vector = sp.Matrix(continuous_moments_vector)
+    M = moment_matrix(moments, stencil)
     assert M.rank() == Q, "Rank of moment matrix (%d) does not match stencil size (%d)" % (M.rank(), Q)
-    return M.inv() * continuousMomentsVector
+    return M.inv() * continuous_moments_vector
 
 
-@diskcache
-def continuousMaxwellianEquilibrium(dim=3, rho=sp.Symbol("rho"),
-                                    u=tuple(sp.symbols("u_0 u_1 u_2")),
-                                    v=tuple(sp.symbols("v_0 v_1 v_2")),
-                                    c_s_sq=sp.Symbol("c_s") ** 2):
+@disk_cache
+def continuous_maxwellian_equilibrium(dim=3, rho=sp.Symbol("rho"),
+                                      u=tuple(sp.symbols("u_0 u_1 u_2")),
+                                      v=tuple(sp.symbols("v_0 v_1 v_2")),
+                                      c_s_sq=sp.Symbol("c_s") ** 2):
     """
     Returns sympy expression of Maxwell Boltzmann distribution
 
@@ -133,16 +135,17 @@ def continuousMaxwellianEquilibrium(dim=3, rho=sp.Symbol("rho"),
     u = u[:dim]
     v = v[:dim]
 
-    velTerm = sum([(v_i - u_i) ** 2 for v_i, u_i in zip(v, u)])
-    return rho / (2 * sp.pi * c_s_sq) ** (sp.Rational(dim, 2)) * sp.exp(- velTerm / (2 * c_s_sq))
+    vel_term = sum([(v_i - u_i) ** 2 for v_i, u_i in zip(v, u)])
+    return rho / (2 * sp.pi * c_s_sq) ** (sp.Rational(dim, 2)) * sp.exp(- vel_term / (2 * c_s_sq))
 
 
 # -------------------------------- Equilibrium moments/cumulants  ------------------------------------------------------
 
 
-@diskcache
-def getMomentsOfContinuousMaxwellianEquilibrium(moments, dim, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
-                                                c_s_sq=sp.Symbol("c_s") ** 2, order=None):
+@disk_cache
+def get_moments_of_continuous_maxwellian_equilibrium(moments, dim, rho=sp.Symbol("rho"),
+                                                     u=tuple(sp.symbols("u_0 u_1 u_2")),
+                                                     c_s_sq=sp.Symbol("c_s") ** 2, order=None):
     """
     Computes moments of the continuous Maxwell Boltzmann equilibrium distribution
 
@@ -154,47 +157,47 @@ def getMomentsOfContinuousMaxwellianEquilibrium(moments, dim, rho=sp.Symbol("rho
     :param order: if this parameter is not None, terms that have a higher polynomial order in the macroscopic velocity
                   are removed
 
-    >>> getMomentsOfContinuousMaxwellianEquilibrium( ( (0,0,0), (1,0,0), (0,1,0), (0,0,1), (2,0,0) ), dim=3 )
+    >>> get_moments_of_continuous_maxwellian_equilibrium( ( (0,0,0), (1,0,0), (0,1,0), (0,0,1), (2,0,0) ), dim=3 )
     [rho, rho*u_0, rho*u_1, rho*u_2, rho*(c_s**2 + u_0**2)]
     """
     from pystencils.sympyextensions import remove_higher_order_terms
     from lbmpy.moments import MOMENT_SYMBOLS
-    from lbmpy.continuous_distribution_measures import continuousMoment
+    from lbmpy.continuous_distribution_measures import continuous_moment
 
     # trick to speed up sympy integration (otherwise it takes multiple minutes, or aborts):
     # use a positive, real symbol to represent c_s_sq -> then replace this symbol afterwards with the real c_s_sq
     c_s_sq_helper = sp.Symbol("csqHelper", positive=True, real=True)
-    mb = continuousMaxwellianEquilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
-    result = [continuousMoment(mb, moment, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq) for moment in moments]
+    mb = continuous_maxwellian_equilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
+    result = [continuous_moment(mb, moment, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq) for moment in moments]
     if order is not None:
         result = [remove_higher_order_terms(r, order=order, symbols=u) for r in result]
 
     return result
 
 
-@diskcache
-def getMomentsOfDiscreteMaxwellianEquilibrium(stencil, moments,
-                                              rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
-                                              c_s_sq=sp.Symbol("c_s") ** 2, order=None, compressible=True):
-    """
-    Compute moments of discrete maxwellian equilibrium
+@disk_cache
+def get_moments_of_discrete_maxwellian_equilibrium(stencil, moments,
+                                                   rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
+                                                   c_s_sq=sp.Symbol("c_s") ** 2, order=None, compressible=True):
+    """Compute moments of discrete maxwellian equilibrium.
 
-    :param stencil: stencil is required to compute moments of discrete function
-    :param moments: moments in polynomial or exponent-tuple form
-    :param rho: symbol or value for the density
-    :param u: symbols or values for the macroscopic velocity
-    :param c_s_sq: symbol for speed of sound squared, defaults to symbol c_s**2
-    :param order: highest order of u terms
-    :param compressible: compressible or incompressible form
+    Args:
+        stencil: stencil is required to compute moments of discrete function
+        moments: moments in polynomial or exponent-tuple form
+        rho: symbol or value for the density
+        u: symbols or values for the macroscopic velocity
+        c_s_sq: symbol for speed of sound squared, defaults to symbol c_s**2
+        order: highest order of u terms
+        compressible: compressible or incompressible form
     """
-    from lbmpy.moments import discreteMoment
+    from lbmpy.moments import discrete_moment
     if order is None:
         order = 4
-    mb = discreteMaxwellianEquilibrium(stencil, rho, u, order, c_s_sq, compressible)
-    return tuple([discreteMoment(mb, moment, stencil).expand() for moment in moments])
+    mb = discrete_maxwellian_equilibrium(stencil, rho, u, order, c_s_sq, compressible)
+    return tuple([discrete_moment(mb, moment, stencil).expand() for moment in moments])
 
 
-def compressibleToIncompressibleMomentValue(term, rho, u):
+def compressible_to_incompressible_moment_value(term, rho, u):
     term = sp.sympify(term)
     term = term.expand()
     if term.func != sp.Add:
@@ -204,8 +207,8 @@ def compressibleToIncompressibleMomentValue(term, rho, u):
 
     res = 0
     for t in args:
-        containedSymbols = t.atoms(sp.Symbol)
-        if rho in containedSymbols and len(containedSymbols.intersection(set(u))) > 0:
+        contained_symbols = t.atoms(sp.Symbol)
+        if rho in contained_symbols and len(contained_symbols.intersection(set(u))) > 0:
             res += t / rho
         else:
             res += t
@@ -215,30 +218,31 @@ def compressibleToIncompressibleMomentValue(term, rho, u):
 # -------------------------------- Equilibrium moments -----------------------------------------------------------------
 
 
-def getCumulantsOfContinuousMaxwellianEquilibrium(cumulants, dim, rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
-                                                  c_s_sq=sp.Symbol("c_s") ** 2, order=None):
+def get_cumulants_of_continuous_maxwellian_equilibrium(cumulants, dim, rho=sp.Symbol("rho"),
+                                                       u=tuple(sp.symbols("u_0 u_1 u_2")), c_s_sq=sp.Symbol("c_s") ** 2,
+                                                       order=None):
     from lbmpy.moments import MOMENT_SYMBOLS
-    from lbmpy.continuous_distribution_measures import continuousCumulant
+    from lbmpy.continuous_distribution_measures import continuous_cumulant
     from pystencils.sympyextensions import remove_higher_order_terms
 
     # trick to speed up sympy integration (otherwise it takes multiple minutes, or aborts):
     # use a positive, real symbol to represent c_s_sq -> then replace this symbol afterwards with the real c_s_sq
     c_s_sq_helper = sp.Symbol("csqHelper", positive=True, real=True)
-    mb = continuousMaxwellianEquilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
-    result = [continuousCumulant(mb, cumulant, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq) for cumulant in cumulants]
+    mb = continuous_maxwellian_equilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
+    result = [continuous_cumulant(mb, cumulant, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq)
+              for cumulant in cumulants]
     if order is not None:
         result = [remove_higher_order_terms(r, order=order, symbols=u) for r in result]
 
     return result
 
 
-@diskcache
-def getCumulantsOfDiscreteMaxwellianEquilibrium(stencil, cumulants,
-                                                rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
-                                                c_s_sq=sp.Symbol("c_s") ** 2, order=None, compressible=True):
+@disk_cache
+def get_cumulants_of_discrete_maxwellian_equilibrium(stencil, cumulants,
+                                                     rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
+                                                     c_s_sq=sp.Symbol("c_s") ** 2, order=None, compressible=True):
     from lbmpy.cumulants import discreteCumulant
     if order is None:
         order = 4
-    mb = discreteMaxwellianEquilibrium(stencil, rho, u, order, c_s_sq, compressible)
+    mb = discrete_maxwellian_equilibrium(stencil, rho, u, order, c_s_sq, compressible)
     return tuple([discreteCumulant(mb, cumulant, stencil).expand() for cumulant in cumulants])
-

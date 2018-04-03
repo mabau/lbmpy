@@ -1,164 +1,167 @@
 import numpy as np
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
-from lbmpy.creationfunctions import switchToSymbolicRelaxationRatesForOmegaAdaptingMethods, \
-    createLatticeBoltzmannFunction, \
-    updateWithDefaultParameters
-from lbmpy.simplificationfactory import createSimplificationStrategy
-from lbmpy.stencils import getStencil
+from lbmpy.creationfunctions import switch_to_symbolic_relaxation_rates_for_omega_adapting_methods, \
+    create_lb_function, \
+    update_with_default_parameters
+from lbmpy.simplificationfactory import create_simplification_strategy
+from lbmpy.stencils import get_stencil
 from pystencils.datahandling.serial_datahandling import SerialDataHandling
-from pystencils import createKernel, makeSlice
+from pystencils import create_kernel, makeSlice
 from pystencils.slicing import SlicedGetter
 from pystencils.timeloop import TimeLoop
 
 
 class LatticeBoltzmannStep:
 
-    def __init__(self, domainSize=None, lbmKernel=None, periodicity=False,
-                 kernelParams={}, dataHandling=None, name="lbm", optimizationParams={},
-                 velocityDataName=None, densityDataName=None, densityDataIndex=None,
-                 computeVelocityInEveryStep=False, computeDensityInEveryStep=False,
-                 velocityInputArrayName=None, timeStepOrder='streamCollide', flagInterface=None,
-                 **methodParameters):
+    def __init__(self, domain_size=None, lbm_kernel=None, periodicity=False,
+                 kernel_params={}, data_handling=None, name="lbm", optimization=None,
+                 velocity_data_name=None, density_data_name=None, density_data_index=None,
+                 compute_velocity_in_every_step=False, compute_density_in_every_step=False,
+                 velocity_input_array_name=None, time_step_order='streamCollide', flag_interface=None,
+                 **method_parameters):
 
         # --- Parameter normalization  ---
-        if dataHandling is not None:
-            if domainSize is not None:
-                raise ValueError("When passing a dataHandling, the domainSize parameter can not be specified")
+        if data_handling is not None:
+            if domain_size is not None:
+                raise ValueError("When passing a data_handling, the domain_size parameter can not be specified")
 
-        if dataHandling is None:
-            if domainSize is None:
-                raise ValueError("Specify either domainSize or dataHandling")
-            dataHandling = SerialDataHandling(domainSize, defaultGhostLayers=1, periodicity=periodicity)
+        if data_handling is None:
+            if domain_size is None:
+                raise ValueError("Specify either domain_size or data_handling")
+            data_handling = SerialDataHandling(domain_size, default_ghost_layers=1, periodicity=periodicity)
 
-        if 'stencil' not in methodParameters:
-            methodParameters['stencil'] = 'D2Q9' if dataHandling.dim == 2 else 'D3Q27'
+        if 'stencil' not in method_parameters:
+            method_parameters['stencil'] = 'D2Q9' if data_handling.dim == 2 else 'D3Q27'
 
-        methodParameters, optimizationParams = updateWithDefaultParameters(methodParameters, optimizationParams)
-        del methodParameters['kernelType']
+        method_parameters, optimization = update_with_default_parameters(method_parameters, optimization)
+        del method_parameters['kernel_type']
 
-        if lbmKernel:
-            Q = len(lbmKernel.method.stencil)
+        if lbm_kernel:
+            q = len(lbm_kernel.method.stencil)
         else:
-            Q = len(getStencil(methodParameters['stencil']))
-        target = optimizationParams['target']
+            q = len(get_stencil(method_parameters['stencil']))
+        target = optimization['target']
 
         self.name = name
-        self._dataHandling = dataHandling
-        self._pdfArrName = name + "_pdfSrc"
-        self._tmpArrName = name + "_pdfTmp"
-        self.velocityDataName = name + "_velocity" if velocityDataName is None else velocityDataName
-        self.densityDataName = name + "_density" if densityDataName is None else densityDataName
-        self.densityDataIndex = densityDataIndex
+        self._data_handling = data_handling
+        self._pdf_arr_name = name + "_pdfSrc"
+        self._tmp_arr_name = name + "_pdfTmp"
+        self.velocity_data_name = name + "_velocity" if velocity_data_name is None else velocity_data_name
+        self.density_data_name = name + "_density" if density_data_name is None else density_data_name
+        self.density_data_index = density_data_index
 
         self._gpu = target == 'gpu'
-        layout = optimizationParams['fieldLayout']
-        self._dataHandling.addArray(self._pdfArrName, fSize=Q, gpu=self._gpu, layout=layout, latexName='src')
-        self._dataHandling.addArray(self._tmpArrName, fSize=Q, gpu=self._gpu, cpu=not self._gpu,
-                                    layout=layout, latexName='dst')
+        layout = optimization['field_layout']
+        self._data_handling.add_array(self._pdf_arr_name, values_per_cell=q, gpu=self._gpu, layout=layout,
+                                      latex_name='src')
+        self._data_handling.add_array(self._tmp_arr_name, values_per_cell=q, gpu=self._gpu, cpu=not self._gpu,
+                                      layout=layout, latex_name='dst')
 
-        if velocityDataName is None:
-            self._dataHandling.addArray(self.velocityDataName, fSize=self._dataHandling.dim,
-                                        gpu=self._gpu and computeVelocityInEveryStep, layout=layout, latexName='u')
-        if densityDataName is None:
-            self._dataHandling.addArray(self.densityDataName, fSize=1,
-                                        gpu=self._gpu and computeDensityInEveryStep, layout=layout, latexName='ρ')
+        if velocity_data_name is None:
+            self._data_handling.add_array(self.velocity_data_name, values_per_cell=self._data_handling.dim,
+                                          gpu=self._gpu and compute_velocity_in_every_step,
+                                          layout=layout, latex_name='u')
+        if density_data_name is None:
+            self._data_handling.add_array(self.density_data_name, values_per_cell=1,
+                                          gpu=self._gpu and compute_density_in_every_step,
+                                          layout=layout, latex_name='ρ')
 
-        if computeVelocityInEveryStep:
-            methodParameters['output']['velocity'] = self._dataHandling.fields[self.velocityDataName]
-        if computeDensityInEveryStep:
-            densityField = self._dataHandling.fields[self.densityDataName]
-            if self.densityDataIndex is not None:
-                densityField = densityField(densityDataIndex)
-            methodParameters['output']['density'] = densityField
-        if velocityInputArrayName is not None:
-            methodParameters['velocityInput'] = self._dataHandling.fields[velocityInputArrayName]
-        if methodParameters['omegaOutputField'] and isinstance(methodParameters['omegaOutputField'], str):
-            methodParameters['omegaOutputField'] = dataHandling.addArray(methodParameters['omegaOutputField'])
+        if compute_velocity_in_every_step:
+            method_parameters['output']['velocity'] = self._data_handling.fields[self.velocity_data_name]
+        if compute_density_in_every_step:
+            density_field = self._data_handling.fields[self.density_data_name]
+            if self.density_data_index is not None:
+                density_field = density_field(density_data_index)
+            method_parameters['output']['density'] = density_field
+        if velocity_input_array_name is not None:
+            method_parameters['velocity_input'] = self._data_handling.fields[velocity_input_array_name]
+        if method_parameters['omega_output_field'] and isinstance(method_parameters['omega_output_field'], str):
+            method_parameters['omega_output_field'] = data_handling.add_array(method_parameters['omega_output_field'])
 
-        self.kernelParams = kernelParams
+        self.kernelParams = kernel_params
 
         # --- Kernel creation ---
-        if lbmKernel is None:
-            switchToSymbolicRelaxationRatesForOmegaAdaptingMethods(methodParameters, self.kernelParams)
-            optimizationParams['symbolicField'] = dataHandling.fields[self._pdfArrName]
-            methodParameters['fieldName'] = self._pdfArrName
-            methodParameters['secondFieldName'] = self._tmpArrName
-            if timeStepOrder == 'streamCollide':
-                self._lbmKernels = [createLatticeBoltzmannFunction(optimizationParams=optimizationParams,
-                                                                   **methodParameters)]
-            elif timeStepOrder == 'collideStream':
-                self._lbmKernels = [createLatticeBoltzmannFunction(optimizationParams=optimizationParams,
-                                                                   kernelType='collideOnly',
-                                                                   **methodParameters),
-                                    createLatticeBoltzmannFunction(optimizationParams=optimizationParams,
-                                                                   kernelType='streamPullOnly',
-                                                                   ** methodParameters)]
+        if lbm_kernel is None:
+            switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, self.kernelParams)
+            optimization['symbolic_field'] = data_handling.fields[self._pdf_arr_name]
+            method_parameters['field_name'] = self._pdf_arr_name
+            method_parameters['temporary_field_name'] = self._tmp_arr_name
+            if time_step_order == 'streamCollide':
+                self._lbmKernels = [create_lb_function(optimization=optimization,
+                                                       **method_parameters)]
+            elif time_step_order == 'collideStream':
+                self._lbmKernels = [create_lb_function(optimization=optimization,
+                                                       kernel_type='collide_only',
+                                                       **method_parameters),
+                                    create_lb_function(optimization=optimization,
+                                                       kernel_type='stream_pull_only',
+                                                       ** method_parameters)]
 
         else:
-            assert self._dataHandling.dim == lbmKernel.method.dim, \
-                "Error: %dD Kernel for %D domain" % (lbmKernel.method.dim, self._dataHandling.dim)
-            self._lbmKernels = [lbmKernel]
+            assert self._data_handling.dim == lbm_kernel.method.dim, \
+                "Error: %dD Kernel for %d dimensional domain" % (lbm_kernel.method.dim, self._data_handling.dim)
+            self._lbmKernels = [lbm_kernel]
 
         self.method = self._lbmKernels[0].method
         self.ast = self._lbmKernels[0].ast
 
         # -- Boundary Handling  & Synchronization ---
-        self._sync = dataHandling.synchronizationFunction([self._pdfArrName], methodParameters['stencil'], target)
-        self._boundaryHandling = LatticeBoltzmannBoundaryHandling(self.method, self._dataHandling, self._pdfArrName,
-                                                                  name=name + "_boundaryHandling",
-                                                                  flagInterface=flagInterface,
-                                                                  target=target, openMP=optimizationParams['openMP'])
+        self._sync = data_handling.synchronization_function([self._pdf_arr_name], method_parameters['stencil'], target)
+        self._boundary_handling = LatticeBoltzmannBoundaryHandling(self.method, self._data_handling, self._pdf_arr_name,
+                                                                   name=name + "_boundary_handling",
+                                                                   flag_interface=flag_interface,
+                                                                   target=target, openmp=optimization['openmp'])
 
         # -- Macroscopic Value Kernels
-        self._getterKernel, self._setterKernel = self._compilerMacroscopicSetterAndGetter()
+        self._getterKernel, self._setterKernel = self._compile_macroscopic_setter_and_getter()
 
-        self._dataHandling.fill(self.densityDataName, 1.0, fValue=self.densityDataIndex,
-                                ghostLayers=True, innerGhostLayers=True)
-        self._dataHandling.fill(self.velocityDataName, 0.0, ghostLayers=True, innerGhostLayers=True)
-        self.setPdfFieldsFromMacroscopicValues()
+        self._data_handling.fill(self.density_data_name, 1.0, value_idx=self.density_data_index,
+                                 ghost_layers=True, inner_ghost_layers=True)
+        self._data_handling.fill(self.velocity_data_name, 0.0, ghost_layers=True, inner_ghost_layers=True)
+        self.set_pdf_fields_from_macroscopic_values()
 
         # -- VTK output
-        self.vtkWriter = self.dataHandling.vtkWriter(name, [self.velocityDataName, self.densityDataName])
+        self.vtkWriter = self.data_handling.create_vtk_writer(name, [self.velocity_data_name, self.density_data_name])
         self.timeStepsRun = 0
 
     @property
-    def boundaryHandling(self):
+    def boundary_handling(self):
         """Boundary handling instance of the scenario. Use this to change the boundary setup"""
-        return self._boundaryHandling
+        return self._boundary_handling
 
     @property
-    def dataHandling(self):
-        return self._dataHandling
+    def data_handling(self):
+        return self._data_handling
 
     @property
     def dim(self):
-        return self._dataHandling.dim
+        return self._data_handling.dim
 
     @property
-    def domainSize(self):
-        return self._dataHandling.shape
+    def domain_size(self):
+        return self._data_handling.shape
 
     @property
-    def numberOfCells(self):
+    def number_of_cells(self):
         result = 1
-        for d in self.domainSize:
+        for d in self.domain_size:
             result *= d
         return result
 
     @property
-    def pdfArrayName(self):
-        return self._pdfArrName
+    def pdf_array_name(self):
+        return self._pdf_arr_name
 
-    def _getSlice(self, dataName, sliceObj, masked):
-        if sliceObj is None:
-            sliceObj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
+    def _get_slice(self, data_name, slice_obj, masked):
+        if slice_obj is None:
+            slice_obj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
 
-        result = self._dataHandling.gatherArray(dataName, sliceObj)
+        result = self._data_handling.gather_array(data_name, slice_obj)
         if result is None:
             return
 
         if masked:
-            mask = self.boundaryHandling.getMask(sliceObj[:self.dim], 'domain', True)
+            mask = self.boundary_handling.get_mask(slice_obj[:self.dim], 'domain', True)
             if len(mask.shape) < len(result.shape):
                 assert len(mask.shape) + 1 == len(result.shape)
                 mask = np.repeat(mask[..., np.newaxis], result.shape[-1], axis=2)
@@ -166,94 +169,95 @@ class LatticeBoltzmannStep:
             result = np.ma.masked_array(result, mask)
         return result.squeeze()
 
-    def velocitySlice(self, sliceObj=None, masked=True):
-        return self._getSlice(self.velocityDataName, sliceObj, masked)
+    def velocity_slice(self, slice_obj=None, masked=True):
+        return self._get_slice(self.velocity_data_name, slice_obj, masked)
 
-    def densitySlice(self, sliceObj=None, masked=True):
-        if self.densityDataIndex is not None:
-            sliceObj += (self.densityDataIndex,)
-        return self._getSlice(self.densityDataName, sliceObj, masked)
+    def density_slice(self, slice_obj=None, masked=True):
+        if self.density_data_index is not None:
+            slice_obj += (self.density_data_index,)
+        return self._get_slice(self.density_data_name, slice_obj, masked)
 
     @property
     def velocity(self):
-        return SlicedGetter(self.velocitySlice)
+        return SlicedGetter(self.velocity_slice)
 
     @property
     def density(self):
-        return SlicedGetter(self.densitySlice)
+        return SlicedGetter(self.density_slice)
 
-    def preRun(self):
+    def pre_run(self):
         if self._gpu:
-            self._dataHandling.toGpu(self._pdfArrName)
-            if self._dataHandling.isOnGpu(self.velocityDataName):
-                self._dataHandling.toGpu(self.velocityDataName)
-            if self._dataHandling.isOnGpu(self.densityDataName):
-                self._dataHandling.toGpu(self.densityDataName)
+            self._data_handling.to_gpu(self._pdf_arr_name)
+            if self._data_handling.is_on_gpu(self.velocity_data_name):
+                self._data_handling.to_gpu(self.velocity_data_name)
+            if self._data_handling.is_on_gpu(self.density_data_name):
+                self._data_handling.to_gpu(self.density_data_name)
 
-    def setPdfFieldsFromMacroscopicValues(self):
-        self._dataHandling.runKernel(self._setterKernel, **self.kernelParams)
+    def set_pdf_fields_from_macroscopic_values(self):
+        self._data_handling.run_kernel(self._setterKernel, **self.kernelParams)
 
-    def timeStep(self):
+    def time_step(self):
         if len(self._lbmKernels) == 2:  # collide stream
-            self._dataHandling.runKernel(self._lbmKernels[0], **self.kernelParams)
+            self._data_handling.run_kernel(self._lbmKernels[0], **self.kernelParams)
             self._sync()
-            self._boundaryHandling(**self.kernelParams)
-            self._dataHandling.runKernel(self._lbmKernels[1], **self.kernelParams)
+            self._boundary_handling(**self.kernelParams)
+            self._data_handling.run_kernel(self._lbmKernels[1], **self.kernelParams)
         else:  # stream collide
             self._sync()
-            self._boundaryHandling(**self.kernelParams)
-            self._dataHandling.runKernel(self._lbmKernels[0], **self.kernelParams)
+            self._boundary_handling(**self.kernelParams)
+            self._data_handling.run_kernel(self._lbmKernels[0], **self.kernelParams)
 
-        self._dataHandling.swap(self._pdfArrName, self._tmpArrName, self._gpu)
+        self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name, self._gpu)
         self.timeStepsRun += 1
 
-    def postRun(self):
+    def post_run(self):
         if self._gpu:
-            self._dataHandling.toCpu(self._pdfArrName)
-        self._dataHandling.runKernel(self._getterKernel, **self.kernelParams)
+            self._data_handling.to_cpu(self._pdf_arr_name)
+        self._data_handling.run_kernel(self._getterKernel, **self.kernelParams)
 
     def run(self, timeSteps):
-        self.preRun()
+        self.pre_run()
         for i in range(timeSteps):
-            self.timeStep()
-        self.postRun()
+            self.time_step()
+        self.post_run()
 
-    def benchmarkRun(self, timeSteps):
-        timeLoop = TimeLoop()
-        timeLoop.addStep(self)
-        durationOfTimeStep = timeLoop.benchmarkRun(timeSteps)
-        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
+    def benchmark_run(self, time_steps):
+        time_loop = TimeLoop()
+        time_loop.add_step(self)
+        duration_of_time_step = time_loop.benchmark_run(time_steps)
+        mlups = self.number_of_cells / duration_of_time_step * 1e-6
         return mlups
 
-    def benchmark(self, timeForBenchmark=5, initTimeSteps=10, numberOfTimeStepsForEstimation=20):
-        timeLoop = TimeLoop()
-        timeLoop.addStep(self)
-        durationOfTimeStep = timeLoop.benchmark(timeForBenchmark, initTimeSteps, numberOfTimeStepsForEstimation)
-        mlups = self.numberOfCells / durationOfTimeStep * 1e-6
+    def benchmark(self, time_for_benchmark=5, init_time_steps=10, number_of_time_steps_for_estimation=20):
+        time_loop = TimeLoop()
+        time_loop.add_step(self)
+        duration_of_time_step = time_loop.benchmark(time_for_benchmark, init_time_steps,
+                                                    number_of_time_steps_for_estimation)
+        mlups = self.number_of_cells / duration_of_time_step * 1e-6
         return mlups
 
-    def writeVTK(self):
+    def write_vtk(self):
         self.vtkWriter(self.timeStepsRun)
 
-    def _compilerMacroscopicSetterAndGetter(self):
-        lbMethod = self.method
-        D = lbMethod.dim
-        Q = len(lbMethod.stencil)
-        cqc = lbMethod.conservedQuantityComputation
-        pdfField = self._dataHandling.fields[self._pdfArrName]
-        rhoField = self._dataHandling.fields[self.densityDataName]
-        rhoField = rhoField.center if self.densityDataIndex is None else rhoField(self.densityDataIndex)
-        velField = self._dataHandling.fields[self.velocityDataName]
-        pdfSymbols = [pdfField(i) for i in range(Q)]
+    def _compile_macroscopic_setter_and_getter(self):
+        lb_method = self.method
+        dim = lb_method.dim
+        q = len(lb_method.stencil)
+        cqc = lb_method.conserved_quantity_computation
+        pdf_field = self._data_handling.fields[self._pdf_arr_name]
+        rho_field = self._data_handling.fields[self.density_data_name]
+        rho_field = rho_field.center if self.density_data_index is None else rho_field(self.density_data_index)
+        vel_field = self._data_handling.fields[self.velocity_data_name]
+        pdf_symbols = [pdf_field(i) for i in range(q)]
 
-        getterEqs = cqc.outputEquationsFromPdfs(pdfSymbols, {'density': rhoField, 'velocity': velField})
-        getterKernel = createKernel(getterEqs, target='cpu').compile()
+        getter_eqs = cqc.output_equations_from_pdfs(pdf_symbols, {'density': rho_field, 'velocity': vel_field})
+        getter_kernel = create_kernel(getter_eqs, target='cpu').compile()
 
-        inpEqs = cqc.equilibriumInputEquationsFromInitValues(rhoField, [velField(i) for i in range(D)])
-        setterEqs = lbMethod.getEquilibrium(conservedQuantityEquations=inpEqs)
-        setterEqs = setterEqs.new_with_substitutions({sym: pdfField(i)
-                                                      for i, sym in enumerate(lbMethod.postCollisionPdfSymbols)})
+        inp_eqs = cqc.equilibrium_input_equations_from_init_values(rho_field, [vel_field(i) for i in range(dim)])
+        setter_eqs = lb_method.get_equilibrium(conserved_quantity_equations=inp_eqs)
+        setter_eqs = setter_eqs.new_with_substitutions({sym: pdf_field(i)
+                                                      for i, sym in enumerate(lb_method.post_collision_pdf_symbols)})
 
-        setterEqs = createSimplificationStrategy(lbMethod)(setterEqs)
-        setterKernel = createKernel(setterEqs, target='cpu').compile()
-        return getterKernel, setterKernel
+        setter_eqs = create_simplification_strategy(lb_method)(setter_eqs)
+        setter_kernel = create_kernel(setter_eqs, target='cpu').compile()
+        return getter_kernel, setter_kernel

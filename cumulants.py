@@ -5,8 +5,8 @@ Additionally functions are provided to compute cumulants from moments and vice v
 
 import sympy as sp
 
-from lbmpy.continuous_distribution_measures import multiDifferentiation
-from lbmpy.moments import momentsUpToComponentOrder
+from lbmpy.continuous_distribution_measures import multi_differentiation
+from lbmpy.moments import moments_up_to_component_order
 from pystencils.cache import memorycache
 # ------------------------------------------- Internal Functions -------------------------------------------------------
 from pystencils.sympyextensions import fast_subs
@@ -129,14 +129,14 @@ def discreteCumulant(function, cumulant, stencil):
 
     generatingFunction = __getDiscreteCumulantGeneratingFunction(function, stencil, waveNumbers)
     if type(cumulant) is tuple:
-        return multiDifferentiation(generatingFunction, cumulant, waveNumbers)
+        return multi_differentiation(generatingFunction, cumulant, waveNumbers)
     else:
         from lbmpy.moments import MOMENT_SYMBOLS
         result = 0
         for term, coefficient in cumulant.as_coefficients_dict().items():
             exponents = tuple([term.as_coeff_exponent(v_i)[1] for v_i in MOMENT_SYMBOLS[:dim]])
             generatingFunction = __getDiscreteCumulantGeneratingFunction(function, stencil, waveNumbers)
-            cm = multiDifferentiation(generatingFunction, exponents, waveNumbers)
+            cm = multi_differentiation(generatingFunction, exponents, waveNumbers)
             result += coefficient * cm
         return result
 
@@ -149,13 +149,13 @@ def cumulantsFromPdfs(stencil, cumulantIndices=None, pdfSymbols=None):
     :param stencil:
     :param cumulantIndices: sequence of cumulant indices, could be tuples or polynomial representation
                             if left to default and a full stencil was passed,
-                            the full set i.e. `momentsUpToComponentOrder(2)` is used
+                            the full set i.e. `moments_up_to_component_order(2)` is used
     :param pdfSymbols: symbolic values for pdf values, if not passed they default to :math:`f_0, f_1, ...`
     :return: dict mapping cumulant index to expression
     """
     dim = len(stencil[0])
     if cumulantIndices is None:
-        cumulantIndices = momentsUpToComponentOrder(2, dim=dim)
+        cumulantIndices = moments_up_to_component_order(2, dim=dim)
     assert len(stencil) == len(cumulantIndices), "Stencil has to have same length as cumulantIndices sequence"
     if pdfSymbols is None:
         pdfSymbols = __getIndexedSymbols(pdfSymbols, "f", range(len(stencil)))

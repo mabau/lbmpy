@@ -52,87 +52,87 @@ T = TypeVar('T')
 # ------------------------------ Discrete (Exponent Tuples) ------------------------------------------------------------
 
 
-def momentMultiplicity(exponentTuple):
+def moment_multiplicity(exponent_tuple):
     """
     Returns number of permutations of the given moment tuple
 
     Example:
-    >>> momentMultiplicity((2,0,0))
+    >>> moment_multiplicity((2,0,0))
     3
-    >>> list(momentPermutations((2,0,0)))
+    >>> list(moment_permutations((2,0,0)))
     [(0, 0, 2), (0, 2, 0), (2, 0, 0)]
     """
-    c = Counter(exponentTuple)
-    result = math.factorial(len(exponentTuple))
+    c = Counter(exponent_tuple)
+    result = math.factorial(len(exponent_tuple))
     for d in c.values():
         result //= math.factorial(d)
     return result
 
 
-def pickRepresentativeMoments(moments):
+def pick_representative_moments(moments):
     """Picks the representative i.e. of each permutation group only one is kept"""
-    toRemove = []
+    to_remove = []
     for m in moments:
-        permutations = list(momentPermutations(m))
-        toRemove += permutations[1:]
-    return set(moments) - set(toRemove)
+        permutations = list(moment_permutations(m))
+        to_remove += permutations[1:]
+    return set(moments) - set(to_remove)
 
 
-def momentPermutations(exponentTuple):
+def moment_permutations(exponent_tuple):
     """Returns all (unique) permutations of the given tuple"""
-    return __unique_permutations(exponentTuple)
+    return __unique_permutations(exponent_tuple)
 
 
-def momentsOfOrder(order, dim=3, includePermutations=True):
+def moments_of_order(order, dim=3, include_permutations=True):
     """All tuples of length 'dim' which sum equals 'order'"""
-    for item in __fixed_sum_tuples(dim, order, ordered=not includePermutations):
+    for item in __fixed_sum_tuples(dim, order, ordered=not include_permutations):
         assert(len(item) == dim)
         assert(sum(item) == order)
         yield item
 
 
-def momentsUpToOrder(order, dim=3, includePermutations=True):
+def moments_up_to_order(order, dim=3, include_permutations=True):
     """All tuples of length 'dim' which sum is smaller than 'order' """
-    singleMomentIterators = [momentsOfOrder(o, dim, includePermutations) for o in range(order + 1)]
-    return tuple(itertools.chain(*singleMomentIterators))
+    single_moment_iterators = [moments_of_order(o, dim, include_permutations) for o in range(order + 1)]
+    return tuple(itertools.chain(*single_moment_iterators))
 
 
-def momentsUpToComponentOrder(order, dim=3):
+def moments_up_to_component_order(order, dim=3):
     """All tuples of length 'dim' where each entry is smaller or equal to 'order' """
     return tuple(itertools.product(*[range(order + 1)] * dim))
 
 
-def extendMomentsWithPermutations(exponentTuples):
+def extend_moments_with_permutations(exponent_tuples):
     """Returns all permutations of the given exponent tuples"""
-    allMoments = []
-    for i in exponentTuples:
-        allMoments += list(momentPermutations(i))
-    return __unique(allMoments)
+    all_moments = []
+    for i in exponent_tuples:
+        all_moments += list(moment_permutations(i))
+    return __unique(all_moments)
 
 
 # ------------------------------ Representation Conversions ------------------------------------------------------------
 
 
-def exponentToPolynomialRepresentation(exponentTuple):
+def exponent_to_polynomial_representation(exponent_tuple):
     """
     Converts an exponent tuple to corresponding polynomial representation
 
     Example:
-        >>> exponentToPolynomialRepresentation( (2,1,3) )
+        >>> exponent_to_polynomial_representation( (2,1,3) )
         x**2*y*z**3
     """
     poly = 1
-    for sym, tupleEntry in zip(MOMENT_SYMBOLS[:len(exponentTuple)], exponentTuple):
+    for sym, tupleEntry in zip(MOMENT_SYMBOLS[:len(exponent_tuple)], exponent_tuple):
         poly *= sym ** tupleEntry
     return poly
 
 
-def exponentsToPolynomialRepresentations(sequenceOfExponentTuples):
-    """Applies :func:`exponentToPolynomialRepresentation` to given sequence"""
-    return tuple([exponentToPolynomialRepresentation(t) for t in sequenceOfExponentTuples])
+def exponents_to_polynomial_representations(sequence_of_exponent_tuples):
+    """Applies :func:`exponent_to_polynomial_representation` to given sequence"""
+    return tuple([exponent_to_polynomial_representation(t) for t in sequence_of_exponent_tuples])
 
 
-def polynomialToExponentRepresentation(polynomial, dim=3):
+def polynomial_to_exponent_representation(polynomial, dim=3):
     """
     Converts a linear combination of moments in polynomial representation into exponent representation
 
@@ -140,61 +140,61 @@ def polynomialToExponentRepresentation(polynomial, dim=3):
 
     Example:
         >>> x , y, z = MOMENT_SYMBOLS
-        >>> set(polynomialToExponentRepresentation(1 + (42 * x**2 * y**2 * z) )) == {(42, (2, 2, 1)), (1, (0, 0, 0))}
+        >>> set(polynomial_to_exponent_representation(1 + (42 * x**2 * y**2 * z) )) == {(42, (2, 2, 1)), (1, (0, 0, 0))}
         True
     """
     assert dim <= 3
     x, y, z = MOMENT_SYMBOLS
     polynomial = polynomial.expand()
-    coeffExpTupleRepresentation = []
+    coeff_exp_tuple_representation = []
 
     summands = [polynomial] if polynomial.func != sp.Add else polynomial.args
     for expr in summands:
         if len(expr.atoms(sp.Symbol) - set(MOMENT_SYMBOLS)) > 0:
             raise ValueError("Invalid moment polynomial: " + str(expr))
         c, x_exp, y_exp, z_exp = sp.Wild('c'), sp.Wild('xexp'), sp.Wild('yexp'), sp.Wild('zc')
-        matchRes = expr.match(c * x**x_exp * y**y_exp * z**z_exp)
-        assert matchRes[x_exp].is_integer and matchRes[y_exp].is_integer and matchRes[z_exp].is_integer
-        expTuple = (int(matchRes[x_exp]), int(matchRes[y_exp]), int(matchRes[z_exp]),)
+        match_res = expr.match(c * x**x_exp * y**y_exp * z**z_exp)
+        assert match_res[x_exp].is_integer and match_res[y_exp].is_integer and match_res[z_exp].is_integer
+        exp_tuple = (int(match_res[x_exp]), int(match_res[y_exp]), int(match_res[z_exp]),)
         if dim < 3:
             for i in range(dim, 3):
-                assert expTuple[i] == 0, "Used symbols in polynomial are not representable in that dimension"
-            expTuple = expTuple[:dim]
-        coeffExpTupleRepresentation.append((matchRes[c], expTuple))
-    return coeffExpTupleRepresentation
+                assert exp_tuple[i] == 0, "Used symbols in polynomial are not representable in that dimension"
+            exp_tuple = exp_tuple[:dim]
+        coeff_exp_tuple_representation.append((match_res[c], exp_tuple))
+    return coeff_exp_tuple_representation
 
 
-def momentSortKey(moment):
+def moment_sort_key(moment):
     """Sort key function for moments to sort them by (in decreasing priority)
      order, number of occuring symbols, length of string representation, string representation"""
-    momStr = str(moment)
-    return getOrder(moment), len(moment.atoms(sp.Symbol)), len(momStr), momStr
+    mom_str = str(moment)
+    return get_order(moment), len(moment.atoms(sp.Symbol)), len(mom_str), mom_str
 
 
-def sortMomentsIntoGroupsOfSameOrder(moments):
+def sort_moments_into_groups_of_same_order(moments):
     """Returns a dictionary mapping the order (int) to a list of moments with that order."""
     result = defaultdict(list)
     for i, moment in enumerate(moments):
-        order = getOrder(moment)
+        order = get_order(moment)
         result[order].append(moment)
     return result
 
 # -------------------- Common Function working with exponent tuples and polynomial moments -----------------------------
 
 
-def isEven(moment):
+def is_even(moment):
     """
     A moment is considered even when under sign reversal nothing changes i.e. :math:`m(-x,-y,-z) = m(x,y,z)`
 
     For the exponent tuple representation that means that the exponent sum is even  e.g.
         >>> x , y, z = MOMENT_SYMBOLS
-        >>> isEven(x**2 * y**2)
+        >>> is_even(x**2 * y**2)
         True
-        >>> isEven(x**2 * y)
+        >>> is_even(x**2 * y)
         False
-        >>> isEven((1,0,0))
+        >>> is_even((1,0,0))
         False
-        >>> isEven(1)
+        >>> is_even(1)
         True
     """
     if type(moment) is tuple:
@@ -207,38 +207,38 @@ def isEven(moment):
         return sp.expand(moment - opposite) == 0
 
 
-def getMomentIndices(momentExponentTuple):
+def get_moment_indices(moment_exponent_tuple):
     """Returns indices for a given exponent tuple:
     
     Example:
-        >>> getMomentIndices((2,1,0))
+        >>> get_moment_indices((2,1,0))
         [0, 0, 1]
-        >>> getMomentIndices((0,0,3))
+        >>> get_moment_indices((0,0,3))
         [2, 2, 2]
     """
     result = []
-    for i, element in enumerate(momentExponentTuple):
+    for i, element in enumerate(moment_exponent_tuple):
         result += [i] * element
     return result
 
 
-def getExponentTupleFromIndices(momentIndices, dim):
+def get_exponent_tuple_from_indices(moment_indices, dim):
     result = [0] * dim
-    for i in momentIndices:
+    for i in moment_indices:
         result[i] += 1
     return tuple(result)
 
 
-def getOrder(moment):
+def get_order(moment):
     """Computes polynomial order of given moment.
 
     Examples:
         >>> x , y, z = MOMENT_SYMBOLS
-        >>> getOrder(x**2 * y + x)
+        >>> get_order(x**2 * y + x)
         3
-        >>> getOrder(z**4 * x**2)
+        >>> get_order(z**4 * x**2)
         6
-        >>> getOrder((2,1,0))
+        >>> get_order((2,1,0))
         3
     """
     if isinstance(moment, tuple):
@@ -250,7 +250,7 @@ def getOrder(moment):
     return sum([sp.degree(leading_coefficient, gen=m) for m in symbols_in_leading_coefficient])
 
 
-def nonAliasedMoment(moment_tuple: Sequence[int]) -> Tuple[int, ...]:
+def non_aliased_moment(moment_tuple: Sequence[int]) -> Tuple[int, ...]:
     """Takes a moment exponent tuple and returns the non-aliased version of it.
 
     For first neighborhood stencils, all moments with exponents 3, 5, 7... are equal to exponent 1,
@@ -258,9 +258,9 @@ def nonAliasedMoment(moment_tuple: Sequence[int]) -> Tuple[int, ...]:
     d ∈ {+1, 0, -1}. So for example d**5 is always the same as d**3 and d, and d**6 == d**4 == d**2
 
     Example:
-         >>> nonAliasedMoment((5, 4, 2))
+         >>> non_aliased_moment((5, 4, 2))
          (1, 2, 2)
-         >>> nonAliasedMoment((9, 1, 2))
+         >>> non_aliased_moment((9, 1, 2))
          (1, 1, 2)
     """
     moment = list(moment_tuple)
@@ -273,16 +273,18 @@ def nonAliasedMoment(moment_tuple: Sequence[int]) -> Tuple[int, ...]:
     return tuple(result)
 
 
-def isShearMoment(moment):
+def is_shear_moment(moment):
     """Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y"""
     if type(moment) is tuple:
-        moment = exponentToPolynomialRepresentation(moment)
-    return moment in isShearMoment.shearMoments
-isShearMoment.shearMoments = set([c[0] * c[1] for c in itertools.combinations(MOMENT_SYMBOLS, 2)])
+        moment = exponent_to_polynomial_representation(moment)
+    return moment in is_shear_moment.shearMoments
+
+
+is_shear_moment.shearMoments = set([c[0] * c[1] for c in itertools.combinations(MOMENT_SYMBOLS, 2)])
 
 
 @memorycache(maxsize=512)
-def discreteMoment(function, moment, stencil):
+def discrete_moment(func, moment, stencil):
     """
     Computes discrete moment of given distribution function
 
@@ -292,13 +294,13 @@ def discreteMoment(function, moment, stencil):
     where :math:`p(d)` is the moment polynomial where :math:`x, y, z` have been replaced with the components of the
     stencil direction, and :math:`f_i` is the i'th entry in the passed function sequence
 
-    :param function: list of distribution functions for each direction
+    :param func: list of distribution functions for each direction
     :param moment: can either be a exponent tuple, or a sympy polynomial expression
     :param stencil: sequence of directions
     """
-    assert len(stencil) == len(function)
+    assert len(stencil) == len(func)
     res = 0
-    for factor, e in zip(function, stencil):
+    for factor, e in zip(func, stencil):
         if type(moment) is tuple:
             for vel, exponent in zip(e, moment):
                 factor *= vel ** exponent
@@ -312,7 +314,7 @@ def discreteMoment(function, moment, stencil):
     return res
 
 
-def momentMatrix(moments, stencil):
+def moment_matrix(moments, stencil):
     """
     Returns transformation matrix to moment space
 
@@ -336,7 +338,7 @@ def momentMatrix(moments, stencil):
     return sp.Matrix(len(moments), len(stencil), generator)
 
 
-def gramSchmidt(moments, stencil, weights=None):
+def gram_schmidt(moments, stencil, weights=None):
     """
     Computes orthogonal set of moments using the method by Gram-Schmidt
 
@@ -354,65 +356,110 @@ def gramSchmidt(moments, stencil, weights=None):
         weights = sp.diag(*weights)
 
     if type(moments[0]) is tuple:
-        moments = list(exponentsToPolynomialRepresentations(moments))
+        moments = list(exponents_to_polynomial_representations(moments))
     else:
         moments = list(copy(moments))
 
-    M = momentMatrix(moments, stencil).transpose()
-    columnsOfM = [M.col(i) for i in range(M.cols)]
-    orthogonalizedVectors = []
-    for i in range(len(columnsOfM)):
-        currentElement = columnsOfM[i]
+    pdfs_to_moments = moment_matrix(moments, stencil).transpose()
+    moment_matrix_columns = [pdfs_to_moments.col(i) for i in range(pdfs_to_moments.cols)]
+    orthogonalized_vectors = []
+    for i in range(len(moment_matrix_columns)):
+        current_element = moment_matrix_columns[i]
         for j in range(i):
-            prevElement = orthogonalizedVectors[j]
-            denom = prevElement.dot(weights * prevElement)
-            if denom == 0:
+            prev_element = orthogonalized_vectors[j]
+            denominator = prev_element.dot(weights * prev_element)
+            if denominator == 0:
                 raise ValueError("Not an independent set of vectors given: "
                                  "vector %d is dependent on previous vectors" % (i,))
-            overlap = currentElement.dot(weights * prevElement) / denom
-            currentElement -= overlap * prevElement
+            overlap = current_element.dot(weights * prev_element) / denominator
+            current_element -= overlap * prev_element
             moments[i] -= overlap * moments[j]
-        orthogonalizedVectors.append(currentElement)
+        orthogonalized_vectors.append(current_element)
 
     return moments
 
 
-def getDefaultMomentSetForStencil(stencil):
+def get_default_moment_set_for_stencil(stencil):
     """
     Returns a sequence of moments that are commonly used to construct a LBM equilibrium for the given stencil
     """
-    from lbmpy.stencils import getStencil, stencilsHaveSameEntries
+    from lbmpy.stencils import get_stencil, stencils_have_same_entries
 
-    toPoly = exponentsToPolynomialRepresentations
+    to_poly = exponents_to_polynomial_representations
 
-    if stencilsHaveSameEntries(stencil, getStencil("D2Q9")):
-        return sorted(toPoly(momentsUpToComponentOrder(2, dim=2)), key=momentSortKey)
+    if stencils_have_same_entries(stencil, get_stencil("D2Q9")):
+        return sorted(to_poly(moments_up_to_component_order(2, dim=2)), key=moment_sort_key)
 
-    all27Moments = momentsUpToComponentOrder(2, dim=3)
-    if stencilsHaveSameEntries(stencil, getStencil("D3Q27")):
-        return toPoly(all27Moments)
-    if stencilsHaveSameEntries(stencil, getStencil("D3Q19")):
-        nonMatchedMoments = [(1, 2, 2), (1, 1, 2), (2, 2, 2), (1, 1, 1)]
-        moments19 = set(all27Moments) - set(extendMomentsWithPermutations(nonMatchedMoments))
-        return sorted(toPoly(moments19), key=momentSortKey)
-    if stencilsHaveSameEntries(stencil, getStencil("D3Q15")):
+    all27_moments = moments_up_to_component_order(2, dim=3)
+    if stencils_have_same_entries(stencil, get_stencil("D3Q27")):
+        return to_poly(all27_moments)
+    if stencils_have_same_entries(stencil, get_stencil("D3Q19")):
+        non_matched_moments = [(1, 2, 2), (1, 1, 2), (2, 2, 2), (1, 1, 1)]
+        moments19 = set(all27_moments) - set(extend_moments_with_permutations(non_matched_moments))
+        return sorted(to_poly(moments19), key=moment_sort_key)
+    if stencils_have_same_entries(stencil, get_stencil("D3Q15")):
         x, y, z = MOMENT_SYMBOLS
-        nonMatchedMoments = [(1, 2, 0), (2, 2, 0), (1, 1, 2), (1, 2, 2), (2, 2, 2)]
-        additionalMoments = (6 * (x**2 * y**2 + x**2 * z**2 + y**2 * z**2),
-                             3 * (x * (y**2 + z**2)),
-                             3 * (y * (x**2 + z**2)),
-                             3 * (z * (x**2 + y**2)),
-                            )
-        toRemove = set(extendMomentsWithPermutations(nonMatchedMoments))
-        return sorted(toPoly(set(all27Moments) - toRemove) + additionalMoments, key=momentSortKey)
+        non_matched_moments = [(1, 2, 0), (2, 2, 0), (1, 1, 2), (1, 2, 2), (2, 2, 2)]
+        additional_moments = (6 * (x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2),
+                              3 * (x * (y ** 2 + z ** 2)),
+                              3 * (y * (x ** 2 + z ** 2)),
+                              3 * (z * (x ** 2 + y ** 2)),
+                              )
+        to_remove = set(extend_moments_with_permutations(non_matched_moments))
+        return sorted(to_poly(set(all27_moments) - to_remove) + additional_moments, key=moment_sort_key)
 
     raise NotImplementedError("No default moment system available for this stencil - define matched moments yourself")
+
+
+def extract_monomials(sequence_of_polynomials, dim=3):
+    """
+    Returns a set of exponent tuples of all monomials contained in the given set of polynomials
+    :param sequence_of_polynomials: sequence of polynomials in the MOMENT_SYMBOLS
+    :param dim: length of returned exponent tuples
+
+    >>> x, y, z = MOMENT_SYMBOLS
+    >>> extract_monomials([x**2 + y**2 + y, y + y**2])
+    {(0, 2, 0), (0, 1, 0), (2, 0, 0)}
+    >>> extract_monomials([x**2 + y**2 + y, y + y**2], dim=2)
+    {(0, 1), (2, 0), (0, 2)}
+    """
+    monomials = set()
+    for polynomial in sequence_of_polynomials:
+        for factor, exponentTuple in polynomial_to_exponent_representation(polynomial):
+            monomials.add(exponentTuple[:dim])
+    return monomials
+
+
+def monomial_to_polynomial_transformation_matrix(monomials, polynomials):
+    """
+    Returns a transformation matrix from a monomial to a polynomial representation
+    :param monomials: sequence of exponent tuples
+    :param polynomials: sequence of polynomials in the MOMENT_SYMBOLS
+
+    >>> x, y, z = MOMENT_SYMBOLS
+    >>> polys = [7 * x**2 + 3 * x + 2 * y **2, \
+                 9 * x**2 - 5 * x]
+    >>> mons = list(extract_monomials(polys, dim=2))
+    >>> monomial_to_polynomial_transformation_matrix(mons, polys)
+    Matrix([
+    [7,  3, 2],
+    [9, -5, 0]])
+    """
+    dim = len(monomials[0])
+
+    result = sp.zeros(len(polynomials), len(monomials))
+    for polynomialIdx, polynomial in enumerate(polynomials):
+        for factor, exponent_tuple in polynomial_to_exponent_representation(polynomial):
+            exponent_tuple = exponent_tuple[:dim]
+            result[polynomialIdx, monomials.index(exponent_tuple)] = factor
+    return result
 
 
 # ---------------------------------- Visualization ---------------------------------------------------------------------
 
 
-def momentEqualityTable(stencil, discrete_equilibrium=None, continuous_equilibrium=None, maxOrder=4, truncateOrder=None):
+def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilibrium=None,
+                          max_order=4, truncate_order=None):
     """
     Creates a table showing which moments of a discrete stencil/equilibrium coincide with the
     corresponding continuous moments
@@ -421,28 +468,28 @@ def momentEqualityTable(stencil, discrete_equilibrium=None, continuous_equilibri
     :param discrete_equilibrium: list of sympy expr to compute discrete equilibrium for each direction, if left
                                 to default the standard discrete Maxwellian equilibrium is used
     :param continuous_equilibrium: continuous equilibrium, if left to default, the continuous Maxwellian is used
-    :param maxOrder: compare moments up to this order (number of rows in table)
-    :param truncateOrder: moments are considered equal if they match up to this order
+    :param max_order: compare moments up to this order (number of rows in table)
+    :param truncate_order: moments are considered equal if they match up to this order
     :return: Object to display in an Jupyter notebook
     """
     import ipy_table
-    from lbmpy.continuous_distribution_measures import continuousMoment
+    from lbmpy.continuous_distribution_measures import continuous_moment
 
     dim = len(stencil[0])
     u = sp.symbols(f"u_:{dim}")
     if discrete_equilibrium is None:
-        from lbmpy.maxwellian_equilibrium import discreteMaxwellianEquilibrium
-        discrete_equilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
-                                                             u=u, order=truncateOrder)
+        from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
+        discrete_equilibrium = discrete_maxwellian_equilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
+                                                               u=u, order=truncate_order)
     if continuous_equilibrium is None:
-        from lbmpy.maxwellian_equilibrium import continuousMaxwellianEquilibrium
-        continuous_equilibrium = continuousMaxwellianEquilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
+        from lbmpy.maxwellian_equilibrium import continuous_maxwellian_equilibrium
+        continuous_equilibrium = continuous_maxwellian_equilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
 
     table = []
     matched_moments = 0
     non_matched_moments = 0
 
-    moments_list = [list(momentsOfOrder(o, dim, includePermutations=False)) for o in range(maxOrder + 1)]
+    moments_list = [list(moments_of_order(o, dim, include_permutations=False)) for o in range(max_order + 1)]
 
     colors = dict()
     nr_of_columns = max([len(v) for v in moments_list]) + 1
@@ -455,12 +502,12 @@ def momentEqualityTable(stencil, discrete_equilibrium=None, continuous_equilibri
         row = [' '] * nr_of_columns
         row[0] = '%d' % (order,)
         for moment, colIdx in zip(moments, range(1, len(row))):
-            multiplicity = momentMultiplicity(moment)
-            dm = discreteMoment(discrete_equilibrium, moment, stencil)
-            cm = continuousMoment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
+            multiplicity = moment_multiplicity(moment)
+            dm = discrete_moment(discrete_equilibrium, moment, stencil)
+            cm = continuous_moment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
             difference = sp.simplify(dm - cm)
-            if truncateOrder:
-                difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncateOrder))
+            if truncate_order:
+                difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncate_order))
             if difference != 0:
                 colors[(order + 1, colIdx)] = 'Orange'
                 non_matched_moments += multiplicity
@@ -468,7 +515,7 @@ def momentEqualityTable(stencil, discrete_equilibrium=None, continuous_equilibri
                 colors[(order + 1, colIdx)] = 'lightGreen'
                 matched_moments += multiplicity
 
-            row[colIdx] = '%s  x %d' % (moment, momentMultiplicity(moment))
+            row[colIdx] = '%s  x %d' % (moment, moment_multiplicity(moment))
 
         table.append(row)
 
@@ -483,51 +530,51 @@ def momentEqualityTable(stencil, discrete_equilibrium=None, continuous_equilibri
     return table_display
 
 
-def momentEqualityTableByStencil(nameToStencilDict, moments, truncateOrder=None):
+def moment_equality_table_by_stencil(name_to_stencil_dict, moments, truncate_order=None):
     """
     Creates a table for display in IPython notebooks that shows which moments agree between continuous and
     discrete equilibrium, group by stencils
 
-    :param nameToStencilDict: dict from stencil name to stencil
+    :param name_to_stencil_dict: dict from stencil name to stencil
     :param moments: sequence of moments to compare - assumes that permutations have similar properties
                     so just one representative is shown labeled with its multiplicity
-    :param truncateOrder: compare up to this order
+    :param truncate_order: compare up to this order
     """
     import ipy_table
-    from lbmpy.maxwellian_equilibrium import discreteMaxwellianEquilibrium
-    from lbmpy.maxwellian_equilibrium import continuousMaxwellianEquilibrium
-    from lbmpy.continuous_distribution_measures import continuousMoment
+    from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
+    from lbmpy.maxwellian_equilibrium import continuous_maxwellian_equilibrium
+    from lbmpy.continuous_distribution_measures import continuous_moment
 
     stencil_names = []
     stencils = []
-    for key, value in nameToStencilDict.items():
+    for key, value in name_to_stencil_dict.items():
         stencil_names.append(key)
         stencils.append(value)
 
-    moments = list(pickRepresentativeMoments(moments))
+    moments = list(pick_representative_moments(moments))
 
     colors = {}
     for stencilIdx, stencil in enumerate(stencils):
         dim = len(stencil[0])
         u = sp.symbols(f"u_:{dim}")
-        discrete_equilibrium = discreteMaxwellianEquilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
-                                                             u=u, order=truncateOrder)
-        continuous_equilibrium = continuousMaxwellianEquilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
+        discrete_equilibrium = discrete_maxwellian_equilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
+                                                               u=u, order=truncate_order)
+        continuous_equilibrium = continuous_maxwellian_equilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
 
         for momentIdx, moment in enumerate(moments):
             moment = moment[:dim]
-            dm = discreteMoment(discrete_equilibrium, moment, stencil)
-            cm = continuousMoment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
+            dm = discrete_moment(discrete_equilibrium, moment, stencil)
+            cm = continuous_moment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
             difference = sp.simplify(dm - cm)
-            if truncateOrder:
-                difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncateOrder))
+            if truncate_order:
+                difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncate_order))
             colors[(momentIdx + 1, stencilIdx + 2)] = 'Orange' if difference != 0 else 'lightGreen'
 
     table = []
     header_row = [' ', '#'] + stencil_names
     table.append(header_row)
     for moment in moments:
-        row = [str(moment), str(momentMultiplicity(moment))] + [' '] * len(stencils)
+        row = [str(moment), str(moment_multiplicity(moment))] + [' '] * len(stencils)
         table.append(row)
 
     table_display = ipy_table.make_table(table)
@@ -536,50 +583,6 @@ def momentEqualityTableByStencil(nameToStencilDict, moments, truncateOrder=None)
         ipy_table.set_cell_style(cellIdx[0], cellIdx[1], color=color)
 
     return table_display
-
-
-def extractMonomials(sequenceOfPolynomials, dim=3):
-    """
-    Returns a set of exponent tuples of all monomials contained in the given set of polynomials
-    :param sequenceOfPolynomials: sequence of polynomials in the MOMENT_SYMBOLS
-    :param dim: length of returned exponent tuples
-
-    >>> x, y, z = MOMENT_SYMBOLS
-    >>> extractMonomials([x**2 + y**2 + y, y + y**2])
-    {(0, 2, 0), (0, 1, 0), (2, 0, 0)}
-    >>> extractMonomials([x**2 + y**2 + y, y + y**2], dim=2)
-    {(0, 1), (2, 0), (0, 2)}
-    """
-    monomials = set()
-    for polynomial in sequenceOfPolynomials:
-        for factor, exponentTuple in polynomialToExponentRepresentation(polynomial):
-            monomials.add(exponentTuple[:dim])
-    return monomials
-
-
-def monomialToPolynomialTransformationMatrix(monomials, polynomials):
-    """
-    Returns a transformation matrix from a monomial to a polynomial representation
-    :param monomials: sequence of exponent tuples
-    :param polynomials: sequence of polynomials in the MOMENT_SYMBOLS
-
-    >>> x, y, z = MOMENT_SYMBOLS
-    >>> polys = [7 * x**2 + 3 * x + 2 * y **2, \
-                 9 * x**2 - 5 * x]
-    >>> mons = list(extractMonomials(polys, dim=2))
-    >>> monomialToPolynomialTransformationMatrix(mons, polys)
-    Matrix([
-    [7,  3, 2],
-    [9, -5, 0]])
-    """
-    dim = len(monomials[0])
-
-    result = sp.zeros(len(polynomials), len(monomials))
-    for polynomialIdx, polynomial in enumerate(polynomials):
-        for factor, exponentTuple in polynomialToExponentRepresentation(polynomial):
-            exponentTuple = exponentTuple[:dim]
-            result[polynomialIdx, monomials.index(exponentTuple)] = factor
-    return result
 
 
 # --------------------------------------- Internal Functions -----------------------------------------------------------

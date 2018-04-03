@@ -1,15 +1,15 @@
 import sympy as sp
 from collections import defaultdict
 
-from pystencils.sympyextensions import multidimensional_sum as multiSum, normalize_product, prod
-from pystencils.derivative import functionalDerivative, expandUsingLinearity, Diff, fullDiffExpand
+from pystencils.sympyextensions import multidimensional_sum as multi_sum, normalize_product, prod
+from pystencils.derivative import functional_derivative, expand_using_linearity, Diff, full_diff_expand
 
 orderParameterSymbolName = "phi"
 surfaceTensionSymbolName = "tau"
-interfaceWidthSymbol = sp.Symbol("alpha")
+interface_width_symbol = sp.Symbol("alpha")
 
 
-def symmetricSymbolicSurfaceTension(i, j):
+def symmetric_symbolic_surface_tension(i, j):
     """Returns symbolic surface tension. The function is symmetric, i.e. interchanging i and j yields the same result.
     If both phase indices i and j are chosen equal, zero is returned"""
     if i == j:
@@ -18,69 +18,69 @@ def symmetricSymbolicSurfaceTension(i, j):
     return sp.Symbol("%s_%d_%d" % ((surfaceTensionSymbolName, ) + index))
 
 
-def symbolicOrderParameters(numSymbols):
-    return sp.symbols("%s_:%i" % (orderParameterSymbolName, numSymbols))
+def symbolic_order_parameters(num_symbols):
+    return sp.symbols("%s_:%i" % (orderParameterSymbolName, num_symbols))
 
 
-def freeEnergyFunction3Phases(orderParameters=None, interfaceWidth=interfaceWidthSymbol, transformed=True,
-                              includeBulk=True, includeInterface=True, expandDerivatives=True,
-                              kappa=sp.symbols("kappa_:3")):
-    kappaPrime = tuple(interfaceWidth**2 * k for k in kappa)
-    C = sp.symbols("C_:3")
+def free_energy_functional_3_phases(order_parameters=None, interface_width=interface_width_symbol, transformed=True,
+                                    include_bulk=True, include_interface=True, expand_derivatives=True,
+                                    kappa=sp.symbols("kappa_:3")):
+    kappa_prime = tuple(interface_width ** 2 * k for k in kappa)
+    c = sp.symbols("C_:3")
 
-    bulkFreeEnergy = sum(k * C_i ** 2 * (1 - C_i) ** 2 / 2 for k, C_i in zip(kappa, C))
-    surfaceFreeEnergy = sum(k * Diff(C_i) ** 2 / 2 for k, C_i in zip(kappaPrime, C))
+    bulk_free_energy = sum(k * C_i ** 2 * (1 - C_i) ** 2 / 2 for k, C_i in zip(kappa, c))
+    surface_free_energy = sum(k * Diff(C_i) ** 2 / 2 for k, C_i in zip(kappa_prime, c))
 
-    F = 0
-    if includeBulk:
-        F += bulkFreeEnergy
-    if includeInterface:
-        F += surfaceFreeEnergy
+    f = 0
+    if include_bulk:
+        f += bulk_free_energy
+    if include_interface:
+        f += surface_free_energy
 
     if not transformed:
-        return F
+        return f
 
-    if orderParameters:
-        rho, phi, psi = orderParameters
+    if order_parameters:
+        rho, phi, psi = order_parameters
     else:
         rho, phi, psi = sp.symbols("rho phi psi")
 
-    transformationMatrix = sp.Matrix([[1,  1, 1],
-                                      [1, -1, 0],
-                                      [0,  0, 1]])
-    rhoDef, phiDef, psiDef = transformationMatrix * sp.Matrix(C)
-    orderParamToConcentrationRelation = sp.solve([rhoDef - rho, phiDef - phi, psiDef - psi], C)
+    transformation_matrix = sp.Matrix([[1, 1, 1],
+                                       [1, -1, 0],
+                                       [0, 0, 1]])
+    rho_def, phi_def, psi_def = transformation_matrix * sp.Matrix(c)
+    order_param_to_concentration_relation = sp.solve([rho_def - rho, phi_def - phi, psi_def - psi], c)
 
-    F = F.subs(orderParamToConcentrationRelation)
-    if expandDerivatives:
-        F = expandUsingLinearity(F, functions=orderParameters)
+    f = f.subs(order_param_to_concentration_relation)
+    if expand_derivatives:
+        f = expand_using_linearity(f, functions=order_parameters)
 
-    return F, transformationMatrix
+    return f, transformation_matrix
 
 
-def freeEnergyFunctionalNPhasesPenaltyTerm(orderParameters, interfaceWidth=interfaceWidthSymbol, kappa=None,
-                                           penaltyTermFactor=0.01):
-    numPhases = len(orderParameters)
+def free_energy_functional_n_phases_penalty_term(order_parameters, interface_width=interface_width_symbol, kappa=None,
+                                                 penalty_term_factor=0.01):
+    num_phases = len(order_parameters)
     if kappa is None:
-        kappa = sp.symbols("kappa_:%d" % (numPhases,))
+        kappa = sp.symbols("kappa_:%d" % (num_phases,))
     if not hasattr(kappa, "__len__"):
-        kappa = [kappa] * numPhases
+        kappa = [kappa] * num_phases
 
     def f(x):
         return x ** 2 * (1 - x) ** 2
 
-    bulk = sum(f(c) * k / 2 for c, k in zip(orderParameters, kappa))
-    interface = sum(Diff(c) ** 2 / 2 * interfaceWidth ** 2 * k
-                    for c, k in zip(orderParameters, kappa))
+    bulk = sum(f(c) * k / 2 for c, k in zip(order_parameters, kappa))
+    interface = sum(Diff(c) ** 2 / 2 * interface_width ** 2 * k
+                    for c, k in zip(order_parameters, kappa))
 
-    bulkPenaltyTerm = (1 - sum(c for c in orderParameters)) ** 2
-    return bulk + interface + penaltyTermFactor * bulkPenaltyTerm
+    bulk_penalty_term = (1 - sum(c for c in order_parameters)) ** 2
+    return bulk + interface + penalty_term_factor * bulk_penalty_term
 
 
-def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymbolicSurfaceTension,
-                                interfaceWidth=interfaceWidthSymbol, orderParameters=None,
-                                includeBulk=True, includeInterface=True, symbolicLambda=False,
-                                symbolicDependentVariable=False):
+def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_symbolic_surface_tension,
+                                    interface_width=interface_width_symbol, order_parameters=None,
+                                    include_bulk=True, include_interface=True, symbolic_lambda=False,
+                                    symbolic_dependent_variable=False):
     r"""
     Returns a symbolic expression for the free energy of a system with N phases and
     specified surface tensions. The total free energy is the sum of a bulk and an interface component.
@@ -100,26 +100,26 @@ def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymboli
 
         f(c) = c^2( 1-c)^2
 
-    :param numPhases: number of phases, called N above
-    :param surfaceTensions: surface tension function, called with two phase indices (two integers)
-    :param interfaceWidth: called :math:`\eta` above, controls the interface width
-    :param orderParameters: explicitly
+    :param num_phases: number of phases, called N above
+    :param surface_tensions: surface tension function, called with two phase indices (two integers)
+    :param interface_width: called :math:`\eta` above, controls the interface width
+    :param order_parameters: explicitly
 
     Parameter useful for viewing / debugging the function
-    :param includeBulk: if false no bulk term is added
-    :param includeInterface:if false no interface contribution is added
-    :param symbolicLambda: surface energy coefficient is represented by symbol, not in expanded form
-    :param symbolicDependentVariable: last phase variable is defined as 1-otherPhaseVars, if this is set to True
+    :param include_bulk: if false no bulk term is added
+    :param include_interface:if false no interface contribution is added
+    :param symbolic_lambda: surface energy coefficient is represented by symbol, not in expanded form
+    :param symbolic_dependent_variable: last phase variable is defined as 1-otherPhaseVars, if this is set to True
                                       it is represented by phi_A for better readability
     """
-    assert not (numPhases is None and orderParameters is None)
-    if orderParameters is None:
-        phi = symbolicOrderParameters(numPhases-1)
+    assert not (num_phases is None and order_parameters is None)
+    if order_parameters is None:
+        phi = symbolic_order_parameters(num_phases - 1)
     else:
-        phi = orderParameters
-        numPhases = len(phi) + 1
+        phi = order_parameters
+        num_phases = len(phi) + 1
 
-    if not symbolicDependentVariable:
+    if not symbolic_dependent_variable:
         phi = tuple(phi) + (1 - sum(phi),)
     else:
         phi = tuple(phi) + (sp.Symbol("phi_D"), )
@@ -127,88 +127,89 @@ def freeEnergyFunctionalNPhases(numPhases=None, surfaceTensions=symmetricSymboli
     # Compared to handwritten notes we scale the interface width parameter here to obtain the correct
     # equations for the interface profile and the surface tensions i.e. to pass tests
     # test_analyticInterfaceSolution and test_surfaceTensionDerivation
-    interfaceWidth *= sp.sqrt(2)
+    interface_width *= sp.sqrt(2)
 
     def f(c):
         return c ** 2 * (1 - c) ** 2
 
-    def lambdaCoeff(k, l):
-        if symbolicLambda:
+    def lambda_coeff(k, l):
+        if symbolic_lambda:
             return sp.Symbol("Lambda_%d%d" % ((k, l) if k < l else (l, k)))
-        N = numPhases - 1
+        n = num_phases - 1
         if k == l:
-            assert surfaceTensions(l, l) == 0
-        return 3 / sp.sqrt(2) * interfaceWidth * (surfaceTensions(k, N) + surfaceTensions(l, N) - surfaceTensions(k, l))
+            assert surface_tensions(l, l) == 0
+        return 3 / sp.sqrt(2) * interface_width * (surface_tensions(k, n) +
+                                                   surface_tensions(l, n) - surface_tensions(k, l))
 
-    def bulkTerm(i, j):
-        return surfaceTensions(i, j) / 2 * (f(phi[i]) + f(phi[j]) - f(phi[i] + phi[j]))
+    def bulk_term(i, j):
+        return surface_tensions(i, j) / 2 * (f(phi[i]) + f(phi[j]) - f(phi[i] + phi[j]))
 
-    F_bulk = 3 / sp.sqrt(2) / interfaceWidth * sum(bulkTerm(i, j) for i, j in multiSum(2, numPhases) if i != j)
-    F_interface = sum(lambdaCoeff(i, j) / 2 * Diff(phi[i]) * Diff(phi[j]) for i, j in multiSum(2, numPhases-1))
+    f_bulk = 3 / sp.sqrt(2) / interface_width * sum(bulk_term(i, j) for i, j in multi_sum(2, num_phases) if i != j)
+    f_interface = sum(lambda_coeff(i, j) / 2 * Diff(phi[i]) * Diff(phi[j]) for i, j in multi_sum(2, num_phases - 1))
 
     result = 0
-    if includeBulk:
-        result += F_bulk
-    if includeInterface:
-        result += F_interface
+    if include_bulk:
+        result += f_bulk
+    if include_interface:
+        result += f_interface
     return result
 
 
-def separateIntoBulkAndInterface(freeEnergy):
+def separate_into_bulk_and_interface(free_energy):
     """Separates the bulk and interface parts of a free energy
 
-    >>> F = freeEnergyFunctionalNPhases(3)
-    >>> bulk, inter = separateIntoBulkAndInterface(F)
-    >>> assert sp.expand(bulk - freeEnergyFunctionalNPhases(3, includeInterface=False)) == 0
-    >>> assert sp.expand(inter - freeEnergyFunctionalNPhases(3, includeBulk=False)) == 0
+    >>> F = free_energy_functional_n_phases(3)
+    >>> bulk, inter = separate_into_bulk_and_interface(F)
+    >>> assert sp.expand(bulk - free_energy_functional_n_phases(3, include_interface=False)) == 0
+    >>> assert sp.expand(inter - free_energy_functional_n_phases(3, include_bulk=False)) == 0
     """
-    freeEnergy = freeEnergy.expand()
-    bulkPart = freeEnergy.subs({a: 0 for a in freeEnergy.atoms(Diff)})
-    interfacePart = freeEnergy - bulkPart
-    return bulkPart, interfacePart
+    free_energy = free_energy.expand()
+    bulk_part = free_energy.subs({a: 0 for a in free_energy.atoms(Diff)})
+    interface_part = free_energy - bulk_part
+    return bulk_part, interface_part
 
 
-def analyticInterfaceProfile(x, interfaceWidth=interfaceWidthSymbol):
+def analytic_interface_profile(x, interface_width=interface_width_symbol):
     """Analytic expression for a 1D interface normal to x with given interface width
 
     The following doctest shows that the returned analytical solution is indeed a solution of the ODE that we
     get from the condition :math:`\mu_0 = 0` (thermodynamic equilibrium) for a situation with only a single order
     parameter, i.e. at a transition between two phases.
     >>> numPhases = 4
-    >>> x, phi = sp.Symbol("x"), symbolicOrderParameters(numPhases-1)
-    >>> F = freeEnergyFunctionalNPhases(orderParameters=phi)
-    >>> mu = chemicalPotentialsFromFreeEnergy(F)
+    >>> x, phi = sp.Symbol("x"), symbolic_order_parameters(numPhases-1)
+    >>> F = free_energy_functional_n_phases(order_parameters=phi)
+    >>> mu = chemical_potentials_from_free_energy(F)
     >>> mu0 = mu[0].subs({p: 0 for p in phi[1:]})  # mu[0] as function of one order parameter only
-    >>> solution = analyticInterfaceProfile(x)
+    >>> solution = analytic_interface_profile(x)
     >>> solutionSubstitution = {phi[0]: solution, Diff(Diff(phi[0])): sp.diff(solution, x, x) }
     >>> sp.expand(mu0.subs(solutionSubstitution))  # inserting solution should solve the mu_0=0 equation
     0
     """
-    return (1 + sp.tanh(x / (2 * interfaceWidth))) / 2
+    return (1 + sp.tanh(x / (2 * interface_width))) / 2
 
 
-def chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters=None):
+def chemical_potentials_from_free_energy(free_energy, order_parameters=None):
     """Computes chemical potentials as functional derivative of free energy"""
-    syms = freeEnergy.atoms(sp.Symbol)
-    if orderParameters is None:
-        orderParameters = [s for s in syms if s.name.startswith(orderParameterSymbolName)]
-        orderParameters.sort(key=lambda e: e.name)
-        orderParameters = orderParameters[:-1]
-    constants = [s for s in syms if s not in orderParameters]
-    return sp.Matrix([expandUsingLinearity(functionalDerivative(freeEnergy, op),constants=constants)
-                      for op in orderParameters])
+    symbols = free_energy.atoms(sp.Symbol)
+    if order_parameters is None:
+        order_parameters = [s for s in symbols if s.name.startswith(orderParameterSymbolName)]
+        order_parameters.sort(key=lambda e: e.name)
+        order_parameters = order_parameters[:-1]
+    constants = [s for s in symbols if s not in order_parameters]
+    return sp.Matrix([expand_using_linearity(functional_derivative(free_energy, op), constants=constants)
+                      for op in order_parameters])
 
 
-def forceFromPhiAndMu(orderParameters, dim, mu=None):
+def force_from_phi_and_mu(order_parameters, dim, mu=None):
     if mu is None:
-        mu = sp.symbols("mu_:%d" % (len(orderParameters),))
+        mu = sp.symbols("mu_:%d" % (len(order_parameters),))
 
-    return sp.Matrix([sum(- c_i * Diff(mu_i, a) for c_i, mu_i in zip(orderParameters, mu))
+    return sp.Matrix([sum(- c_i * Diff(mu_i, a) for c_i, mu_i in zip(order_parameters, mu))
                       for a in range(dim)])
 
 
-def substituteLaplacianBySum(eq, dim):
-    """Substitutes abstract laplacian represented by ∂∂ by a sum over all dimensions
+def substitute_laplacian_by_sum(eq, dim):
+    """Substitutes abstract Laplacian represented by ∂∂ by a sum over all dimensions
     i.e. in case of 3D: ∂∂ is replaced by ∂0∂0 + ∂1∂1 + ∂2∂2
     :param eq: the term where the substitutions should be made
     :param dim: spatial dimension, in example above, 3
@@ -216,68 +217,68 @@ def substituteLaplacianBySum(eq, dim):
     functions = [d.args[0] for d in eq.atoms(Diff)]
     substitutions = {Diff(Diff(op)): sum(Diff(Diff(op, i), i) for i in range(dim))
                      for op in functions}
-    return fullDiffExpand(eq.subs(substitutions))
+    return full_diff_expand(eq.subs(substitutions))
 
 
-def coshIntegral(f, var):
+def cosh_integral(f, var):
     """Integrates a function f that has exactly one cosh term, from -oo to oo, by
     substituting a new helper variable for the cosh argument"""
-    coshTerm = list(f.atoms(sp.cosh))
-    assert len(coshTerm) == 1
+    cosh_term = list(f.atoms(sp.cosh))
+    assert len(cosh_term) == 1
     integral = sp.Integral(f, var)
-    transformedInt = integral.transform(coshTerm[0].args[0], sp.Symbol("u", real=True))
-    return sp.integrate(transformedInt.args[0], (transformedInt.args[1][0], -sp.oo, sp.oo))
+    transformed_int = integral.transform(cosh_term[0].args[0], sp.Symbol("u", real=True))
+    return sp.integrate(transformed_int.args[0], (transformed_int.args[1][0], -sp.oo, sp.oo))
 
 
-def symmetricTensorLinearization(dim):
-    nextIdx = 0
-    resultMap = {}
-    for idx in multiSum(2, dim):
+def symmetric_tensor_linearization(dim):
+    next_idx = 0
+    result_map = {}
+    for idx in multi_sum(2, dim):
         idx = tuple(sorted(idx))
-        if idx in resultMap:
+        if idx in result_map:
             continue
         else:
-            resultMap[idx] = nextIdx
-            nextIdx += 1
-    return resultMap
+            result_map[idx] = next_idx
+            next_idx += 1
+    return result_map
 
 # ----------------------------------------- Pressure Tensor ------------------------------------------------------------
 
 
-def extractGamma(freeEnergy, orderParameters):
+def extract_gamma(free_energy, order_parameters):
     """Extracts parameters before the gradient terms"""
     result = defaultdict(lambda: 0)
-    freeEnergy = freeEnergy.expand()
-    assert freeEnergy.func == sp.Add
-    for product in freeEnergy.args:
+    free_energy = free_energy.expand()
+    assert free_energy.func == sp.Add
+    for product in free_energy.args:
         product = normalize_product(product)
-        diffFactors = [e for e in product if e.func == Diff]
-        if len(diffFactors) == 0:
+        diff_factors = [e for e in product if e.func == Diff]
+        if len(diff_factors) == 0:
             continue
 
-        if len(diffFactors) != 2:
+        if len(diff_factors) != 2:
             raise ValueError("Could not new_filtered Λ because of term " + str(product))
 
-        indices = sorted([orderParameters.index(d.args[0]) for d in diffFactors])
+        indices = sorted([order_parameters.index(d.args[0]) for d in diff_factors])
         result[tuple(indices)] += prod(e for e in product if e.func != Diff)
-        if diffFactors[0] == diffFactors[1]:
+        if diff_factors[0] == diff_factors[1]:
             result[tuple(indices)] *= 2
     return result
 
 
-def pressureTensorBulkComponent(freeEnergy, orderParameters):
+def pressure_tensor_bulk_component(free_energy, order_parameters):
     """Diagonal component of pressure tensor in bulk"""
-    bulkFreeEnergy, _ = separateIntoBulkAndInterface(freeEnergy)
-    muBulk = chemicalPotentialsFromFreeEnergy(bulkFreeEnergy, orderParameters)
-    return sum(c_i * mu_i for c_i, mu_i in zip(orderParameters, muBulk)) - bulkFreeEnergy
+    bulk_free_energy, _ = separate_into_bulk_and_interface(free_energy)
+    mu_bulk = chemical_potentials_from_free_energy(bulk_free_energy, order_parameters)
+    return sum(c_i * mu_i for c_i, mu_i in zip(order_parameters, mu_bulk)) - bulk_free_energy
 
 
-def pressureTensorInterfaceComponent(freeEnergy, orderParameters, dim, a, b):
-    gamma = extractGamma(freeEnergy, orderParameters)
+def pressure_tensor_interface_component(free_energy, order_parameters, dim, a, b):
+    gamma = extract_gamma(free_energy, order_parameters)
     d = Diff
     result = 0
-    for i, c_i in enumerate(orderParameters):
-        for j, c_j in enumerate(orderParameters):
+    for i, c_i in enumerate(order_parameters):
+        for j, c_j in enumerate(order_parameters):
             t = d(c_i, a) * d(c_j, b) + d(c_i, b) * d(c_j, a)
             if a == b:
                 t -= sum(d(c_i, g) * d(c_j, g) for g in range(dim))
@@ -288,22 +289,22 @@ def pressureTensorInterfaceComponent(freeEnergy, orderParameters, dim, a, b):
     return result
 
 
-def pressureTensorFromFreeEnergy(freeEnergy, orderParameters, dim):
-    def getEntry(i, j):
-        pIf = pressureTensorInterfaceComponent(freeEnergy, orderParameters, dim, i, j)
-        pB = pressureTensorBulkComponent(freeEnergy, orderParameters) if i == j else 0
-        return sp.expand(pIf + pB)
+def pressure_tensor_from_free_energy(free_energy, order_parameters, dim):
+    def get_entry(i, j):
+        p_if = pressure_tensor_interface_component(free_energy, order_parameters, dim, i, j)
+        p_b = pressure_tensor_bulk_component(free_energy, order_parameters) if i == j else 0
+        return sp.expand(p_if + p_b)
 
-    return sp.Matrix(dim, dim, getEntry)
+    return sp.Matrix(dim, dim, get_entry)
 
 
-def forceFromPressureTensor(pressureTensor, functions=None):
-    assert len(pressureTensor.shape) == 2 and pressureTensor.shape[0] == pressureTensor.shape[1]
-    dim = pressureTensor.shape[0]
+def force_from_pressure_tensor(pressure_tensor, functions=None):
+    assert len(pressure_tensor.shape) == 2 and pressure_tensor.shape[0] == pressure_tensor.shape[1]
+    dim = pressure_tensor.shape[0]
 
-    def forceComponent(b):
-        r = -sum(Diff(pressureTensor[a, b], a) for a in range(dim))
-        r = fullDiffExpand(r, functions=functions)
+    def force_component(b):
+        r = -sum(Diff(pressure_tensor[a, b], a) for a in range(dim))
+        r = full_diff_expand(r, functions=functions)
         return r
 
-    return sp.Matrix([forceComponent(b) for b in range(dim)])
+    return sp.Matrix([force_component(b) for b in range(dim)])

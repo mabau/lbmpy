@@ -1,22 +1,22 @@
 import numpy as np
 
 
-def vectorFieldInterpolator(vectorField):
+def vector_field_interpolator(vector_field):
     from scipy.interpolate import RegularGridInterpolator
-    coords = [np.arange(s) + 0.5 for s in  vectorField.shape[:-1]]
-    return RegularGridInterpolator(*coords, vectorField)
+    coordinates = [np.arange(s) + 0.5 for s in vector_field.shape[:-1]]
+    return RegularGridInterpolator(*coordinates, vector_field)
 
 
-def scalarFieldInterpolator(scalarField):
+def scalar_field_interpolator(scalar_field):
     from scipy.interpolate import RegularGridInterpolator
-    coords = [np.arange(s) + 0.5 for s in scalarField.shape]
-    return RegularGridInterpolator(coords, values=scalarField)
+    coordinates = [np.arange(s) + 0.5 for s in scalar_field.shape]
+    return RegularGridInterpolator(coordinates, values=scalar_field)
 
 
-def vorticity2D(velocityField):
-    assert len(velocityField.shape) == 3
-    assert velocityField.shape[2] == 2
-    grad_y_of_x = np.gradient(velocityField[:, :, 0], axis=1)
-    grad_x_of_y = np.gradient(velocityField[:, :, 1], axis=0)
+def vorticity_2d(velocity_field):
+    assert len(velocity_field.shape) == 3
+    assert velocity_field.shape[2] == 2
+    grad_y_of_x = np.gradient(velocity_field[:, :, 0], axis=1)
+    grad_x_of_y = np.gradient(velocity_field[:, :, 1], axis=0)
     return grad_x_of_y - grad_y_of_x
 

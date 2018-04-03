@@ -5,103 +5,108 @@ from lbmpy.chapman_enskog import Diff
 from pystencils import makeSlice
 
 
-def plotStatus(phaseFieldStep, fromX=None, toX=None):
+def plot_status(phase_field_step, from_x=None, to_x=None):
     import lbmpy.plot2d as plt
 
-    domainSize = phaseFieldStep.dataHandling.shape
-    assert len(domainSize) == 2 and domainSize[1] == 1, "Not a 1D scenario"
+    domain_size = phase_field_step.data_handling.shape
+    assert len(domain_size) == 2 and domain_size[1] == 1, "Not a 1D scenario"
 
-    dh = phaseFieldStep.dataHandling
+    dh = phase_field_step.data_handling
 
-    numPhases = phaseFieldStep.numOrderParameters
+    num_phases = phase_field_step.numOrderParameters
 
     plt.subplot(1, 3, 1)
     plt.title('φ')
-    phiName = phaseFieldStep.phiFieldName
-    for i in range(numPhases):
-        plt.plot(dh.gatherArray(phiName, makeSlice[fromX:toX, 0, i]), marker='x', label='φ_%d' % (i,))
+    phi_name = phase_field_step.phiFieldName
+    for i in range(num_phases):
+        plt.plot(dh.gather_array(phi_name, makeSlice[from_x:to_x, 0, i]), marker='x', label='φ_%d' % (i,))
     plt.legend()
 
     plt.subplot(1, 3, 2)
     plt.title("μ")
-    muName = phaseFieldStep.muFieldName
-    for i in range(numPhases):
-        plt.plot(dh.gatherArray(muName, makeSlice[fromX:toX, 0, i]), marker='x', label='μ_%d' % (i,));
+    mu_name = phase_field_step.muFieldName
+    for i in range(num_phases):
+        plt.plot(dh.gather_array(mu_name, makeSlice[from_x:to_x, 0, i]), marker='x', label='μ_%d' % (i,))
     plt.legend()
 
     plt.subplot(1, 3, 3)
     plt.title("Force and Velocity")
-    plt.plot(dh.gatherArray(phaseFieldStep.forceFieldName, makeSlice[fromX:toX, 0, 0]), label='F', marker='x')
-    plt.plot(dh.gatherArray(phaseFieldStep.velFieldName, makeSlice[fromX:toX, 0, 0]), label='u', marker='v')
+    plt.plot(dh.gather_array(phase_field_step.forceFieldName, makeSlice[from_x:to_x, 0, 0]), label='F', marker='x')
+    plt.plot(dh.gather_array(phase_field_step.velFieldName, makeSlice[from_x:to_x, 0, 0]), label='u', marker='v')
     plt.legend()
 
 
-def plotFreeEnergyBulkContours(freeEnergy, orderParameters, phase0=0, phase1=1,
-                               xRange=(-0.2, 1.2), yRange=(-0.2, 1.2), **kwargs):
+def plot_free_energy_bulk_contours(free_energy, order_parameters, phase0=0, phase1=1,
+                                   x_range=(-0.2, 1.2), y_range=(-0.2, 1.2), **kwargs):
     import lbmpy.plot2d as plt
 
-    x = np.linspace(xRange[0], xRange[1], 100)
-    y = np.linspace(yRange[0], yRange[1], 100)
+    x = np.linspace(x_range[0], x_range[1], 100)
+    y = np.linspace(y_range[0], y_range[1], 100)
     xg, yg = np.meshgrid(x, y)
-    substitutions = {op: 0 for i, op in enumerate(orderParameters) if i not in (phase0, phase1)}
-    substitutions.update({d: 0 for d in freeEnergy.atoms(Diff)})  # remove interface components of free energy
-    freeEnergyLambda = sp.lambdify([orderParameters[phase0], orderParameters[phase1]],
-                                   freeEnergy.subs(substitutions))
+    substitutions = {op: 0 for i, op in enumerate(order_parameters) if i not in (phase0, phase1)}
+    substitutions.update({d: 0 for d in free_energy.atoms(Diff)})  # remove interface components of free energy
+    free_energy_lambda = sp.lambdify([order_parameters[phase0], order_parameters[phase1]],
+                                     free_energy.subs(substitutions))
     if 'levels' not in kwargs:
         kwargs['levels'] = np.linspace(0, 1, 60)
-    plt.contour(x, y, freeEnergyLambda(xg, yg), **kwargs)
+    plt.contour(x, y, free_energy_lambda(xg, yg), **kwargs)
 
 
-def initSharpInterface(pfStep, phaseIdx, x1=None, x2=None, inverse=False):
-    domainSize = pfStep.dataHandling.shape
+def init_sharp_interface(pf_step, phase_idx, x1=None, x2=None, inverse=False):
+    domain_size = pf_step.data_handling.shape
     if x1 is None:
-        x1 = domainSize[0] // 4
+        x1 = domain_size[0] // 4
     if x2 is None:
         x2 = 3 * x1
 
-    if phaseIdx >= pfStep.numOrderParameters:
+    if phase_idx >= pf_step.numOrderParameters:
         return
 
-    for b in pfStep.dataHandling.iterate():
-        x = b.cellIndexArrays[0]
+    for b in pf_step.data_handling.iterate():
+        x = b.cell_index_arrays[0]
         mid = np.logical_and(x1 < x, x < x2)
 
-        phi = b[pfStep.phiFieldName]
+        phi = b[pf_step.phiFieldName]
         val1, val2 = (1, 0) if inverse else (0, 1)
 
-        phi[..., phaseIdx].fill(val1)
-        phi[mid, phaseIdx] = val2
+        phi[..., phase_idx].fill(val1)
+        phi[mid, phase_idx] = val2
 
-    pfStep.setPdfFieldsFromMacroscopicValues()
+    pf_step.set_pdf_fields_from_macroscopic_values()
 
 
-def tanhTest(pfStep, phase0, phase1, expectedInterfaceWidth=1, timeSteps=10000):
+def tanh_test(pf_step, phase0, phase1, expected_interface_width=1, time_steps=10000):
     """
     Initializes a sharp interface and checks if tanh-shaped profile is developing
-    :param pfStep: phase field scenario / step
-    :param phase0: index of first phase to initialize
-    :param phase1: index of second phase to initialize inversely
-    :param expectedInterfaceWidth: interface width parameter alpha that is used in analytical form
-    :param timeSteps: number of time steps run before evaluation
-    :return: deviation of simulated profile from analytical solution as average(abs(simulation-analytic))
+
+    Args:
+        pf_step: phase field scenario / step
+        phase0: index of first phase to initialize
+        phase1: index of second phase to initialize inversely
+        expected_interface_width: interface width parameter alpha that is used in analytical form
+        time_steps: number of time steps run before evaluation
+
+    Returns:
+        deviation of simulated profile from analytical solution as average(abs(simulation-analytic))
     """
     import lbmpy.plot2d as plt
-    from lbmpy.phasefield.analytical import analyticInterfaceProfile
+    from lbmpy.phasefield.analytical import analytic_interface_profile
 
-    domainSize = pfStep.dataHandling.shape
-    pfStep.reset()
-    pfStep.dataHandling.fill(pfStep.phiFieldName, 0)
-    initSharpInterface(pfStep, phaseIdx=phase0, inverse=False)
-    initSharpInterface(pfStep, phaseIdx=phase1, inverse=True)
-    pfStep.setPdfFieldsFromMacroscopicValues()
-    pfStep.run(timeSteps)
+    domain_size = pf_step.data_handling.shape
+    pf_step.reset()
+    pf_step.data_handling.fill(pf_step.phiFieldName, 0)
+    init_sharp_interface(pf_step, phase_idx=phase0, inverse=False)
+    init_sharp_interface(pf_step, phase_idx=phase1, inverse=True)
+    pf_step.set_pdf_fields_from_macroscopic_values()
+    pf_step.run(time_steps)
 
-    visWidth = 20
-    x = np.arange(visWidth) - (visWidth // 2)
-    analytic = np.array([analyticInterfaceProfile(x_i - 0.5, expectedInterfaceWidth) for x_i in x], dtype=np.float64)
+    vis_width = 20
+    x = np.arange(vis_width) - (vis_width // 2)
+    analytic = np.array([analytic_interface_profile(x_i - 0.5, expected_interface_width) for x_i in x],
+                        dtype=np.float64)
 
-    stepLocation = domainSize[0] // 4
-    simulated = pfStep.phi[stepLocation - visWidth//2:stepLocation + visWidth//2, 0, phase0]
+    step_location = domain_size[0] // 4
+    simulated = pf_step.phi[step_location - vis_width // 2:step_location + vis_width // 2, 0, phase0]
     plt.plot(analytic, label='analytic', marker='o')
     plt.plot(simulated, label='simulated', marker='x')
     plt.legend()
@@ -109,60 +114,64 @@ def tanhTest(pfStep, phase0, phase1, expectedInterfaceWidth=1, timeSteps=10000):
     return np.average(np.abs(simulated - analytic))
 
 
-def galileanInvarianceTest(pfStep, velocity=0.05, rounds=3, phase0=0, phase1=1,
-                           expectedInterfaceWidth=1, initTimeSteps=5000):
+def galilean_invariance_test(pf_step, velocity=0.05, rounds=3, phase0=0, phase1=1,
+                             expected_interface_width=1, init_time_steps=5000):
     """
     Moves interface at constant speed through periodic domain - check if momentum is conserved
-    :param pfStep: phase field scenario / step
-    :param velocity: constant velocity to move interface
-    :param rounds: how many times the interface should travel through the domain
-    :param phase0: index of first phase to initialize
-    :param phase1: index of second phase to initialize inversely
-    :param expectedInterfaceWidth: interface width parameter alpha that is used in analytical form
-    :param initTimeSteps: before velocity is set, this many time steps are run to let interface settle to tanh shape
-    :return: change in velocity
+
+    Args:
+        pf_step: phase field scenario / step
+        velocity: constant velocity to move interface
+        rounds: how many times the interface should travel through the domain
+        phase0: index of first phase to initialize
+        phase1: index of second phase to initialize inversely
+        expected_interface_width: interface width parameter alpha that is used in analytical form
+        init_time_steps: before velocity is set, this many time steps are run to let interface settle to tanh shape
+
+    Returns:
+        change in velocity
     """
     import lbmpy.plot2d as plt
-    from lbmpy.phasefield.analytical import analyticInterfaceProfile
+    from lbmpy.phasefield.analytical import analytic_interface_profile
 
-    domainSize = pfStep.dataHandling.shape
-    roundTimeSteps = int((domainSize[0]+0.25) / velocity)
+    domain_size = pf_step.data_handling.shape
+    round_time_steps = int((domain_size[0]+0.25) / velocity)
 
-    print("Velocity:", velocity, " Timesteps for round:", roundTimeSteps)
+    print("Velocity:", velocity, " Time steps for round:", round_time_steps)
 
-    pfStep.reset()
-    pfStep.dataHandling.fill(pfStep.phiFieldName, 0)
-    initSharpInterface(pfStep, phaseIdx=phase0, inverse=False)
-    initSharpInterface(pfStep, phaseIdx=phase1, inverse=True)
-    pfStep.setPdfFieldsFromMacroscopicValues()
+    pf_step.reset()
+    pf_step.data_handling.fill(pf_step.phiFieldName, 0)
+    init_sharp_interface(pf_step, phase_idx=phase0, inverse=False)
+    init_sharp_interface(pf_step, phase_idx=phase1, inverse=True)
+    pf_step.set_pdf_fields_from_macroscopic_values()
 
-    print("Running", initTimeSteps, "initial time steps")
-    pfStep.run(initTimeSteps)
-    pfStep.dataHandling.fill(pfStep.velFieldName, velocity, fValue=0)
-    pfStep.setPdfFieldsFromMacroscopicValues()
+    print("Running", init_time_steps, "initial time steps")
+    pf_step.run(init_time_steps)
+    pf_step.data_handling.fill(pf_step.velFieldName, velocity, value_idx=0)
+    pf_step.set_pdf_fields_from_macroscopic_values()
 
-    stepLocation = domainSize[0] // 4
-    visWidth = 20
+    step_location = domain_size[0] // 4
+    vis_width = 20
 
-    simulatedProfiles = []
+    simulated_profiles = []
 
-    def captureProfile():
-        simulated = pfStep.phi[stepLocation - visWidth // 2:stepLocation + visWidth // 2, 0, phase0].copy()
-        simulatedProfiles.append(simulated)
+    def capture_profile():
+        simulated = pf_step.phi[step_location - vis_width // 2:step_location + vis_width // 2, 0, phase0].copy()
+        simulated_profiles.append(simulated)
 
-    captureProfile()
-    for rt in range(rounds ):
+    capture_profile()
+    for rt in range(rounds):
         print("Running round %d/%d" % (rt+1, rounds))
-        pfStep.run(roundTimeSteps)
-        captureProfile()
+        pf_step.run(round_time_steps)
+        capture_profile()
 
-    x = np.arange(visWidth) - (visWidth // 2)
-    analytic = np.array([analyticInterfaceProfile(x_i - 0.5, expectedInterfaceWidth) for x_i in x], dtype=np.float64)
+    x = np.arange(vis_width) - (vis_width // 2)
+    ref = np.array([analytic_interface_profile(x_i - 0.5, expected_interface_width) for x_i in x], dtype=np.float64)
 
-    plt.plot(x, analytic, label='analytic', marker='o')
-    for i, profile in enumerate(simulatedProfiles):
+    plt.plot(x, ref, label='analytic', marker='o')
+    for i, profile in enumerate(simulated_profiles):
         plt.plot(x, profile, label="After %d rounds" % (i,))
 
     plt.legend()
 
-    return np.average(pfStep.velocity[:, 0, 0]) - velocity
+    return np.average(pf_step.velocity[:, 0, 0]) - velocity

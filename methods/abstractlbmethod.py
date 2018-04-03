@@ -4,7 +4,7 @@ from collections import namedtuple
 from pystencils.assignment_collection import AssignmentCollection
 
 
-RelaxationInfo = namedtuple('RelaxationInfo', ['equilibriumValue', 'relaxationRate'])
+RelaxationInfo = namedtuple('RelaxationInfo', ['equilibriumValue', 'relaxation_rate'])
 
 
 class LbmCollisionRule(AssignmentCollection):
@@ -13,10 +13,8 @@ class LbmCollisionRule(AssignmentCollection):
         self.method = lb_method
 
 
-class AbstractLbMethod(abc.ABCMeta('ABC', (object,), {})):
-    """
-    Abstract base class for all LBM methods
-    """
+class AbstractLbMethod(abc.ABC):
+    """Abstract base class for all LBM methods."""
 
     def __init__(self, stencil):
         self._stencil = stencil
@@ -31,19 +29,19 @@ class AbstractLbMethod(abc.ABCMeta('ABC', (object,), {})):
         return len(self.stencil[0])
 
     @property
-    def preCollisionPdfSymbols(self):
+    def pre_collision_pdf_symbols(self):
         """Tuple of symbols representing the pdf values before collision"""
         return sp.symbols("f_:%d" % (len(self.stencil),))
 
     @property
-    def postCollisionPdfSymbols(self):
+    def post_collision_pdf_symbols(self):
         """Tuple of symbols representing the pdf values after collision"""
         return sp.symbols("d_:%d" % (len(self.stencil),))
 
     # ------------------------- Abstract Methods & Properties ----------------------------------------------------------
 
     @abc.abstractmethod
-    def conservedQuantityComputation(self):
+    def conserved_quantity_computation(self):
         """Returns an instance of class :class:`lbmpy.methods.AbstractConservedQuantityComputation`"""
 
     @abc.abstractmethod
@@ -51,13 +49,13 @@ class AbstractLbMethod(abc.ABCMeta('ABC', (object,), {})):
         """Returns a sequence of weights, one for each lattice direction"""
 
     @abc.abstractmethod
-    def getEquilibrium(self):
+    def get_equilibrium(self):
         """Returns equation collection, to compute equilibrium values.
         The equations have the post collision symbols as left hand sides and are
         functions of the conserved quantities"""
 
     @abc.abstractmethod
-    def getCollisionRule(self):
+    def get_collision_rule(self):
         """Returns an LbmCollisionRule i.e. an equation collection with a reference to the method.
          This collision rule defines the collision operator."""
 

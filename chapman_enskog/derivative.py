@@ -1,21 +1,21 @@
 from pystencils.derivative import *
 
 
-def chapmanEnskogDerivativeExpansion(expr, label, eps=sp.Symbol("epsilon"), startOrder=1, stopOrder=4):
+def chapman_enskog_derivative_expansion(expr, label, eps=sp.Symbol("epsilon"), start_order=1, stop_order=4):
     """Substitutes differentials with given target and no superscript by the sum:
-    eps**(startOrder) * Diff(superscript=startOrder)   + ... + eps**(stopOrder) * Diff(superscript=stopOrder)"""
+    eps**(start_order) * Diff(superscript=start_order)   + ... + eps**(stop_order) * Diff(superscript=stop_order)"""
     diffs = [d for d in expr.atoms(Diff) if d.target == label]
-    subsDict = {d: sum([eps ** i * Diff(d.arg, d.target, i) for i in range(startOrder, stopOrder)])
-                for d in diffs}
-    return expr.subs(subsDict)
+    subs_dict = {d: sum([eps ** i * Diff(d.arg, d.target, i) for i in range(start_order, stop_order)])
+                 for d in diffs}
+    return expr.subs(subs_dict)
 
 
-def chapmanEnskogDerivativeRecombination(expr, label, eps=sp.Symbol("epsilon"), startOrder=1, stopOrder=4):
-    """Inverse operation of 'chapmanEnskogDerivativeExpansion'"""
+def chapman_enskog_derivative_recombination(expr, label, eps=sp.Symbol("epsilon"), start_order=1, stop_order=4):
+    """Inverse operation of 'chapman_enskog_derivative_expansion'"""
     expr = expr.expand()
-    diffs = [d for d in expr.atoms(Diff) if d.target == label and d.superscript == stopOrder - 1]
+    diffs = [d for d in expr.atoms(Diff) if d.target == label and d.superscript == stop_order - 1]
     for d in diffs:
         substitution = Diff(d.arg, label)
-        substitution -= sum([eps ** i * Diff(d.arg, label, i) for i in range(startOrder, stopOrder - 1)])
-        expr = expr.subs(d, substitution / eps**(stopOrder-1))
+        substitution -= sum([eps ** i * Diff(d.arg, label, i) for i in range(start_order, stop_order - 1)])
+        expr = expr.subs(d, substitution / eps ** (stop_order - 1))
     return expr

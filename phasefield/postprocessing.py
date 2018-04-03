@@ -6,17 +6,17 @@ import scipy.spatial
 import warnings
 
 
-def getIsolines(dataset, level=0.5, refinementFactor=4):
+def get_isolines(dataset, level=0.5, refinement_factor=4):
     from matplotlib._contour import QuadContourGenerator
-    indexArrays = np.meshgrid(*[np.arange(s) for s in dataset.shape])
-    gen = QuadContourGenerator(*indexArrays, dataset, None, True, 0)
+    index_arrays = np.meshgrid(*[np.arange(s) for s in dataset.shape])
+    gen = QuadContourGenerator(*index_arrays, dataset, None, True, 0)
     result = gen.create_contour(level)
-    if refinementFactor > 1:
-        result = [Path(p).interpolated(refinementFactor).vertices for p in result]
+    if refinement_factor > 1:
+        result = [Path(p).interpolated(refinement_factor).vertices for p in result]
     return result
 
 
-def findJumpIndices(array, threshold=0, minLength=3):
+def find_jump_indices(array, threshold=0, min_length=3):
     jumps = []
     offset = 0
     while True:
@@ -26,32 +26,32 @@ def findJumpIndices(array, threshold=0, minLength=3):
             jump = np.argmax(array < threshold)
         if jump == 0:
             return jumps
-        if len(array) <= minLength + jump:
+        if len(array) <= min_length + jump:
             return jumps
         jumps.append(offset + jump)
-        offset += jump + minLength
+        offset += jump + min_length
 
-        array = array[jump + minLength:]
+        array = array[jump + min_length:]
 
 
-def findBranchingPoint(pathVertices1, pathVertices2, maxDistance=0.5, branchingPointFilter=3):
-    tree = scipy.spatial.KDTree(pathVertices1)
-    distances, indices = tree.query(pathVertices2, k=1, distance_upper_bound=maxDistance)
+def find_branching_point(path_vertices1, path_vertices2, max_distance=0.5, branching_point_filter=3):
+    tree = scipy.spatial.KDTree(path_vertices1)
+    distances, indices = tree.query(path_vertices2, k=1, distance_upper_bound=max_distance)
     distances[distances == np.inf] = -1
-    jumpIndices = findJumpIndices(distances, 0, branchingPointFilter)
-    return pathVertices2[jumpIndices]
+    jump_indices = find_jump_indices(distances, 0, branching_point_filter)
+    return path_vertices2[jump_indices]
 
 
-def findAllBranchingPoints(phaseField1, phaseField2, maxDistance=0.1, branchingPointFilter=3):
+def find_all_branching_points(phase_field1, phase_field2, max_distance=0.1, branching_point_filter=3):
     result = []
-    isoLines = [getIsolines(p, level=0.5, refinementFactor=16) for p in (phaseField1, phaseField2)]
-    for path1, path2 in itertools.product(*isoLines):
-        bbs = findBranchingPoint(path1, path2, maxDistance, branchingPointFilter)
+    iso_lines = [get_isolines(p, level=0.5, refinement_factor=16) for p in (phase_field1, phase_field2)]
+    for path1, path2 in itertools.product(*iso_lines):
+        bbs = find_branching_point(path1, path2, max_distance, branching_point_filter)
         result += list(bbs)
     return np.array(result)
 
 
-def findIntersections(pathVertices1, pathVertices2):
+def find_intersections(path_vertices1, path_vertices2):
     from numpy import where, dstack, diff, meshgrid
 
     with warnings.catch_warnings():
@@ -62,12 +62,12 @@ def findIntersections(pathVertices1, pathVertices2):
         aall = lambda abools: dstack(abools).all(axis=2)
         slope = lambda line: (lambda d: d[:, 1] / d[:, 0])(diff(line, axis=0))
 
-        x11, x21 = meshgrid(pathVertices1[:-1, 0], pathVertices2[:-1, 0])
-        x12, x22 = meshgrid(pathVertices1[1:, 0], pathVertices2[1:, 0])
-        y11, y21 = meshgrid(pathVertices1[:-1, 1], pathVertices2[:-1, 1])
-        y12, y22 = meshgrid(pathVertices1[1:, 1], pathVertices2[1:, 1])
+        x11, x21 = meshgrid(path_vertices1[:-1, 0], path_vertices2[:-1, 0])
+        x12, x22 = meshgrid(path_vertices1[1:, 0], path_vertices2[1:, 0])
+        y11, y21 = meshgrid(path_vertices1[:-1, 1], path_vertices2[:-1, 1])
+        y12, y22 = meshgrid(path_vertices1[1:, 1], path_vertices2[1:, 1])
 
-        m1, m2 = meshgrid(slope(pathVertices1), slope(pathVertices2))
+        m1, m2 = meshgrid(slope(path_vertices1), slope(path_vertices2))
         m1inv, m2inv = 1 / m1, 1 / m2
 
         yi = (m1 * (x21 - x11 - m2inv * y21) + y11) / (1 - m1 * m2inv)
@@ -81,44 +81,44 @@ def findIntersections(pathVertices1, pathVertices2):
         return xi[aall(xconds)], yi[aall(yconds)]
 
 
-def findAllIntersectionPoints(phaseField1, phaseField2):
-    isoLines = [getIsolines(p, level=1.0/3, refinementFactor=4)
-                for p in (phaseField1, phaseField2)]
+def find_all_intersection_points(phase_field1, phase_field2):
+    iso_lines = [get_isolines(p, level=1.0 / 3, refinement_factor=4)
+                 for p in (phase_field1, phase_field2)]
     result = []
-    for path1, path2 in itertools.product(*isoLines):
-        xArr, yArr = findIntersections(path1, path2)
-        if xArr is not None and yArr is not None:
-            for x, y in zip(xArr, yArr):
+    for path1, path2 in itertools.product(*iso_lines):
+        x_arr, y_arr = find_intersections(path1, path2)
+        if x_arr is not None and y_arr is not None:
+            for x, y in zip(x_arr, y_arr):
                 result.append(np.array([x, y]))
     return np.array(result)
 
 
-def groupPoints(triplePoints, outerPoints):
-    """For each triple points the two closest point in 'outerPoints' are searched. 
+def group_points(triple_points, outer_points):
+    """For each triple points the two closest point in 'outer_points' are searched.
     Returns list of tuples [ (triplePoints0, matchedPoint0, matchedPoint2), ... ]
     """
-    assert len(outerPoints) == 2 * len(triplePoints)
-    outerPoints = list(outerPoints)
+    assert len(outer_points) == 2 * len(triple_points)
+    outer_points = list(outer_points)
     result = []
-    for triplePoint in triplePoints:
-        outerPoints.sort(key=lambda p: np.sum((triplePoint - p) ** 2))
-        result.append([triplePoint, outerPoints.pop(0), outerPoints.pop(0)])
+    for triplePoint in triple_points:
+        outer_points.sort(key=lambda p: np.sum((triplePoint - p) ** 2))
+        result.append([triplePoint, outer_points.pop(0), outer_points.pop(0)])
     return result
 
 
-def getAngle(pMid, p1, p2):
+def get_angle(p_mid, p1, p2):
     """Returns angle in degree spanned by a midpoint and two outer points"""
-    v = [p - pMid for p in [p1, p2]]
+    v = [p - p_mid for p in [p1, p2]]
     v = [p / np.linalg.norm(p) for p in v]
-    scalarProd = np.sum(v[0] * v[1])
-    result = np.rad2deg(np.arccos(scalarProd))
+    scalar_prod = np.sum(v[0] * v[1])
+    result = np.rad2deg(np.arccos(scalar_prod))
     return result
 
 
-def getTriplePointInfos(phi0, phi1, phi2, branchingDistance=0.5, branchingPointFilter=3):
+def get_triple_point_info(phi0, phi1, phi2, branching_distance=0.5, branching_point_filter=3):
     """
 
-    :param branchingDistance: where the 1/2 contour lines  move apart farther than this value, the
+    :param branching_distance: where the 1/2 contour lines  move apart farther than this value, the
                               branching points are detected
     :return: list of 3-tuples that contain (triplePoint, branchingPoint1, branchingPoint2)
              the angle can be determined at the triple point 
@@ -127,11 +127,11 @@ def getTriplePointInfos(phi0, phi1, phi2, branchingDistance=0.5, branchingPointF
     # the angle at the triple points is measured with contour lines of level 1/2 at "branching points"
     # i.e. at points where the lines move away from each other
 
-    bb1 = findAllBranchingPoints(phi0, phi1, branchingDistance, branchingPointFilter)
-    bb2 = findAllBranchingPoints(phi0, phi2, branchingDistance, branchingPointFilter)
-    ip = findAllIntersectionPoints(phi0, phi1)
-    return groupPoints(ip, np.vstack([bb1, bb2]))
+    bb1 = find_all_branching_points(phi0, phi1, branching_distance, branching_point_filter)
+    bb2 = find_all_branching_points(phi0, phi2, branching_distance, branching_point_filter)
+    ip = find_all_intersection_points(phi0, phi1)
+    return group_points(ip, np.vstack([bb1, bb2]))
 
 
-def getAnglesOfPhase(phi0, phi1, phi2, branchingDistance=0.5, branchingPointFilter=3):
-    return [getAngle(*r) for r in getTriplePointInfos(phi0, phi1, phi2, branchingDistance, branchingPointFilter)]
+def get_angles_of_phase(phi0, phi1, phi2, branching_distance=0.5, branching_point_filter=3):
+    return [get_angle(*r) for r in get_triple_point_info(phi0, phi1, phi2, branching_distance, branching_point_filter)]

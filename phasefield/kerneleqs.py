@@ -1,103 +1,103 @@
 import sympy as sp
 from pystencils import Assignment
 from pystencils.finitedifferences import Discretization2ndOrder
-from lbmpy.phasefield.analytical import chemicalPotentialsFromFreeEnergy, substituteLaplacianBySum, \
-    forceFromPhiAndMu, symmetricTensorLinearization, pressureTensorFromFreeEnergy, forceFromPressureTensor
+from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, substitute_laplacian_by_sum, \
+    force_from_phi_and_mu, symmetric_tensor_linearization, pressure_tensor_from_free_energy, force_from_pressure_tensor
 
 
 # ---------------------------------- Kernels to compute force ----------------------------------------------------------
 
 
-def muKernel(freeEnergy, orderParameters, phiField, muField, dx=1):
+def mu_kernel(free_energy, order_parameters, phi_field, mu_field, dx=1):
     """Reads from order parameter (phi) field and updates chemical potentials"""
-    assert phiField.spatialDimensions == muField.spatialDimensions
-    dim = phiField.spatialDimensions
-    chemicalPotential = chemicalPotentialsFromFreeEnergy(freeEnergy, orderParameters)
-    chemicalPotential = substituteLaplacianBySum(chemicalPotential, dim)
-    chemicalPotential = chemicalPotential.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
+    assert phi_field.spatial_dimensions == mu_field.spatial_dimensions
+    dim = phi_field.spatial_dimensions
+    chemical_potential = chemical_potentials_from_free_energy(free_energy, order_parameters)
+    chemical_potential = substitute_laplacian_by_sum(chemical_potential, dim)
+    chemical_potential = chemical_potential.subs({op: phi_field(i) for i, op in enumerate(order_parameters)})
     discretize = Discretization2ndOrder(dx=dx)
-    return [Assignment(muField(i), discretize(mu_i)) for i, mu_i in enumerate(chemicalPotential)]
+    return [Assignment(mu_field(i), discretize(mu_i)) for i, mu_i in enumerate(chemical_potential)]
 
 
-def forceKernelUsingMu(forceField, phiField, muField, dx=1):
-    """Computes forces using precomputed chemical potential - needs muKernel first"""
-    assert muField.indexDimensions == 1
-    force = forceFromPhiAndMu(phiField.vecCenter, mu=muField.vecCenter, dim=muField.spatialDimensions)
+def force_kernel_using_mu(force_field, phi_field, mu_field, dx=1):
+    """Computes forces using precomputed chemical potential - needs mu_kernel first"""
+    assert mu_field.index_dimensions == 1
+    force = force_from_phi_and_mu(phi_field.center_vector, mu=mu_field.center_vector, dim=mu_field.spatial_dimensions)
     discretize = Discretization2ndOrder(dx=dx)
-    return [Assignment(forceField(i),
-                  discretize(f_i)).expand() for i, f_i in enumerate(force)]
+    return [Assignment(force_field(i),
+                       discretize(f_i)).expand() for i, f_i in enumerate(force)]
 
 
-def pressureTensorKernel(freeEnergy, orderParameters, phiField, pressureTensorField, dx=1):
-    dim = phiField.spatialDimensions
-    p = pressureTensorFromFreeEnergy(freeEnergy, orderParameters, dim)
-    p = p.subs({op: phiField(i) for i, op in enumerate(orderParameters)})
-    indexMap = symmetricTensorLinearization(dim)
+def pressure_tensor_kernel(free_energy, order_parameters, phi_field, pressure_tensor_field, dx=1):
+    dim = phi_field.spatial_dimensions
+    p = pressure_tensor_from_free_energy(free_energy, order_parameters, dim)
+    p = p.subs({op: phi_field(i) for i, op in enumerate(order_parameters)})
+    index_map = symmetric_tensor_linearization(dim)
     discretize = Discretization2ndOrder(dx=dx)
     eqs = []
-    for index, linIndex in indexMap.items():
-        eq = Assignment(pressureTensorField(linIndex), discretize(p[index]).expand())
+    for index, linIndex in index_map.items():
+        eq = Assignment(pressure_tensor_field(linIndex), discretize(p[index]).expand())
         eqs.append(eq)
     return eqs
 
 
-def forceKernelUsingPressureTensor(forceField, pressureTensorField, extraForce=None, dx=1):
-    dim = forceField.spatialDimensions
-    indexMap = symmetricTensorLinearization(dim)
+def force_kernel_using_pressure_tensor(force_field, pressure_tensor_field, extra_force=None, dx=1):
+    dim = force_field.spatial_dimensions
+    index_map = symmetric_tensor_linearization(dim)
 
-    p = sp.Matrix(dim, dim, lambda i, j: pressureTensorField(indexMap[i, j] if i < j else indexMap[j, i]))
-    f = forceFromPressureTensor(p)
-    if extraForce:
-        f += extraForce
+    p = sp.Matrix(dim, dim, lambda i, j: pressure_tensor_field(index_map[i, j] if i < j else index_map[j, i]))
+    f = force_from_pressure_tensor(p)
+    if extra_force:
+        f += extra_force
     discretize = Discretization2ndOrder(dx=dx)
-    return [Assignment(forceField(i), discretize(f_i).expand())
+    return [Assignment(force_field(i), discretize(f_i).expand())
             for i, f_i in enumerate(f)]
 
 
 # ---------------------------------- Cahn Hilliard with finite differences ---------------------------------------------
 
 
-def cahnHilliardFdEq(phaseIdx, phi, mu, velocity, mobility, dx, dt):
+def cahn_hilliard_fd_eq(phase_idx, phi, mu, velocity, mobility, dx, dt):
     from pystencils.finitedifferences import transient, advection, diffusion
-    cahnHilliard = transient(phi, phaseIdx) + advection(phi, velocity, phaseIdx) - diffusion(mu, mobility, phaseIdx)
-    return Discretization2ndOrder(dx, dt)(cahnHilliard)
+    cahn_hilliard = transient(phi, phase_idx) + advection(phi, velocity, phase_idx) - diffusion(mu, mobility, phase_idx)
+    return Discretization2ndOrder(dx, dt)(cahn_hilliard)
 
 
 class CahnHilliardFDStep:
-    def __init__(self, dataHandling, phiFieldName, muFieldName, velocityFieldName, name='ch_fd', target='cpu',
-                 dx=1, dt=1, mobilities=1, equationModifier=lambda eqs: eqs):
-        from pystencils import createKernel
-        self.dataHandling = dataHandling
+    def __init__(self, data_handling, phi_field_name, mu_field_name, velocity_field_name, name='ch_fd', target='cpu',
+                 dx=1, dt=1, mobilities=1, equation_modifier=lambda eqs: eqs):
+        from pystencils import create_kernel
+        self.dataHandling = data_handling
 
-        muField = self.dataHandling.fields[muFieldName]
-        velField = self.dataHandling.fields[velocityFieldName]
-        self.phiField = self.dataHandling.fields[phiFieldName]
-        self.tmpField = self.dataHandling.addArrayLike(name + '_tmp', phiFieldName, latexName='tmp')
+        mu_field = self.dataHandling.fields[mu_field_name]
+        vel_field = self.dataHandling.fields[velocity_field_name]
+        self.phi_field = self.dataHandling.fields[phi_field_name]
+        self.tmp_field = self.dataHandling.add_array_like(name + '_tmp', phi_field_name, latex_name='tmp')
 
-        numPhases = self.dataHandling.fSize(phiFieldName)
+        num_phases = self.dataHandling.values_per_cell(phi_field_name)
         if not hasattr(mobilities, '__len__'):
-            mobilities = [mobilities] * numPhases
+            mobilities = [mobilities] * num_phases
 
-        updateEqs = []
-        for i in range(numPhases):
-            rhs = cahnHilliardFdEq(i, self.phiField, muField, velField, mobilities[i], dx, dt)
-            updateEqs.append(Assignment(self.tmpField(i), rhs))
-        self.updateEqs = updateEqs
-        self.updateEqs = equationModifier(updateEqs)
-        self.kernel = createKernel(self.updateEqs, target=target).compile()
-        self.sync = self.dataHandling.synchronizationFunction([phiFieldName, velocityFieldName, muFieldName],
-                                                              target=target)
+        update_eqs = []
+        for i in range(num_phases):
+            rhs = cahn_hilliard_fd_eq(i, self.phi_field, mu_field, vel_field, mobilities[i], dx, dt)
+            update_eqs.append(Assignment(self.tmp_field(i), rhs))
+        self.update_eqs = update_eqs
+        self.update_eqs = equation_modifier(update_eqs)
+        self.kernel = create_kernel(self.update_eqs, target=target).compile()
+        self.sync = self.dataHandling.synchronization_function([phi_field_name, velocity_field_name, mu_field_name],
+                                                               target=target)
 
-    def timeStep(self, **kwargs):
+    def time_step(self, **kwargs):
         self.sync()
-        self.dataHandling.runKernel(self.kernel, **kwargs)
-        self.dataHandling.swap(self.phiField.name, self.tmpField.name)
+        self.dataHandling.run_kernel(self.kernel, **kwargs)
+        self.dataHandling.swap(self.phi_field.name, self.tmp_field.name)
 
-    def setPdfFieldsFromMacroscopicValues(self):
+    def set_pdf_fields_from_macroscopic_values(self):
         pass
 
-    def preRun(self):
+    def pre_run(self):
         pass
 
-    def postRun(self):
+    def post_run(self):
         pass

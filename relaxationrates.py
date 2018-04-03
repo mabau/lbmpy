@@ -1,27 +1,25 @@
 import sympy as sp
-from lbmpy.moments import isShearMoment, getOrder
+from lbmpy.moments import is_shear_moment, get_order
 
 
-def relaxationRateFromLatticeViscosity(nu):
+def relaxation_rate_from_lattice_viscosity(nu):
     """Computes relaxation rate from lattice viscosity: :math:`\omega = \frac{1}{3\nu_L + \frac{1}{2}}`"""
     return 2 / (6 * nu + 1)
 
 
-def latticeViscosityFromRelaxationRate(omega):
+def lattice_viscosity_from_relaxation_rate(omega):
     """Computes lattice viscosity from relaxation rate: 
     :math:`\nu_L=\frac{1}{3}\left(\frac{1}{\omega}-\frac{1}{2}\right)`"""
     return (2 - omega) / (6 * omega)
 
 
-def relaxationRateFromMagicNumber(hydrodynamicRelaxationRate, magicNumber=sp.Rational(3, 16)):
-    """
-    Computes second TRT relaxation rate from magic number
-    """
-    omega = hydrodynamicRelaxationRate
-    return (4 - 2 * omega) / (4 * magicNumber * omega + 2 - omega)
+def relaxation_rate_from_magic_number(hydrodynamic_relaxation_rate, magic_number=sp.Rational(3, 16)):
+    """Computes second TRT relaxation rate from magic number."""
+    omega = hydrodynamic_relaxation_rate
+    return (4 - 2 * omega) / (4 * magic_number * omega + 2 - omega)
 
 
-def getShearRelaxationRate(method):
+def get_shear_relaxation_rate(method):
     """
     Assumes that all shear moments are relaxed with same rate - returns this rate
     Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y
@@ -30,52 +28,55 @@ def getShearRelaxationRate(method):
     if hasattr(method, 'shearRelaxationRate'):
         return method.shearRelaxationRate
 
-    relaxationRates = set()
-    for moment, relaxInfo in method.relaxationInfoDict.items():
-        if isShearMoment(moment):
-            relaxationRates.add(relaxInfo.relaxationRate)
-    if len(relaxationRates) == 1:
-        return relaxationRates.pop()
+    relaxation_rates = set()
+    for moment, relaxInfo in method.relaxation_info_dict.items():
+        if is_shear_moment(moment):
+            relaxation_rates.add(relaxInfo.relaxation_rate)
+    if len(relaxation_rates) == 1:
+        return relaxation_rates.pop()
     else:
-        if len(relaxationRates) > 1:
-            raise ValueError("Shear moments are relaxed with different relaxation times: %s" % (relaxationRates,))
+        if len(relaxation_rates) > 1:
+            raise ValueError("Shear moments are relaxed with different relaxation times: %s" % (relaxation_rates,))
         else:
-            allRelaxationRates = set(v.relaxationRate for v in method.relaxationInfoDict.values())
-            if len(allRelaxationRates) == 1:
-                return list(allRelaxationRates)[0]
+            all_relaxation_rates = set(v.relaxation_rate for v in method.relaxation_info_dict.values())
+            if len(all_relaxation_rates) == 1:
+                return list(all_relaxation_rates)[0]
             raise NotImplementedError("Shear moments seem to be not relaxed separately - "
                                       "Can not determine their relaxation rate automatically")
 
 
-def relaxationRateScaling(omega, levelScaleFactor):
+def relaxation_rate_scaling(omega, level_scale_factor):
+    """Computes adapted omega for refinement.
+
+    Args:
+        omega: relaxation rate
+        level_scale_factor: resolution of finer grid i.e. 2, 4, 8
+
+    Returns:
+        relaxation rate on refined grid
     """
-    Computes adapted omega for refinement
-    :param omega: relaxation rate
-    :param levelScaleFactor: resolution of finer grid i.e. 2, 4, 8
-    :return: relaxation rate on refined grid
-    """
-    return omega / (omega / 2 + levelScaleFactor * (1 - omega / 2))
+    return omega / (omega / 2 + level_scale_factor * (1 - omega / 2))
 
 
-def defaultRelaxationRateNames():
-    nextIndex = [0]
+def default_relaxation_rate_names():
+    next_index = [0]
 
-    def result(momentList):
-        shearMomentInside = False
-        allConservedMoments = True
-        for m in momentList:
-            if isShearMoment(m):
-                shearMomentInside = True
-            if not (getOrder(m) == 0 or getOrder(m) == 1):
-                allConservedMoments = False
+    def result(moment_list):
+        shear_moment_inside = False
+        all_conserved_moments = True
+        for m in moment_list:
+            if is_shear_moment(m):
+                shear_moment_inside = True
+            if not (get_order(m) == 0 or get_order(m) == 1):
+                all_conserved_moments = False
 
-        if shearMomentInside:
+        if shear_moment_inside:
             return sp.Symbol("omega")
-        elif allConservedMoments:
+        elif all_conserved_moments:
             return 0
         else:
-            nextIndex[0] += 1
-            return sp.Symbol("omega_%d" % (nextIndex[0],))
+            next_index[0] += 1
+            return sp.Symbol("omega_%d" % (next_index[0],))
 
     return result
 

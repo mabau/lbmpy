@@ -1,25 +1,26 @@
 import sympy as sp
-from lbmpy.methods.creationfunctions import createFromEquilibrium
-from lbmpy.stencils import getStencil
+from lbmpy.methods.creationfunctions import create_from_equilibrium
+from lbmpy.stencils import get_stencil
 from pystencils.sympyextensions import kronecker_delta, multidimensional_sum
-from lbmpy.maxwellian_equilibrium import getWeights
+from lbmpy.maxwellian_equilibrium import get_weights
 
 
-def cahnHilliardLbmMethod(stencil, mu, relaxationRate=sp.Symbol("omega"), gamma=1):
-    """Returns LB equilibrium that solves the Cahn Hilliard equation
+def cahn_hilliard_lb_method(stencil, mu, relaxation_rate=sp.Symbol("omega"), gamma=1):
+    """Returns LB equilibrium that solves the Cahn Hilliard equation.
 
     ..math ::
 
         \partial_t \phi + \partial_i ( \phi v_i ) = M \nabla^2 \mu
-    
-    :param stencil: tuple of discrete directions
-    :param mu: symbolic expression (field access) for the chemical potential
-    :param relaxationRate: relaxation rate of method
-    :param gamma: tunable parameter affecting the second order equilibrium moment
+
+    Args:
+        stencil: tuple of discrete directions
+        mu: symbolic expression (field access) for the chemical potential
+        relaxation_rate: relaxation rate of method
+        gamma: tunable parameter affecting the second order equilibrium moment
     """
     if isinstance(stencil, str):
-        stencil = getStencil(stencil)
-    weights = getWeights(stencil, c_s_sq=sp.Rational(1, 3))
+        stencil = get_stencil(stencil)
+    weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
 
     kd = kronecker_delta
 
@@ -40,5 +41,5 @@ def cahnHilliardLbmMethod(stencil, mu, relaxationRate=sp.Symbol("omega"), gamma=
 
     rho = sp.Symbol("rho")
     equilibrium[0] = rho - sp.expand(sum(equilibrium[1:]))
-    return createFromEquilibrium(stencil, tuple(equilibrium), relaxationRate, compressible=True)
+    return create_from_equilibrium(stencil, tuple(equilibrium), relaxation_rate, compressible=True)
 
