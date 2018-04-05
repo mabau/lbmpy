@@ -152,6 +152,8 @@ For example, to modify the AST one can run::
 import sympy as sp
 from copy import copy
 
+from lbmpy.methods.creationfunctions import create_generic_mrt
+from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
 from pystencils.assignment_collection.assignment_collection import AssignmentCollection
@@ -358,6 +360,20 @@ def create_lb_method(**params):
 
     return method
 
+
+def create_lb_method_from_existing(method, modification_function):
+    """Creates a new method based on an existing method by modifying its collision table.
+
+    Args:
+        method: old method
+        modification_function: function receiving (moment, equilibriumValue, relaxation_rate) as arguments,
+                               i.e. one row of the relaxation table, returning a modified version
+    """
+    relaxation_table = (modification_function(m, eq, rr)
+                        for m, eq, rr in zip(method.moments, method.moment_equilibrium_values, method.relaxation_rates))
+    compressible = method.conserved_quantity_computation.compressible
+    cumulant = isinstance(method, CumulantBasedLbMethod)
+    return create_generic_mrt(method.stencil, relaxation_table, compressible, method.force_model, cumulant)
 
 # ----------------------------------------------------------------------------------------------------------------------
 

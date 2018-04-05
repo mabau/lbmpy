@@ -445,19 +445,6 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
         return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, **kwargs)
 
 
-def modify_relaxation_table(method, modification_function):
-    """
-    Creates a new method, based on an existing method with modified relaxation table
-    :param method: old method
-    :param modification_function: function receiving (moment, equilibriumValue, relaxation_rate) tuple, i.e. on row
-                                 of the relaxation table, returning a modified tuple
-    """
-    relaxation_table = (modification_function(m, eq, rr)
-                        for m, eq, rr in zip(method.moments, method.moment_equilibrium_values, method.relaxation_rates))
-    compressible = method.conserved_quantity_computation.compressible
-    cumulant = isinstance(method, CumulantBasedLbMethod)
-    return create_generic_mrt(method.stencil, relaxation_table, compressible, method.force_model, cumulant)
-
 # ----------------------------------------- Comparison view for notebooks ----------------------------------------------
 
 

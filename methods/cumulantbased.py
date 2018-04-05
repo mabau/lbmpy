@@ -5,7 +5,7 @@ from pystencils.sympyextensions import fast_subs, subs_additive
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, extract_monomials, moment_matrix, monomial_to_polynomial_transformation_matrix
-from lbmpy.cumulants import cumulantAsFunctionOfRawMoments, rawMomentAsFunctionOfCumulants
+from lbmpy.cumulants import cumulant_as_function_of_raw_moments, raw_moment_as_function_of_cumulants
 
 
 class CumulantBasedLbMethod(AbstractLbMethod):
@@ -173,7 +173,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
 
         # 3) Transform moments to monomial cumulants
         moments_dict = {idx: m for idx, m in zip(indices, moments)}
-        monomial_cumulants = [cumulantAsFunctionOfRawMoments(idx, moments_dict) for idx in indices]
+        monomial_cumulants = [cumulant_as_function_of_raw_moments(idx, moments_dict) for idx in indices]
 
         if pre_collision_subexpressions:
             symbols = [tuple_to_symbol(t, "preC") for t in higher_order_indices]
@@ -196,7 +196,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
 
         # 5) Transform post-collision cumulant back to moments and from there to pdfs
         cumulant_dict = {idx: value for idx, value in zip(indices, relaxed_monomial_cumulants)}
-        collided_moments = [rawMomentAsFunctionOfCumulants(idx, cumulant_dict) for idx in indices]
+        collided_moments = [raw_moment_as_function_of_cumulants(idx, cumulant_dict) for idx in indices]
         result = moment_transformation_matrix.inv() * sp.Matrix(collided_moments)
         main_assignments = [Assignment(sym, val) for sym, val in zip(self.post_collision_pdf_symbols, result)]
 

@@ -241,8 +241,8 @@ def get_cumulants_of_continuous_maxwellian_equilibrium(cumulants, dim, rho=sp.Sy
 def get_cumulants_of_discrete_maxwellian_equilibrium(stencil, cumulants,
                                                      rho=sp.Symbol("rho"), u=tuple(sp.symbols("u_0 u_1 u_2")),
                                                      c_s_sq=sp.Symbol("c_s") ** 2, order=None, compressible=True):
-    from lbmpy.cumulants import discreteCumulant
+    from lbmpy.cumulants import discrete_cumulant
     if order is None:
         order = 4
     mb = discrete_maxwellian_equilibrium(stencil, rho, u, order, c_s_sq, compressible)
-    return tuple([discreteCumulant(mb, cumulant, stencil).expand() for cumulant in cumulants])
+    return tuple([discrete_cumulant(mb, cumulant, stencil).expand() for cumulant in cumulants])
