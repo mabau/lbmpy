@@ -6,7 +6,7 @@ from lbmpy.creationfunctions import switch_to_symbolic_relaxation_rates_for_omeg
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
 from pystencils.datahandling.serial_datahandling import SerialDataHandling
-from pystencils import create_kernel, makeSlice
+from pystencils import create_kernel, make_slice
 from pystencils.slicing import SlicedGetter
 from pystencils.timeloop import TimeLoop
 
@@ -78,11 +78,11 @@ class LatticeBoltzmannStep:
         if method_parameters['omega_output_field'] and isinstance(method_parameters['omega_output_field'], str):
             method_parameters['omega_output_field'] = data_handling.add_array(method_parameters['omega_output_field'])
 
-        self.kernelParams = kernel_params
+        self.kernel_params = kernel_params
 
         # --- Kernel creation ---
         if lbm_kernel is None:
-            switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, self.kernelParams)
+            switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, self.kernel_params)
             optimization['symbolic_field'] = data_handling.fields[self._pdf_arr_name]
             method_parameters['field_name'] = self._pdf_arr_name
             method_parameters['temporary_field_name'] = self._tmp_arr_name
@@ -154,7 +154,7 @@ class LatticeBoltzmannStep:
 
     def _get_slice(self, data_name, slice_obj, masked):
         if slice_obj is None:
-            slice_obj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
+            slice_obj = make_slice[:, :] if self.dim == 2 else make_slice[:, :, 0.5]
 
         result = self._data_handling.gather_array(data_name, slice_obj)
         if result is None:
@@ -194,18 +194,18 @@ class LatticeBoltzmannStep:
                 self._data_handling.to_gpu(self.density_data_name)
 
     def set_pdf_fields_from_macroscopic_values(self):
-        self._data_handling.run_kernel(self._setterKernel, **self.kernelParams)
+        self._data_handling.run_kernel(self._setterKernel, **self.kernel_params)
 
     def time_step(self):
         if len(self._lbmKernels) == 2:  # collide stream
-            self._data_handling.run_kernel(self._lbmKernels[0], **self.kernelParams)
+            self._data_handling.run_kernel(self._lbmKernels[0], **self.kernel_params)
             self._sync()
-            self._boundary_handling(**self.kernelParams)
-            self._data_handling.run_kernel(self._lbmKernels[1], **self.kernelParams)
+            self._boundary_handling(**self.kernel_params)
+            self._data_handling.run_kernel(self._lbmKernels[1], **self.kernel_params)
         else:  # stream collide
             self._sync()
-            self._boundary_handling(**self.kernelParams)
-            self._data_handling.run_kernel(self._lbmKernels[0], **self.kernelParams)
+            self._boundary_handling(**self.kernel_params)
+            self._data_handling.run_kernel(self._lbmKernels[0], **self.kernel_params)
 
         self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name, self._gpu)
         self.timeStepsRun += 1
@@ -213,7 +213,7 @@ class LatticeBoltzmannStep:
     def post_run(self):
         if self._gpu:
             self._data_handling.to_cpu(self._pdf_arr_name)
-        self._data_handling.run_kernel(self._getterKernel, **self.kernelParams)
+        self._data_handling.run_kernel(self._getterKernel, **self.kernel_params)
 
     def run(self, timeSteps):
         self.pre_run()

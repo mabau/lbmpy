@@ -2,7 +2,7 @@ import numpy as np
 import sympy as sp
 
 from lbmpy.chapman_enskog import Diff
-from pystencils import makeSlice
+from pystencils import make_slice
 
 
 def plot_status(phase_field_step, from_x=None, to_x=None):
@@ -19,20 +19,20 @@ def plot_status(phase_field_step, from_x=None, to_x=None):
     plt.title('φ')
     phi_name = phase_field_step.phiFieldName
     for i in range(num_phases):
-        plt.plot(dh.gather_array(phi_name, makeSlice[from_x:to_x, 0, i]), marker='x', label='φ_%d' % (i,))
+        plt.plot(dh.gather_array(phi_name, make_slice[from_x:to_x, 0, i]), marker='x', label='φ_%d' % (i,))
     plt.legend()
 
     plt.subplot(1, 3, 2)
     plt.title("μ")
     mu_name = phase_field_step.muFieldName
     for i in range(num_phases):
-        plt.plot(dh.gather_array(mu_name, makeSlice[from_x:to_x, 0, i]), marker='x', label='μ_%d' % (i,))
+        plt.plot(dh.gather_array(mu_name, make_slice[from_x:to_x, 0, i]), marker='x', label='μ_%d' % (i,))
     plt.legend()
 
     plt.subplot(1, 3, 3)
     plt.title("Force and Velocity")
-    plt.plot(dh.gather_array(phase_field_step.forceFieldName, makeSlice[from_x:to_x, 0, 0]), label='F', marker='x')
-    plt.plot(dh.gather_array(phase_field_step.velFieldName, makeSlice[from_x:to_x, 0, 0]), label='u', marker='v')
+    plt.plot(dh.gather_array(phase_field_step.forceFieldName, make_slice[from_x:to_x, 0, 0]), label='F', marker='x')
+    plt.plot(dh.gather_array(phase_field_step.velFieldName, make_slice[from_x:to_x, 0, 0]), label='u', marker='v')
     plt.legend()
 
 

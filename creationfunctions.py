@@ -208,7 +208,7 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
     if collision_rule is None:
-        collision_rule = create_lattice_boltzmann_collision_rule(**params, optimization=opt_params)
+        collision_rule = create_lb_collision_rule(**params, optimization=opt_params)
 
     lb_method = collision_rule.method
 
@@ -260,7 +260,7 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
 
 
 @disk_cache_no_fallback
-def create_lattice_boltzmann_collision_rule(lb_method=None, optimization={}, **kwargs):
+def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
     if lb_method is None:

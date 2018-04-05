@@ -1,7 +1,7 @@
 from itertools import cycle
 import matplotlib.patches as patches
 
-from pystencils import makeSlice
+from pystencils import make_slice
 from pystencils.plot2d import *
 
 
@@ -72,7 +72,7 @@ def phase_plot(phase_field, linewidth=1.0):
         scalar_field_contour(phase_field[..., i], levels=[0.5], colors='k', linewidths=[linewidth])
 
 
-def phase_plot_for_step(phase_field_step, slice_obj=makeSlice[:, :], **kwargs):
+def phase_plot_for_step(phase_field_step, slice_obj=make_slice[:, :], **kwargs):
     concentrations = phase_field_step.concentration[slice_obj]
     phase_plot(concentrations, **kwargs)
 

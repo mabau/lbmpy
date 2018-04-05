@@ -501,7 +501,7 @@ class ChapmanEnskogAnalysis(object):
         # Match to Navier stokes
         compressible, pressure, sigma = match_to_navier_stokes(self._equationsWithHigherOrderMoments)
         self.compressible = compressible
-        self.pressureEquation = pressure
+        self.pressure_equation = pressure
         self._sigmaWithHigherOrderMoments = sigma
         self._sigma = sigma.subs(self.higherOrderMomentSubsDict).expand().applyfunc(self._ce_recombine)
         self._sigmaWithoutErrorTerms = remove_error_terms(self._sigma)

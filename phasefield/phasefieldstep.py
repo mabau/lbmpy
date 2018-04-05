@@ -11,7 +11,7 @@ from pystencils.boundaries.boundaryhandling import FlagInterface
 from pystencils.boundaries.inkernel import add_neumann_boundary
 from pystencils.datahandling import SerialDataHandling
 from pystencils.assignment_collection.simplifications import sympy_cse_on_assignment_list
-from pystencils.slicing import makeSlice, SlicedGetter
+from pystencils.slicing import make_slice, SlicedGetter
 
 
 class PhaseFieldStep:
@@ -199,10 +199,10 @@ class PhaseFieldStep:
 
     def time_step(self):
         neumannFlag = self.neumannFlag
-        #for b in self.data_handling.iterate(sliceObj=makeSlice[:, 0]):
+        #for b in self.data_handling.iterate(sliceObj=make_slice[:, 0]):
         #    b[self.phi_field_name][..., 0] = 0.0
         #    b[self.phi_field_name][..., 1] = 1.0
-        #for b in self.data_handling.iterate(sliceObj=makeSlice[0, :]):
+        #for b in self.data_handling.iterate(sliceObj=make_slice[0, :]):
         #    b[self.phi_field_name][..., 0] = 1.0
         #    b[self.phi_field_name][..., 1] = 0.0
 
@@ -247,7 +247,7 @@ class PhaseFieldStep:
 
     def _get_slice(self, data_name, slice_obj):
         if slice_obj is None:
-            slice_obj = makeSlice[:, :] if self.dim == 2 else makeSlice[:, :, 0.5]
+            slice_obj = make_slice[:, :] if self.dim == 2 else make_slice[:, :, 0.5]
         return self.data_handling.gather_array(data_name, slice_obj).squeeze()
 
     def phi_slice(self, slice_obj=None):

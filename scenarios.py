@@ -12,8 +12,8 @@ It is a good starting point if you are new to lbmpy.
 All scenarios can be modified, for example you can create a simple channel first, then place an object in it:
 
 >>> from lbmpy.boundaries import NoSlip
->>> from pystencils.slicing import makeSlice
->>> flag = scenario.boundary_handling.set_boundary(NoSlip(), makeSlice[0.3:0.4, 0.0:0.3])
+>>> from pystencils.slicing import make_slice
+>>> flag = scenario.boundary_handling.set_boundary(NoSlip(), make_slice[0.3:0.4, 0.0:0.3])
 
 
 

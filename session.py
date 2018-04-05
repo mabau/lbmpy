@@ -2,7 +2,7 @@ import sympy as sp
 import numpy as np
 from lbmpy.scenarios import *
 from lbmpy.creationfunctions import *
-from pystencils import makeSlice, show_code
+from pystencils import make_slice, show_code
 from lbmpy.boundaries import *
 from lbmpy.postprocessing import *
 from lbmpy.lbstep import LatticeBoltzmannStep
