@@ -30,11 +30,11 @@ class PhaseFieldStep:
         if data_handling is None:
             data_handling = SerialDataHandling(domain_size, periodicity=True)
 
-        self.freeEnergy = free_energy
-        self.concentrationToOrderParameter = concentration_to_order_parameters
-        self.orderParametersToConcentrations = order_parameters_to_concentrations
+        self.free_energy = free_energy
+        self.concentration_to_order_parameter = concentration_to_order_parameters
+        self.order_parameters_to_concentrations = order_parameters_to_concentrations
 
-        self.chemicalPotentials = chemical_potentials_from_free_energy(free_energy, order_parameters)
+        self.chemical_potentials = chemical_potentials_from_free_energy(free_energy, order_parameters)
 
         # ------------------ Adding arrays ---------------------
         gpu = target == 'gpu'
@@ -61,7 +61,7 @@ class PhaseFieldStep:
 
         # ------------------ Creating kernels ------------------
         phi = tuple(self.phi_field(i) for i in range(len(order_parameters)))
-        F = self.freeEnergy.subs({old: new for old, new in zip(order_parameters, phi)})
+        F = self.free_energy.subs({old: new for old, new in zip(order_parameters, phi)})
 
         if homogeneous_neumann_boundaries:
             def apply_neumann_boundaries(eqs):
@@ -77,7 +77,7 @@ class PhaseFieldStep:
         # μ and pressure tensor update
         self.phiSync = data_handling.synchronization_function([self.phi_field_name], target=target)
         self.muEqs = mu_kernel(F, phi, self.phi_field, self.mu_field, dx)
-        self.pressureTensorEqs = pressure_tensor_kernel(self.freeEnergy, order_parameters,
+        self.pressureTensorEqs = pressure_tensor_kernel(self.free_energy, order_parameters,
                                                         self.phi_field, self.pressure_tensor_field, dx)
         mu_and_pressure_tensor_eqs = self.muEqs + self.pressureTensorEqs
         mu_and_pressure_tensor_eqs = apply_neumann_boundaries(mu_and_pressure_tensor_eqs)
@@ -225,8 +225,8 @@ class PhaseFieldStep:
         return self.hydroLbmStep.boundary_handling
 
     def set_concentration(self, slice_obj, concentration):
-        if self.concentrationToOrderParameter is not None:
-            phi = self.concentrationToOrderParameter(concentration)
+        if self.concentration_to_order_parameter is not None:
+            phi = self.concentration_to_order_parameter(concentration)
         else:
             phi = np.array(concentration)
 
@@ -255,7 +255,7 @@ class PhaseFieldStep:
 
     def concentration_slice(self, slice_obj=None):
         phi = self.phi_slice(slice_obj)
-        return phi if self.orderParametersToConcentrations is None else self.orderParametersToConcentrations(phi)
+        return phi if self.order_parameters_to_concentrations is None else self.order_parameters_to_concentrations(phi)
 
     def mu_slice(self, slice_obj=None):
         return self._get_slice(self.mu_field_name, slice_obj)

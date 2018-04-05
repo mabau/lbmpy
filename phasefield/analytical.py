@@ -170,26 +170,28 @@ def separate_into_bulk_and_interface(free_energy):
 
 
 def analytic_interface_profile(x, interface_width=interface_width_symbol):
-    """Analytic expression for a 1D interface normal to x with given interface width
+    """Analytic expression for a 1D interface normal to x with given interface width.
 
     The following doctest shows that the returned analytical solution is indeed a solution of the ODE that we
     get from the condition :math:`\mu_0 = 0` (thermodynamic equilibrium) for a situation with only a single order
     parameter, i.e. at a transition between two phases.
-    >>> numPhases = 4
-    >>> x, phi = sp.Symbol("x"), symbolic_order_parameters(numPhases-1)
-    >>> F = free_energy_functional_n_phases(order_parameters=phi)
-    >>> mu = chemical_potentials_from_free_energy(F)
-    >>> mu0 = mu[0].subs({p: 0 for p in phi[1:]})  # mu[0] as function of one order parameter only
-    >>> solution = analytic_interface_profile(x)
-    >>> solutionSubstitution = {phi[0]: solution, Diff(Diff(phi[0])): sp.diff(solution, x, x) }
-    >>> sp.expand(mu0.subs(solutionSubstitution))  # inserting solution should solve the mu_0=0 equation
-    0
+
+    Examples:
+        >>> numPhases = 4
+        >>> x, phi = sp.Symbol("x"), symbolic_order_parameters(numPhases-1)
+        >>> F = free_energy_functional_n_phases(order_parameters=phi)
+        >>> mu = chemical_potentials_from_free_energy(F)
+        >>> mu0 = mu[0].subs({p: 0 for p in phi[1:]})  # mu[0] as function of one order parameter only
+        >>> solution = analytic_interface_profile(x)
+        >>> solutionSubstitution = {phi[0]: solution, Diff(Diff(phi[0])): sp.diff(solution, x, x) }
+        >>> sp.expand(mu0.subs(solutionSubstitution))  # inserting solution should solve the mu_0=0 equation
+        0
     """
     return (1 + sp.tanh(x / (2 * interface_width))) / 2
 
 
 def chemical_potentials_from_free_energy(free_energy, order_parameters=None):
-    """Computes chemical potentials as functional derivative of free energy"""
+    """Computes chemical potentials as functional derivative of free energy."""
     symbols = free_energy.atoms(sp.Symbol)
     if order_parameters is None:
         order_parameters = [s for s in symbols if s.name.startswith(orderParameterSymbolName)]

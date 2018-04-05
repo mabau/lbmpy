@@ -13,26 +13,26 @@ def plot_status(phase_field_step, from_x=None, to_x=None):
 
     dh = phase_field_step.data_handling
 
-    num_phases = phase_field_step.numOrderParameters
+    num_phases = phase_field_step.num_order_parameters
 
     plt.subplot(1, 3, 1)
     plt.title('φ')
-    phi_name = phase_field_step.phiFieldName
+    phi_name = phase_field_step.phi_field_name
     for i in range(num_phases):
         plt.plot(dh.gather_array(phi_name, make_slice[from_x:to_x, 0, i]), marker='x', label='φ_%d' % (i,))
     plt.legend()
 
     plt.subplot(1, 3, 2)
     plt.title("μ")
-    mu_name = phase_field_step.muFieldName
+    mu_name = phase_field_step.mu_field_name
     for i in range(num_phases):
         plt.plot(dh.gather_array(mu_name, make_slice[from_x:to_x, 0, i]), marker='x', label='μ_%d' % (i,))
     plt.legend()
 
     plt.subplot(1, 3, 3)
     plt.title("Force and Velocity")
-    plt.plot(dh.gather_array(phase_field_step.forceFieldName, make_slice[from_x:to_x, 0, 0]), label='F', marker='x')
-    plt.plot(dh.gather_array(phase_field_step.velFieldName, make_slice[from_x:to_x, 0, 0]), label='u', marker='v')
+    plt.plot(dh.gather_array(phase_field_step.force_field_name, make_slice[from_x:to_x, 0, 0]), label='F', marker='x')
+    plt.plot(dh.gather_array(phase_field_step.vel_field_name, make_slice[from_x:to_x, 0, 0]), label='u', marker='v')
     plt.legend()
 
 
@@ -59,14 +59,14 @@ def init_sharp_interface(pf_step, phase_idx, x1=None, x2=None, inverse=False):
     if x2 is None:
         x2 = 3 * x1
 
-    if phase_idx >= pf_step.numOrderParameters:
+    if phase_idx >= pf_step.num_order_parameters:
         return
 
     for b in pf_step.data_handling.iterate():
         x = b.cell_index_arrays[0]
         mid = np.logical_and(x1 < x, x < x2)
 
-        phi = b[pf_step.phiFieldName]
+        phi = b[pf_step.phi_field_name]
         val1, val2 = (1, 0) if inverse else (0, 1)
 
         phi[..., phase_idx].fill(val1)
@@ -94,7 +94,7 @@ def tanh_test(pf_step, phase0, phase1, expected_interface_width=1, time_steps=10
 
     domain_size = pf_step.data_handling.shape
     pf_step.reset()
-    pf_step.data_handling.fill(pf_step.phiFieldName, 0)
+    pf_step.data_handling.fill(pf_step.phi_field_name, 0)
     init_sharp_interface(pf_step, phase_idx=phase0, inverse=False)
     init_sharp_interface(pf_step, phase_idx=phase1, inverse=True)
     pf_step.set_pdf_fields_from_macroscopic_values()
@@ -140,14 +140,14 @@ def galilean_invariance_test(pf_step, velocity=0.05, rounds=3, phase0=0, phase1=
     print("Velocity:", velocity, " Time steps for round:", round_time_steps)
 
     pf_step.reset()
-    pf_step.data_handling.fill(pf_step.phiFieldName, 0)
+    pf_step.data_handling.fill(pf_step.phi_field_name, 0)
     init_sharp_interface(pf_step, phase_idx=phase0, inverse=False)
     init_sharp_interface(pf_step, phase_idx=phase1, inverse=True)
     pf_step.set_pdf_fields_from_macroscopic_values()
 
     print("Running", init_time_steps, "initial time steps")
     pf_step.run(init_time_steps)
-    pf_step.data_handling.fill(pf_step.velFieldName, velocity, value_idx=0)
+    pf_step.data_handling.fill(pf_step.vel_field_name, velocity, value_idx=0)
     pf_step.set_pdf_fields_from_macroscopic_values()
 
     step_location = domain_size[0] // 4
