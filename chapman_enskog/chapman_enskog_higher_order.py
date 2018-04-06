@@ -1,81 +1,102 @@
 import sympy as sp
-from lbmpy.chapman_enskog import CeMoment, Diff, take_moments
+from lbmpy.chapman_enskog.chapman_enskog import CeMoment, Diff, take_moments
 from lbmpy.chapman_enskog.derivative import full_diff_expand
 from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol
 from lbmpy.moments import moments_up_to_order, moments_of_order
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
 
-def polyMoments(order, dim):
+def poly_moments(order, dim):
     from pystencils.sympyextensions import prod
     c = sp.Matrix([expanded_symbol("c", subscript=i) for i in range(dim)])
     return [prod(c_i ** m_i for c_i, m_i in zip(c, m)) for m in moments_of_order(order, dim=dim)]
 
 
-def specialLinSolve(eqs, dofs):
-    """Sympy's linsolve can only solve for symbols, not expressions
+def special_linsolve(eqs, degrees_of_freedom):
+    """Adapted version of sympy's linsolve function.
+
+    Sympy's linsolve can only solve for symbols, not expressions
     The general solve routine can, but is way slower. This function substitutes the expressions to solve for
-    by dummy variables and the uses the fast linsolve from sympy"""
-    dummySubs = {d: sp.Dummy() for d in dofs}
-    dummySubsInverse = {dum: val for val, dum in dummySubs.items()}
-    eqsWithDummies = [e.subs(dummySubs) for e in eqs]
-    eqsToSolve = [eq for eq in eqsWithDummies if eq.atoms(sp.Dummy)]
-    assert eqsToSolve
-    dummyList = list(dummySubs.values())
-    solveResult = sp.linsolve(eqsToSolve, dummyList)
-    assert len(solveResult) == 1, "Solve Result length " + str(len(solveResult))
-    solveResult = list(solveResult)[0]
-    return {dummySubsInverse[dummyList[i]]: solveResult[i] for i in range(len(solveResult))}
+    by dummy variables and then uses the fast linsolve from sympy
+    """
+    dummy_subs = {d: sp.Dummy() for d in degrees_of_freedom}
+    dummy_subs_inverse = {dum: val for val, dum in dummy_subs.items()}
+    eqs_with_dummies = [e.subs(dummy_subs) for e in eqs]
+    eqs_to_solve = [eq for eq in eqs_with_dummies if eq.atoms(sp.Dummy)]
+    assert eqs_to_solve
+    dummy_list = list(dummy_subs.values())
+    solve_result = sp.linsolve(eqs_to_solve, dummy_list)
+    assert len(solve_result) == 1, "Solve Result length " + str(len(solve_result))
+    solve_result = list(solve_result)[0]
+    return {dummy_subs_inverse[dummy_list[i]]: solve_result[i] for i in range(len(solve_result))}
 
 
-def getSolvabilityConditions(dim, order):
-    solvabilityConditions = {}
-    for name in ["\Pi", "\\Upsilon"]:
-        for momentTuple in moments_up_to_order(1, dim=dim):
+def get_solvability_conditions(dim, order):
+    solvability_conditions = {}
+    for name in ["\\Pi", "\\Upsilon"]:
+        for moment_tuple in moments_up_to_order(1, dim=dim):
             for k in range(order+1):
-                solvabilityConditions[CeMoment(name, superscript=k, momentTuple=momentTuple)] = 0
-    return solvabilityConditions
+                solvability_conditions[CeMoment(name, superscript=k, moment_tuple=moment_tuple)] = 0
+    return solvability_conditions
 
 
-def determineHigherOrderMoments(epsilonHierarchy, relaxationRates, momentComputation, dim, order=2):
-    solvabilityConditions = getSolvabilityConditions(dim, order)
+def determine_higher_order_moments(epsilon_hierarchy, relaxation_rates, moment_computation, dim, order=2):
+    """Computes values of non-equilibrium moments of order 2 up to passed order.
 
-    def fullExpand(expr):
-        return full_diff_expand(expr, constants=relaxationRates)
+    Args:
+        epsilon_hierarchy: dict mapping epsilon exponent to equation.
+                           Can be computed by :func:`chapman_enskog_ansatz`
+        relaxation_rates: list of symbolic relaxation rates, which are treated as constants
+        moment_computation: instance of LbMethodEqMoments, which computes equilibrium moments of a LB scheme
+        dim: dimension
+        order: moments up to this order are computed, has to be >= 2
+
+    Returns:
+        Tuple with
+            - values of expanded time derivative objects
+            - higher order moments in raw form, with time derivative terms
+            - higher order moments where time derivative objects have been substituted
+    """
+    assert order >= 2
+    solvability_conditions = get_solvability_conditions(dim, order)
+
+    def full_expand(expr):
+        return full_diff_expand(expr, constants=relaxation_rates)
 
     def tm(expr):
         expr = take_moments(expr, use_one_neighborhood_aliasing=True)
-        return momentComputation.substitute(expr).subs(solvabilityConditions)
+        return moment_computation.substitute(expr).subs(solvability_conditions)
 
-    timeDiffs = OrderedDict()
-    nonEqMoms = OrderedDict()
+    time_diffs = OrderedDict()
+    non_eq_moms = OrderedDict()
     for epsOrder in range(1, order):
-        epsEq = epsilonHierarchy[epsOrder]
+        eps_eq = epsilon_hierarchy[epsOrder]
 
         for order in range(order+1):
-            eqs = sp.Matrix([fullExpand(tm(epsEq * m)) for m in polyMoments(order, dim)])
-            unknownMoments = [m for m in eqs.atoms(CeMoment) if m.superscript == epsOrder and sum(m.momentTuple) == order]
-            print(epsOrder, order)
-            if len(unknownMoments) == 0:
+            eqs = sp.Matrix([full_expand(tm(eps_eq * m)) for m in poly_moments(order, dim)])
+            unknown_moments = [m for m in eqs.atoms(CeMoment)
+                               if m.superscript == epsOrder and sum(m.moment_tuple) == order]
+            if len(unknown_moments) == 0:
                 for eq in eqs:
-                    timeDiffsInExpr = [d for d in eq.atoms(Diff) if
-                                       (d.target == 't' or d.target == sp.Symbol("t")) and d.superscript == epsOrder]
-                    if len(timeDiffsInExpr) == 0:
+                    time_diffs_in_expr = [d for d in eq.atoms(Diff) if
+                                          (d.target == 't' or d.target == sp.Symbol("t")) and d.superscript == epsOrder]
+                    if len(time_diffs_in_expr) == 0:
                         continue
-                    assert len(timeDiffsInExpr) == 1, "Time diffs in expr %d %s" % (len(timeDiffsInExpr), timeDiffsInExpr)
-                    td = timeDiffsInExpr[0]
-                    timeDiffs[td] = sp.solve(eq, td)[0]
+                    assert len(time_diffs_in_expr) == 1, \
+                        "Time diffs in expr %d %s" % (len(time_diffs_in_expr), time_diffs_in_expr)
+                    td = time_diffs_in_expr[0]
+                    time_diffs[td] = sp.solve(eq, td)[0]
             else:
-                solveResult = specialLinSolve(eqs, unknownMoments)
-                nonEqMoms.update(solveResult)
+                solve_result = special_linsolve(eqs, unknown_moments)
+                non_eq_moms.update(solve_result)
 
-    substitutedNonEqMoms = OrderedDict()
-    for key, value in nonEqMoms.items():
-        print("Substituting", key)
-        value = fullExpand(value)
-        value = fullExpand(value.subs(timeDiffs)).expand()
-        value = fullExpand(value.subs(substitutedNonEqMoms)).expand()
-        value = fullExpand(value.subs(timeDiffs)).expand()
-        substitutedNonEqMoms[key] = value.expand()
+    substituted_non_eq_moms = OrderedDict()
+    for key, value in non_eq_moms.items():
+        value = full_expand(value)
+        value = full_expand(value.subs(time_diffs)).expand()
+        value = full_expand(value.subs(substituted_non_eq_moms)).expand()
+        value = full_expand(value.subs(time_diffs)).expand()
+        substituted_non_eq_moms[key] = value.expand()
 
-    return timeDiffs, nonEqMoms, substitutedNonEqMoms
+    Result = namedtuple('HigherOrderMoments', ['time_diffs', 'non_eq_moments_raw', 'non_eq_moments'])
+    return Result(time_diffs, non_eq_moms, substituted_non_eq_moms)

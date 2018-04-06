@@ -1,8 +1,8 @@
 import numpy as np
 import sympy as sp
 
-from lbmpy.chapman_enskog import Diff
 from pystencils import make_slice
+from pystencils.derivative import Diff
 
 
 def plot_status(phase_field_step, from_x=None, to_x=None):

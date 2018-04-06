@@ -1,18 +1,171 @@
-import functools
-from collections import namedtuple
-
 import sympy as sp
+from collections import namedtuple
 from sympy.core.cache import cacheit
-
-from lbmpy.chapman_enskog import Diff, expand_using_linearity, expand_using_product_rule
-from lbmpy.chapman_enskog import DiffOperator, normalize_diff_order, chapman_enskog_derivative_expansion, \
-    chapman_enskog_derivative_recombination
-from lbmpy.chapman_enskog.derivative import collect_derivatives, create_nested_diff
+from pystencils.cache import disk_cache
+from pystencils.derivative import full_diff_expand
+from pystencils.sympyextensions import normalize_product, symmetric_product
+from pystencils.derivative import Diff, DiffOperator, expand_using_linearity, \
+    expand_using_product_rule, normalize_diff_order
 from lbmpy.moments import discrete_moment, moment_matrix, polynomial_to_exponent_representation, get_moment_indices, \
     non_aliased_moment
-from pystencils.cache import disk_cache
-from pystencils.sympyextensions import normalize_product, multidimensional_sum, kronecker_delta
-from pystencils.sympyextensions import symmetric_product
+from lbmpy.chapman_enskog.derivative import chapman_enskog_derivative_recombination, chapman_enskog_derivative_expansion
+
+
+class ChapmanEnskogAnalysis:
+
+    def __init__(self, method, constants=None):
+        cqc = method.conserved_quantity_computation
+        self._method = method
+        self._moment_cache = LbMethodEqMoments(method)
+        self.rho = cqc.defined_symbols(order=0)[1]
+        self.u = cqc.defined_symbols(order=1)[1]
+        self.t = sp.Symbol("t")
+        self.epsilon = sp.Symbol("epsilon")
+
+        taylored_lb_eq = get_taylor_expanded_lb_equation(dim=self._method.dim)
+        self.equations_by_order = chapman_enskog_ansatz(taylored_lb_eq)
+
+        # Taking moments
+        c = sp.Matrix([expanded_symbol("c", subscript=i) for i in range(self._method.dim)])
+        moments_until_order1 = [1] + list(c)
+        moments_order2 = [c_i * c_j for c_i, c_j in symmetric_product(c, c)]
+
+        symbolic_relaxation_rates = [rr for rr in method.relaxation_rates if isinstance(rr, sp.Symbol)]
+        if constants is None:
+            constants = set(symbolic_relaxation_rates)
+        else:
+            constants.update(symbolic_relaxation_rates)
+
+        self.constants = constants
+
+        o_eps_moments1 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[1] * moment),
+                                                 constants=constants)
+                          for moment in moments_until_order1]
+        o_eps_moments2 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[1] * moment),
+                                                 constants=constants)
+                          for moment in moments_order2]
+        o_eps_sq_moments1 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[2] * moment),
+                                                    constants=constants)
+                             for moment in moments_until_order1]
+
+        self._equationsWithHigherOrderMoments = [self._ce_recombine(ord1 * self.epsilon + ord2 * self.epsilon ** 2)
+                                                 for ord1, ord2 in zip(o_eps_moments1, o_eps_sq_moments1)]
+
+        self.higher_order_moments = compute_higher_order_moment_subs_dict(tuple(o_eps_moments1 + o_eps_moments2))
+
+        # Match to Navier stokes
+        compressible, pressure, sigma = match_to_navier_stokes(self._equationsWithHigherOrderMoments)
+        self.compressible = compressible
+        self.pressure_equation = pressure
+        self._sigmaWithHigherOrderMoments = sigma
+        self._sigma = sigma.subs(self.higher_order_moments).expand().applyfunc(self._ce_recombine)
+        self._sigmaWithoutErrorTerms = remove_error_terms(self._sigma)
+
+    def get_macroscopic_equations(self, substitute_higher_order_moments=False):
+        if substitute_higher_order_moments:
+            return [full_diff_expand(e.subs(self.higher_order_moments), constants=self.constants)
+                    for e in self._equationsWithHigherOrderMoments]
+        else:
+            return self._equationsWithHigherOrderMoments
+
+    def get_viscous_stress_tensor(self, substitute_higher_order_moments=True):
+        if substitute_higher_order_moments:
+            return self._sigma
+        else:
+            return self._sigmaWithHigherOrderMoments
+
+    def _take_and_insert_moments(self, eq):
+        eq = take_moments(eq)
+        eq = substitute_collision_operator_moments(eq, self._moment_cache)
+        return insert_moments(eq, self._moment_cache).expand()
+
+    def _ce_recombine(self, expr):
+        expr = chapman_enskog_derivative_recombination(expr, self.t, stop_order=3)
+        for l in range(self._method.dim):
+            expr = chapman_enskog_derivative_recombination(expr, l, stop_order=2)
+        return expr
+
+    def get_dynamic_viscosity(self):
+        candidates = self.get_shear_viscosity_candidates()
+        if len(candidates) != 1:
+            raise ValueError("Could not find expression for kinematic viscosity. "
+                             "Probably method does not approximate Navier Stokes.")
+        return candidates.pop()
+
+    def get_kinematic_viscosity(self):
+        if self.compressible:
+            return (self.get_dynamic_viscosity() / self.rho).expand()
+        else:
+            return self.get_dynamic_viscosity()
+
+    def get_shear_viscosity_candidates(self):
+        result = set()
+        dim = self._method.dim
+        for i, j in symmetric_product(range(dim), range(dim), with_diagonal=False):
+            result.add(-sp.cancel(self._sigmaWithoutErrorTerms[i, j] / (Diff(self.u[i], j) + Diff(self.u[j], i))))
+        return result
+
+    def does_approximate_navier_stokes(self):
+        """Returns a set of equations that are required in order for the method to approximate Navier Stokes equations
+        up to second order"""
+        conditions = {0}
+        dim = self._method.dim
+        assert dim > 1
+        # Check that shear viscosity does not depend on any u derivatives - create conditions (equations) that
+        # have to be fulfilled for this to be the case
+        viscosity_reference = self._sigmaWithoutErrorTerms[0, 1].expand().coeff(Diff(self.u[0], 1))
+        for i, j in symmetric_product(range(dim), range(dim), with_diagonal=False):
+            term = self._sigmaWithoutErrorTerms[i, j]
+            equal_cross_term_condition = sp.expand(term.coeff(Diff(self.u[i], j)) - viscosity_reference)
+            term = term.subs({Diff(self.u[i], j): 0,
+                              Diff(self.u[j], i): 0})
+
+            conditions.add(equal_cross_term_condition)
+            for k in range(dim):
+                symmetric_term_condition = term.coeff(Diff(self.u[k], k))
+                conditions.add(symmetric_term_condition)
+            term = term.subs({Diff(self.u[k], k): 0 for k in range(dim)})
+            conditions.add(term)
+
+        bulk_candidates = list(self.get_bulk_viscosity_candidates(-viscosity_reference))
+        if len(bulk_candidates) > 0:
+            for i in range(1, len(bulk_candidates)):
+                conditions.add(bulk_candidates[0] - bulk_candidates[i])
+
+        return conditions
+
+    def get_bulk_viscosity_candidates(self, viscosity=None):
+        sigma = self._sigmaWithoutErrorTerms
+        assert self._sigmaWithHigherOrderMoments.is_square
+        result = set()
+        if viscosity is None:
+            viscosity = self.get_dynamic_viscosity()
+        for i in range(sigma.shape[0]):
+            bulk_term = sigma[i, i] + 2 * viscosity * Diff(self.u[i], i)
+            bulk_term = bulk_term.expand()
+            for d in bulk_term.atoms(Diff):
+                bulk_term = bulk_term.collect(d)
+                result.add(bulk_term.coeff(d))
+                bulk_term = bulk_term.subs(d, 0)
+            if bulk_term != 0:
+                return set()
+        if len(result) == 0:
+            result.add(0)
+        return result
+
+    def get_bulk_viscosity(self):
+        candidates = self.get_bulk_viscosity_candidates()
+        if len(candidates) != 1:
+            raise ValueError("Could not find expression for bulk viscosity. "
+                             "Probably method does not approximate Navier Stokes.")
+
+        viscosity = self.get_dynamic_viscosity()
+        return (candidates.pop() + 2 * viscosity / 3).expand()
+
+    def relaxation_rate_from_kinematic_viscosity(self, nu):
+        kinematic_viscosity = self.get_kinematic_viscosity()
+        solve_res = sp.solve(kinematic_viscosity - nu, kinematic_viscosity.atoms(sp.Symbol), dict=True)
+        return solve_res[0]
 
 
 # --------------------------------------------- Helper Functions -------------------------------------------------------
@@ -29,16 +182,17 @@ def expanded_symbol(name, subscript=None, superscript=None, **kwargs):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
+# noinspection PyMethodOverriding,PyUnresolvedReferences
 class CeMoment(sp.Symbol):
-    def __new__(cls, name, *args, **kwds):
-        obj = CeMoment.__xnew_cached_(cls, name, *args, **kwds)
+    def __new__(cls, name, *args, **kwargs):
+        obj = CeMoment.__xnew_cached_(cls, name, *args, **kwargs)
         return obj
 
-    def __new_stage2__(cls, name, moment_tuple, superscript=-1):
-        obj = super(CeMoment, cls).__xnew__(cls, name)
-        obj.momentTuple = moment_tuple
-        while len(obj.momentTuple) < 3:
-            obj.momentTuple = obj.momentTuple + (0,)
+    def __new_stage2__(self, name, moment_tuple, superscript=-1):
+        obj = super(CeMoment, self).__xnew__(self, name)
+        obj._moment_tuple = moment_tuple
+        while len(obj._moment_tuple) < 3:
+            obj._moment_tuple = obj._moment_tuple + (0,)
         obj.superscript = superscript
         return obj
 
@@ -47,18 +201,22 @@ class CeMoment(sp.Symbol):
 
     def _hashable_content(self):
         super_class_contents = list(super(CeMoment, self)._hashable_content())
-        return tuple(super_class_contents + [hash(repr(self.momentTuple)), hash(repr(self.superscript))])
+        return tuple(super_class_contents + [hash(repr(self.moment_tuple)), hash(repr(self.superscript))])
 
     @property
     def indices(self):
-        return get_moment_indices(self.momentTuple)
+        return get_moment_indices(self.moment_tuple)
+
+    @property
+    def moment_tuple(self):
+        return self._moment_tuple
 
     def __getnewargs__(self):
-        return self.name, self.momentTuple, self.superscript
+        return self.name, self.moment_tuple, self.superscript
 
-    def _latex(self, printer, *args):
+    def _latex(self, *_):
         coord_str = []
-        for i, comp in enumerate(self.momentTuple):
+        for i, comp in enumerate(self.moment_tuple):
             coord_str += [str(i)] * comp
         coord_str = "".join(coord_str)
         result = "{%s_{%s}" % (self.name, coord_str)
@@ -69,10 +227,10 @@ class CeMoment(sp.Symbol):
         return result
 
     def __repr__(self):
-        return "%s_(%d)_%s" % (self.name, self.superscript, self.momentTuple)
+        return "%s_(%d)_%s" % (self.name, self.superscript, self.moment_tuple)
 
     def __str__(self):
-        return "%s_(%d)_%s" % (self.name, self.superscript, self.momentTuple)
+        return "%s_(%d)_%s" % (self.name, self.superscript, self.moment_tuple)
 
 
 class LbMethodEqMoments:
@@ -90,29 +248,31 @@ class LbMethodEqMoments:
     def get_pre_collision_moment(self, ce_moment):
         assert ce_moment.superscript == 0, "Only equilibrium moments can be obtained with this function"
         if ce_moment not in self._momentCache:
-            self._momentCache[ce_moment] = discrete_moment(self._eq, ce_moment.momentTuple, self._stencil)
+            self._momentCache[ce_moment] = discrete_moment(self._eq, ce_moment.moment_tuple, self._stencil)
         return self._momentCache[ce_moment]
 
-    def get_post_collision_moment(self, ceMoment, exponent=1, preCollisionMomentName="\\Pi"):
-        if (ceMoment, exponent) in self._postCollisionMomentCache:
-            return self._postCollisionMomentCache[(ceMoment, exponent)]
+    def get_post_collision_moment(self, ce_moment, exponent=1, pre_collision_moment_name="\\Pi"):
+        if (ce_moment, exponent) in self._postCollisionMomentCache:
+            return self._postCollisionMomentCache[(ce_moment, exponent)]
 
         stencil = self._method.stencil
         moment2pdf = self._inverseMomentMatrix
 
-        moment_tuple = ceMoment.momentTuple
+        moment_tuple = ce_moment.moment_tuple
 
         moment_symbols = []
         for moment, (eqValue, rr) in self._method.relaxation_info_dict.items():
             if isinstance(moment, tuple):
-                moment_symbols.append(-rr**exponent * CeMoment(preCollisionMomentName, moment, ceMoment.superscript))
+                moment_symbols.append(-rr**exponent
+                                      * CeMoment(pre_collision_moment_name, moment, ce_moment.superscript))
             else:
-                moment_symbols.append(-rr**exponent * sum(coeff * CeMoment(preCollisionMomentName, momentTuple,
-                                                                           ceMoment.superscript)
-                                                          for coeff, momentTuple in polynomial_to_exponent_representation(moment)))
+                exponent_repr = polynomial_to_exponent_representation(moment)
+                moment_symbols.append(-rr**exponent * sum(coeff * CeMoment(pre_collision_moment_name, moment_tuple,
+                                                                           ce_moment.superscript)
+                                                          for coeff, moment_tuple in exponent_repr))
         moment_symbols = sp.Matrix(moment_symbols)
         post_collision_value = discrete_moment(tuple(moment2pdf * moment_symbols), moment_tuple, stencil)
-        self._postCollisionMomentCache[(ceMoment, exponent)] = post_collision_value
+        self._postCollisionMomentCache[(ce_moment, exponent)] = post_collision_value
 
         return post_collision_value
 
@@ -123,12 +283,15 @@ class LbMethodEqMoments:
 
     def substitute_post_collision_moments(self, expr,
                                           pre_collision_moment_name="\\Pi", post_collision_moment_name="\\Upsilon"):
-        """
-        Substitutes post-collision equilibrium moments 
-        :param expr: expression with fully expanded derivatives
-        :param pre_collision_moment_name: post-collision moments are replaced by CeMoments with this name
-        :param post_collision_moment_name: name of post-collision CeMoments
-        :return: expressions where equilibrium post-collision moments have been replaced
+        """Substitutes post-collision equilibrium moments.
+
+        Args:
+            expr: expression with fully expanded derivatives
+            pre_collision_moment_name: post-collision moments are replaced by CeMoments with this name
+            post_collision_moment_name: name of post-collision CeMoments
+
+        Returns:
+            expressions where equilibrium post-collision moments have been replaced
         """
         expr = sp.expand(expr)
 
@@ -151,11 +314,11 @@ class LbMethodEqMoments:
 def insert_moments(eqn, lb_method_moments, moment_name="\\Pi", use_solvability_conditions=True):
     substitutions = {}
     if use_solvability_conditions:
-        condition = lambda m: m.superscript > 0 and sum(m.momentTuple) <= 1 and m.name == moment_name
-        substitutions.update({m: 0 for m in eqn.atoms(CeMoment) if condition(m)})
+        substitutions.update({m: 0 for m in eqn.atoms(CeMoment)
+                              if m.superscript > 0 and sum(m.moment_tuple) <= 1 and m.name == moment_name})
 
-    condition = lambda m: m.superscript == 0 and m.name == moment_name
-    substitutions.update({m: lb_method_moments(m) for m in eqn.atoms(CeMoment) if condition(m)})
+    substitutions.update({m: lb_method_moments(m) for m in eqn.atoms(CeMoment)
+                          if m.superscript == 0 and m.name == moment_name})
     return eqn.subs(substitutions)
 
 
@@ -339,15 +502,18 @@ def get_taylor_expanded_lb_equation(pdf_symbol_name="f", pdfs_after_collision_op
     return eq_4_7.expand()
 
 
-def use_chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_derivative_orders=(1, 2),
-                              pdfs=(['f', 0, 3], ['\Omega f', 1, 3]), **kwargs):
-    """
-    Uses a Chapman Enskog Ansatz to expand given equation.
-    :param equation: equation to expand
-    :param time_derivative_orders: tuple describing range for time derivative to expand
-    :param spatial_derivative_orders: tuple describing range for spatial derivatives to expand
-    :param pdfs: symbols to expand: sequence of triples (symbolName, startOrder, endOrder)
-    :return: tuple mapping epsilon order to equation
+def chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_derivative_orders=(1, 2),
+                          pdfs=(['f', 0, 3], ['\Omega f', 1, 3]), commutative=True):
+    """Uses a Chapman Enskog Ansatz to expand given equation.
+
+    Args:
+        equation: equation to expand
+        time_derivative_orders: tuple describing range for time derivative to expand
+        spatial_derivative_orders: tuple describing range for spatial derivatives to expand
+        pdfs: symbols to expand: sequence of triples (symbolName, startOrder, endOrder)
+        commutative: can be set to False to have non-commutative pdf symbols
+    Returns:
+        tuple mapping epsilon order to equation
     """
     t, eps = sp.symbols("t epsilon")
 
@@ -370,10 +536,11 @@ def use_chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_d
     for pdf_name, startOrder, stopOrder in pdfs:
         if isinstance(pdf_name, sp.Symbol):
             pdf_name = pdf_name.name
-        expanded_pdf_symbols += [expanded_symbol(pdf_name, superscript=i, **kwargs)
+        expanded_pdf_symbols += [expanded_symbol(pdf_name, superscript=i, commutative=commutative)
                                  for i in range(startOrder, stopOrder)]
-        subs_dict[sp.Symbol(pdf_name, **kwargs)] = sum(eps ** i * expanded_symbol(pdf_name, superscript=i, **kwargs)
-                                                       for i in range(startOrder, stopOrder))
+        pdf_symbol = sp.Symbol(pdf_name, commutative=commutative)
+        subs_dict[pdf_symbol] = sum(eps ** i * expanded_symbol(pdf_name, superscript=i, commutative=commutative)
+                                    for i in range(startOrder, stopOrder))
         max_expansion_order = max(max_expansion_order, stopOrder)
     equation = equation.subs(subs_dict)
     equation = expand_using_linearity(equation, functions=expanded_pdf_symbols).expand().collect(eps)
@@ -421,19 +588,19 @@ def match_to_navier_stokes(conservation_equations, rho=sp.Symbol("rho"), u=sp.sy
                 coefficient_arg_sets[i].add((term / candidate_list[0], candidate_list[0].arg))
         pressure_terms = set.intersection(*coefficient_arg_sets)
 
-        sigma = sp.zeros(dim)
-        error_terms = []
+        sigma_ = sp.zeros(dim)
+        error_terms_ = []
         for i, shearAndPressureEq in enumerate(shear_and_pressure_eqs):
             eq_without_pressure = shearAndPressureEq - sum(coeff * Diff(arg, i) for coeff, arg in pressure_terms)
             for d in eq_without_pressure.atoms(Diff):
                 eq_without_pressure = eq_without_pressure.collect(d)
-                sigma[i, d.target] += eq_without_pressure.coeff(d) * d.arg
+                sigma_[i, d.target] += eq_without_pressure.coeff(d) * d.arg
                 eq_without_pressure = eq_without_pressure.subs(d, 0)
 
-            error_terms.append(eq_without_pressure)
-        pressure = [coeff * arg for coeff, arg in pressure_terms]
+            error_terms_.append(eq_without_pressure)
+        pressure_ = [coeff * arg for coeff, arg in pressure_terms]
 
-        return pressure, sigma, error_terms
+        return pressure_, sigma_, error_terms_
 
     continuity_error_terms, compressible = match_continuity_eq(conservation_equations[0])
     pressure, sigma, moment_error_terms = match_moment_eqs(conservation_equations[1:], compressible)
@@ -456,290 +623,3 @@ def compute_higher_order_moment_subs_dict(moment_equations):
             moments_to_solve_for.update(found_moments)
             pi_ab_equations.append(eq)
     return sp.solve(pi_ab_equations, moments_to_solve_for)
-
-
-class ChapmanEnskogAnalysis(object):
-
-    def __init__(self, method, constants=None):
-        cqc = method.conserved_quantity_computation
-        self._method = method
-        self._moment_cache = LbMethodEqMoments(method)
-        self.rho = cqc.defined_symbols(order=0)[1]
-        self.u = cqc.defined_symbols(order=1)[1]
-        self.t = sp.Symbol("t")
-        self.epsilon = sp.Symbol("epsilon")
-
-        taylored_lb_eq = get_taylor_expanded_lb_equation(dim=self._method.dim)
-        self.equations_by_order = use_chapman_enskog_ansatz(taylored_lb_eq)
-
-        # Taking moments
-        c = sp.Matrix([expanded_symbol("c", subscript=i) for i in range(self._method.dim)])
-        moments_until_order1 = [1] + list(c)
-        moments_order2 = [c_i * c_j for c_i, c_j in symmetric_product(c, c)]
-
-        symbolic_relaxation_rates = [rr for rr in method.relaxation_rates if isinstance(rr, sp.Symbol)]
-        if constants is None:
-            constants = set(symbolic_relaxation_rates)
-        else:
-            constants.update(symbolic_relaxation_rates)
-
-        o_eps_moments1 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[1] * moment),
-                                                 constants=constants)
-                          for moment in moments_until_order1]
-        o_eps_moments2 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[1] * moment),
-                                                 constants=constants)
-                          for moment in moments_order2]
-        o_eps_sq_moments1 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[2] * moment),
-                                                    constants=constants)
-                             for moment in moments_until_order1]
-
-        self._equationsWithHigherOrderMoments = [self._ce_recombine(ord1 * self.epsilon + ord2 * self.epsilon ** 2)
-                                                 for ord1, ord2 in zip(o_eps_moments1, o_eps_sq_moments1)]
-
-        self.higher_order_moments = compute_higher_order_moment_subs_dict(tuple(o_eps_moments1 + o_eps_moments2))
-
-        # Match to Navier stokes
-        compressible, pressure, sigma = match_to_navier_stokes(self._equationsWithHigherOrderMoments)
-        self.compressible = compressible
-        self.pressure_equation = pressure
-        self._sigmaWithHigherOrderMoments = sigma
-        self._sigma = sigma.subs(self.higher_order_moments).expand().applyfunc(self._ce_recombine)
-        self._sigmaWithoutErrorTerms = remove_error_terms(self._sigma)
-
-    def get_macroscopic_equations(self, substitute_higher_order_moments=False):
-        if substitute_higher_order_moments:
-            return self._equationsWithHigherOrderMoments.subs(self.higher_order_moments)
-        else:
-            return self._equationsWithHigherOrderMoments
-
-    def get_viscous_stress_tensor(self, substitute_higher_order_moments=True):
-        if substitute_higher_order_moments:
-            return self._sigma
-        else:
-            return self._sigmaWithHigherOrderMoments
-
-    def _take_and_insert_moments(self, eq):
-        eq = take_moments(eq)
-        eq = substitute_collision_operator_moments(eq, self._moment_cache)
-        return insert_moments(eq, self._moment_cache).expand()
-
-    def _ce_recombine(self, expr):
-        expr = chapman_enskog_derivative_recombination(expr, self.t, stop_order=3)
-        for l in range(self._method.dim):
-            expr = chapman_enskog_derivative_recombination(expr, l, stop_order=2)
-        return expr
-
-    def get_dynamic_viscosity(self):
-        candidates = self.get_shear_viscosity_candidates()
-        if len(candidates) != 1:
-            raise ValueError("Could not find expression for kinematic viscosity. "
-                             "Probably method does not approximate Navier Stokes.")
-        return candidates.pop()
-
-    def get_kinematic_viscosity(self):
-        if self.compressible:
-            return (self.get_dynamic_viscosity() / self.rho).expand()
-        else:
-            return self.get_dynamic_viscosity()
-
-    def get_shear_viscosity_candidates(self):
-        result = set()
-        dim = self._method.dim
-        for i, j in symmetric_product(range(dim), range(dim), with_diagonal=False):
-            result.add(-sp.cancel(self._sigmaWithoutErrorTerms[i, j] / (Diff(self.u[i], j) + Diff(self.u[j], i))))
-        return result
-
-    def does_approximate_navier_stokes(self):
-        """Returns a set of equations that are required in order for the method to approximate Navier Stokes equations
-        up to second order"""
-        conditions = set([0])
-        dim = self._method.dim
-        assert dim > 1
-        # Check that shear viscosity does not depend on any u derivatives - create conditions (equations) that
-        # have to be fulfilled for this to be the case
-        viscosity_reference = self._sigmaWithoutErrorTerms[0, 1].expand().coeff(Diff(self.u[0], 1))
-        for i, j in symmetric_product(range(dim), range(dim), with_diagonal=False):
-            term = self._sigmaWithoutErrorTerms[i, j]
-            equal_cross_term_condition = sp.expand(term.coeff(Diff(self.u[i], j)) - viscosity_reference)
-            term = term.subs({Diff(self.u[i], j): 0,
-                              Diff(self.u[j], i): 0})
-
-            conditions.add(equal_cross_term_condition)
-            for k in range(dim):
-                symmetric_term_condition = term.coeff(Diff(self.u[k], k))
-                conditions.add(symmetric_term_condition)
-            term = term.subs({Diff(self.u[k], k): 0 for k in range(dim)})
-            conditions.add(term)
-
-        bulk_candidates = list(self.get_bulk_viscosity_candidates(-viscosity_reference))
-        if len(bulk_candidates) > 0:
-            for i in range(1, len(bulk_candidates)):
-                conditions.add(bulk_candidates[0] - bulk_candidates[i])
-
-        return conditions
-
-    def get_bulk_viscosity_candidates(self, viscosity=None):
-        sigma = self._sigmaWithoutErrorTerms
-        assert self._sigmaWithHigherOrderMoments.is_square
-        result = set()
-        if viscosity is None:
-            viscosity = self.get_dynamic_viscosity()
-        for i in range(sigma.shape[0]):
-            bulk_term = sigma[i, i] + 2 * viscosity * Diff(self.u[i], i)
-            bulk_term = bulk_term.expand()
-            for d in bulk_term.atoms(Diff):
-                bulk_term = bulk_term.collect(d)
-                result.add(bulk_term.coeff(d))
-                bulk_term = bulk_term.subs(d, 0)
-            if bulk_term != 0:
-                return set()
-        if len(result) == 0:
-            result.add(0)
-        return result
-
-    def get_bulk_viscosity(self):
-        candidates = self.get_bulk_viscosity_candidates()
-        if len(candidates) != 1:
-            raise ValueError("Could not find expression for bulk viscosity. "
-                             "Probably method does not approximate Navier Stokes.")
-
-        viscosity = self.get_dynamic_viscosity()
-        return (candidates.pop() + 2 * viscosity / 3).expand()
-
-    def relaxation_rate_from_kinematic_viscosity(self, nu):
-        kinematic_viscosity = self.get_kinematic_viscosity()
-        solve_res = sp.solve(kinematic_viscosity - nu, kinematic_viscosity.atoms(sp.Symbol), dict=True)
-        return solve_res[0]
-
-
-class SteadyStateChapmanEnskogAnalysis(object):
-    """Experimental:
-        -> does not yield correct results for MRT, only SRT
-        -> does predict different value for bulk viscosity?! 
-    """
-
-    def __init__(self, method, order=4):
-        self.method = method
-        dim = method.dim
-        moment_computation = LbMethodEqMoments(method)
-
-        eps, B, f, dt = sp.symbols("epsilon B f Delta_t")
-        self.dt = dt
-        expanded_pdf_symbols = [expanded_symbol("f", superscript=i) for i in range(0, order + 1)]
-        feq = expanded_pdf_symbols[0]
-        c = sp.Matrix([expanded_symbol("c", subscript=i) for i in range(dim)])
-        dx = sp.Matrix([DiffOperator(target=l) for l in range(dim)])
-        differential_operator = sum((dt * eps * c.dot(dx)) ** n / sp.factorial(n) for n in range(1, order + 1))
-        taylor_expansion = DiffOperator.apply(differential_operator.expand(), f, apply_to_constants=False)
-        eps_dict = use_chapman_enskog_ansatz(taylor_expansion,
-                                             spatial_derivative_orders=None,  # do not expand the differential operator
-                                             pdfs=(['f', 0, order + 1],))  # expand only the 'f' terms
-
-        self.scaleHierarchy = [-B * eps_dict[i] for i in range(0, order+1)]
-        self.scaleHierarchyRaw = self.scaleHierarchy.copy()
-
-        expanded_pdfs = [feq, self.scaleHierarchy[1]]
-        subs_dict = {expanded_pdf_symbols[1]: self.scaleHierarchy[1]}
-        for i in range(2, 5):
-            eq = self.scaleHierarchy[i].subs(subs_dict)
-            eq = expand_using_linearity(eq, functions=expanded_pdf_symbols)
-            eq = normalize_diff_order(eq, functions=expanded_pdf_symbols)
-            subs_dict[expanded_pdf_symbols[i]] = eq
-            expanded_pdfs.append(eq)
-        self.scaleHierarchy = expanded_pdfs
-
-        constants = sp.Matrix(method.relaxation_rates).atoms(sp.Symbol)
-        recombined = -sum(self.scaleHierarchy[n] for n in range(1, order + 1))  # Eq 18a
-        recombined = sp.cancel(recombined / (dt * B)).expand()  # cancel common factors
-
-        def handle_postcollision_values(eq):
-            eq = eq.expand()
-            assert isinstance(eq, sp.Add)
-            result = 0
-            for summand in eq.args:
-
-                moment = summand.atoms(CeMoment)
-                moment = moment.pop()
-                collision_operator_exponent = normalize_product(summand).count(B)
-                if collision_operator_exponent == 0:
-                    result += summand
-                else:
-                    substitutions = {
-                        B: 1,
-                        moment: -moment_computation.get_post_collision_moment(moment, -collision_operator_exponent),
-                    }
-                    result += summand.subs(substitutions)
-
-            return result
-
-        # Continuity equation (mass transport)
-        cont_eq = take_moments(recombined, max_expansion=(order + 1) * 2)
-        cont_eq = handle_postcollision_values(cont_eq)
-        cont_eq = expand_using_linearity(cont_eq, constants=constants).expand().collect(dt)
-        self.continuityEquationWithMoments = cont_eq
-        cont_eq = insert_moments(cont_eq, moment_computation, use_solvability_conditions=False)
-        cont_eq = expand_using_linearity(cont_eq, constants=constants).expand().collect(dt)
-        self.continuityEquation = cont_eq
-
-        # Momentum equation (momentum transport)
-        self.momentumEquationsWithMoments = []
-        self.momentumEquations = []
-        for h in range(dim):
-            mom_eq = take_moments(recombined * c[h], max_expansion=(order + 1) * 2)
-            mom_eq = handle_postcollision_values(mom_eq)
-            mom_eq = expand_using_linearity(mom_eq, constants=constants).expand().collect(dt)
-            self.momentumEquationsWithMoments.append(mom_eq)
-            mom_eq = insert_moments(mom_eq, moment_computation, use_solvability_conditions=False)
-            mom_eq = expand_using_linearity(mom_eq, constants=constants).expand().collect(dt)
-            self.momentumEquations.append(mom_eq)
-
-    def get_mass_transport_equation(self, order):
-        if order == 0:
-            result = self.continuityEquation.subs(self.dt, 0)
-        else:
-            result = self.continuityEquation.coeff(self.dt ** order)
-        return collect_derivatives(result)
-
-    def get_momentum_transport_equation(self, coordinate, order):
-        if order == 0:
-            result = self.momentumEquations[coordinate].subs(self.dt, 0)
-        else:
-            result = self.momentumEquations[coordinate].coeff(self.dt ** order)
-        return collect_derivatives(result)
-
-    def determine_viscosities(self, coordinate):
-        """
-        Matches the first order term of the momentum equation to Navier stokes
-        Automatically neglects higher order velocity terms and rho derivatives
-
-        The bulk viscosity is predicted differently than by the normal Navier Stokes analysis...why??
-
-        :param coordinate: which momentum equation to use i.e. x,y or z, to approximate Navier Stokes
-                           all have to return the same result
-        """
-        dim = self.method.dim
-
-        D = create_nested_diff
-        s = functools.partial(multidimensional_sum, dim=dim)
-        kd = kronecker_delta
-
-        eta, eta_b = sp.symbols("nu nu_B")
-        u = sp.symbols("u_:3")[:dim]
-        a = coordinate
-        navier_stokes_ref = eta * sum(D(b, b, arg=u[a]) + D(b, a, arg=u[b]) for b, in s(1)) + \
-                            (eta_b - 2 * eta / 3) * sum(D(b, g, arg=u[g]) * kd(a, b) for b, g in s(2))
-        navier_stokes_ref = -navier_stokes_ref.expand()
-
-        first_order_terms = self.get_momentum_transport_equation(coordinate, order=1)
-        first_order_terms = remove_higher_order_u(first_order_terms)
-        first_order_terms = expand_using_linearity(first_order_terms, constants=[sp.Symbol("rho")])
-
-        match_coeff_equations = []
-        for diff in navier_stokes_ref.atoms(Diff):
-            match_coeff_equations.append(navier_stokes_ref.coeff(diff) - first_order_terms.coeff(diff))
-        return sp.solve(match_coeff_equations, [eta, eta_b])
-
-
-
-
-
