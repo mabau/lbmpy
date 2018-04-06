@@ -1,8 +1,9 @@
+from types import MappingProxyType
+
 import numpy as np
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import switch_to_symbolic_relaxation_rates_for_omega_adapting_methods, \
-    create_lb_function, \
-    update_with_default_parameters
+    create_lb_function, update_with_default_parameters
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
 from pystencils.datahandling.serial_datahandling import SerialDataHandling
@@ -14,7 +15,7 @@ from pystencils.timeloop import TimeLoop
 class LatticeBoltzmannStep:
 
     def __init__(self, domain_size=None, lbm_kernel=None, periodicity=False,
-                 kernel_params={}, data_handling=None, name="lbm", optimization=None,
+                 kernel_params=MappingProxyType({}), data_handling=None, name="lbm", optimization=None,
                  velocity_data_name=None, density_data_name=None, density_data_index=None,
                  compute_velocity_in_every_step=False, compute_density_in_every_step=False,
                  velocity_input_array_name=None, time_step_order='streamCollide', flag_interface=None,
@@ -78,7 +79,7 @@ class LatticeBoltzmannStep:
         if method_parameters['omega_output_field'] and isinstance(method_parameters['omega_output_field'], str):
             method_parameters['omega_output_field'] = data_handling.add_array(method_parameters['omega_output_field'])
 
-        self.kernel_params = kernel_params
+        self.kernel_params = kernel_params.copy()
 
         # --- Kernel creation ---
         if lbm_kernel is None:
@@ -121,8 +122,8 @@ class LatticeBoltzmannStep:
         self.set_pdf_fields_from_macroscopic_values()
 
         # -- VTK output
-        self.vtkWriter = self.data_handling.create_vtk_writer(name, [self.velocity_data_name, self.density_data_name])
-        self.timeStepsRun = 0
+        self._vtk_writer = None
+        self.time_steps_run = 0
 
     @property
     def boundary_handling(self):
@@ -132,6 +133,14 @@ class LatticeBoltzmannStep:
     @property
     def data_handling(self):
         return self._data_handling
+
+    @property
+    def vtk_writer(self):
+        if self._vtk_writer is None:
+            # Create vtk writer on demand - otherwise output folders are created even if no vtk output is done
+            self._vtk_writer = self.data_handling.create_vtk_writer(self.name,
+                                                                    [self.velocity_data_name, self.density_data_name])
+        return self._vtk_writer
 
     @property
     def dim(self):
@@ -208,7 +217,7 @@ class LatticeBoltzmannStep:
             self._data_handling.run_kernel(self._lbmKernels[0], **self.kernel_params)
 
         self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name, self._gpu)
-        self.timeStepsRun += 1
+        self.time_steps_run += 1
 
     def post_run(self):
         if self._gpu:
@@ -237,7 +246,7 @@ class LatticeBoltzmannStep:
         return mlups
 
     def write_vtk(self):
-        self.vtkWriter(self.timeStepsRun)
+        self.vtk_writer(self.time_steps_run)
 
     def _compile_macroscopic_setter_and_getter(self):
         lb_method = self.method
@@ -256,7 +265,7 @@ class LatticeBoltzmannStep:
         inp_eqs = cqc.equilibrium_input_equations_from_init_values(rho_field, [vel_field(i) for i in range(dim)])
         setter_eqs = lb_method.get_equilibrium(conserved_quantity_equations=inp_eqs)
         setter_eqs = setter_eqs.new_with_substitutions({sym: pdf_field(i)
-                                                      for i, sym in enumerate(lb_method.post_collision_pdf_symbols)})
+                                                        for i, sym in enumerate(lb_method.post_collision_pdf_symbols)})
 
         setter_eqs = create_simplification_strategy(lb_method)(setter_eqs)
         setter_kernel = create_kernel(setter_eqs, target='cpu').compile()

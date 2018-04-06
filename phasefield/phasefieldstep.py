@@ -1,3 +1,5 @@
+from types import MappingProxyType
+
 import sympy as sp
 import numpy as np
 
@@ -17,9 +19,10 @@ from pystencils.slicing import make_slice, SlicedGetter
 class PhaseFieldStep:
 
     def __init__(self, free_energy, order_parameters, domain_size=None, data_handling=None,
-                 name='pf', hydro_lbm_parameters={},
+                 name='pf', hydro_lbm_parameters=MappingProxyType({}),
                  hydro_dynamic_relaxation_rate=1.0, cahn_hilliard_relaxation_rates=1.0, density_order_parameter=None,
-                 optimization=None, kernel_params={}, dx=1, dt=1, solve_cahn_hilliard_with_finite_differences=False,
+                 optimization=None, kernel_params=MappingProxyType({}),
+                 dx=1, dt=1, solve_cahn_hilliard_with_finite_differences=False,
                  order_parameter_force=None, concentration_to_order_parameters=None,
                  order_parameters_to_concentrations=None, homogeneous_neumann_boundaries=False):
 
@@ -42,6 +45,7 @@ class PhaseFieldStep:
         self.num_order_parameters = len(order_parameters)
         pressure_tensor_size = len(symmetric_tensor_linearization(data_handling.dim))
 
+        self.name = name
         self.phi_field_name = name + "_phi"
         self.mu_field_name = name + "_mu"
         self.vel_field_name = name + "_u"
@@ -96,6 +100,7 @@ class PhaseFieldStep:
         self.pressureTensorSync = data_handling.synchronization_function([self.pressure_tensor_field_name],
                                                                          target=target)
 
+        hydro_lbm_parameters = hydro_lbm_parameters.copy()
         # Hydrodynamic LBM
         if density_order_parameter is not None:
             density_idx = order_parameters.index(density_order_parameter)
@@ -148,15 +153,23 @@ class PhaseFieldStep:
                                                optimization=optimization)
                 self.cahnHilliardSteps.append(ch_step)
 
-        self.vtk_writer = self.data_handling.create_vtk_writer(name, [self.phi_field_name, self.mu_field_name,
-                                                                      self.vel_field_name, self.force_field_name])
-
+        self._vtk_writer = None
         self.run_hydro_lbm = True
         self.density_order_parameter = density_order_parameter
         self.time_steps_run = 0
         self.reset()
 
         self.neumannFlag = 0
+
+    @property
+    def vtk_writer(self):
+        if self._vtk_writer is None:
+            self._vtk_writer = self.data_handling.create_vtk_writer(self.name, [self.phi_field_name,
+                                                                                self.mu_field_name,
+                                                                                self.vel_field_name,
+                                                                                self.force_field_name])
+
+        return self._vtk_writer
 
     def write_vtk(self):
         self.vtk_writer(self.time_steps_run)
@@ -199,12 +212,6 @@ class PhaseFieldStep:
 
     def time_step(self):
         neumannFlag = self.neumannFlag
-        #for b in self.data_handling.iterate(sliceObj=make_slice[:, 0]):
-        #    b[self.phi_field_name][..., 0] = 0.0
-        #    b[self.phi_field_name][..., 1] = 1.0
-        #for b in self.data_handling.iterate(sliceObj=make_slice[0, :]):
-        #    b[self.phi_field_name][..., 0] = 1.0
-        #    b[self.phi_field_name][..., 1] = 0.0
 
         self.phiSync()
         self.data_handling.run_kernel(self.muAndPressureTensorKernel, neumannFlag=neumannFlag)
@@ -215,7 +222,6 @@ class PhaseFieldStep:
             self.hydroLbmStep.time_step()
 
         for chLbm in self.cahnHilliardSteps:
-            #chLbm.time_step(neumannFlag=neumannFlag)
             chLbm.time_step()
 
         self.time_steps_run += 1
@@ -247,7 +253,7 @@ class PhaseFieldStep:
 
     def _get_slice(self, data_name, slice_obj):
         if slice_obj is None:
-            slice_obj = make_slice[:, :] if self.dim == 2 else make_slice[:, :, 0.5]
+            slice_obj = make_slice[:, :] if self.data_handling.dim == 2 else make_slice[:, :, 0.5]
         return self.data_handling.gather_array(data_name, slice_obj).squeeze()
 
     def phi_slice(self, slice_obj=None):
