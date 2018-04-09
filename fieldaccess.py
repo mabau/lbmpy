@@ -52,28 +52,10 @@ class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
         return [field(i) for i in range(len(stencil))]
 
 
-class Pseudo2DTwoFieldsAccessor(PdfFieldAccessor):
-    """Useful if a 3D simulation of a domain with size (x,y,1) is done and the dimensions with size 1 
-    is periodic. In this case no periodicity exchange has to be done"""
-    def __init__(self, collapsedDim):
-        self._collapsedDim = collapsedDim
-
-    def read(self, field, stencil):
-        result = []
-        for i, d in enumerate(stencil):
-            direction = list(d)
-            direction[self._collapsedDim] = 0
-            result.append(field[inverse_direction(tuple(direction))](i))
-        return result
-
-    @staticmethod
-    def write(field, stencil):
-        return [field(i) for i in range(len(stencil))]
-
-
 class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
-    """Access scheme that builds periodicity into the kernel, by introducing a condition on every load,
-    such that at the borders the periodic value is loaded. The periodicity is specified as a tuple of booleans, one for
+    """Access scheme that builds periodicity into the kernel.
+
+    Introduces a condition on every load, such that at the borders the periodic value is loaded. The periodicity is specified as a tuple of booleans, one for
     each direction. The second parameter `ghost_layers` specifies the number of assumed ghost layers of the field.
     For the periodic kernel itself no ghost layers are required, however other kernels might need them. 
     """
@@ -113,7 +95,7 @@ class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
         return [field(i) for i in range(len(stencil))]
 
 
-class AABBEvenTimeStepAccessor(PdfFieldAccessor):
+class AAEvenTimeStepAccessor(PdfFieldAccessor):
     @staticmethod
     def read(field, stencil):
         return [field(i) for i in range(len(stencil))]
@@ -123,7 +105,7 @@ class AABBEvenTimeStepAccessor(PdfFieldAccessor):
         return [field(stencil.index(inverse_direction(d))) for d in stencil]
 
 
-class AABBOddTimeStepAccessor(PdfFieldAccessor):
+class AAOddTimeStepAccessor(PdfFieldAccessor):
     @staticmethod
     def read(field, stencil):
         res = []
@@ -131,31 +113,11 @@ class AABBOddTimeStepAccessor(PdfFieldAccessor):
             inv_dir = inverse_direction(d)
             field_access = field[inv_dir](stencil.index(inv_dir))
             res.append(field_access)
-        return
+        return res
 
     @staticmethod
     def write(field, stencil):
         return [field[d](i) for i, d in enumerate(stencil)]
-
-
-class EsotericTwistAccessor(PdfFieldAccessor):
-    @staticmethod
-    def read(field, stencil):
-        result = []
-        for i, direction in enumerate(stencil):
-            direction = inverse_direction(direction)
-            neighbor_offset = tuple([-e if e <= 0 else 0 for e in direction])
-            result.append(field[neighbor_offset](i))
-        return result
-
-    @staticmethod
-    def write(field, stencil):
-        result = []
-        for i, direction in enumerate(stencil):
-            neighbor_offset = tuple([e if e >= 0 else 0 for e in direction])
-            inverse_index = stencil.index(inverse_direction(direction))
-            result.append(field[neighbor_offset](inverse_index))
-        return result
 
 
 # -------------------------------------------- Visualization -----------------------------------------------------------

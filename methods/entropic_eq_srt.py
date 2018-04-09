@@ -44,14 +44,14 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
 
         if conserved_quantity_equations is None:
             conserved_quantity_equations = self._cqc.equilibrium_input_equations_from_pdfs(f)
-        all_subexpressions = conserved_quantity_equations.allEquations
+        all_subexpressions = conserved_quantity_equations.all_assignments
 
         eq = []
         for w_i, direction in zip(self.weights, self.stencil):
             f_i = rho * w_i
             for u_a, e_ia in zip(u, direction):
-                B = sp.sqrt(1 + 3 * u_a ** 2)
-                f_i *= (2 - B) * ((2 * u_a + B) / (1 - u_a)) ** e_ia
+                b = sp.sqrt(1 + 3 * u_a ** 2)
+                f_i *= (2 - b) * ((2 * u_a + b) / (1 - u_a)) ** e_ia
             eq.append(f_i)
 
         collision_eqs = [Assignment(lhs, (1 - relaxation_rate) * f_i + relaxation_rate * eq_i)
@@ -61,7 +61,7 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
             force_model_terms = self._forceModel(self)
             force_term_symbols = sp.symbols("forceTerm_:%d" % (len(force_model_terms, )))
             force_subexpressions = [Assignment(sym, forceModelTerm)
-                                   for sym, forceModelTerm in zip(force_term_symbols, force_model_terms)]
+                                    for sym, forceModelTerm in zip(force_term_symbols, force_model_terms)]
             all_subexpressions += force_subexpressions
             collision_eqs = [Assignment(eq.lhs, eq.rhs + forceTermSymbol)
                              for eq, forceTermSymbol in zip(collision_eqs, force_term_symbols)]
