@@ -64,7 +64,7 @@ def match_generic_equilibrium_ansatz(stencil, equilibrium, u=sp.symbols("u_:3"))
 
 
 def moment_constraint_equations(stencil, equilibrium, moment_to_value_dict, u=sp.symbols("u_:3")):
-    """Returns a set of equations that have to be fulfilled for a generic equilibrium match moment conditions 
+    """Returns a set of equations that have to be fulfilled for a generic equilibrium to match moment conditions
     passed in moment_to_value_dict. This dict is expected to map moment tuples to values."""
     dim = len(stencil[0])
     u = u[:dim]
