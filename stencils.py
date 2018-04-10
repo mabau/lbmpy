@@ -16,10 +16,11 @@ def get_stencil(name, ordering='walberla'):
         return get_stencil.data[name.upper()][ordering.lower()]
     except KeyError:
         err_msg = ""
-        for stencil, orderingNames in get_stencil.data.items():
-            err_msg += "  %s: %s\n" % (stencil, ", ".join(orderingNames.keys()))
+        for stencil, ordering_names in get_stencil.data.items():
+            err_msg += "  %s: %s\n" % (stencil, ", ".join(ordering_names.keys()))
 
-        raise ValueError("No such stencil available. Available stencils: <stencilName>( <orderingNames> )\n" + err_msg)
+        raise ValueError("No such stencil available. "
+                         "Available stencils: <stencil_name>( <ordering_names> )\n" + err_msg)
 
 
 get_stencil.data = {

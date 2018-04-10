@@ -135,7 +135,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         if self._compressible:
             eq_coll = divide_first_order_moments_by_rho(eq_coll, dim)
 
-        eq_coll = apply_force_model_shift('equilibriumVelocityShift', dim, eq_coll, self._forceModel, self._compressible)
+        eq_coll = apply_force_model_shift('equilibrium_velocity_shift', dim, eq_coll, self._forceModel, self._compressible)
         return eq_coll
 
     def equilibrium_input_equations_from_init_values(self, density=1, velocity=(0, 0, 0)):
@@ -202,7 +202,8 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             # but this is usually not the case
             momentum_density_output_symbols = output_quantity_names_to_symbols['momentum_density']
             mom_density_eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
-                                                                                  self._symbolOrder0, self._symbolsOrder1)
+                                                                                  self._symbolOrder0,
+                                                                                  self._symbolsOrder1)
             mom_density_eq_coll = apply_force_model_shift('macroscopic_velocity_shift', dim, mom_density_eq_coll,
                                                           self._forceModel, self._compressible)
             for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.main_assignments[1:]):
@@ -311,8 +312,8 @@ def apply_force_model_shift(shift_member_name, dim, assignment_collection, force
         vel_offsets = shift_func(density)
         if reverse:
             vel_offsets = [-v for v in vel_offsets]
-        shifted_velocity_eqs = [Assignment(oldEq.lhs, oldEq.rhs + offset)
-                                for oldEq, offset in zip(old_vel_eqs, vel_offsets)]
+        shifted_velocity_eqs = [Assignment(old_eq.lhs, old_eq.rhs + offset)
+                                for old_eq, offset in zip(old_vel_eqs, vel_offsets)]
         new_eqs = [old_eqs[0]] + shifted_velocity_eqs + old_eqs[dim + 1:]
         return assignment_collection.copy(new_eqs)
     else:

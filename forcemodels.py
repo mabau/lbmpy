@@ -110,14 +110,14 @@ class Simple(object):
     def __call__(self, lb_method, **kwargs):
         assert len(self._force) == lb_method.dim
 
-        def scalarProduct(a, b):
+        def scalar_product(a, b):
             return sum(a_i * b_i for a_i, b_i in zip(a, b))
 
-        return [3 * w_i * scalarProduct(self._force, direction)
+        return [3 * w_i * scalar_product(self._force, direction)
                 for direction, w_i in zip(lb_method.stencil, lb_method.weights)]
 
     def macroscopic_velocity_shift(self, density):
-        return defaultVelocityShift(density, self._force)
+        return default_velocity_shift(density, self._force)
 
 
 class Luo(object):
@@ -139,7 +139,7 @@ class Luo(object):
         return result
 
     def macroscopic_velocity_shift(self, density):
-        return defaultVelocityShift(density, self._force)
+        return default_velocity_shift(density, self._force)
 
 
 class Guo(object):
@@ -153,15 +153,15 @@ class Guo(object):
     def __call__(self, lb_method):
         luo = Luo(self._force)
 
-        shearRelaxationRate = get_shear_relaxation_rate(lb_method)
-        correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
-        return [correctionFactor * t for t in luo(lb_method)]
+        shear_relaxation_rate = get_shear_relaxation_rate(lb_method)
+        correction_factor = (1 - sp.Rational(1, 2) * shear_relaxation_rate)
+        return [correction_factor * t for t in luo(lb_method)]
 
     def macroscopic_velocity_shift(self, density):
-        return defaultVelocityShift(density, self._force)
+        return default_velocity_shift(density, self._force)
 
-    def equilibriumVelocityShift(self, density):
-        return defaultVelocityShift(density, self._force)
+    def equilibrium_velocity_shift(self, density):
+        return default_velocity_shift(density, self._force)
 
 
 class Buick(object):
@@ -176,15 +176,15 @@ class Buick(object):
     def __call__(self, lb_method, **kwargs):
         simple = Simple(self._force)
 
-        shearRelaxationRate = get_shear_relaxation_rate(lb_method)
-        correctionFactor = (1 - sp.Rational(1, 2) * shearRelaxationRate)
-        return [correctionFactor * t for t in simple(lb_method)]
+        shear_relaxation_rate = get_shear_relaxation_rate(lb_method)
+        correction_factor = (1 - sp.Rational(1, 2) * shear_relaxation_rate)
+        return [correction_factor * t for t in simple(lb_method)]
 
     def macroscopic_velocity_shift(self, density):
-        return defaultVelocityShift(density, self._force)
+        return default_velocity_shift(density, self._force)
 
-    def equilibriumVelocityShift(self, density):
-        return defaultVelocityShift(density, self._force)
+    def equilibrium_velocity_shift(self, density):
+        return default_velocity_shift(density, self._force)
 
 
 class EDM(object):
@@ -198,18 +198,18 @@ class EDM(object):
         rho = cqc.zeroth_order_moment_symbol if cqc.compressible else 1
         u = cqc.first_order_moment_symbols
 
-        shiftedU = (u_i + f_i / rho for u_i, f_i in zip(u, self._force))
-        eqTerms = lb_method.get_equilibrium_terms()
-        shiftedEq = eqTerms.subs({u_i: su_i for u_i, su_i in zip(u, shiftedU)})
-        return shiftedEq - eqTerms
+        shifted_u = (u_i + f_i / rho for u_i, f_i in zip(u, self._force))
+        eq_terms = lb_method.get_equilibrium_terms()
+        shifted_eq = eq_terms.subs({u_i: su_i for u_i, su_i in zip(u, shifted_u)})
+        return shifted_eq - eq_terms
 
     def macroscopic_velocity_shift(self, density):
-        return defaultVelocityShift(density, self._force)
+        return default_velocity_shift(density, self._force)
 
 
 # --------------------------------  Helper functions  ------------------------------------------------------------------
 
 
-def defaultVelocityShift(density, force):
+def default_velocity_shift(density, force):
     return [f_i / (2 * density) for f_i in force]
 

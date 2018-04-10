@@ -166,7 +166,7 @@ def get_moments_of_continuous_maxwellian_equilibrium(moments, dim, rho=sp.Symbol
 
     # trick to speed up sympy integration (otherwise it takes multiple minutes, or aborts):
     # use a positive, real symbol to represent c_s_sq -> then replace this symbol afterwards with the real c_s_sq
-    c_s_sq_helper = sp.Symbol("csqHelper", positive=True, real=True)
+    c_s_sq_helper = sp.Symbol("csq_helper", positive=True, real=True)
     mb = continuous_maxwellian_equilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
     result = [continuous_moment(mb, moment, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq) for moment in moments]
     if order is not None:
@@ -227,7 +227,7 @@ def get_cumulants_of_continuous_maxwellian_equilibrium(cumulants, dim, rho=sp.Sy
 
     # trick to speed up sympy integration (otherwise it takes multiple minutes, or aborts):
     # use a positive, real symbol to represent c_s_sq -> then replace this symbol afterwards with the real c_s_sq
-    c_s_sq_helper = sp.Symbol("csqHelper", positive=True, real=True)
+    c_s_sq_helper = sp.Symbol("csq_helper", positive=True, real=True)
     mb = continuous_maxwellian_equilibrium(dim, rho, u, MOMENT_SYMBOLS[:dim], c_s_sq_helper)
     result = [continuous_cumulant(mb, cumulant, MOMENT_SYMBOLS[:dim]).subs(c_s_sq_helper, c_s_sq)
               for cumulant in cumulants]

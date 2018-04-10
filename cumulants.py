@@ -52,7 +52,7 @@ def __cumulant_raw_moment_transform(index, dependent_var_dict, outer_function, d
         index: tuple describing the index of the cumulant/moment to express as function of moments/cumulants
         dependent_var_dict: a dictionary from index tuple to moments/cumulants symbols, or None to use default symbols
         outer_function: logarithm to transform from moments->cumulants, exp for inverse direction
-        default_prefix: if dependentVarDict is None, this is used to construct symbols of the form prefix_i_j_k
+        default_prefix: if dependent_var_dict is None, this is used to construct symbols of the form prefix_i_j_k
         centralized: if True the first order moments/cumulants are set to zero
     """
     dim = len(index)
@@ -74,8 +74,8 @@ def __cumulant_raw_moment_transform(index, dependent_var_dict, outer_function, d
     # index (2,1,0) means differentiate twice w.r.t to first variable, and once w.r.t to second variable
     # this is transformed here into representation [0,0,1] such that each entry is one diff operation
     partition_list = []
-    for i, indexComponent in enumerate(index):
-        for j in range(indexComponent):
+    for i, index_component in enumerate(index):
+        for j in range(index_component):
             partition_list.append(i)
 
     if len(partition_list) == 0:  # special case for zero index

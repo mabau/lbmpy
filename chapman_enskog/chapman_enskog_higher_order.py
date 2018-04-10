@@ -69,17 +69,17 @@ def determine_higher_order_moments(epsilon_hierarchy, relaxation_rates, moment_c
 
     time_diffs = OrderedDict()
     non_eq_moms = OrderedDict()
-    for epsOrder in range(1, order):
-        eps_eq = epsilon_hierarchy[epsOrder]
+    for eps_order in range(1, order):
+        eps_eq = epsilon_hierarchy[eps_order]
 
         for order in range(order+1):
             eqs = sp.Matrix([full_expand(tm(eps_eq * m)) for m in poly_moments(order, dim)])
             unknown_moments = [m for m in eqs.atoms(CeMoment)
-                               if m.superscript == epsOrder and sum(m.moment_tuple) == order]
+                               if m.superscript == eps_order and sum(m.moment_tuple) == order]
             if len(unknown_moments) == 0:
                 for eq in eqs:
                     time_diffs_in_expr = [d for d in eq.atoms(Diff) if
-                                          (d.target == 't' or d.target == sp.Symbol("t")) and d.superscript == epsOrder]
+                                          (d.target == 't' or d.target == sp.Symbol("t")) and d.superscript == eps_order]
                     if len(time_diffs_in_expr) == 0:
                         continue
                     assert len(time_diffs_in_expr) == 1, \

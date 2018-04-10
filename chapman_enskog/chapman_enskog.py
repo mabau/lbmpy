@@ -261,7 +261,7 @@ class LbMethodEqMoments:
         moment_tuple = ce_moment.moment_tuple
 
         moment_symbols = []
-        for moment, (eqValue, rr) in self._method.relaxation_info_dict.items():
+        for moment, (eq_value, rr) in self._method.relaxation_info_dict.items():
             if isinstance(moment, tuple):
                 moment_symbols.append(-rr**exponent
                                       * CeMoment(pre_collision_moment_name, moment, ce_moment.superscript))
@@ -326,8 +326,8 @@ def substitute_collision_operator_moments(expr, lb_moment_computation, collision
                                           pre_collision_moment_name="\\Pi"):
     moments_to_replace = [m for m in expr.atoms(CeMoment) if m.name == collision_op_moment_name]
     subs_dict = {}
-    for ceMoment in moments_to_replace:
-        subs_dict[ceMoment] = lb_moment_computation.get_post_collision_moment(ceMoment, 1, pre_collision_moment_name)
+    for ce_moment in moments_to_replace:
+        subs_dict[ce_moment] = lb_moment_computation.get_post_collision_moment(ce_moment, 1, pre_collision_moment_name)
 
     return expr.subs(subs_dict)
 
@@ -341,10 +341,10 @@ def take_moments(eqn, pdf_to_moment_name=(('f', '\Pi'), ('\Omega f', '\\Upsilon'
     velocity_terms = tuple(expanded_symbol(velocity_name, subscript=i) for i in range(3))
 
     def determine_f_index(factor):
-        FIndex = namedtuple("FIndex", ['momentName', 'superscript'])
-        for symbolListId, pdfSymbolsElement in enumerate(pdf_symbols):
+        FIndex = namedtuple("FIndex", ['moment_name', 'superscript'])
+        for symbol_list_id, pdf_symbols_element in enumerate(pdf_symbols):
             try:
-                return FIndex(pdf_to_moment_name[symbolListId][1], pdfSymbolsElement.index(factor))
+                return FIndex(pdf_to_moment_name[symbol_list_id][1], pdf_symbols_element.index(factor))
             except ValueError:
                 pass
         return None
@@ -370,13 +370,13 @@ def take_moments(eqn, pdf_to_moment_name=(('f', '\Pi'), ('\Omega f', '\\Upsilon'
                     f_index = new_f_index
 
         moment_tuple = [0] * len(velocity_terms)
-        for cIdx in c_indices:
-            moment_tuple[cIdx] += 1
+        for c_idx in c_indices:
+            moment_tuple[c_idx] += 1
         moment_tuple = tuple(moment_tuple)
 
         if use_one_neighborhood_aliasing:
             moment_tuple = non_aliased_moment(moment_tuple)
-        result = CeMoment(f_index.momentName, moment_tuple, f_index.superscript)
+        result = CeMoment(f_index.moment_name, moment_tuple, f_index.superscript)
         if derivative_term is not None:
             result = derivative_term.change_arg_recursive(result)
         result *= rest
@@ -510,7 +510,7 @@ def chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_deriv
         equation: equation to expand
         time_derivative_orders: tuple describing range for time derivative to expand
         spatial_derivative_orders: tuple describing range for spatial derivatives to expand
-        pdfs: symbols to expand: sequence of triples (symbolName, startOrder, endOrder)
+        pdfs: symbols to expand: sequence of triples (symbol_name, start_order, end_order)
         commutative: can be set to False to have non-commutative pdf symbols
     Returns:
         tuple mapping epsilon order to equation
@@ -533,15 +533,15 @@ def chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_deriv
     expanded_pdf_symbols = []
 
     max_expansion_order = spatial_derivative_orders[1] if spatial_derivative_orders else 10
-    for pdf_name, startOrder, stopOrder in pdfs:
+    for pdf_name, start_order, stop_order in pdfs:
         if isinstance(pdf_name, sp.Symbol):
             pdf_name = pdf_name.name
         expanded_pdf_symbols += [expanded_symbol(pdf_name, superscript=i, commutative=commutative)
-                                 for i in range(startOrder, stopOrder)]
+                                 for i in range(start_order, stop_order)]
         pdf_symbol = sp.Symbol(pdf_name, commutative=commutative)
         subs_dict[pdf_symbol] = sum(eps ** i * expanded_symbol(pdf_name, superscript=i, commutative=commutative)
-                                    for i in range(startOrder, stopOrder))
-        max_expansion_order = max(max_expansion_order, stopOrder)
+                                    for i in range(start_order, stop_order))
+        max_expansion_order = max(max_expansion_order, stop_order)
     equation = equation.subs(subs_dict)
     equation = expand_using_linearity(equation, functions=expanded_pdf_symbols).expand().collect(eps)
     result = {eps_order: equation.coeff(eps ** eps_order) for eps_order in range(1, 2*max_expansion_order)}
@@ -568,7 +568,7 @@ def match_to_navier_stokes(conservation_equations, rho=sp.Symbol("rho"), u=sp.sy
 
     def match_moment_eqs(moment_eqs, is_compressible):
         shear_and_pressure_eqs = []
-        for i, momEq in enumerate(moment_eqs):
+        for i, mom_eq in enumerate(moment_eqs):
             factor = rho if is_compressible else 1
             ref = diff_simplify(Diff(factor * u[i], t) + sum(Diff(factor * u[i] * u[j], j) for j in range(dim)))
             shear_and_pressure_eqs.append(diff_simplify(moment_eqs[i]) - ref)
@@ -590,8 +590,8 @@ def match_to_navier_stokes(conservation_equations, rho=sp.Symbol("rho"), u=sp.sy
 
         sigma_ = sp.zeros(dim)
         error_terms_ = []
-        for i, shearAndPressureEq in enumerate(shear_and_pressure_eqs):
-            eq_without_pressure = shearAndPressureEq - sum(coeff * Diff(arg, i) for coeff, arg in pressure_terms)
+        for i, shear_and_pressure_eq in enumerate(shear_and_pressure_eqs):
+            eq_without_pressure = shear_and_pressure_eq - sum(coeff * Diff(arg, i) for coeff, arg in pressure_terms)
             for d in eq_without_pressure.atoms(Diff):
                 eq_without_pressure = eq_without_pressure.collect(d)
                 sigma_[i, d.target] += eq_without_pressure.coeff(d) * d.arg

@@ -35,8 +35,8 @@ def pressure_tensor_kernel(free_energy, order_parameters, phi_field, pressure_te
     index_map = symmetric_tensor_linearization(dim)
     discretize = Discretization2ndOrder(dx=dx)
     eqs = []
-    for index, linIndex in index_map.items():
-        eq = Assignment(pressure_tensor_field(linIndex), discretize(p[index]).expand())
+    for index, lin_index in index_map.items():
+        eq = Assignment(pressure_tensor_field(lin_index), discretize(p[index]).expand())
         eqs.append(eq)
     return eqs
 
@@ -67,14 +67,14 @@ class CahnHilliardFDStep:
     def __init__(self, data_handling, phi_field_name, mu_field_name, velocity_field_name, name='ch_fd', target='cpu',
                  dx=1, dt=1, mobilities=1, equation_modifier=lambda eqs: eqs):
         from pystencils import create_kernel
-        self.dataHandling = data_handling
+        self.data_handling = data_handling
 
-        mu_field = self.dataHandling.fields[mu_field_name]
-        vel_field = self.dataHandling.fields[velocity_field_name]
-        self.phi_field = self.dataHandling.fields[phi_field_name]
-        self.tmp_field = self.dataHandling.add_array_like(name + '_tmp', phi_field_name, latex_name='tmp')
+        mu_field = self.data_handling.fields[mu_field_name]
+        vel_field = self.data_handling.fields[velocity_field_name]
+        self.phi_field = self.data_handling.fields[phi_field_name]
+        self.tmp_field = self.data_handling.add_array_like(name + '_tmp', phi_field_name, latex_name='tmp')
 
-        num_phases = self.dataHandling.values_per_cell(phi_field_name)
+        num_phases = self.data_handling.values_per_cell(phi_field_name)
         if not hasattr(mobilities, '__len__'):
             mobilities = [mobilities] * num_phases
 
@@ -85,13 +85,13 @@ class CahnHilliardFDStep:
         self.update_eqs = update_eqs
         self.update_eqs = equation_modifier(update_eqs)
         self.kernel = create_kernel(self.update_eqs, target=target).compile()
-        self.sync = self.dataHandling.synchronization_function([phi_field_name, velocity_field_name, mu_field_name],
-                                                               target=target)
+        self.sync = self.data_handling.synchronization_function([phi_field_name, velocity_field_name, mu_field_name],
+                                                                target=target)
 
     def time_step(self, **kwargs):
         self.sync()
-        self.dataHandling.run_kernel(self.kernel, **kwargs)
-        self.dataHandling.swap(self.phi_field.name, self.tmp_field.name)
+        self.data_handling.run_kernel(self.kernel, **kwargs)
+        self.data_handling.swap(self.phi_field.name, self.tmp_field.name)
 
     def set_pdf_fields_from_macroscopic_values(self):
         pass

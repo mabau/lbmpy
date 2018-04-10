@@ -25,7 +25,7 @@ def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_fie
     tau_0 = sp.Symbol("tau_0_")
     second_order_neq_moments = sp.Symbol("Pi")
     rho = method.zeroth_order_equilibrium_moment_symbol if method.conserved_quantity_computation.compressible else 1
-    adapted_omega = sp.Symbol("smagorinskyOmega")
+    adapted_omega = sp.Symbol("smagorinsky_omega")
 
     collision_rule = collision_rule.new_with_substitutions({omega_s: adapted_omega})
     # for derivation see notebook demo_custom_LES_model.ipynb

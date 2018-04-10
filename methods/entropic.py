@@ -58,9 +58,9 @@ def add_entropy_condition(collision_rule, omega_output_field=None):
     new_update_equations = []
 
     const_part = decomposition.constant_exprs()
-    for updateEq in collision_rule.main_assignments:
-        index = collision_rule.method.post_collision_pdf_symbols.index(updateEq.lhs)
-        new_eq = Assignment(updateEq.lhs, const_part[index] + omega_s * ds_symbols[index] + omega_h * dh_symbols[index])
+    for update_eq in collision_rule.main_assignments:
+        index = collision_rule.method.post_collision_pdf_symbols.index(update_eq.lhs)
+        new_eq = Assignment(update_eq.lhs, const_part[index] + omega_s * ds_symbols[index] + omega_h * dh_symbols[index])
         new_update_equations.append(new_eq)
     new_collision_rule = collision_rule.copy(new_update_equations, collision_rule.subexpressions + subexpressions)
     new_collision_rule.simplification_hints['entropic'] = True
@@ -102,8 +102,8 @@ def add_iterative_entropy_condition(collision_rule, free_omega=None, newton_iter
     # 1) decompose into constant + free_omega * ent1 + free_omega**2 * ent2
     polynomial_subexpressions = []
     rr_polynomials = []
-    for i, constantExpr in enumerate(decomposition.constant_exprs()):
-        constant_expr_eq = Assignment(decomposition.symbolic_constant_expr(i), constantExpr)
+    for i, constant_expr in enumerate(decomposition.constant_exprs()):
+        constant_expr_eq = Assignment(decomposition.symbolic_constant_expr(i), constant_expr)
         polynomial_subexpressions.append(constant_expr_eq)
         rr_polynomial = constant_expr_eq.lhs
 
@@ -209,9 +209,9 @@ class RelaxationRatePolynomialDecomposition(object):
         update_equations = self._collisionRule.main_assignments
 
         result = []
-        for updateEquation in update_equations:
+        for update_equation in update_equations:
             factors = []
-            rhs = updateEquation.rhs
+            rhs = update_equation.rhs
             power = 0
             while True:
                 power += 1

@@ -68,22 +68,22 @@ class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
         for i, d in enumerate(stencil):
             pull_direction = inverse_direction(d)
             periodic_pull_direction = []
-            for coordId, dirElement in enumerate(pull_direction):
-                if not self._periodicity[coordId]:
-                    periodic_pull_direction.append(dirElement)
+            for coord_id, dir_element in enumerate(pull_direction):
+                if not self._periodicity[coord_id]:
+                    periodic_pull_direction.append(dir_element)
                     continue
 
                 lower_limit = self._ghostLayers
-                upper_limit = field.spatial_shape[coordId] - 1 - self._ghostLayers
+                upper_limit = field.spatial_shape[coord_id] - 1 - self._ghostLayers
                 limit_diff = upper_limit - lower_limit
-                loop_counter = LoopOverCoordinate.get_loop_counter_symbol(coordId)
-                if dirElement == 0:
+                loop_counter = LoopOverCoordinate.get_loop_counter_symbol(coord_id)
+                if dir_element == 0:
                     periodic_pull_direction.append(0)
-                elif dirElement == 1:
-                    new_dir_element = sp.Piecewise((dirElement, loop_counter < upper_limit), (-limit_diff, True))
+                elif dir_element == 1:
+                    new_dir_element = sp.Piecewise((dir_element, loop_counter < upper_limit), (-limit_diff, True))
                     periodic_pull_direction.append(new_dir_element)
-                elif dirElement == -1:
-                    new_dir_element = sp.Piecewise((dirElement, loop_counter > lower_limit), (limit_diff, True))
+                elif dir_element == -1:
+                    new_dir_element = sp.Piecewise((dir_element, loop_counter > lower_limit), (limit_diff, True))
                     periodic_pull_direction.append(new_dir_element)
                 else:
                     raise NotImplementedError("This accessor supports only nearest neighbor stencils")
@@ -127,9 +127,9 @@ def visualize_field_mapping(axes, stencil, field_mapping, color='b'):
     from lbmpy.plot2d import LbGrid
     grid = LbGrid(3, 3)
     grid.fill_with_default_arrows()
-    for fieldAccess, direction in zip(field_mapping, stencil):
-        field_position = stencil[fieldAccess.index[0]]
-        neighbor = fieldAccess.offsets
+    for field_access, direction in zip(field_mapping, stencil):
+        field_position = stencil[field_access.index[0]]
+        neighbor = field_access.offsets
         grid.add_arrow((1 + neighbor[0], 1 + neighbor[1]),
                        arrow_position=field_position, arrow_direction=direction, color=color)
     grid.draw(axes)

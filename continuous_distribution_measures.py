@@ -20,7 +20,7 @@ def moment_generating_function(generating_function, symbols, symbols_in_result):
     :param generating_function: sympy expression
     :param symbols: a sequence of symbols forming the vector x
     :param symbols_in_result: a sequence forming the vector t
-    :return: transformation result F: an expression that depends now on symbolsInResult
+    :return: transformation result F: an expression that depends now on symbols_in_result
              (symbols have been integrated out)
 
     .. note::

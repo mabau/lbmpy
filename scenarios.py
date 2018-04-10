@@ -61,7 +61,7 @@ def create_fully_periodic_flow(initial_velocity, periodicity_in_kernel=False, lb
     if data_handling is None:
         data_handling = create_data_handling(parallel, domain_size, periodicity=not periodicity_in_kernel,
                                              default_ghost_layers=1)
-    step = LatticeBoltzmannStep(data_handling=data_handling, name="periodicScenario", lbm_kernel=lbm_kernel, **kwargs)
+    step = LatticeBoltzmannStep(data_handling=data_handling, name="periodic_scenario", lbm_kernel=lbm_kernel, **kwargs)
     for b in step.data_handling.iterate(ghost_layers=False):
         np.copyto(b[step.velocity_data_name], initial_velocity[b.global_slice])
     step.set_pdf_fields_from_macroscopic_values()
@@ -85,7 +85,7 @@ def create_lid_driven_cavity(domain_size=None, lid_velocity=0.005, lbm_kernel=No
     assert domain_size is not None or data_handling is not None
     if data_handling is None:
         data_handling = create_data_handling(parallel, domain_size, periodicity=False, default_ghost_layers=1)
-    step = LatticeBoltzmannStep(data_handling=data_handling, lbm_kernel=lbm_kernel, name="lidDrivenCavity", **kwargs)
+    step = LatticeBoltzmannStep(data_handling=data_handling, lbm_kernel=lbm_kernel, name="ldc", **kwargs)
 
     my_ubb = UBB(velocity=[lid_velocity, 0, 0][:step.method.dim])
     step.boundary_handling.set_boundary(my_ubb, slice_from_direction('N', step.dim))
@@ -132,17 +132,17 @@ def create_channel(domain_size=None, force=None, pressure_difference=None, u_max
     if force:
         kwargs['force'] = tuple([force, 0, 0][:dim])
         assert data_handling.periodicity[0]
-        step = LatticeBoltzmannStep(data_handling=data_handling, name="forceDrivenChannel", **kwargs)
+        step = LatticeBoltzmannStep(data_handling=data_handling, name="force_driven_channel", **kwargs)
     elif pressure_difference:
         inflow = FixedDensity(1.0 + pressure_difference)
         outflow = FixedDensity(1.0)
-        step = LatticeBoltzmannStep(data_handling=data_handling, name="pressureDrivenChannel", **kwargs)
+        step = LatticeBoltzmannStep(data_handling=data_handling, name="pressure_driven_channel", **kwargs)
         step.boundary_handling.set_boundary(inflow, slice_from_direction('W', dim))
         step.boundary_handling.set_boundary(outflow, slice_from_direction('E', dim))
     elif u_max:
         if duct:
             raise NotImplementedError("Velocity inflow for duct flows not yet implemented")
-        step = LatticeBoltzmannStep(data_handling=data_handling, name="velocityDrivenChannel", **kwargs)
+        step = LatticeBoltzmannStep(data_handling=data_handling, name="velocity_driven_channel", **kwargs)
         diameter = diameter_callback(np.array([0]), domain_size)[0] if diameter_callback else min(domain_size[1:])
         add_parabolic_velocity_inflow(step.boundary_handling, u_max, slice_from_direction('W', dim),
                                       vel_coord=0, diameter=diameter)

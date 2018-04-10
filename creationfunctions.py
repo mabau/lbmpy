@@ -90,11 +90,11 @@ Simplifications / Transformations:
 
 Field size information:
 
-- ``pdfArr=None``: pass a numpy array here to create kernels with fixed size and create the loop nest according to layout
-  of this array
+- ``pdf_arr=None``: pass a numpy array here to create kernels with fixed size and create the loop nest according 
+    to layout of this array
 - ``field_size=None``: create kernel for fixed field size
-- ``field_layout='c'``:   ``'c'`` or ``'numpy'`` for standard numpy layout, ``'reverseNumpy'`` or ``'f'`` for fortran
-  layout, this does not apply when pdfArr was given, then the same layout as pdfArr is used
+- ``field_layout='c'``:   ``'c'`` or ``'numpy'`` for standard numpy layout, ``'reverse_numpy'`` or ``'f'`` for fortran
+  layout, this does not apply when pdf_arr was given, then the same layout as pdf_arr is used
 
 GPU:
 
@@ -102,7 +102,7 @@ GPU:
   and installed *pycuda* package
 - ``gpu_indexing='block'``: determines mapping of CUDA threads to cells. Can be either ``'block'`` or ``'line'``
 - ``gpu_indexing_params='block'``: parameters passed to init function of gpu indexing.
-  For ``'block'`` indexing one can e.g. specify the block size ``{'blockSize' : (128, 4, 1)}``
+  For ``'block'`` indexing one can e.g. specify the block size ``{'block_size' : (128, 4, 1)}``
 
 Other:
 
@@ -173,10 +173,10 @@ from lbmpy.updatekernels import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAc
 
 
 def create_lb_function(ast=None, optimization={}, **kwargs):
-    params, optParams = update_with_default_parameters(kwargs, optimization)
+    params, opt_params = update_with_default_parameters(kwargs, optimization)
 
     if ast is None:
-        params['optimization'] = optParams
+        params['optimization'] = opt_params
         ast = create_lb_ast(**params)
 
     res = ast.compile()
@@ -279,7 +279,7 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     if params['velocity_input'] is not None:
         eqs = [Assignment(cqc.zeroth_order_moment_symbol, sum(lb_method.pre_collision_pdf_symbols))]
         velocity_field = params['velocity_input']
-        eqs += [Assignment(uSym, velocity_field(i)) for i, uSym in enumerate(cqc.first_order_moment_symbols)]
+        eqs += [Assignment(u_sym, velocity_field(i)) for i, u_sym in enumerate(cqc.first_order_moment_symbols)]
         eqs = AssignmentCollection(eqs, [])
         collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=eqs)
     else:
@@ -366,7 +366,7 @@ def create_lb_method_from_existing(method, modification_function):
 
     Args:
         method: old method
-        modification_function: function receiving (moment, equilibriumValue, relaxation_rate) as arguments,
+        modification_function: function receiving (moment, equilibrium_value, relaxation_rate) as arguments,
                                i.e. one row of the relaxation table, returning a modified version
     """
     relaxation_table = (modification_function(m, eq, rr)
@@ -463,7 +463,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'split': False,
 
         'field_size': None,
-        'field_layout': 'fzyx',  # can be 'numpy' (='c'), 'reverseNumpy' (='f'), 'fzyx', 'zyxf'
+        'field_layout': 'fzyx',  # can be 'numpy' (='c'), 'reverse_numpy' (='f'), 'fzyx', 'zyxf'
         'symbolic_field': None,
 
         'target': 'cpu',

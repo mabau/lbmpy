@@ -62,8 +62,8 @@ def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rat
                                                                    c_s_sq=c_s_sq, compressible=compressible,
                                                                    order=equilibrium_order)
 
-    rr_dict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
-                           for mom, rr, eqMom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
+    rr_dict = OrderedDict([(mom, RelaxationInfo(eq_mom, rr))
+                           for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
     if cumulant:
         return CumulantBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
     else:
@@ -100,8 +100,8 @@ def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_r
         u = density_velocity_computation.defined_symbols(order=1)[1]
         eq_values = [compressible_to_incompressible_moment_value(em, rho, u) for em in eq_values]
 
-    rr_dict = OrderedDict([(mom, RelaxationInfo(eqMom, rr))
-                          for mom, rr, eqMom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
+    rr_dict = OrderedDict([(mom, RelaxationInfo(eq_mom, rr))
+                          for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
     if cumulant:
         return CumulantBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
     else:
@@ -123,9 +123,9 @@ def create_generic_mrt(stencil, moment_eq_value_relaxation_rate_tuples, compress
     density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
 
     rr_dict = OrderedDict()
-    for moment, eqValue, rr in moment_eq_value_relaxation_rate_tuples:
+    for moment, eq_value, rr in moment_eq_value_relaxation_rate_tuples:
         moment = sp.sympify(moment)
-        rr_dict[moment] = RelaxationInfo(eqValue, rr)
+        rr_dict[moment] = RelaxationInfo(eq_value, rr)
     if cumulant:
         return CumulantBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
     else:
@@ -248,7 +248,8 @@ def create_mrt3(stencil, relaxation_rates, maxwellian_moments=False, **kwargs):
     shear_tensor_trace = sum(shear_tensor_diagonal)
     shear_tensor_trace_free_diagonal = [dim * d - shear_tensor_trace for d in shear_tensor_diagonal]
 
-    rest = [defaultMoment for defaultMoment in get_default_moment_set_for_stencil(stencil) if get_order(defaultMoment) != 2]
+    rest = [default_moment for default_moment in get_default_moment_set_for_stencil(stencil) 
+            if get_order(default_moment) != 2]
 
     d = shear_tensor_off_diagonal + shear_tensor_trace_free_diagonal[:-1]
     t = [shear_tensor_trace]
@@ -434,9 +435,9 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
         raise NotImplementedError("No MRT model is available (yet) for this stencil. "
                                   "Create a custom MRT using 'create_with_discrete_maxwellian_eq_moments'")
 
-    for momentList in nested_moments:
-        rr = relaxation_rate_getter(momentList)
-        for m in momentList:
+    for moment_list in nested_moments:
+        rr = relaxation_rate_getter(moment_list)
+        for m in moment_list:
             moment_to_relaxation_rate_dict[m] = rr
 
     if maxwellian_moments:
@@ -457,8 +458,8 @@ def compare_moment_based_lb_methods(reference, other, show_deviations_only=False
     reference_moments = set(reference.moments)
     other_moments = set(other.moments)
     for moment in reference_moments.intersection(other_moments):
-        reference_value = reference.relaxation_info_dict[moment].equilibriumValue
-        other_value = other.relaxation_info_dict[moment].equilibriumValue
+        reference_value = reference.relaxation_info_dict[moment].equilibrium_value
+        other_value = other.relaxation_info_dict[moment].equilibrium_value
         diff = sp.simplify(reference_value - other_value)
         if show_deviations_only and diff == 0:
             pass
@@ -473,7 +474,7 @@ def compare_moment_based_lb_methods(reference, other, show_deviations_only=False
         caption_rows.append(len(table))
         table.append(['Only in Ref', 'value', '', ''])
         for moment in only_in_ref:
-            val = reference.relaxation_info_dict[moment].equilibriumValue
+            val = reference.relaxation_info_dict[moment].equilibrium_value
             table.append(["$%s$" % (sp.latex(moment),),
                           "$%s$" % (sp.latex(val),),
                           " ", " "])
@@ -483,7 +484,7 @@ def compare_moment_based_lb_methods(reference, other, show_deviations_only=False
         caption_rows.append(len(table))
         table.append(['Only in Other', '', 'value', ''])
         for moment in only_in_other:
-            val = other.relaxation_info_dict[moment].equilibriumValue
+            val = other.relaxation_info_dict[moment].equilibrium_value
             table.append(["$%s$" % (sp.latex(moment),),
                           " ",
                           "$%s$" % (sp.latex(val),),

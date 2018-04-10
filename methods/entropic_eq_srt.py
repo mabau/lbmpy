@@ -13,7 +13,7 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
         self._weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
         self._relaxationRate = relaxation_rate
         self._forceModel = force_model
-        self.shearRelaxationRate = relaxation_rate
+        self.shear_relaxation_rate = relaxation_rate
 
     @property
     def conserved_quantity_computation(self):
@@ -60,11 +60,11 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
         if (self._forceModel is not None) and include_force_terms:
             force_model_terms = self._forceModel(self)
             force_term_symbols = sp.symbols("forceTerm_:%d" % (len(force_model_terms, )))
-            force_subexpressions = [Assignment(sym, forceModelTerm)
-                                    for sym, forceModelTerm in zip(force_term_symbols, force_model_terms)]
+            force_subexpressions = [Assignment(sym, force_model_term)
+                                    for sym, force_model_term in zip(force_term_symbols, force_model_terms)]
             all_subexpressions += force_subexpressions
-            collision_eqs = [Assignment(eq.lhs, eq.rhs + forceTermSymbol)
-                             for eq, forceTermSymbol in zip(collision_eqs, force_term_symbols)]
+            collision_eqs = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
+                             for eq, force_term_symbol in zip(collision_eqs, force_term_symbols)]
 
         return LbmCollisionRule(self, collision_eqs, all_subexpressions)
 

@@ -25,13 +25,13 @@ def get_shear_relaxation_rate(method):
     Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y
     The shear relaxation rate determines the viscosity in hydrodynamic LBM schemes
     """
-    if hasattr(method, 'shearRelaxationRate'):
-        return method.shearRelaxationRate
+    if hasattr(method, 'shear_relaxation_rate'):
+        return method.shear_relaxation_rate
 
     relaxation_rates = set()
-    for moment, relaxInfo in method.relaxation_info_dict.items():
+    for moment, relax_info in method.relaxation_info_dict.items():
         if is_shear_moment(moment):
-            relaxation_rates.add(relaxInfo.relaxation_rate)
+            relaxation_rates.add(relax_info.relaxation_rate)
     if len(relaxation_rates) == 1:
         return relaxation_rates.pop()
     else:

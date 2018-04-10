@@ -87,8 +87,8 @@ def add_pipe(boundary_handling, diameter, boundary=NoSlip()):
 
     :param boundary_handling: boundary handling object, works for serial and parallel versions
     :param diameter: pipe diameter, can be either a constant value or a callback function.
-                     the callback function has the signature (xCoordArray, domainShapeInCells) andp has to return
-                     a array of same shape as the received xCoordArray, with the diameter for each x position
+                     the callback function has the signature (x_coord_array, domain_shape_in_cells) and has to return
+                     a array of same shape as the received x_coord_array, with the diameter for each x position
     :param boundary: boundary object that is set at the wall, defaults to NoSlip (bounce back)
     """
     domain_shape = boundary_handling.shape

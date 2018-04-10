@@ -50,7 +50,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     @property
     def moment_equilibrium_values(self):
-        return tuple([e.equilibriumValue for e in self._momentToRelaxationInfoDict.values()])
+        return tuple([e.equilibrium_value for e in self._momentToRelaxationInfoDict.values()])
 
     @property
     def relaxation_rates(self):
@@ -138,16 +138,16 @@ class MomentBasedLbMethod(AbstractLbMethod):
         </table>
         """
         content = ""
-        for moment, (eqValue, rr) in self._momentToRelaxationInfoDict.items():
+        for moment, (eq_value, rr) in self._momentToRelaxationInfoDict.items():
             vals = {
                 'rr': sp.latex(rr),
                 'moment': sp.latex(moment),
-                'eqValue': sp.latex(eqValue),
+                'eq_value': sp.latex(eq_value),
                 'nb': 'style="border:none"',
             }
             content += """<tr {nb}>
                             <td {nb}>${moment}$</td>
-                            <td {nb}>${eqValue}$</td>
+                            <td {nb}>${eq_value}$</td>
                             <td {nb}>${rr}$</td>
                          </tr>\n""".format(**vals)
         return table.format(content=content, nb='style="border:none"')
@@ -191,12 +191,12 @@ class MomentBasedLbMethod(AbstractLbMethod):
         if self._forceModel is not None and include_force_terms:
             force_model_terms = self._forceModel(self)
             force_term_symbols = sp.symbols("forceTerm_:%d" % (len(force_model_terms,)))
-            force_subexpressions = [Assignment(sym, forceModelTerm)
-                                    for sym, forceModelTerm in zip(force_term_symbols, force_model_terms)]
+            force_subexpressions = [Assignment(sym, force_model_term)
+                                    for sym, force_model_term in zip(force_term_symbols, force_model_terms)]
             all_subexpressions += force_subexpressions
-            collision_eqs = [Assignment(eq.lhs, eq.rhs + forceTermSymbol)
-                             for eq, forceTermSymbol in zip(collision_eqs, force_term_symbols)]
-            simplification_hints['forceTerms'] = force_term_symbols
+            collision_eqs = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
+                             for eq, force_term_symbol in zip(collision_eqs, force_term_symbols)]
+            simplification_hints['force_terms'] = force_term_symbols
 
         return LbmCollisionRule(self, collision_eqs, all_subexpressions,
                                 simplification_hints)

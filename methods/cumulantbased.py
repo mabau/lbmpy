@@ -50,7 +50,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
 
     @property
     def cumulant_equilibrium_values(self):
-        return tuple([e.equilibriumValue for e in self._cumulant_to_relaxation_info_dict.values()])
+        return tuple([e.equilibrium_value for e in self._cumulant_to_relaxation_info_dict.values()])
 
     @property
     def relaxation_rates(self):
@@ -82,16 +82,16 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         </table>
         """
         content = ""
-        for cumulant, (eqValue, rr) in self._cumulant_to_relaxation_info_dict.items():
+        for cumulant, (eq_value, rr) in self._cumulant_to_relaxation_info_dict.items():
             vals = {
                 'rr': sp.latex(rr),
                 'cumulant': sp.latex(cumulant),
-                'eqValue': sp.latex(eqValue),
+                'eq_value': sp.latex(eq_value),
                 'nb': 'style="border:none"',
             }
             content += """<tr {nb}>
                             <td {nb}>${cumulant}$</td>
-                            <td {nb}>${eqValue}$</td>
+                            <td {nb}>${eq_value}$</td>
                             <td {nb}>${rr}$</td>
                          </tr>\n""".format(**vals)
         return table.format(content=content, nb='style="border:none"')
@@ -176,7 +176,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         monomial_cumulants = [cumulant_as_function_of_raw_moments(idx, moments_dict) for idx in indices]
 
         if pre_collision_subexpressions:
-            symbols = [tuple_to_symbol(t, "preC") for t in higher_order_indices]
+            symbols = [tuple_to_symbol(t, "pre_c") for t in higher_order_indices]
             subexpressions += [Assignment(sym, c)
                                for sym, c in zip(symbols, monomial_cumulants[num_lower_order_indices:])]
             monomial_cumulants = monomial_cumulants[:num_lower_order_indices] + symbols
@@ -189,7 +189,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         relaxed_monomial_cumulants = mon_to_poly.inv() * collided_poly_values
 
         if post_collision_subexpressions:
-            symbols = [tuple_to_symbol(t, "postC") for t in higher_order_indices]
+            symbols = [tuple_to_symbol(t, "post_c") for t in higher_order_indices]
             subexpressions += [Assignment(sym, c)
                                for sym, c in zip(symbols, relaxed_monomial_cumulants[num_lower_order_indices:])]
             relaxed_monomial_cumulants = relaxed_monomial_cumulants[:num_lower_order_indices] + symbols
@@ -204,11 +204,11 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         if self._force_model is not None and include_force_terms:
             force_model_terms = self._force_model(self)
             force_term_symbols = sp.symbols("forceTerm_:%d" % (len(force_model_terms,)))
-            force_subexpressions = [Assignment(sym, forceModelTerm)
-                                    for sym, forceModelTerm in zip(force_term_symbols, force_model_terms)]
+            force_subexpressions = [Assignment(sym, force_model_term)
+                                    for sym, force_model_term in zip(force_term_symbols, force_model_terms)]
             subexpressions += force_subexpressions
-            main_assignments = [Assignment(eq.lhs, eq.rhs + forceTermSymbol)
-                                for eq, forceTermSymbol in zip(main_assignments, force_term_symbols)]
+            main_assignments = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
+                                for eq, force_term_symbol in zip(main_assignments, force_term_symbols)]
 
         sh = {'relaxation_rates': list(self.relaxation_rates)}
         return LbmCollisionRule(self, main_assignments, subexpressions, simplification_hints=sh)

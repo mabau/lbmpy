@@ -39,9 +39,9 @@ def boundary_handling(boundary_handling_obj, slice_obj=None, boundary_name_to_co
 
     boundary_names = []
     flag_values = []
-    for name, flagName in sorted(boundary_handling_obj.get_boundary_name_to_flag_dict().items(), key=lambda l: l[1]):
+    for name, flag_name in sorted(boundary_handling_obj.get_boundary_name_to_flag_dict().items(), key=lambda l: l[1]):
         boundary_names.append(name)
-        flag_values.append(flagName)
+        flag_values.append(flag_name)
     default_cycle = matplotlib.rcParams['axes.prop_cycle']
     color_values = [fixed_colors[name] if name in fixed_colors else c['color']
                     for c, name in zip(default_cycle, boundary_names)]
@@ -157,8 +157,8 @@ class LbGrid:
         for p in self._patches:
             ax.add_patch(p)
 
-        for arrowPatch in self._arrows.values():
-            ax.add_patch(arrowPatch)
+        for arrow_patch in self._arrows.values():
+            ax.add_patch(arrow_patch)
 
         offset = 0.1
         ax.set_xlim(-offset, self._xCells+offset)

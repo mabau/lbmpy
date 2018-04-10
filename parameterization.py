@@ -6,9 +6,9 @@ from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity, lattic
 
 class ScalingWidget:
     def __init__(self):
-        self.scalingType = Select(options=[r'diffusive (fixed relaxation rate)',
-                                           r'acoustic (fixed dt)',
-                                           r'fixed lattice velocity'])
+        self.scaling_type = Select(options=[r'diffusive (fixed relaxation rate)',
+                                            r'acoustic (fixed dt)',
+                                            r'fixed lattice velocity'])
         self.physical_length = FloatText(value=0.1)
         self.cells_per_length = FloatText(value=256.0)
         self.max_physical_velocity = FloatText(value=0.01)
@@ -19,7 +19,7 @@ class ScalingWidget:
         self.max_lattice_velocity = FloatText(disabled=True)
         self.re = FloatText(disabled=True)
 
-        self.processingUpdate = False
+        self.processing_update = False
 
         def make_label(text):
             label_layout = {'width': '200px'}
@@ -44,7 +44,7 @@ class ScalingWidget:
             return [half_btn, double_btn]
 
         self.form = VBox([
-            HBox([make_label(r'Scaling'), self.scalingType]),
+            HBox([make_label(r'Scaling'), self.scaling_type]),
             HBox([make_label(r"Physical Length $[m]$"), self.physical_length]),
             HBox([make_label(r"Max. velocity $[m/s]$"), self.max_physical_velocity]),
             HBox([make_label(r"Cells per length"), self.cells_per_length] + make_buttons(self.cells_per_length, True)),
@@ -64,7 +64,7 @@ class ScalingWidget:
         self.kinematic_viscosity.observe(self._update_re)
         self.max_physical_velocity.observe(self._update_re)
 
-        for obj in [self.scalingType, self.kinematic_viscosity, self.omega, self.dt, self.max_lattice_velocity]:
+        for obj in [self.scaling_type, self.kinematic_viscosity, self.omega, self.dt, self.max_lattice_velocity]:
             obj.observe(self._update_free_parameter, names='value')
 
         self._update_free_parameter()
@@ -95,15 +95,15 @@ class ScalingWidget:
         self.omega.disabled = True
         self.max_lattice_velocity.disabled = True
 
-        if self.scalingType.value == r'diffusive (fixed relaxation rate)':
+        if self.scaling_type.value == r'diffusive (fixed relaxation rate)':
             self.omega.disabled = False
             self._update_dt_from_relaxation_rate_viscosity_and_dx()
             self._update_lattice_velocity_from_dx_dt_and_physical_velocity()
-        elif self.scalingType.value == r'acoustic (fixed dt)':
+        elif self.scaling_type.value == r'acoustic (fixed dt)':
             self._update_omega_from_viscosity_and_dt_dx()
             self._update_dt_from_dx_and_lattice_velocity()
             self.max_lattice_velocity.disabled = False
-        elif self.scalingType.value == r'fixed lattice velocity':
+        elif self.scaling_type.value == r'fixed lattice velocity':
             self._update_omega_from_viscosity_and_dt_dx()
             self.dt.disabled = False
             self._update_lattice_velocity_from_dx_dt_and_physical_velocity()
@@ -124,24 +124,24 @@ class ScalingWidget:
         self.re.value = round(L * u / nu, 7)
 
     def _on_dx_change(self, _):
-        if self.processingUpdate:
+        if self.processing_update:
             return
         if self.dx.value == 0:
             return
-        self.processingUpdate = True
+        self.processing_update = True
         self.cells_per_length.value = self.physical_length.value / self.dx.value
         self._update_free_parameter()
-        self.processingUpdate = False
+        self.processing_update = False
 
     def _on_cells_per_length_change(self, _):
-        if self.processingUpdate:
+        if self.processing_update:
             return
         if self.cells_per_length.value == 0:
             return
-        self.processingUpdate = True
+        self.processing_update = True
         self.dx.value = self.physical_length.value / self.cells_per_length.value
         self._update_free_parameter()
-        self.processingUpdate = False
+        self.processing_update = False
 
     def _on_physical_length_change(self, _):
         if self.cells_per_length.value == 0:

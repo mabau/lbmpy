@@ -4,7 +4,7 @@ from collections import namedtuple
 from pystencils.assignment_collection import AssignmentCollection
 
 
-RelaxationInfo = namedtuple('RelaxationInfo', ['equilibriumValue', 'relaxation_rate'])
+RelaxationInfo = namedtuple('RelaxationInfo', ['equilibrium_value', 'relaxation_rate'])
 
 
 class LbmCollisionRule(AssignmentCollection):

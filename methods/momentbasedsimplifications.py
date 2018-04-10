@@ -55,7 +55,7 @@ def factor_relaxation_rates(cr: LbmCollisionRule):
 def factor_density_after_factoring_relaxation_times(cr: LbmCollisionRule):
     """
     Tries to factor out the density. This only works if previously
-    :func:`lbmpy.methods.momentbasedsimplifications.factorRelaxationTimes` was run.
+    :func:`lbmpy.methods.momentbasedsimplifications.factor_relaxation_times` was run.
 
     This transformations makes only sense for compressible models - for incompressible models this does nothing
 
@@ -198,13 +198,13 @@ def cse_in_opposing_directions(cr: LbmCollisionRule):
                                                          order='None', optimizations=[])
                 substitutions += [Assignment(f[0], f[1]) for f in found_subexpressions]
 
-                update_rules = [Assignment(ur.lhs, ur.rhs.subs(relaxation_rate * oldTerm, new_coefficient * newTerm))
-                                for ur, newTerm, oldTerm in zip(update_rules, new_terms, terms)]
+                update_rules = [Assignment(ur.lhs, ur.rhs.subs(relaxation_rate * old_term, new_coefficient * new_term))
+                                for ur, new_term, old_term in zip(update_rules, new_terms, terms)]
 
         result += update_rules
 
-    for term, substitutedVar in new_coefficient_substitutions.items():
-        substitutions.append(Assignment(substitutedVar, term))
+    for term, substituted_var in new_coefficient_substitutions.items():
+        substitutions.append(Assignment(substituted_var, term))
 
     result.sort(key=lambda e: cr.method.post_collision_pdf_symbols.index(e.lhs))
     res = cr.copy(result)
@@ -233,8 +233,8 @@ def __get_common_quadratic_and_constant_terms(cr: LbmCollisionRule):
     for fa in pdf_symbols:
         t = t.subs(fa, 0)
 
-    if 'forceTerms' in sh:
-        t = t.subs({ft: 0 for ft in sh['forceTerms']})
+    if 'force_terms' in sh:
+        t = t.subs({ft: 0 for ft in sh['force_terms']})
 
     weight = t
 

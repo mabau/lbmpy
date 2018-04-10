@@ -20,7 +20,7 @@ class Boundary:
         :param pdf_field: pystencils field describing the pdf. The current cell is cell next to the boundary,
                          which is influenced by the boundary cell i.e. has a link from the boundary cell to
                          itself.
-        :param direction_symbol: a sympy symbol that can be used as index to the pdfField. It describes
+        :param direction_symbol: a sympy symbol that can be used as index to the pdf_field. It describes
                                 the direction pointing from the fluid to the boundary cell 
         :param lb_method: an instance of the LB method used. Use this to adapt the boundary to the method
                          (e.g. compressibility)
@@ -32,8 +32,8 @@ class Boundary:
     @property
     def additional_data(self):
         """Return a list of (name, type) tuples for additional data items required in this boundary
-        These data items can either be initialized in separate kernel see additionalDataKernelInit or by 
-        Python callbacks - see additionalDataCallback """
+        These data items can either be initialized in separate kernel see additional_data_kernel_init or by
+        Python callbacks - see additional_data_callback """
         return []
 
     @property
@@ -134,7 +134,7 @@ class UBB(Boundary):
                                      for d_i, v_i in zip(neighbor, velocity)]) * weight_of_direction(direction)
 
         # Better alternative: in conserved value computation
-        # rename what is currently called density to "virtualDensity"
+        # rename what is currently called density to "virtual_density"
         # provide a new quantity density, which is constant in case of incompressible models
         if not lb_method.conserved_quantity_computation.zero_centered_pdfs:
             cqc = lb_method.conserved_quantity_computation

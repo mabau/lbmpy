@@ -27,7 +27,7 @@ Example ::
 
     >>> from lbmpy.moments import MOMENT_SYMBOLS
     >>> x, y, z = MOMENT_SYMBOLS
-    >>> secondOrderMoment = x*y + y*z
+    >>> second_order_moment = x*y + y*z
 
 
 Functions
@@ -122,8 +122,8 @@ def exponent_to_polynomial_representation(exponent_tuple):
         x**2*y*z**3
     """
     poly = 1
-    for sym, tupleEntry in zip(MOMENT_SYMBOLS[:len(exponent_tuple)], exponent_tuple):
-        poly *= sym ** tupleEntry
+    for sym, tuple_entry in zip(MOMENT_SYMBOLS[:len(exponent_tuple)], exponent_tuple):
+        poly *= sym ** tuple_entry
     return poly
 
 
@@ -277,10 +277,10 @@ def is_shear_moment(moment):
     """Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y"""
     if type(moment) is tuple:
         moment = exponent_to_polynomial_representation(moment)
-    return moment in is_shear_moment.shearMoments
+    return moment in is_shear_moment.shear_moments
 
 
-is_shear_moment.shearMoments = set([c[0] * c[1] for c in itertools.combinations(MOMENT_SYMBOLS, 2)])
+is_shear_moment.shear_moments = set([c[0] * c[1] for c in itertools.combinations(MOMENT_SYMBOLS, 2)])
 
 
 @memorycache(maxsize=512)
@@ -325,14 +325,14 @@ def moment_matrix(moments, stencil):
     if type(moments[0]) is tuple:
         def generator(row, column):
             result = sp.Rational(1, 1)
-            for exponent, stencilEntry in zip(moments[row], stencil[column]):
-                result *= int(stencilEntry ** exponent)
+            for exponent, stencil_entry in zip(moments[row], stencil[column]):
+                result *= int(stencil_entry ** exponent)
             return result
     else:
         def generator(row, column):
             evaluated = moments[row]
-            for var, stencilEntry in zip(MOMENT_SYMBOLS, stencil[column]):
-                evaluated = evaluated.subs(var, stencilEntry)
+            for var, stencil_entry in zip(MOMENT_SYMBOLS, stencil[column]):
+                evaluated = evaluated.subs(var, stencil_entry)
             return evaluated
 
     return sp.Matrix(len(moments), len(stencil), generator)
@@ -425,8 +425,8 @@ def extract_monomials(sequence_of_polynomials, dim=3):
     """
     monomials = set()
     for polynomial in sequence_of_polynomials:
-        for factor, exponentTuple in polynomial_to_exponent_representation(polynomial):
-            monomials.add(exponentTuple[:dim])
+        for factor, exponent_tuple in polynomial_to_exponent_representation(polynomial):
+            monomials.add(exponent_tuple[:dim])
     return monomials
 
 
@@ -448,10 +448,10 @@ def monomial_to_polynomial_transformation_matrix(monomials, polynomials):
     dim = len(monomials[0])
 
     result = sp.zeros(len(polynomials), len(monomials))
-    for polynomialIdx, polynomial in enumerate(polynomials):
+    for polynomial_idx, polynomial in enumerate(polynomials):
         for factor, exponent_tuple in polynomial_to_exponent_representation(polynomial):
             exponent_tuple = exponent_tuple[:dim]
-            result[polynomialIdx, monomials.index(exponent_tuple)] = factor
+            result[polynomial_idx, monomials.index(exponent_tuple)] = factor
     return result
 
 
@@ -501,7 +501,7 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
     for order, moments in enumerate(moments_list):
         row = [' '] * nr_of_columns
         row[0] = '%d' % (order,)
-        for moment, colIdx in zip(moments, range(1, len(row))):
+        for moment, col_idx in zip(moments, range(1, len(row))):
             multiplicity = moment_multiplicity(moment)
             dm = discrete_moment(discrete_equilibrium, moment, stencil)
             cm = continuous_moment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
@@ -509,20 +509,20 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
             if truncate_order:
                 difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncate_order))
             if difference != 0:
-                colors[(order + 1, colIdx)] = 'Orange'
+                colors[(order + 1, col_idx)] = 'Orange'
                 non_matched_moments += multiplicity
             else:
-                colors[(order + 1, colIdx)] = 'lightGreen'
+                colors[(order + 1, col_idx)] = 'lightGreen'
                 matched_moments += multiplicity
 
-            row[colIdx] = '%s  x %d' % (moment, moment_multiplicity(moment))
+            row[col_idx] = '%s  x %d' % (moment, moment_multiplicity(moment))
 
         table.append(row)
 
     table_display = ipy_table.make_table(table)
     ipy_table.set_row_style(0, color='#ddd')
-    for cellIdx, color in colors.items():
-        ipy_table.set_cell_style(cellIdx[0], cellIdx[1], color=color)
+    for cell_idx, color in colors.items():
+        ipy_table.set_cell_style(cell_idx[0], cell_idx[1], color=color)
 
     print("Matched moments %d - non matched moments %d - total %d" %
           (matched_moments, non_matched_moments, matched_moments + non_matched_moments))
@@ -554,21 +554,21 @@ def moment_equality_table_by_stencil(name_to_stencil_dict, moments, truncate_ord
     moments = list(pick_representative_moments(moments))
 
     colors = {}
-    for stencilIdx, stencil in enumerate(stencils):
+    for stencil_idx, stencil in enumerate(stencils):
         dim = len(stencil[0])
         u = sp.symbols(f"u_:{dim}")
         discrete_equilibrium = discrete_maxwellian_equilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
                                                                u=u, order=truncate_order)
         continuous_equilibrium = continuous_maxwellian_equilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
 
-        for momentIdx, moment in enumerate(moments):
+        for moment_idx, moment in enumerate(moments):
             moment = moment[:dim]
             dm = discrete_moment(discrete_equilibrium, moment, stencil)
             cm = continuous_moment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
             difference = sp.simplify(dm - cm)
             if truncate_order:
                 difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncate_order))
-            colors[(momentIdx + 1, stencilIdx + 2)] = 'Orange' if difference != 0 else 'lightGreen'
+            colors[(moment_idx + 1, stencil_idx + 2)] = 'Orange' if difference != 0 else 'lightGreen'
 
     table = []
     header_row = [' ', '#'] + stencil_names
@@ -579,8 +579,8 @@ def moment_equality_table_by_stencil(name_to_stencil_dict, moments, truncate_ord
 
     table_display = ipy_table.make_table(table)
     ipy_table.set_row_style(0, color='#ddd')
-    for cellIdx, color in colors.items():
-        ipy_table.set_cell_style(cellIdx[0], cellIdx[1], color=color)
+    for cell_idx, color in colors.items():
+        ipy_table.set_cell_style(cell_idx[0], cell_idx[1], color=color)
 
     return table_display
 

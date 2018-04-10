@@ -45,13 +45,13 @@ def match_generic_equilibrium_ansatz(stencil, equilibrium, u=sp.symbols("u_:3"))
     u = u[:dim]
 
     result = dict()
-    for direction, actualEquilibrium in zip(stencil, equilibrium):
+    for direction, actual_equilibrium in zip(stencil, equilibrium):
         speed = np.abs(direction).sum()
         a, b, c, d = get_parameter_symbols(speed)
         u_times_d = scalar_product(u, direction)
         generic_equation = a + b * u_times_d + c * u_times_d ** 2 + d * scalar_product(u, u)
 
-        equations = sp.poly(actualEquilibrium - generic_equation, *u).coeffs()
+        equations = sp.poly(actual_equilibrium - generic_equation, *u).coeffs()
         solve_res = sp.solve(equations, [a, b, c, d])
         if not solve_res:
             raise ValueError("This equilibrium does not match the generic quadratic standard form")
@@ -70,9 +70,9 @@ def moment_constraint_equations(stencil, equilibrium, moment_to_value_dict, u=sp
     u = u[:dim]
     equilibrium = tuple(equilibrium)
     constraint_equations = set()
-    for moment, desiredValue in moment_to_value_dict.items():
+    for moment, desired_value in moment_to_value_dict.items():
         generic_moment = discrete_moment(equilibrium, moment, stencil)
-        equations = sp.poly(generic_moment - desiredValue, *u).coeffs()
+        equations = sp.poly(generic_moment - desired_value, *u).coeffs()
         constraint_equations.update(equations)
     return list(constraint_equations)
 

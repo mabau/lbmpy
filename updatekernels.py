@@ -33,16 +33,16 @@ def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
     input_accesses = accessor.read(input_field, method.stencil)
     output_accesses = accessor.write(output_field, method.stencil)
 
-    for (idx, offset), inputAccess, outputAccess in zip(enumerate(method.stencil), input_accesses, output_accesses):
-        substitutions[pre_collision_symbols[idx]] = inputAccess
-        substitutions[post_collision_symbols[idx]] = outputAccess
+    for (idx, offset), input_access, output_access in zip(enumerate(method.stencil), input_accesses, output_accesses):
+        substitutions[pre_collision_symbols[idx]] = input_access
+        substitutions[post_collision_symbols[idx]] = output_access
 
     result = collision_rule.new_with_substitutions(substitutions)
 
     if 'split_groups' in result.simplification_hints:
         new_split_groups = []
-        for splitGroup in result.simplification_hints['split_groups']:
-            new_split_groups.append([fast_subs(e, substitutions) for e in splitGroup])
+        for split_group in result.simplification_hints['split_groups']:
+            new_split_groups.append([fast_subs(e, substitutions) for e in split_group])
         result.simplification_hints['split_groups'] = new_split_groups
 
     return result

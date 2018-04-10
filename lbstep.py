@@ -18,7 +18,7 @@ class LatticeBoltzmannStep:
                  kernel_params=MappingProxyType({}), data_handling=None, name="lbm", optimization=None,
                  velocity_data_name=None, density_data_name=None, density_data_index=None,
                  compute_velocity_in_every_step=False, compute_density_in_every_step=False,
-                 velocity_input_array_name=None, time_step_order='streamCollide', flag_interface=None,
+                 velocity_input_array_name=None, time_step_order='stream_collide', flag_interface=None,
                  **method_parameters):
 
         # --- Parameter normalization  ---
@@ -87,10 +87,10 @@ class LatticeBoltzmannStep:
             optimization['symbolic_field'] = data_handling.fields[self._pdf_arr_name]
             method_parameters['field_name'] = self._pdf_arr_name
             method_parameters['temporary_field_name'] = self._tmp_arr_name
-            if time_step_order == 'streamCollide':
+            if time_step_order == 'stream_collide':
                 self._lbmKernels = [create_lb_function(optimization=optimization,
                                                        **method_parameters)]
-            elif time_step_order == 'collideStream':
+            elif time_step_order == 'collide_stream':
                 self._lbmKernels = [create_lb_function(optimization=optimization,
                                                        kernel_type='collide_only',
                                                        **method_parameters),
@@ -224,9 +224,9 @@ class LatticeBoltzmannStep:
             self._data_handling.to_cpu(self._pdf_arr_name)
         self._data_handling.run_kernel(self._getterKernel, **self.kernel_params)
 
-    def run(self, timeSteps):
+    def run(self, time_steps):
         self.pre_run()
-        for i in range(timeSteps):
+        for i in range(time_steps):
             self.time_step()
         self.post_run()
 

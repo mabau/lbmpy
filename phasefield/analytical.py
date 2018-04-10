@@ -4,8 +4,8 @@ from collections import defaultdict
 from pystencils.sympyextensions import multidimensional_sum as multi_sum, normalize_product, prod
 from pystencils.derivative import functional_derivative, expand_using_linearity, Diff, full_diff_expand
 
-orderParameterSymbolName = "phi"
-surfaceTensionSymbolName = "tau"
+order_parameter_symbol_name = "phi"
+surface_tension_symbol_name = "tau"
 interface_width_symbol = sp.Symbol("alpha")
 
 
@@ -15,11 +15,11 @@ def symmetric_symbolic_surface_tension(i, j):
     if i == j:
         return 0
     index = (i, j) if i < j else (j, i)
-    return sp.Symbol("%s_%d_%d" % ((surfaceTensionSymbolName, ) + index))
+    return sp.Symbol("%s_%d_%d" % ((surface_tension_symbol_name,) + index))
 
 
 def symbolic_order_parameters(num_symbols):
-    return sp.symbols("%s_:%i" % (orderParameterSymbolName, num_symbols))
+    return sp.symbols("%s_:%i" % (order_parameter_symbol_name, num_symbols))
 
 
 def free_energy_functional_3_phases(order_parameters=None, interface_width=interface_width_symbol, transformed=True,
@@ -109,7 +109,7 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
     :param include_bulk: if false no bulk term is added
     :param include_interface:if false no interface contribution is added
     :param symbolic_lambda: surface energy coefficient is represented by symbol, not in expanded form
-    :param symbolic_dependent_variable: last phase variable is defined as 1-otherPhaseVars, if this is set to True
+    :param symbolic_dependent_variable: last phase variable is defined as 1-other_phase_vars, if this is set to True
                                       it is represented by phi_A for better readability
     """
     assert not (num_phases is None and order_parameters is None)
@@ -177,14 +177,14 @@ def analytic_interface_profile(x, interface_width=interface_width_symbol):
     parameter, i.e. at a transition between two phases.
 
     Examples:
-        >>> numPhases = 4
-        >>> x, phi = sp.Symbol("x"), symbolic_order_parameters(numPhases-1)
+        >>> num_phases = 4
+        >>> x, phi = sp.Symbol("x"), symbolic_order_parameters(num_phases-1)
         >>> F = free_energy_functional_n_phases(order_parameters=phi)
         >>> mu = chemical_potentials_from_free_energy(F)
         >>> mu0 = mu[0].subs({p: 0 for p in phi[1:]})  # mu[0] as function of one order parameter only
         >>> solution = analytic_interface_profile(x)
-        >>> solutionSubstitution = {phi[0]: solution, Diff(Diff(phi[0])): sp.diff(solution, x, x) }
-        >>> sp.expand(mu0.subs(solutionSubstitution))  # inserting solution should solve the mu_0=0 equation
+        >>> solution_substitution = {phi[0]: solution, Diff(Diff(phi[0])): sp.diff(solution, x, x) }
+        >>> sp.expand(mu0.subs(solution_substitution))  # inserting solution should solve the mu_0=0 equation
         0
     """
     return (1 + sp.tanh(x / (2 * interface_width))) / 2
@@ -194,7 +194,7 @@ def chemical_potentials_from_free_energy(free_energy, order_parameters=None):
     """Computes chemical potentials as functional derivative of free energy."""
     symbols = free_energy.atoms(sp.Symbol)
     if order_parameters is None:
-        order_parameters = [s for s in symbols if s.name.startswith(orderParameterSymbolName)]
+        order_parameters = [s for s in symbols if s.name.startswith(order_parameter_symbol_name)]
         order_parameters.sort(key=lambda e: e.name)
         order_parameters = order_parameters[:-1]
     constants = [s for s in symbols if s not in order_parameters]
