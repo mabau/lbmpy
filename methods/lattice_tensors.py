@@ -26,3 +26,10 @@ def delta6(i, j, k, l, m, n):
            kd(i, l) * delta4(j, k, m, n) + \
            kd(i, m) * delta4(j, k, l, n) + \
            kd(i, n) * delta4(j, k, l, m)
+
+
+def test_rudimentary():
+    from pystencils.sympyextensions import multidimensional_sum as s
+    assert sum(delta4(*t) for t in s(4, dim=3)) == 27
+    assert sum(delta42(*t) for t in s(6, dim=2)) == 60
+    assert sum(delta6(*t) for t in s(6, dim=2)) == 120
