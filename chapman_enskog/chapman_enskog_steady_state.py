@@ -281,8 +281,8 @@ class SteadyStateChapmanEnskogAnalysisSRT:
         eta, eta_b = sp.symbols("nu nu_B")
         u = sp.symbols("u_:3")[:dim]
         a = coordinate
-        navier_stokes_ref = eta * sum(d(b, b, arg=u[a]) + d(b, a, arg=u[b])
-                                      for b, in s(1)) + (eta_b - 2 * eta / 3) * sum(d(b, g, arg=u[g]) * kd(a, b)
+        navier_stokes_ref = eta * sum(d(u[a], b, b) + d(u[b], b, a)
+                                      for b, in s(1)) + (eta_b - 2 * eta / 3) * sum(d(u[g], b, g) * kd(a, b)
                                                                                     for b, g in s(2))
         navier_stokes_ref = -navier_stokes_ref.expand()
 
