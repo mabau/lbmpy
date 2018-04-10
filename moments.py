@@ -459,7 +459,7 @@ def monomial_to_polynomial_transformation_matrix(monomials, polynomials):
 
 
 def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilibrium=None,
-                          max_order=4, truncate_order=None):
+                          max_order=4, truncate_order=3):
     """
     Creates a table showing which moments of a discrete stencil/equilibrium coincide with the
     corresponding continuous moments
@@ -530,7 +530,7 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
     return table_display
 
 
-def moment_equality_table_by_stencil(name_to_stencil_dict, moments, truncate_order=None):
+def moment_equality_table_by_stencil(name_to_stencil_dict, moments, truncate_order=3):
     """
     Creates a table for display in IPython notebooks that shows which moments agree between continuous and
     discrete equilibrium, group by stencils
