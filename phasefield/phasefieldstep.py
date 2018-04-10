@@ -28,7 +28,8 @@ class PhaseFieldStep:
 
         if optimization is None:
             optimization = {'openmp': False, 'target': 'cpu'}
-        openmp, target = optimization['openmp'], optimization['target']
+        openmp = optimization.get('openmp', False)
+        target = optimization.get('target', 'cpu')
 
         if data_handling is None:
             data_handling = SerialDataHandling(domain_size, periodicity=True)
@@ -170,6 +171,10 @@ class PhaseFieldStep:
                                                                                 self.force_field_name])
 
         return self._vtk_writer
+
+    @property
+    def shape(self):
+        return self.data_handling.shape
 
     def write_vtk(self):
         self.vtk_writer(self.time_steps_run)
