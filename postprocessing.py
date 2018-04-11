@@ -4,7 +4,7 @@ import numpy as np
 def vector_field_interpolator(vector_field):
     from scipy.interpolate import RegularGridInterpolator
     coordinates = [np.arange(s) + 0.5 for s in vector_field.shape[:-1]]
-    return RegularGridInterpolator(*coordinates, vector_field)
+    return RegularGridInterpolator(coordinates, values=vector_field)
 
 
 def scalar_field_interpolator(scalar_field):

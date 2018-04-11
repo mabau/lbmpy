@@ -16,8 +16,7 @@ def create_simplification_strategy(lb_method, cse_pdfs=False, cse_global=False, 
 
     s = SimplificationStrategy()
 
-    expand = partial(apply_to_all_assignments, operation=sp.expand)
-    expand.__name__ = "expand"
+    expand = apply_to_all_assignments(sp.expand)
 
     if isinstance(lb_method, MomentBasedLbMethod):
         s.add(expand)
