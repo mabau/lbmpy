@@ -105,7 +105,8 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
             fixed_kernel_parameters[quantity_name] = value
             at_least_one_field_input = True
             num_components = cqc.conserved_quantities[quantity_name]
-            field = Field.create_from_numpy_array(quantity_name, value, index_dimensions=0 if num_components <= 1 else 1)
+            field = Field.create_from_numpy_array(quantity_name, value,
+                                                  index_dimensions=0 if num_components <= 1 else 1)
             if num_components == 1:
                 value = field(0)
             else:
@@ -143,52 +144,39 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
     return setter
 
 
-def create_advanced_velocity_setter_collision_rule(lb_method, velocity_array, velocity_relaxation_rate=0.8):
+def create_advanced_velocity_setter_collision_rule(method, velocity_field: Field, velocity_relaxation_rate=0.8):
+    """Advanced initialization of velocity field through iteration procedure.
 
-    velocity_field = Field.create_from_numpy_array('vel_input', velocity_array, index_dimensions=1)
+    by Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
 
-    cqc = lb_method.conserved_quantity_computation
+    Args:
+        method: lattice boltzmann method object
+        velocity_field: pystencils field
+        velocity_relaxation_rate: relaxation rate for the velocity moments - determines convergence behaviour
+                                of the initialization scheme
+
+    Returns:
+        LB collision rule
+    """
+    cqc = method.conserved_quantity_computation
     density_symbol = cqc.defined_symbols(order=0)[1]
     velocity_symbols = cqc.defined_symbols(order=1)[1]
 
     # density is computed from pdfs
-    eq_input_from_pdfs = cqc.equilibrium_input_equations_from_pdfs(lb_method.pre_collision_pdf_symbols)
+    eq_input_from_pdfs = cqc.equilibrium_input_equations_from_pdfs(method.pre_collision_pdf_symbols)
     eq_input_from_pdfs = eq_input_from_pdfs.new_filtered([density_symbol])
     # velocity is read from input field
-    vel_symbols = [velocity_field(i) for i in range(lb_method.dim)]
+    vel_symbols = [velocity_field(i) for i in range(method.dim)]
     eq_input_from_field = cqc.equilibrium_input_equations_from_init_values(velocity=vel_symbols)
     eq_input_from_field = eq_input_from_field.new_filtered(velocity_symbols)
     # then both are merged together
     eq_input = eq_input_from_pdfs.new_merged(eq_input_from_field)
 
     # set first order relaxation rate
-    lb_method = deepcopy(lb_method)
-    lb_method.set_first_moment_relaxation_rate(velocity_relaxation_rate)
+    method = deepcopy(method)
+    method.set_first_moment_relaxation_rate(velocity_relaxation_rate)
 
-    simplification_strategy = create_simplification_strategy(lb_method)
-    new_collision_rule = simplification_strategy(lb_method.get_collision_rule(eq_input))
+    simplification_strategy = create_simplification_strategy(method)
+    new_collision_rule = simplification_strategy(method.get_collision_rule(eq_input))
 
     return new_collision_rule
-
-
-def compile_advanced_velocity_setter(method, velocity_array, velocity_relaxation_rate=0.8, pdf_arr=None,
-                                     field_layout='numpy', optimization={}):
-    """
-    Advanced initialization of velocity field through iteration procedure according to
-    Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005
-
-    :param method:
-    :param velocity_array: array with velocity field
-    :param velocity_relaxation_rate: relaxation rate for the velocity moments - determines convergence behaviour
-                                   of the initialization scheme
-    :param pdf_arr: optional numpy array for pdf field - used to get optimal loop structure for kernel
-    :param field_layout: layout of the pdf field if pdf_arr was not given
-    :param optimization: dictionary with optimization hints
-    :return: stream-collide update function
-    """
-    from lbmpy.updatekernels import create_stream_pull_collide_kernel
-    from lbmpy.creationfunctions import create_lb_ast, create_lb_function
-    new_collision_rule = create_advanced_velocity_setter_collision_rule(method, velocity_array, velocity_relaxation_rate)
-    update_rule = create_stream_pull_collide_kernel(new_collision_rule, pdf_arr, generic_layout=field_layout)
-    ast = create_lb_ast(update_rule, optimization)
-    return create_lb_function(ast, optimization)

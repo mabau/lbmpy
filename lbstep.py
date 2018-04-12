@@ -4,6 +4,7 @@ import numpy as np
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import switch_to_symbolic_relaxation_rates_for_omega_adapting_methods, \
     create_lb_function, update_with_default_parameters
+from lbmpy.macroscopic_value_kernels import create_advanced_velocity_setter_collision_rule
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
 from pystencils.datahandling.serial_datahandling import SerialDataHandling
@@ -124,6 +125,9 @@ class LatticeBoltzmannStep:
         # -- VTK output
         self._vtk_writer = None
         self.time_steps_run = 0
+
+        self._velocity_init_kernel = None
+        self._velocity_init_vel_backup = None
 
     @property
     def boundary_handling(self):
@@ -247,6 +251,85 @@ class LatticeBoltzmannStep:
 
     def write_vtk(self):
         self.vtk_writer(self.time_steps_run)
+
+    def run_iterative_initialization(self, velocity_relaxation_rate=1.0, convergence_threshold=1e-5, max_steps=5000,
+                                     check_residuum_after=100):
+        """Runs Advanced initialization of velocity field through iteration procedure.
+
+        Usually the pdfs are initialized in equilibrium with given density and velocity. Higher order moments are
+        set to their equilibrium values. This routine also initializes the higher order moments and the density field
+        using an iterative routine. For scenarios with high relaxation rates this might take long to converge.
+        For details, see Mei, Luo, Lallemand and Humieres: Consistent initial conditions for LBM simulations, 2005.
+
+        Args:
+            velocity_relaxation_rate: relaxation rate for the velocity moments - determines convergence behaviour
+                                      of the initialization scheme, should be in the range of the other relaxation
+                                      rate(s) otherwise the scheme could get unstable
+            convergence_threshold: The residuum is computed as average difference between prescribed and calculated
+                                   velocity field. If (residuum < convergence_threshold) the function returns
+                                   successfully.
+            max_steps: stop if not converged after this number of steps
+            check_residuum_after: the residuum criterion is tested after this number of steps
+
+        Returns:
+            tuple (residuum, steps_run) if successful or raises ValueError if not converged
+        """
+        dh = self.data_handling
+
+        def on_first_call():
+            self._velocity_init_vel_backup = 'velocity_init_vel_backup'
+            dh.add_array_like(self._velocity_init_vel_backup, self.velocity_data_name)
+            velocity_field = dh.fields[self.velocity_data_name]
+            collision_rule = create_advanced_velocity_setter_collision_rule(self.method, velocity_field,
+                                                                            velocity_relaxation_rate)
+
+            kernel = create_lb_function(collision_rule=collision_rule, field_name=self._pdf_arr_name,
+                                        temporary_field_name=self._tmp_arr_name,
+                                        optimization={'symbolic_field': dh.fields[self._pdf_arr_name]})
+            self._velocity_init_kernel = kernel
+
+        def make_velocity_backup():
+            for b in dh.iterate():
+                np.copyto(b[self._velocity_init_vel_backup], b[self.velocity_data_name])
+
+        def restore_velocity_backup():
+            for b in dh.iterate():
+                np.copyto(b[self.velocity_data_name], b[self._velocity_init_vel_backup])
+
+        def compute_residuum():
+            residuum = 0
+            for b in dh.iterate(ghost_layers=False, inner_ghost_layers=False):
+                residuum = np.average(np.abs(b[self._velocity_init_vel_backup] - b[self.velocity_data_name]))
+            reduce_result = dh.reduce_float_sequence([residuum, 1.0], 'sum', all_reduce=True)
+            return reduce_result[0] / reduce_result[1]
+
+        if self._velocity_init_kernel is None:
+            on_first_call()
+
+        make_velocity_backup()
+        outer_iterations = max_steps // check_residuum_after
+        global_residuum = None
+        steps_run = 0
+        for outer_iteration in range(outer_iterations):
+            for i in range(check_residuum_after):
+                steps_run += 1
+                self._sync()
+                self._boundary_handling(**self.kernel_params)
+                self._data_handling.run_kernel(self._velocity_init_kernel, **self.kernel_params)
+                self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name)
+            self._data_handling.run_kernel(self._getterKernel, **self.kernel_params)
+            global_residuum = compute_residuum()
+            if np.isnan(global_residuum) or global_residuum < convergence_threshold:
+                break
+
+        assert global_residuum is not None
+        converged = global_residuum < convergence_threshold
+        if not converged:
+            restore_velocity_backup()
+            raise ValueError("Iterative initialization did not converge after %d steps.\n"
+                             "Current residuum is %s" % (steps_run, global_residuum))
+
+        return global_residuum, steps_run
 
     def _compile_macroscopic_setter_and_getter(self):
         lb_method = self.method
