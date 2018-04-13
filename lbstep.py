@@ -36,6 +36,8 @@ class LatticeBoltzmannStep:
             method_parameters['stencil'] = 'D2Q9' if data_handling.dim == 2 else 'D3Q27'
 
         method_parameters, optimization = update_with_default_parameters(method_parameters, optimization)
+        field_dtype = np.float64 if optimization['double_precision'] else np.float32
+
         del method_parameters['kernel_type']
 
         if lbm_kernel:
@@ -55,18 +57,18 @@ class LatticeBoltzmannStep:
         self._gpu = target == 'gpu'
         layout = optimization['field_layout']
         self._data_handling.add_array(self._pdf_arr_name, values_per_cell=q, gpu=self._gpu, layout=layout,
-                                      latex_name='src')
+                                      latex_name='src', dtype=field_dtype)
         self._data_handling.add_array(self._tmp_arr_name, values_per_cell=q, gpu=self._gpu, cpu=not self._gpu,
-                                      layout=layout, latex_name='dst')
+                                      layout=layout, latex_name='dst', dtype=field_dtype)
 
         if velocity_data_name is None:
             self._data_handling.add_array(self.velocity_data_name, values_per_cell=self._data_handling.dim,
                                           gpu=self._gpu and compute_velocity_in_every_step,
-                                          layout=layout, latex_name='u')
+                                          layout=layout, latex_name='u', dtype=field_dtype)
         if density_data_name is None:
             self._data_handling.add_array(self.density_data_name, values_per_cell=1,
                                           gpu=self._gpu and compute_density_in_every_step,
-                                          layout=layout, latex_name='ρ')
+                                          layout=layout, latex_name='ρ', dtype=field_dtype)
 
         if compute_velocity_in_every_step:
             method_parameters['output']['velocity'] = self._data_handling.fields[self.velocity_data_name]
@@ -78,7 +80,8 @@ class LatticeBoltzmannStep:
         if velocity_input_array_name is not None:
             method_parameters['velocity_input'] = self._data_handling.fields[velocity_input_array_name]
         if method_parameters['omega_output_field'] and isinstance(method_parameters['omega_output_field'], str):
-            method_parameters['omega_output_field'] = data_handling.add_array(method_parameters['omega_output_field'])
+            method_parameters['omega_output_field'] = data_handling.add_array(method_parameters['omega_output_field'],
+                                                                              dtype=field_dtype)
 
         self.kernel_params = kernel_params.copy()
 
