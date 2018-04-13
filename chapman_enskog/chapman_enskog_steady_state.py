@@ -248,7 +248,7 @@ class SteadyStateChapmanEnskogAnalysisSRT:
             mom_eq = expand_using_linearity(mom_eq, constants=constants).expand().collect(dt)
             self.momentum_equations.append(mom_eq)
 
-    def get_mass_transport_equation(self, order):
+    def get_continuity_equation(self, order):
         if order == 0:
             result = self.continuity_equation.subs(self.dt, 0)
         else:
