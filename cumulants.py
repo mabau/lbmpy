@@ -23,7 +23,7 @@ def __get_indexed_symbols(passed_symbols, prefix, indices):
     if passed_symbols is not None:
         return passed_symbols
     else:
-        format_string = "%s_" + "_".join(["%d"]*dim)
+        format_string = "%s_" + "_".join(["%d"] * dim)
         tuple_indices = []
         for i in indices:
             tuple_indices.append(i if type(i) is tuple else (i,))
@@ -65,7 +65,7 @@ def __cumulant_raw_moment_transform(index, dependent_var_dict, outer_function, d
             subs_dict[result_symbol] = dependent_var_dict[idx]
         return result_symbol
 
-    zeroth_moment = create_moment_symbol((0,)*dim)
+    zeroth_moment = create_moment_symbol((0,) * dim)
 
     def outer_function_derivative(n):
         x = zeroth_moment

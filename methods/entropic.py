@@ -60,7 +60,8 @@ def add_entropy_condition(collision_rule, omega_output_field=None):
     const_part = decomposition.constant_exprs()
     for update_eq in collision_rule.main_assignments:
         index = collision_rule.method.post_collision_pdf_symbols.index(update_eq.lhs)
-        new_eq = Assignment(update_eq.lhs, const_part[index] + omega_s * ds_symbols[index] + omega_h * dh_symbols[index])
+        new_eq = Assignment(update_eq.lhs,
+                            const_part[index] + omega_s * ds_symbols[index] + omega_h * dh_symbols[index])
         new_update_equations.append(new_eq)
     new_collision_rule = collision_rule.copy(new_update_equations, collision_rule.subexpressions + subexpressions)
     new_collision_rule.simplification_hints['entropic'] = True
@@ -118,26 +119,26 @@ def add_iterative_entropy_condition(collision_rule, free_omega=None, newton_iter
 
     # 2) get equilibrium from method and define subexpressions for it
     eq_terms = [eq.rhs for eq in collision_rule.method.get_equilibrium().main_assignments]
-    eq_symbols = sp.symbols("entropicFeq_:%d" % (len(eq_terms,)))
+    eq_symbols = sp.symbols("entropicFeq_:%d" % (len(eq_terms, )))
     eq_subexpressions = [Assignment(a, b) for a, b in zip(eq_symbols, eq_terms)]
 
     # 3) find coefficients of entropy derivatives
     entropy_diff = sp.diff(discrete_approx_entropy(rr_polynomials, eq_symbols), free_omega)
     coefficients_first_diff = [c.expand() for c in reversed(sp.poly(entropy_diff, free_omega).all_coeffs())]
-    sym_coeff_diff1 = sp.symbols("entropicDiffCoeff_:%d" % (len(coefficients_first_diff,)))
+    sym_coeff_diff1 = sp.symbols("entropicDiffCoeff_:%d" % (len(coefficients_first_diff, )))
     coefficient_eqs = [Assignment(a, b) for a, b in zip(sym_coeff_diff1, coefficients_first_diff)]
-    sym_coeff_diff2 = [(i+1) * coeff for i, coeff in enumerate(sym_coeff_diff1[1:])]
+    sym_coeff_diff2 = [(i + 1) * coeff for i, coeff in enumerate(sym_coeff_diff1[1:])]
 
     # 4) define Newtons method update iterations
     newton_iteration_equations = []
     intermediate_omegas = [sp.Symbol("omega_iter_%i" % (i,)) for i in range(newton_iterations + 1)]
     intermediate_omegas[0] = initial_value
     intermediate_omegas[-1] = free_omega
-    for omega_idx in range(len(intermediate_omegas)-1):
+    for omega_idx in range(len(intermediate_omegas) - 1):
         rhs_omega = intermediate_omegas[omega_idx]
-        lhs_omega = intermediate_omegas[omega_idx+1]
-        diff1_poly = sum([coeff * rhs_omega**i for i, coeff in enumerate(sym_coeff_diff1)])
-        diff2_poly = sum([coeff * rhs_omega**i for i, coeff in enumerate(sym_coeff_diff2)])
+        lhs_omega = intermediate_omegas[omega_idx + 1]
+        diff1_poly = sum([coeff * rhs_omega ** i for i, coeff in enumerate(sym_coeff_diff1)])
+        diff2_poly = sum([coeff * rhs_omega ** i for i, coeff in enumerate(sym_coeff_diff2)])
         newton_eq = Assignment(lhs_omega, rhs_omega - diff1_poly / diff2_poly)
         newton_iteration_equations.append(newton_eq)
 
@@ -179,7 +180,7 @@ def discrete_approx_entropy(func, reference):
     .. math ::
         S = - \sum_i f_i \left( \frac{f_i}{r_i} - 1 \right)
     """
-    return -sum([f_i * ((f_i / r_i)-1) for f_i, r_i in zip(func, reference)])
+    return -sum([f_i * ((f_i / r_i) - 1) for f_i, r_i in zip(func, reference)])
 
 
 def _get_entropy_maximizing_omega(omega_s, f_eq, ds, dh):

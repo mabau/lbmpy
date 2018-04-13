@@ -51,16 +51,16 @@ get_stencil.data = {
                      (-1, 1, 0), (1, 1, 0), (-1, -1, 0), (1, -1, 0),
                      (0, 1, 1), (0, -1, 1), (-1, 0, 1), (1, 0, 1),
                      (0, 1, -1), (0, -1, -1), (-1, 0, -1), (1, 0, -1)),
-        'braunschweig':  ((0, 0, 0),
-                          (1, 0, 0), (-1, 0, 0),
-                          (0, 1, 0), (0, -1, 0),
-                          (0, 0, 1), (0, 0, -1),
-                          (1, 1, 0), (-1, -1, 0),
-                          (1, -1, 0), (-1, 1, 0),
-                          (1, 0, 1), (-1, 0, -1),
-                          (1, 0, -1), (-1, 0, 1),
-                          (0, 1, 1), (0, -1, -1),
-                          (0, 1, -1), (0, -1, 1)),
+        'braunschweig': ((0, 0, 0),
+                         (1, 0, 0), (-1, 0, 0),
+                         (0, 1, 0), (0, -1, 0),
+                         (0, 0, 1), (0, 0, -1),
+                         (1, 1, 0), (-1, -1, 0),
+                         (1, -1, 0), (-1, 1, 0),
+                         (1, 0, 1), (-1, 0, -1),
+                         (1, 0, -1), (-1, 0, 1),
+                         (0, 1, 1), (0, -1, -1),
+                         (0, 1, -1), (0, -1, 1)),
         'premnath': ((0, 0, 0),
                      (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
                      (1, 1, 0), (-1, 1, 0), (1, -1, 0), (-1, -1, 0),
@@ -174,24 +174,23 @@ def visualize_stencil_2d(stencil, axes=None, figure=None, data=None, textsize='1
             annotation = "$" + sp.latex(annotation) + "$"
         else:
             annotation = str(annotation)
-        axes.text(direction[0]*text_offset, direction[1]*text_offset, annotation, verticalalignment='center', zorder=30,
-                  horizontalalignment='center',
-                  size=textsize, bbox=dict(boxstyle=text_box_style, facecolor='#00b6eb', alpha=0.85, linewidth=0))
+        axes.text(direction[0] * text_offset, direction[1] * text_offset, annotation, verticalalignment='center',
+                  zorder=30, horizontalalignment='center', size=textsize,
+                  bbox=dict(boxstyle=text_box_style, facecolor='#00b6eb', alpha=0.85, linewidth=0))
 
     axes.set_axis_off()
     axes.set_aspect('equal')
-    axes.set_xlim([-text_offset*1.1, text_offset*1.1])
+    axes.set_xlim([-text_offset * 1.1, text_offset * 1.1])
     axes.set_ylim([-text_offset * 1.1, text_offset * 1.1])
 
 
 def visualize_stencil_3d_by_slicing(stencil, slice_axis=2, figure=None, data=None, **kwargs):
-    """
-    Visualizes a 3D, first-neighborhood stencil by plotting 3 slices along a given axis
+    """Visualizes a 3D, first-neighborhood stencil by plotting 3 slices along a given axis.
 
-    :param stencil: stencil as sequence of directions
-    :param slice_axis: 0, 1, or 2 indicating the axis to slice through
-    :param data: optional data to print as text besides the arrows
-    :return:
+    Args:
+        stencil: stencil as sequence of directions
+        slice_axis: 0, 1, or 2 indicating the axis to slice through
+        data: optional data to print as text besides the arrows
     """
     import matplotlib.pyplot as plt
 
@@ -202,7 +201,7 @@ def visualize_stencil_3d_by_slicing(stencil, slice_axis=2, figure=None, data=Non
     if figure is None:
         figure = plt.gcf()
 
-    axes = [figure.add_subplot(1, 3, i+1) for i in range(3)]
+    axes = [figure.add_subplot(1, 3, i + 1) for i in range(3)]
     splitted_directions = [[], [], []]
     splitted_data = [[], [], []]
     axes_names = ['x', 'y', 'z']
@@ -216,7 +215,7 @@ def visualize_stencil_3d_by_slicing(stencil, slice_axis=2, figure=None, data=Non
     for i in range(3):
         visualize_stencil_2d(splitted_directions[i], axes=axes[i], data=splitted_data[i], **kwargs)
     for i in [-1, 0, 1]:
-        axes[i+1].set_title("Cut at %s=%d" % (axes_names[slice_axis], i))
+        axes[i + 1].set_title("Cut at %s=%d" % (axes_names[slice_axis], i))
 
 
 def visualize_stencil_3d(stencil, figure=None, axes=None, data=None, textsize='8'):
@@ -262,7 +261,7 @@ def visualize_stencil_3d(stencil, figure=None, axes=None, data=None, textsize='8
 
     for d, annotation in zip(stencil, data):
         assert len(d) == 3, "Works only for 3D stencils"
-        if not(d[0] == 0 and d[1] == 0 and d[2] == 0):
+        if not (d[0] == 0 and d[1] == 0 and d[2] == 0):
             if d[0] == 0:
                 color = '#348abd'
             elif d[1] == 0:
@@ -281,11 +280,11 @@ def visualize_stencil_3d(stencil, figure=None, axes=None, data=None, textsize='8
             else:
                 annotation = str(annotation)
 
-            axes.text(d[0]*text_offset, d[1]*text_offset, d[2]*text_offset,
+            axes.text(d[0] * text_offset, d[1] * text_offset, d[2] * text_offset,
                       annotation, verticalalignment='center', zorder=30,
                       size=textsize, bbox=dict(boxstyle=text_box_style, facecolor='#777777', alpha=0.6, linewidth=0))
 
-    axes.set_xlim([-text_offset*1.1, text_offset*1.1])
+    axes.set_xlim([-text_offset * 1.1, text_offset * 1.1])
     axes.set_ylim([-text_offset * 1.1, text_offset * 1.1])
     axes.set_zlim([-text_offset * 1.1, text_offset * 1.1])
     axes.set_axis_off()

@@ -1,4 +1,5 @@
-from pystencils.derivative import *
+import sympy as sp
+from pystencils.derivative import Diff
 
 
 def chapman_enskog_derivative_expansion(expr, label, eps=sp.Symbol("epsilon"), start_order=1, stop_order=4):

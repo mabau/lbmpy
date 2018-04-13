@@ -1,5 +1,5 @@
 """
-Method to construct a quadratic equilibrium using a generic quadratic ansatz according to the book of 
+Method to construct a quadratic equilibrium using a generic quadratic ansatz according to the book of
 Wolf-Gladrow, section 5.4
 """
 
@@ -11,7 +11,7 @@ from lbmpy.maxwellian_equilibrium import compressible_to_incompressible_moment_v
 
 
 def generic_equilibrium_ansatz(stencil, u=sp.symbols("u_:3")):
-    """Returns a generic quadratic equilibrium with coefficients A, B, C, D according to 
+    """Returns a generic quadratic equilibrium with coefficients A, B, C, D according to
     Wolf Gladrow Book equation (5.4.1) """
     dim = len(stencil[0])
     u = u[:dim]
@@ -38,7 +38,7 @@ def generic_equilibrium_ansatz_parameters(stencil):
 
 
 def match_generic_equilibrium_ansatz(stencil, equilibrium, u=sp.symbols("u_:3")):
-    """Given a quadratic equilibrium, the generic coefficients A,B,C,D are determined. 
+    """Given a quadratic equilibrium, the generic coefficients A,B,C,D are determined.
     Returns a dict that maps these coefficients to their values. If the equilibrium does not have a
     generic quadratic form, a ValueError is raised"""
     dim = len(stencil[0])

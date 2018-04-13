@@ -58,4 +58,3 @@ class AbstractLbMethod(abc.ABC):
     def get_collision_rule(self):
         """Returns an LbmCollisionRule i.e. an equation collection with a reference to the method.
          This collision rule defines the collision operator."""
-

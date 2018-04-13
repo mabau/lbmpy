@@ -168,8 +168,8 @@ from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.stencils import get_stencil, stencils_have_same_entries
 import lbmpy.forcemodels as forcemodels
 from lbmpy.simplificationfactory import create_simplification_strategy
-from lbmpy.updatekernels import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor, \
-    create_lbm_kernel, create_stream_pull_with_output_kernel
+from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor
+from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
 
 
 def create_lb_function(ast=None, optimization={}, **kwargs):

@@ -19,4 +19,3 @@ def vorticity_2d(velocity_field):
     grad_y_of_x = np.gradient(velocity_field[:, :, 0], axis=1)
     grad_x_of_y = np.gradient(velocity_field[:, :, 1], axis=0)
     return grad_x_of_y - grad_y_of_x
-

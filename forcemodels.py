@@ -6,8 +6,8 @@ r"""
 Get started:
 -----------
 
-This module offers different models to introduce a body force in the lattice Boltzmann scheme. 
-If you don't know which model to choose, use :class:`lbmpy.forcemodels.Guo`. 
+This module offers different models to introduce a body force in the lattice Boltzmann scheme.
+If you don't know which model to choose, use :class:`lbmpy.forcemodels.Guo`.
 For incompressible collision models the :class:`lbmpy.forcemodels.Buick` model can be better.
 
 
@@ -26,10 +26,10 @@ to the acceleration :math:`\pmb{a}` for all force models.
 
 .. math ::
 
-    \sum_q \pmb{c}_q F_q = \pmb{a} 
+    \sum_q \pmb{c}_q F_q = \pmb{a}
 
 
-The second order moment is different for the forcing models - if it is zero the model is suited for 
+The second order moment is different for the forcing models - if it is zero the model is suited for
 incompressible flows. For weakly compressible collision operators a force model with a corrected second order moment
 should be chosen.
 
@@ -52,7 +52,7 @@ Models with nonzero second moment have:
     F_q = \frac{w_q}{c_s^2} c_{qi} \; a_i + \frac{w_q}{c_s^4} (c_{qi} c_{qj} - c_s^2 \delta_{ij} ) u_j \, a_i
 
 
-For all force models the computation of the macroscopic velocity has to be adapted (shifted) by adding a term 
+For all force models the computation of the macroscopic velocity has to be adapted (shifted) by adding a term
 :math:`S_{macro}` that we call "macroscopic velocity shift"
     
     .. math ::
@@ -62,7 +62,7 @@ For all force models the computation of the macroscopic velocity has to be adapt
         S_{macro} = \frac{\Delta t}{2} \sum_q F_q
 
 
-Some models also shift the velocity entering the equilibrium distribution. 
+Some models also shift the velocity entering the equilibrium distribution.
 
 Comparison
 ----------
@@ -70,7 +70,8 @@ Comparison
 Force models can be distinguished by 2 options:
 
 **Option 1**:
-    :math:`C_F = 1` and equilibrium velocity is not shifted, or :math:`C_F=(1 - \frac{\omega}{2})` and equilibrum is shifted.
+    :math:`C_F = 1` and equilibrium velocity is not shifted, or :math:`C_F=(1 - \frac{\omega}{2})`
+    and equilibrum is shifted.
  
 **Option 2**: 
     second velocity moment is zero or :math:`F_i u_j + F_j u_i`
@@ -212,4 +213,3 @@ class EDM(object):
 
 def default_velocity_shift(density, force):
     return [f_i / (2 * density) for f_i in force]
-

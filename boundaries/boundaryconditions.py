@@ -181,7 +181,8 @@ class FixedDensity(Boundary):
         density_symbol = cqc.defined_symbols()['density']
 
         density = self._density
-        equilibrium_input = cqc.equilibrium_input_equations_from_init_values(density=density).new_without_subexpressions()
+        equilibrium_input = cqc.equilibrium_input_equations_from_init_values(density=density)
+        equilibrium_input = equilibrium_input.new_without_subexpressions()
         density_eq = equilibrium_input.main_assignments[0]
         assert density_eq.lhs == density_symbol
         transformed_density = density_eq.rhs

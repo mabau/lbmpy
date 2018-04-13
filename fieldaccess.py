@@ -55,9 +55,10 @@ class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
 class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
     """Access scheme that builds periodicity into the kernel.
 
-    Introduces a condition on every load, such that at the borders the periodic value is loaded. The periodicity is specified as a tuple of booleans, one for
-    each direction. The second parameter `ghost_layers` specifies the number of assumed ghost layers of the field.
-    For the periodic kernel itself no ghost layers are required, however other kernels might need them. 
+    Introduces a condition on every load, such that at the borders the periodic value is loaded. The periodicity is
+    specified as a tuple of booleans, one for each direction. The second parameter `ghost_layers` specifies the number
+    of assumed ghost layers of the field. For the periodic kernel itself no ghost layers are required,
+    however other kernels might need them.
     """
     def __init__(self, periodicity, ghost_layers=0):
         self._periodicity = periodicity
@@ -158,6 +159,3 @@ def visualize_pdf_field_accessor(pdf_field_accessor, figure=None):
 
     ax_left.set_title("Read")
     ax_right.set_title("Write")
-
-
-

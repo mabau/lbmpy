@@ -42,4 +42,3 @@ def cahn_hilliard_lb_method(stencil, mu, relaxation_rate=sp.Symbol("omega"), gam
     rho = sp.Symbol("rho")
     equilibrium[0] = rho - sp.expand(sum(equilibrium[1:]))
     return create_from_equilibrium(stencil, tuple(equilibrium), relaxation_rate, compressible=True)
-

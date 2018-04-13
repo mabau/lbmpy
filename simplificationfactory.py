@@ -1,6 +1,4 @@
-from functools import partial
 import sympy as sp
-
 from lbmpy.innerloopsplit import create_lbm_split_groups
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from pystencils.assignment_collection.simplifications import apply_to_all_assignments, \
@@ -9,7 +7,7 @@ from pystencils.assignment_collection.simplifications import apply_to_all_assign
 
 def create_simplification_strategy(lb_method, cse_pdfs=False, cse_global=False, split_inner_loop=False):
     from pystencils.assignment_collection import SimplificationStrategy
-    from lbmpy.methods import MomentBasedLbMethod
+    from lbmpy.methods.momentbased import MomentBasedLbMethod
     from lbmpy.methods.momentbasedsimplifications import replace_second_order_velocity_products, \
         factor_density_after_factoring_relaxation_times, factor_relaxation_rates, cse_in_opposing_directions, \
         replace_common_quadratic_and_constant_term, replace_density_and_velocity

@@ -1,6 +1,6 @@
 import sympy as sp
+from pystencils.derivative import full_diff_expand
 from lbmpy.chapman_enskog.chapman_enskog import CeMoment, Diff, take_moments
-from lbmpy.chapman_enskog.derivative import full_diff_expand
 from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol
 from lbmpy.moments import moments_up_to_order, moments_of_order
 from collections import OrderedDict, namedtuple
@@ -35,7 +35,7 @@ def get_solvability_conditions(dim, order):
     solvability_conditions = {}
     for name in ["\\Pi", "\\Upsilon"]:
         for moment_tuple in moments_up_to_order(1, dim=dim):
-            for k in range(order+1):
+            for k in range(order + 1):
                 solvability_conditions[CeMoment(name, superscript=k, moment_tuple=moment_tuple)] = 0
     return solvability_conditions
 
@@ -72,14 +72,15 @@ def determine_higher_order_moments(epsilon_hierarchy, relaxation_rates, moment_c
     for eps_order in range(1, order):
         eps_eq = epsilon_hierarchy[eps_order]
 
-        for order in range(order+1):
+        for order in range(order + 1):
             eqs = sp.Matrix([full_expand(tm(eps_eq * m)) for m in poly_moments(order, dim)])
             unknown_moments = [m for m in eqs.atoms(CeMoment)
                                if m.superscript == eps_order and sum(m.moment_tuple) == order]
             if len(unknown_moments) == 0:
                 for eq in eqs:
-                    time_diffs_in_expr = [d for d in eq.atoms(Diff) if
-                                          (d.target == 't' or d.target == sp.Symbol("t")) and d.superscript == eps_order]
+                    t = sp.Symbol("t")
+                    time_diffs_in_expr = [d for d in eq.atoms(Diff)
+                                          if (d.target == 't' or d.target == t) and d.superscript == eps_order]
                     if len(time_diffs_in_expr) == 0:
                         continue
                     assert len(time_diffs_in_expr) == 1, \

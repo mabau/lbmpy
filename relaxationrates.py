@@ -8,7 +8,7 @@ def relaxation_rate_from_lattice_viscosity(nu):
 
 
 def lattice_viscosity_from_relaxation_rate(omega):
-    """Computes lattice viscosity from relaxation rate: 
+    """Computes lattice viscosity from relaxation rate:
     :math:`\nu_L=\frac{1}{3}\left(\frac{1}{\omega}-\frac{1}{2}\right)`"""
     return (2 - omega) / (6 * omega)
 
@@ -79,5 +79,3 @@ def default_relaxation_rate_names():
             return sp.Symbol("omega_%d" % (next_index[0],))
 
     return result
-
-

@@ -1,9 +1,9 @@
 import sympy as sp
 import functools
-from lbmpy.chapman_enskog.chapman_enskog import LbMethodEqMoments, CeMoment, take_moments, insert_moments
+from pystencils.derivative import Diff, DiffOperator, expand_using_linearity, normalize_diff_order
 from pystencils.derivative import collect_derivatives, create_nested_diff
 from pystencils.sympyextensions import normalize_product, multidimensional_sum, kronecker_delta
-from lbmpy.chapman_enskog.derivative import Diff, DiffOperator, expand_using_linearity, normalize_diff_order
+from lbmpy.chapman_enskog.chapman_enskog import LbMethodEqMoments, CeMoment, take_moments, insert_moments
 from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol, chapman_enskog_ansatz, remove_higher_order_u
 
 

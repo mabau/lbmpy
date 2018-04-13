@@ -134,7 +134,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
                                                    post_collision_subexpressions=False, include_force_terms=True):
         def tuple_to_symbol(exp, prefix):
             dim = len(exp)
-            format_string = prefix + "_" + "_".join(["%d"]*dim)
+            format_string = prefix + "_" + "_".join(["%d"] * dim)
             return sp.Symbol(format_string % exp)
 
         def substitute_conserved_quantities(expressions, cqe):

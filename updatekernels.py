@@ -6,7 +6,7 @@ from pystencils.assignment_collection.assignment_collection import AssignmentCol
 from pystencils.field import create_numpy_array_with_layout, layout_string_to_tuple
 from pystencils.sympyextensions import fast_subs
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
-from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor
+from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
 
 
 # -------------------------------------------- LBM Kernel Creation -----------------------------------------------------

@@ -6,14 +6,14 @@ from pystencils.plot2d import *
 
 
 def boundary_handling(boundary_handling_obj, slice_obj=None, boundary_name_to_color=None, show_legend=True):
-    """
-    Shows boundary cells
+    """Image plot that shows boundary markers of a 2D domain slice.
 
-    :param boundary_handling_obj: instance of :class:`lbmpy.boundaries.BoundaryHandling`
-    :param slice_obj: for 3D boundary handling a slice expression has to be passed here to define the plane that
-                      should be plotted
-    :param boundary_name_to_color: optional dictionary mapping boundary names to colors
-    :param show_legend: if True legend for color->boundary name is added
+    Args:
+        boundary_handling_obj: instance of :class:`lbmpy.boundaries.BoundaryHandling`
+        slice_obj: for 3D boundary handling a slice expression has to be passed here to define the plane that
+                   should be plotted
+        boundary_name_to_color: optional dictionary mapping boundary names to colors
+        show_legend: if True legend for color->boundary name is added
     """
     import matplotlib.pyplot as plt
 

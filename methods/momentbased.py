@@ -76,9 +76,9 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     def get_equilibrium(self, conserved_quantity_equations=None, include_force_terms=False):
         relaxation_matrix = sp.eye(len(self.relaxation_rates))
-        return self._get_collision_rule_with_relaxation_matrix(relaxation_matrix,
-                                                               conserved_quantity_equations=conserved_quantity_equations,
-                                                               include_force_terms=include_force_terms)
+        return self._collision_rule_with_relaxation_matrix(relaxation_matrix,
+                                                           conserved_quantity_equations=conserved_quantity_equations,
+                                                           include_force_terms=include_force_terms)
 
     def get_equilibrium_terms(self):
         equilibrium = self.get_equilibrium()
@@ -87,8 +87,8 @@ class MomentBasedLbMethod(AbstractLbMethod):
     def get_collision_rule(self, conserved_quantity_equations=None):
         d = sp.diag(*self.relaxation_rates)
         relaxation_rate_sub_expressions, d = self._generate_relaxation_matrix(d)
-        ac = self._get_collision_rule_with_relaxation_matrix(d, relaxation_rate_sub_expressions,
-                                                             True, conserved_quantity_equations)
+        ac = self._collision_rule_with_relaxation_matrix(d, relaxation_rate_sub_expressions,
+                                                         True, conserved_quantity_equations)
         return ac
 
     def set_zeroth_moment_relaxation_rate(self, relaxation_rate):
@@ -170,8 +170,8 @@ class MomentBasedLbMethod(AbstractLbMethod):
             weights.append(value)
         return weights
 
-    def _get_collision_rule_with_relaxation_matrix(self, d, additional_subexpressions=(), include_force_terms=True,
-                                                   conserved_quantity_equations=None):
+    def _collision_rule_with_relaxation_matrix(self, d, additional_subexpressions=(), include_force_terms=True,
+                                               conserved_quantity_equations=None):
         f = sp.Matrix(self.pre_collision_pdf_symbols)
         pdf_to_moment = self.moment_matrix
         m_eq = sp.Matrix(self.moment_equilibrium_values)

@@ -2,7 +2,7 @@ import abc
 import sympy as sp
 from collections import OrderedDict
 from pystencils.assignment_collection import AssignmentCollection
-from pystencils.field import Field, Assignment
+from pystencils import Field, Assignment
 
 
 class AbstractConservedQuantityComputation(abc.ABC):
@@ -63,8 +63,8 @@ class AbstractConservedQuantityComputation(abc.ABC):
         be slightly different that the ones used as input for the equilibrium e.g. due to a force model.
 
         :param pdfs: values for the pdf entries
-        :param output_quantity_names_to_symbols: dict mapping of conserved quantity names (See :func:`conserved_quantities`)
-                                            to symbols or field accesses where they should be written to
+        :param output_quantity_names_to_symbols: dict mapping of conserved quantity names
+                (See :func:`conserved_quantities`) to symbols or field accesses where they should be written to
         """
 
     @abc.abstractmethod
@@ -131,11 +131,12 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
     def equilibrium_input_equations_from_pdfs(self, pdfs):
         dim = len(self._stencil[0])
         eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs, self._symbolOrder0,
-                                                          self._symbolsOrder1[:dim])
+                                                                  self._symbolsOrder1[:dim])
         if self._compressible:
             eq_coll = divide_first_order_moments_by_rho(eq_coll, dim)
 
-        eq_coll = apply_force_model_shift('equilibrium_velocity_shift', dim, eq_coll, self._forceModel, self._compressible)
+        eq_coll = apply_force_model_shift('equilibrium_velocity_shift', dim, eq_coll,
+                                          self._forceModel, self._compressible)
         return eq_coll
 
     def equilibrium_input_equations_from_init_values(self, density=1, velocity=(0, 0, 0)):
@@ -284,8 +285,8 @@ def divide_first_order_moments_by_rho(assignment_collection, dim):
     """
     old_eqs = assignment_collection.main_assignments
     rho = old_eqs[0].lhs
-    new_first_order_moment_eq = [Assignment(eq.lhs, eq.rhs / rho) for eq in old_eqs[1:dim+1]]
-    new_eqs = [old_eqs[0]] + new_first_order_moment_eq + old_eqs[dim+1:]
+    new_first_order_moment_eq = [Assignment(eq.lhs, eq.rhs / rho) for eq in old_eqs[1:dim + 1]]
+    new_eqs = [old_eqs[0]] + new_first_order_moment_eq + old_eqs[dim + 1:]
     return assignment_collection.copy(new_eqs)
 
 

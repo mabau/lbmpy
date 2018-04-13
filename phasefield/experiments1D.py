@@ -135,7 +135,7 @@ def galilean_invariance_test(pf_step, velocity=0.05, rounds=3, phase0=0, phase1=
     from lbmpy.phasefield.analytical import analytic_interface_profile
 
     domain_size = pf_step.data_handling.shape
-    round_time_steps = int((domain_size[0]+0.25) / velocity)
+    round_time_steps = int((domain_size[0] + 0.25) / velocity)
 
     print("Velocity:", velocity, " Time steps for round:", round_time_steps)
 
@@ -161,7 +161,7 @@ def galilean_invariance_test(pf_step, velocity=0.05, rounds=3, phase0=0, phase1=
 
     capture_profile()
     for rt in range(rounds):
-        print("Running round %d/%d" % (rt+1, rounds))
+        print("Running round %d/%d" % (rt + 1, rounds))
         pf_step.run(round_time_steps)
         capture_profile()
 

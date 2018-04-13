@@ -544,7 +544,7 @@ def chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_deriv
         max_expansion_order = max(max_expansion_order, stop_order)
     equation = equation.subs(subs_dict)
     equation = expand_using_linearity(equation, functions=expanded_pdf_symbols).expand().collect(eps)
-    result = {eps_order: equation.coeff(eps ** eps_order) for eps_order in range(1, 2*max_expansion_order)}
+    result = {eps_order: equation.coeff(eps ** eps_order) for eps_order in range(1, 2 * max_expansion_order)}
     result[0] = equation.subs(eps, 0)
     return result
 

@@ -310,26 +310,27 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
     shear_tensor_trace = sum(shear_tensor_diagonal)
     shear_tensor_trace_free_diagonal = [dim * d - shear_tensor_trace for d in shear_tensor_diagonal]
 
-    energy_transport_tensor = list(exponents_to_polynomial_representations([a for a in moments_of_order(3, dim, True)
-                                                                            if 3 not in a]))
+    poly_repr = exponents_to_polynomial_representations
+    energy_transport_tensor = list(poly_repr([a for a in moments_of_order(3, dim, True)
+                                              if 3 not in a]))
 
     explicitly_defined = set(rho + velocity + shear_tensor_off_diagonal +
                              shear_tensor_diagonal + energy_transport_tensor)
-    rest = list(set(exponents_to_polynomial_representations(moments_up_to_component_order(2, dim))) - explicitly_defined)
+    rest = list(set(poly_repr(moments_up_to_component_order(2, dim))) - explicitly_defined)
     assert len(rest) + len(explicitly_defined) == 3**dim
 
-    # naming according to paper Karlin 2015: Entropic multirelaxation lattice Boltzmann models for turbulent flows
+    # naming according to paper Karlin 2015: Entropic multi relaxation lattice Boltzmann models for turbulent flows
     d = shear_tensor_off_diagonal + shear_tensor_trace_free_diagonal[:-1]
     t = [shear_tensor_trace]
     q = energy_transport_tensor
     if method_name == 'KBC-N1':
-        decomposition = [d, t+q+rest]
+        decomposition = [d, t + q + rest]
     elif method_name == 'KBC-N2':
-        decomposition = [d+t, q+rest]
+        decomposition = [d + t, q + rest]
     elif method_name == 'KBC-N3':
-        decomposition = [d+q, t+rest]
+        decomposition = [d + q, t + rest]
     elif method_name == 'KBC-N4':
-        decomposition = [d+t+q, rest]
+        decomposition = [d + t + q, rest]
     else:
         raise ValueError("Unknown model. Supported models KBC-Nx where x in (1,2,3,4)")
 

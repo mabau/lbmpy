@@ -46,7 +46,7 @@ def create_lbm_split_groups(cr: LbmCollisionRule):
     dim = len(stencil[0])
 
     for direction, eq in zip(stencil, cr.main_assignments):
-        if direction == tuple([0]*dim):
+        if direction == tuple([0] * dim):
             split_groups[0].append(eq.lhs)
             continue
 

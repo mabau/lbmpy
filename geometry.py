@@ -141,7 +141,7 @@ def get_pipe_velocity_field(domain_size, u_max, flow_direction=0, diameter=None)
         radius = int(round(diameter / 2))
 
     params = [np.arange(s) + 0.5 for s in domain_size]
-    grid = np.meshgrid(*params, indexing='ij')  # type: Tuple[np.array]
+    grid: Tuple[np.array] = np.meshgrid(*params, indexing='ij')
 
     dist = 0
     for i in range(len(domain_size)):
@@ -202,8 +202,8 @@ def add_black_and_white_image(boundary_handling, image_file, target_slice=None, 
     # resize necessary if aspect ratio should be constant
     if zoomed_image.shape != target_size:
         resized_image = np.zeros(target_size, dtype=np.bool)
-        mid = [(ts - s)//2 for ts, s in zip(target_size, zoomed_image.shape)]
-        resized_image[mid[0]:zoomed_image.shape[0]+mid[0], mid[1]:zoomed_image.shape[1]+mid[1]] = zoomed_image
+        mid = [(ts - s) // 2 for ts, s in zip(target_size, zoomed_image.shape)]
+        resized_image[mid[0]:zoomed_image.shape[0] + mid[0], mid[1]:zoomed_image.shape[1] + mid[1]] = zoomed_image
         zoomed_image = resized_image
 
     def callback(*coordinates):
