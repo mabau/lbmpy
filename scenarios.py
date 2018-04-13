@@ -26,7 +26,7 @@ at :mod:`lbmpy.creationfunctions`. The only mandatory keyword parameter is ``rel
 that defines the viscosity of the fluid (valid values being between 0 and 2).
 """
 import numpy as np
-from lbmpy.geometry import setup_channel_walls, add_parabolic_velocity_inflow
+from lbmpy.geometry import add_pipe_walls, add_pipe_inflow_boundary
 from lbmpy.lbstep import LatticeBoltzmannStep
 from pystencils.datahandling import create_data_handling
 from pystencils.slicing import slice_from_direction
@@ -144,13 +144,22 @@ def create_channel(domain_size=None, force=None, pressure_difference=None, u_max
             raise NotImplementedError("Velocity inflow for duct flows not yet implemented")
         step = LatticeBoltzmannStep(data_handling=data_handling, name="velocity_driven_channel", **kwargs)
         diameter = diameter_callback(np.array([0]), domain_size)[0] if diameter_callback else min(domain_size[1:])
-        add_parabolic_velocity_inflow(step.boundary_handling, u_max, slice_from_direction('W', dim),
-                                      vel_coord=0, diameter=diameter)
+        add_pipe_inflow_boundary(step.boundary_handling, u_max, slice_from_direction('W', dim),
+                                 flow_direction=0, diameter=diameter)
         outflow = FixedDensity(1.0)
         step.boundary_handling.set_boundary(outflow, slice_from_direction('E', dim))
     else:
         assert False
 
-    setup_channel_walls(step.boundary_handling, diameter_callback, duct, wall_boundary)
-    return step
+    directions = ('N', 'S', 'T', 'B') if dim == 3 else ('N', 'S')
+    for direction in directions:
+        step.boundary_handling.set_boundary(wall_boundary, slice_from_direction(direction, dim))
 
+    if duct and diameter_callback is not None:
+        raise ValueError("For duct flows, passing a diameter callback does not make sense.")
+
+    if not duct:
+        diameter = min(step.boundary_handling.shape[1:])
+        add_pipe_walls(step.boundary_handling, diameter_callback if diameter_callback else diameter, wall_boundary)
+
+    return step

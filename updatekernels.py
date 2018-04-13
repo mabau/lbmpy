@@ -48,63 +48,6 @@ def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
     return result
 
 
-def create_stream_pull_collide_kernel(collision_rule, numpy_arr=None, src_field_name="src", dst_field_name="dst",
-                                      generic_layout='numpy', generic_field_type=np.float64,
-                                      builtin_periodicity=(False, False, False)):
-    """Implements a stream-pull scheme, where values are read from source and written to destination field.
-
-    Args:
-        collision_rule: a collision rule created by lbm method
-        numpy_arr: optional numpy field for PDFs. Used to create a kernel of fixed loop bounds and strides
-                    if None, a generic kernel is created
-        src_field_name: name of the pdf source field
-        dst_field_name: name of the pdf destination field
-        generic_layout: if no numpy_arr is given to determine the layout, a variable sized field with the given
-                       generic_layout is used
-        generic_field_type: if no numpy_arr is given, this data type is used for the fields
-        builtin_periodicity: periodicity that should be built into the kernel
-
-    Returns:
-        lbm update rule, where generic pdf references are replaced by field accesses
-    """
-    dim = collision_rule.method.dim
-    if numpy_arr is not None:
-        assert len(numpy_arr.shape) == dim + 1, "Field dimension mismatch: dimension is %s, should be %d" % \
-                                                (len(numpy_arr.shape), dim + 1)
-
-    if numpy_arr is None:
-        src = Field.create_generic(src_field_name, dim, index_dimensions=1, layout=generic_layout, dtype=generic_field_type)
-        dst = Field.create_generic(dst_field_name, dim, index_dimensions=1, layout=generic_layout, dtype=generic_field_type)
-    else:
-        src = Field.create_from_numpy_array(src_field_name, numpy_arr, index_dimensions=1)
-        dst = Field.create_from_numpy_array(dst_field_name, numpy_arr, index_dimensions=1)
-
-    accessor = StreamPullTwoFieldsAccessor
-
-    if any(builtin_periodicity):
-        accessor = PeriodicTwoFieldsAccessor(builtin_periodicity, ghost_layers=1)
-    return create_lbm_kernel(collision_rule, src, dst, accessor)
-
-
-def create_collide_only_kernel(collision_rule, numpy_arr=None, field_name="src",
-                               generic_layout='numpy', generic_field_type=np.float64):
-    """Implements a collision only (no neighbor access) LBM kernel.
-
-    For parameters see function ``create_stream_pull_collide_kernel``
-    """
-    dim = collision_rule.method.dim
-    if numpy_arr is not None:
-        assert len(numpy_arr.shape) == dim + 1, "Field dimension mismatch: dimension is %s, should be %d" % \
-                                                (len(numpy_arr.shape), dim + 1)
-
-    if numpy_arr is None:
-        field = Field.create_generic(field_name, dim, index_dimensions=1, layout=generic_layout, dtype=generic_field_type)
-    else:
-        field = Field.create_from_numpy_array(field_name, numpy_arr, index_dimensions=1)
-
-    return create_lbm_kernel(collision_rule, field, field, CollideOnlyInplaceAccessor)
-
-
 def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst_field_name="dst",
                                    generic_layout='numpy', generic_field_type=np.float64):
     """Creates a stream-pull kernel, without collision.
