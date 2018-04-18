@@ -278,8 +278,10 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
 
     if params['velocity_input'] is not None:
         eqs = [Assignment(cqc.zeroth_order_moment_symbol, sum(lb_method.pre_collision_pdf_symbols))]
-        velocity_field = params['velocity_input']
-        eqs += [Assignment(u_sym, velocity_field(i)) for i, u_sym in enumerate(cqc.first_order_moment_symbols)]
+        velocity_input = params['velocity_input']
+        if isinstance(velocity_input, Field):
+            velocity_input = velocity_input.center_vector
+        eqs += [Assignment(u_sym, velocity_input[i]) for i, u_sym in enumerate(cqc.first_order_moment_symbols)]
         eqs = AssignmentCollection(eqs, [])
         collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=eqs)
     else:

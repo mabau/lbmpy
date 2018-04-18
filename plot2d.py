@@ -37,8 +37,8 @@ def boundary_handling(boundary_handling_obj, slice_obj=None, boundary_name_to_co
             'FixedDensity': '#009e73',
         }
 
-    boundary_names = []
-    flag_values = []
+    boundary_names = ['domain']
+    flag_values = [boundary_handling_obj.flag_interface.domain_flag]
     for boundary_obj in boundary_handling_obj.boundary_objects:
         boundary_names.append(boundary_obj.name)
         flag_values.append(boundary_handling_obj.get_flag(boundary_obj))
