@@ -154,6 +154,8 @@ class UBB(Boundary):
 class FixedDensity(Boundary):
 
     def __init__(self, density, name=None):
+        if name is None:
+            name = "Fixed Density " + str(density)
         super(FixedDensity, self).__init__(name)
         self._density = density
 

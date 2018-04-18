@@ -15,7 +15,7 @@ def boundary_handling(boundary_handling_obj, slice_obj=None, boundary_name_to_co
         boundary_name_to_color: optional dictionary mapping boundary names to colors
         show_legend: if True legend for color->boundary name is added
     """
-    import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap, BoundaryNorm
 
     boundary_handling_obj.prepare()
 
@@ -39,37 +39,47 @@ def boundary_handling(boundary_handling_obj, slice_obj=None, boundary_name_to_co
 
     boundary_names = []
     flag_values = []
-    for name, flag_name in sorted(boundary_handling_obj.get_boundary_name_to_flag_dict().items(), key=lambda l: l[1]):
-        boundary_names.append(name)
-        flag_values.append(flag_name)
+    for boundary_obj in boundary_handling_obj.boundary_objects:
+        boundary_names.append(boundary_obj.name)
+        flag_values.append(boundary_handling_obj.get_flag(boundary_obj))
+
     default_cycle = matplotlib.rcParams['axes.prop_cycle']
     color_values = [fixed_colors[name] if name in fixed_colors else c['color']
                     for c, name in zip(default_cycle, boundary_names)]
 
-    colormap = matplotlib.colors.ListedColormap(color_values)
+    colormap = ListedColormap(color_values)
     bounds = np.array(flag_values, dtype=float) - 0.5
     bounds = list(bounds) + [bounds[-1] + 1]
-    norm = matplotlib.colors.BoundaryNorm(bounds, colormap.N)
+    norm = BoundaryNorm(bounds, colormap.N)
 
     flag_arr = flag_arr.swapaxes(0, 1)
-    plt.imshow(flag_arr, interpolation='none', origin='lower',
-               cmap=colormap, norm=norm)
+    imshow(flag_arr, interpolation='none', origin='lower',
+           cmap=colormap, norm=norm)
 
     path_list = [matplotlib.patches.Patch(color=color, label=name) for color, name in zip(color_values, boundary_names)]
-    plt.axis('equal')
+    axis('equal')
     if show_legend:
-        plt.legend(handles=path_list, bbox_to_anchor=(1.02, 0.5), loc=2, borderaxespad=0.)
+        legend(handles=path_list, bbox_to_anchor=(1.02, 0.5), loc=2, borderaxespad=0.)
 
 
-def phase_plot(phase_field, linewidth=1.0):
+def phase_plot(phase_field: np.ndarray, linewidth=1.0, clip=True) -> None:
+    """Plots a phase field array using the phase variables as alpha channel.
+
+    Args:
+        phase_field: array with len(shape) == 3, first two dimensions are spatial, the last one indexes the phase
+                     components.
+        linewidth: line width of the 0.5 contour lines that are drawn over the alpha blended phase images
+        clip: see scalar_field_alpha_value function
+    """
     color_cycle = cycle(['#fe0002', '#00fe00', '#0000ff', '#ffa800', '#f600ff'])
 
     assert len(phase_field.shape) == 3
 
     for i in range(phase_field.shape[-1]):
-        scalar_field_alpha_value(phase_field[..., i], next(color_cycle), clip=True, interpolation='bilinear')
-    for i in range(phase_field.shape[-1]):
-        scalar_field_contour(phase_field[..., i], levels=[0.5], colors='k', linewidths=[linewidth])
+        scalar_field_alpha_value(phase_field[..., i], next(color_cycle), clip=clip, interpolation='bilinear')
+    if linewidth:
+        for i in range(phase_field.shape[-1]):
+            scalar_field_contour(phase_field[..., i], levels=[0.5], colors='k', linewidths=[linewidth])
 
 
 def phase_plot_for_step(phase_field_step, slice_obj=make_slice[:, :], **kwargs):
@@ -96,12 +106,9 @@ class LbGrid:
 
     def add_cell_boundary(self, cell, **kwargs):
         """Draws a rectangle around a single cell. Keyword arguments are passed to the matplotlib Rectangle patch"""
-        if 'fill' not in kwargs:
-            kwargs['fill'] = False
-        if 'linewidth' not in kwargs:
-            kwargs['linewidth'] = 3
-        if 'color' not in kwargs:
-            kwargs['color'] = '#bbbbbb'
+        kwargs.setdefault('fill', False)
+        kwargs.setdefault('linewidth', 3)
+        kwargs.setdefault('color', '#bbbbbb')
         self._cellBoundaries[cell] = patches.Rectangle(cell, 1.0, 1.0, **kwargs)
 
     def add_cell_boundaries(self, **kwargs):
@@ -121,8 +128,8 @@ class LbGrid:
         """
         cell_midpoint = (0.5 + cell[0], 0.5 + cell[1])
 
-        if 'width' not in kwargs: kwargs['width'] = 0.005
-        if 'color' not in kwargs: kwargs['color'] = 'k'
+        kwargs.setdefault('width', 0.005)
+        kwargs.setdefault('color', 'k')
 
         if arrow_position == (0, 0):
             del kwargs['width']
@@ -146,8 +153,8 @@ class LbGrid:
             for y in range(self._yCells):
                 for dx in [-1, 0, 1]:
                     for dy in [-1, 0, 1]:
-                        if 'color' not in kwargs: kwargs['color'] = '#bbbbbb'
-                        if 'width' not in kwargs: kwargs['width'] = 0.006
+                        kwargs.setdefault('color', '#bbbbbb')
+                        kwargs.setdefault('width', 0.066)
 
                         self.add_arrow((x, y), (dx, dy), (dx, dy), **kwargs)
 
