@@ -12,7 +12,6 @@ def write_phase_field_picture_sequence(sc, filename='two_drops_%05d.png',
         plt.figure(figsize=(14, 7))
         plt.phase_plot(sc.phi[:, :], linewidth=0.1)
         plt.axis('off')
-        plt.tight_layout()
         plt.savefig(filename % (i,), bbox_inches='tight')
         plt.clf()
         sc.run(time_steps_between_frames)
