@@ -59,8 +59,8 @@ def create_fully_periodic_flow(initial_velocity, periodicity_in_kernel=False, lb
         kwargs['optimization']['builtin_periodicity'] = (True, True, True)
 
     if data_handling is None:
-        data_handling = create_data_handling(parallel, domain_size, periodicity=not periodicity_in_kernel,
-                                             default_ghost_layers=1)
+        data_handling = create_data_handling(domain_size, periodicity=not periodicity_in_kernel,
+                                             default_ghost_layers=1, parallel=parallel)
     step = LatticeBoltzmannStep(data_handling=data_handling, name="periodic_scenario", lbm_kernel=lbm_kernel, **kwargs)
     for b in step.data_handling.iterate(ghost_layers=False):
         np.copyto(b[step.velocity_data_name], initial_velocity[b.global_slice])
@@ -84,7 +84,7 @@ def create_lid_driven_cavity(domain_size=None, lid_velocity=0.005, lbm_kernel=No
     """
     assert domain_size is not None or data_handling is not None
     if data_handling is None:
-        data_handling = create_data_handling(parallel, domain_size, periodicity=False, default_ghost_layers=1)
+        data_handling = create_data_handling(domain_size, periodicity=False, default_ghost_layers=1, parallel=parallel)
     step = LatticeBoltzmannStep(data_handling=data_handling, lbm_kernel=lbm_kernel, name="ldc", **kwargs)
 
     my_ubb = UBB(velocity=[lid_velocity, 0, 0][:step.method.dim])
@@ -99,22 +99,22 @@ def create_channel(domain_size=None, force=None, pressure_difference=None, u_max
                    duct=False, wall_boundary=NoSlip(), parallel=False, data_handling=None, **kwargs):
     """Create a channel scenario (2D or 3D).
     
-    :param domain_size: size of the simulation domain. First coordinate is the flow direction.
-    
-    The channel can be driven by one of the following methods. Please specify exactly one of the following parameters: 
-    :param force: Periodic channel, driven by a body force. Pass force in flow direction in lattice units here.
-    :param pressure_difference: Inflow and outflow are fixed pressure conditions, with the given pressure difference. 
-    :param u_max: Parabolic velocity profile prescribed at inflow, pressure boundary =1.0 at outflow.
-    
-    Geometry parameters:
-    :param diameter_callback: optional callback for channel with varying diameters. Only valid if duct=False.
-                             The callback receives x coordinate array and domain_size and returns a
-                             an array of diameters of the same shape
-    :param duct: if true the channel has rectangular instead of circular cross section
-    :param wall_boundary: instance of boundary class that should be set at the channel walls
-    :param parallel: True for distributed memory parallelization with walberla
-    :param data_handling: see documentation of :func:`create_fully_periodic_flow`
-    :param kwargs: all other keyword parameters are passed directly to scenario class.
+    The channel can be driven either by force, velocity inflow or pressure difference. Choose one and pass
+    exactly one of the parameters 'force', 'pressure_difference' or 'u_max'.
+
+    Args:
+        domain_size: size of the simulation domain. First coordinate is the flow direction.
+        force: Periodic channel, driven by a body force. Pass force in flow direction in lattice units here.
+        pressure_difference: Inflow and outflow are fixed pressure conditions, with the given pressure difference.
+        u_max: Parabolic velocity profile prescribed at inflow, pressure boundary =1.0 at outflow.
+        diameter_callback: optional callback for channel with varying diameters. Only valid if duct=False.
+                          The callback receives x coordinate array and domain_size and returns a
+                          an array of diameters of the same shape
+        duct: if true the channel has rectangular instead of circular cross section
+        wall_boundary: instance of boundary class that should be set at the channel walls
+        parallel: True for distributed memory parallelization with walberla
+        data_handling: see documentation of :func:`create_fully_periodic_flow`
+        kwargs: all other keyword parameters are passed directly to scenario class.
     """
     assert domain_size is not None or data_handling is not None
 
@@ -125,8 +125,8 @@ def create_channel(domain_size=None, force=None, pressure_difference=None, u_max
     if data_handling is None:
         dim = len(domain_size)
         assert dim in (2, 3)
-        data_handling = create_data_handling(parallel, domain_size, periodicity=periodicity[:dim],
-                                             default_ghost_layers=1)
+        data_handling = create_data_handling(domain_size, periodicity=periodicity[:dim],
+                                             default_ghost_layers=1, parallel=parallel)
 
     dim = data_handling.dim
     if force:

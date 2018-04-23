@@ -7,11 +7,10 @@ from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
 from lbmpy.phasefield.kerneleqs import mu_kernel, CahnHilliardFDStep, pressure_tensor_kernel, \
     force_kernel_using_pressure_tensor
-from pystencils import create_kernel
+from pystencils import create_kernel, create_data_handling
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, symmetric_tensor_linearization
 from pystencils.boundaries.boundaryhandling import FlagInterface
 from pystencils.boundaries.inkernel import add_neumann_boundary
-from pystencils.datahandling import SerialDataHandling
 from pystencils.assignment_collection.simplifications import sympy_cse_on_assignment_list
 from pystencils.slicing import make_slice, SlicedGetter
 
@@ -32,7 +31,7 @@ class PhaseFieldStep:
         target = optimization.get('target', 'cpu')
 
         if data_handling is None:
-            data_handling = SerialDataHandling(domain_size, periodicity=True)
+            data_handling = create_data_handling(domain_size, periodicity=True, parallel=False)
 
         self.free_energy = free_energy
         self.concentration_to_order_parameter = concentration_to_order_parameters

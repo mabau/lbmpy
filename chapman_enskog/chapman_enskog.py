@@ -2,10 +2,9 @@ import sympy as sp
 from collections import namedtuple
 from sympy.core.cache import cacheit
 from pystencils.cache import disk_cache
-from pystencils.derivative import full_diff_expand
+from pystencils.fd import expand_diff_full, Diff, DiffOperator, expand_diff_linear, \
+    expand_diff_products, normalize_diff_order
 from pystencils.sympyextensions import normalize_product, symmetric_product
-from pystencils.derivative import Diff, DiffOperator, expand_using_linearity, \
-    expand_using_product_rule, normalize_diff_order
 from lbmpy.moments import discrete_moment, moment_matrix, polynomial_to_exponent_representation, get_moment_indices, \
     non_aliased_moment
 from lbmpy.chapman_enskog.derivative import chapman_enskog_derivative_recombination, chapman_enskog_derivative_expansion
@@ -38,14 +37,14 @@ class ChapmanEnskogAnalysis:
 
         self.constants = constants
 
-        o_eps_moments1 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[1] * moment),
-                                                 constants=constants)
+        o_eps_moments1 = [expand_diff_linear(self._take_and_insert_moments(self.equations_by_order[1] * moment),
+                                             constants=constants)
                           for moment in moments_until_order1]
-        o_eps_moments2 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[1] * moment),
-                                                 constants=constants)
+        o_eps_moments2 = [expand_diff_linear(self._take_and_insert_moments(self.equations_by_order[1] * moment),
+                                             constants=constants)
                           for moment in moments_order2]
-        o_eps_sq_moments1 = [expand_using_linearity(self._take_and_insert_moments(self.equations_by_order[2] * moment),
-                                                    constants=constants)
+        o_eps_sq_moments1 = [expand_diff_linear(self._take_and_insert_moments(self.equations_by_order[2] * moment),
+                                                constants=constants)
                              for moment in moments_until_order1]
 
         self._equationsWithHigherOrderMoments = [self._ce_recombine(ord1 * self.epsilon + ord2 * self.epsilon ** 2)
@@ -63,7 +62,7 @@ class ChapmanEnskogAnalysis:
 
     def get_macroscopic_equations(self, substitute_higher_order_moments=False):
         if substitute_higher_order_moments:
-            return [full_diff_expand(e.subs(self.higher_order_moments), constants=self.constants)
+            return [expand_diff_full(e.subs(self.higher_order_moments), constants=self.constants)
                     for e in self._equationsWithHigherOrderMoments]
         else:
             return self._equationsWithHigherOrderMoments
@@ -383,7 +382,7 @@ def take_moments(eqn, pdf_to_moment_name=(('f', '\Pi'), ('\Omega f', '\\Upsilon'
         return result
 
     functions = sum(pdf_symbols, ())
-    eqn = expand_using_linearity(eqn, functions).expand()
+    eqn = expand_diff_linear(eqn, functions).expand()
 
     if eqn.func == sp.Mul:
         return handle_product(eqn)
@@ -401,7 +400,7 @@ def moment_selector(eq):
 
 
 def diff_expand_normalizer(eq):
-    return expand_using_product_rule(eq).expand()
+    return expand_diff_products(eq).expand()
 
 
 def chain_solve_and_substitute(assignments, unknown_selector, normalizing_func=diff_expand_normalizer):
@@ -487,12 +486,12 @@ def get_taylor_expanded_lb_equation(pdf_symbol_name="f", pdfs_after_collision_op
 
     functions = [pdf, collided_pdf]
     eq_4_5 = taylor_operator - dt * collided_pdf
-    applied_eq_4_5 = expand_using_linearity(DiffOperator.apply(eq_4_5, pdf, apply_to_constants=False), functions)
+    applied_eq_4_5 = expand_diff_linear(DiffOperator.apply(eq_4_5, pdf, apply_to_constants=False), functions)
 
     if shift:
         operator = ((dt / 2) * (dt_operator + c.dot(dx_operator))).expand()
-        op_times_eq_4_5 = expand_using_linearity(DiffOperator.apply(operator, applied_eq_4_5, apply_to_constants=False),
-                                                 functions).expand()
+        op_times_eq_4_5 = expand_diff_linear(DiffOperator.apply(operator, applied_eq_4_5, apply_to_constants=False),
+                                             functions).expand()
         op_times_eq_4_5 = normalize_diff_order(op_times_eq_4_5, functions)
         eq_4_7 = (applied_eq_4_5 - op_times_eq_4_5).subs(dt ** (taylor_order + 1), 0)
     else:
@@ -543,7 +542,7 @@ def chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_deriv
                                     for i in range(start_order, stop_order))
         max_expansion_order = max(max_expansion_order, stop_order)
     equation = equation.subs(subs_dict)
-    equation = expand_using_linearity(equation, functions=expanded_pdf_symbols).expand().collect(eps)
+    equation = expand_diff_linear(equation, functions=expanded_pdf_symbols).expand().collect(eps)
     result = {eps_order: equation.coeff(eps ** eps_order) for eps_order in range(1, 2 * max_expansion_order)}
     result[0] = equation.subs(eps, 0)
     return result
@@ -557,7 +556,7 @@ def match_to_navier_stokes(conservation_equations, rho=sp.Symbol("rho"), u=sp.sy
     def diff_simplify(eq):
         variables = eq.atoms(CeMoment)
         variables.update(funcs)
-        return expand_using_product_rule(expand_using_linearity(eq, variables)).expand()
+        return expand_diff_products(expand_diff_linear(eq, variables)).expand()
 
     def match_continuity_eq(continuity_eq):
         continuity_eq = diff_simplify(continuity_eq)

@@ -1,7 +1,7 @@
 import sympy as sp
 import functools
-from pystencils.derivative import Diff, DiffOperator, expand_using_linearity, normalize_diff_order
-from pystencils.derivative import collect_derivatives, create_nested_diff
+from pystencils.fd import Diff, DiffOperator, expand_diff_linear, normalize_diff_order, \
+    collect_diffs, create_nested_diff
 from pystencils.sympyextensions import normalize_product, multidimensional_sum, kronecker_delta
 from lbmpy.chapman_enskog.chapman_enskog import LbMethodEqMoments, CeMoment, take_moments, insert_moments
 from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol, chapman_enskog_ansatz, remove_higher_order_u
@@ -93,7 +93,7 @@ class SteadyStateChapmanEnskogAnalysis:
         for ce_eq, f_i in zip(chapman_enskog_hierarchy, self.f_syms):
             new_eq = -1 / self.collision_op_sym * (ce_eq - self.collision_op_sym * f_i)
             raw_hierarchy.append(new_eq)
-            new_eq = expand_using_linearity(new_eq.subs(substitution_dict), functions=self.f_syms + [self.force_sym])
+            new_eq = expand_diff_linear(new_eq.subs(substitution_dict), functions=self.f_syms + [self.force_sym])
             if new_eq:
                 substitution_dict[f_i] = new_eq
             inserted_hierarchy.append(new_eq)
@@ -163,7 +163,7 @@ class SteadyStateChapmanEnskogAnalysis:
 
             new_products.append(new_prod)
 
-        return normalize_diff_order(expand_using_linearity(sp.Add(*new_products), functions=self.physical_variables))
+        return normalize_diff_order(expand_diff_linear(sp.Add(*new_products), functions=self.physical_variables))
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -197,7 +197,7 @@ class SteadyStateChapmanEnskogAnalysisSRT:
 
         for i in range(2, len(self.scale_hierarchy)):
             eq = self.scale_hierarchy[i].subs(subs_dict)
-            eq = expand_using_linearity(eq, functions=expanded_pdf_symbols)
+            eq = expand_diff_linear(eq, functions=expanded_pdf_symbols)
             eq = normalize_diff_order(eq, functions=expanded_pdf_symbols)
             subs_dict[expanded_pdf_symbols[i]] = eq
             expanded_pdfs.append(eq)
@@ -230,10 +230,10 @@ class SteadyStateChapmanEnskogAnalysisSRT:
         # Continuity equation (mass transport)
         cont_eq = take_moments(recombined, max_expansion=(order + 1) * 2)
         cont_eq = handle_postcollision_values(cont_eq)
-        cont_eq = expand_using_linearity(cont_eq, constants=constants).expand().collect(dt)
+        cont_eq = expand_diff_linear(cont_eq, constants=constants).expand().collect(dt)
         self.continuity_equation_with_moments = cont_eq
         cont_eq = insert_moments(cont_eq, moment_computation, use_solvability_conditions=False)
-        cont_eq = expand_using_linearity(cont_eq, constants=constants).expand().collect(dt)
+        cont_eq = expand_diff_linear(cont_eq, constants=constants).expand().collect(dt)
         self.continuity_equation = cont_eq
 
         # Momentum equation (momentum transport)
@@ -242,10 +242,10 @@ class SteadyStateChapmanEnskogAnalysisSRT:
         for h in range(dim):
             mom_eq = take_moments(recombined * c[h], max_expansion=(order + 1) * 2)
             mom_eq = handle_postcollision_values(mom_eq)
-            mom_eq = expand_using_linearity(mom_eq, constants=constants).expand().collect(dt)
+            mom_eq = expand_diff_linear(mom_eq, constants=constants).expand().collect(dt)
             self.momentum_equations_with_moments.append(mom_eq)
             mom_eq = insert_moments(mom_eq, moment_computation, use_solvability_conditions=False)
-            mom_eq = expand_using_linearity(mom_eq, constants=constants).expand().collect(dt)
+            mom_eq = expand_diff_linear(mom_eq, constants=constants).expand().collect(dt)
             self.momentum_equations.append(mom_eq)
 
     def get_continuity_equation(self, order):
@@ -253,14 +253,14 @@ class SteadyStateChapmanEnskogAnalysisSRT:
             result = self.continuity_equation.subs(self.dt, 0)
         else:
             result = self.continuity_equation.coeff(self.dt ** order)
-        return collect_derivatives(result)
+        return collect_diffs(result)
 
     def get_momentum_equation(self, coordinate, order):
         if order == 0:
             result = self.momentum_equations[coordinate].subs(self.dt, 0)
         else:
             result = self.momentum_equations[coordinate].coeff(self.dt ** order)
-        return collect_derivatives(result)
+        return collect_diffs(result)
 
     def determine_viscosities(self, coordinate):
         """Matches the first order term of the momentum equation to Navier stokes.
@@ -288,7 +288,7 @@ class SteadyStateChapmanEnskogAnalysisSRT:
 
         first_order_terms = self.get_momentum_equation(coordinate, order=1)
         first_order_terms = remove_higher_order_u(first_order_terms)
-        first_order_terms = expand_using_linearity(first_order_terms, constants=[sp.Symbol("rho")])
+        first_order_terms = expand_diff_linear(first_order_terms, constants=[sp.Symbol("rho")])
 
         match_coeff_equations = []
         for diff in navier_stokes_ref.atoms(Diff):

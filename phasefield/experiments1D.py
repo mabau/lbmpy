@@ -2,7 +2,7 @@ import numpy as np
 import sympy as sp
 
 from pystencils import make_slice
-from pystencils.derivative import Diff
+from pystencils.fd import Diff
 
 
 def plot_status(phase_field_step, from_x=None, to_x=None):

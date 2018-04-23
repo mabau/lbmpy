@@ -7,8 +7,7 @@ from lbmpy.creationfunctions import switch_to_symbolic_relaxation_rates_for_omeg
 from lbmpy.macroscopic_value_kernels import create_advanced_velocity_setter_collision_rule
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
-from pystencils.datahandling.serial_datahandling import SerialDataHandling
-from pystencils import create_kernel, make_slice
+from pystencils import create_kernel, make_slice, create_data_handling
 from pystencils.slicing import SlicedGetter
 from pystencils.timeloop import TimeLoop
 
@@ -30,7 +29,8 @@ class LatticeBoltzmannStep:
         if data_handling is None:
             if domain_size is None:
                 raise ValueError("Specify either domain_size or data_handling")
-            data_handling = SerialDataHandling(domain_size, default_ghost_layers=1, periodicity=periodicity)
+            data_handling = create_data_handling(domain_size, default_ghost_layers=1,
+                                                 periodicity=periodicity, parallel=False)
 
         if 'stencil' not in method_parameters:
             method_parameters['stencil'] = 'D2Q9' if data_handling.dim == 2 else 'D3Q27'

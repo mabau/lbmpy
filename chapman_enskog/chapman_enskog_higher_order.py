@@ -1,5 +1,5 @@
 import sympy as sp
-from pystencils.derivative import full_diff_expand
+from pystencils.fd import expand_diff_full
 from lbmpy.chapman_enskog.chapman_enskog import CeMoment, Diff, take_moments
 from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol
 from lbmpy.moments import moments_up_to_order, moments_of_order
@@ -61,7 +61,7 @@ def determine_higher_order_moments(epsilon_hierarchy, relaxation_rates, moment_c
     solvability_conditions = get_solvability_conditions(dim, order)
 
     def full_expand(expr):
-        return full_diff_expand(expr, constants=relaxation_rates)
+        return expand_diff_full(expr, constants=relaxation_rates)
 
     def tm(expr):
         expr = take_moments(expr, use_one_neighborhood_aliasing=True)

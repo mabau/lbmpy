@@ -1,6 +1,6 @@
 import sympy as sp
 from pystencils import Assignment
-from pystencils.finitedifferences import Discretization2ndOrder
+from pystencils.fd import Discretization2ndOrder
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, substitute_laplacian_by_sum, \
     force_from_phi_and_mu, symmetric_tensor_linearization, pressure_tensor_from_free_energy, force_from_pressure_tensor
 
@@ -58,7 +58,7 @@ def force_kernel_using_pressure_tensor(force_field, pressure_tensor_field, extra
 
 
 def cahn_hilliard_fd_eq(phase_idx, phi, mu, velocity, mobility, dx, dt):
-    from pystencils.finitedifferences import transient, advection, diffusion
+    from pystencils.fd.finitedifferences import transient, advection, diffusion
     cahn_hilliard = transient(phi, phase_idx) + advection(phi, velocity, phase_idx) - diffusion(mu, mobility, phase_idx)
     return Discretization2ndOrder(dx, dt)(cahn_hilliard)
 

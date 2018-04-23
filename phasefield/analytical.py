@@ -2,7 +2,7 @@ import sympy as sp
 from collections import defaultdict
 
 from pystencils.sympyextensions import multidimensional_sum as multi_sum, normalize_product, prod
-from pystencils.derivative import functional_derivative, expand_using_linearity, Diff, full_diff_expand
+from pystencils.fd import functional_derivative, expand_diff_linear, Diff, expand_diff_full
 
 order_parameter_symbol_name = "phi"
 surface_tension_symbol_name = "tau"
@@ -53,7 +53,7 @@ def free_energy_functional_3_phases(order_parameters=None, interface_width=inter
 
     f = f.subs(order_param_to_concentration_relation)
     if expand_derivatives:
-        f = expand_using_linearity(f, functions=order_parameters)
+        f = expand_diff_linear(f, functions=order_parameters)
 
     return f, transformation_matrix
 
@@ -198,7 +198,7 @@ def chemical_potentials_from_free_energy(free_energy, order_parameters=None):
         order_parameters.sort(key=lambda e: e.name)
         order_parameters = order_parameters[:-1]
     constants = [s for s in symbols if s not in order_parameters]
-    return sp.Matrix([expand_using_linearity(functional_derivative(free_energy, op), constants=constants)
+    return sp.Matrix([expand_diff_linear(functional_derivative(free_energy, op), constants=constants)
                       for op in order_parameters])
 
 
@@ -219,7 +219,7 @@ def substitute_laplacian_by_sum(eq, dim):
     functions = [d.args[0] for d in eq.atoms(Diff)]
     substitutions = {Diff(Diff(op)): sum(Diff(Diff(op, i), i) for i in range(dim))
                      for op in functions}
-    return full_diff_expand(eq.subs(substitutions))
+    return expand_diff_full(eq.subs(substitutions))
 
 
 def cosh_integral(f, var):
@@ -306,7 +306,7 @@ def force_from_pressure_tensor(pressure_tensor, functions=None):
 
     def force_component(b):
         r = -sum(Diff(pressure_tensor[a, b], a) for a in range(dim))
-        r = full_diff_expand(r, functions=functions)
+        r = expand_diff_full(r, functions=functions)
         return r
 
     return sp.Matrix([force_component(b) for b in range(dim)])
