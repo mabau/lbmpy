@@ -1,8 +1,7 @@
 import numpy as np
 import sympy as sp
 
-from pystencils import Field, Assignment
-from pystencils.assignment_collection.assignment_collection import AssignmentCollection
+from pystencils import Field, Assignment, AssignmentCollection
 from pystencils.field import create_numpy_array_with_layout, layout_string_to_tuple
 from pystencils.sympyextensions import fast_subs
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule

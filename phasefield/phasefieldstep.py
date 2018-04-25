@@ -11,7 +11,7 @@ from pystencils import create_kernel, create_data_handling
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, symmetric_tensor_linearization
 from pystencils.boundaries.boundaryhandling import FlagInterface
 from pystencils.boundaries.inkernel import add_neumann_boundary
-from pystencils.assignment_collection.simplifications import sympy_cse_on_assignment_list
+from pystencils.simp import sympy_cse_on_assignment_list
 from pystencils.slicing import make_slice, SlicedGetter
 
 

@@ -1,7 +1,7 @@
 import abc
 import sympy as sp
 from collections import namedtuple
-from pystencils.assignment_collection import AssignmentCollection
+from pystencils import AssignmentCollection
 
 
 RelaxationInfo = namedtuple('RelaxationInfo', ['equilibrium_value', 'relaxation_rate'])

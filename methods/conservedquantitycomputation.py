@@ -1,8 +1,7 @@
 import abc
 import sympy as sp
 from collections import OrderedDict
-from pystencils.assignment_collection import AssignmentCollection
-from pystencils import Field, Assignment
+from pystencils import Field, Assignment, AssignmentCollection
 
 
 class AbstractConservedQuantityComputation(abc.ABC):

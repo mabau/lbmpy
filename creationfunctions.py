@@ -156,7 +156,7 @@ from lbmpy.methods.creationfunctions import create_generic_mrt
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
-from pystencils.assignment_collection.assignment_collection import AssignmentCollection
+from pystencils import AssignmentCollection
 from pystencils.field import get_layout_of_array, Field
 from pystencils import create_kernel, Assignment
 from lbmpy.turbulence_models import add_smagorinsky_model
