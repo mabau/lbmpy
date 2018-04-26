@@ -476,7 +476,7 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
     from lbmpy.continuous_distribution_measures import continuous_moment
 
     dim = len(stencil[0])
-    u = sp.symbols(f"u_:{dim}")
+    u = sp.symbols("u_:{dim}".format(dim=dim))
     if discrete_equilibrium is None:
         from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
         discrete_equilibrium = discrete_maxwellian_equilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
@@ -556,7 +556,7 @@ def moment_equality_table_by_stencil(name_to_stencil_dict, moments, truncate_ord
     colors = {}
     for stencil_idx, stencil in enumerate(stencils):
         dim = len(stencil[0])
-        u = sp.symbols(f"u_:{dim}")
+        u = sp.symbols("u_:{dim}".format(dim=dim))
         discrete_equilibrium = discrete_maxwellian_equilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
                                                                u=u, order=truncate_order)
         continuous_equilibrium = continuous_maxwellian_equilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
