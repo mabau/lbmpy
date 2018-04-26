@@ -23,26 +23,26 @@ from lbmpy.relaxationrates import relaxation_rate_from_magic_number, default_rel
 def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,
                                                force_model=None, equilibrium_order=2,
                                                cumulant=False, c_s_sq=sp.Rational(1, 3)):
-    r"""
-    Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
-    relaxed against the moments of the discrete Maxwellian distribution.
+    r"""Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate.
+
+    These moments are relaxed against the moments of the discrete Maxwellian distribution.
 
     Args:
-        stencil: nested tuple defining the discrete velocity space. See `func:lbmpy.stencils.get_stencil`
+        stencil: nested tuple defining the discrete velocity space. See `get_stencil`
         moment_to_relaxation_rate_dict: dict that has as many entries as the stencil. Each moment, which can be
-                                    represented by an exponent tuple or in polynomial form
-                                    (see `lbmpy.moments`), is mapped to a relaxation rate.
+                                        represented by an exponent tuple or in polynomial form
+                                        (see `lbmpy.moments`), is mapped to a relaxation rate.
         compressible: incompressible LBM methods split the density into :math:`\rho = \rho_0 + \Delta \rho`
-        where :math:`\rho_0` is chosen as one, and the first moment of the pdfs is :math:`\Delta \rho` .
-        This approximates the incompressible Navier-Stokes equations better than the standard
-        compressible model.
+                      where :math:`\rho_0` is chosen as one, and the first moment of the pdfs is :math:`\Delta \rho` .
+                      This approximates the incompressible Navier-Stokes equations better than the standard
+                      compressible model.
         force_model: force model instance, or None if no external forces
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
         cumulant: if True relax cumulants instead of moments
         c_s_sq: Speed of sound squared
 
     Returns:
-        :class:`lbmpy.methods.MomentBasedLbMethod` instance
+        `lbmpy.methods.MomentBasedLbMethod` instance
     """
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
@@ -357,16 +357,17 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
     Returns a orthogonal multi-relaxation time model for the stencils D2Q9, D3Q15, D3Q19 and D3Q27.
     These MRT methods are just one specific version - there are many MRT methods possible for all these stencils
     which differ by the linear combination of moments and the grouping into equal relaxation times.
-    To create a generic MRT method use :func:`lbmpy.methods.create_with_discrete_maxwellian_eq_moments`
+    To create a generic MRT method use `create_with_discrete_maxwellian_eq_moments`
 
-    :param stencil: nested tuple defining the discrete velocity space. See `func:lbmpy.stencils.get_stencil`
-    :param relaxation_rate_getter: function getting a list of moments as argument, returning the associated relaxation
-                                 time. The default returns:
+    Args:
+        stencil: nested tuple defining the discrete velocity space. See `get_stencil`
+        relaxation_rate_getter: function getting a list of moments as argument, returning the associated relaxation
+                              time. The default returns:
 
-                                    - 0 for moments of order 0 and 1 (conserved)
-                                    - :math:`\omega`: from moments of order 2 (rate that determines viscosity)
-                                    - numbered :math:`\omega_i` for the rest
-    :param maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
+                                 - 0 for moments of order 0 and 1 (conserved)
+                                 - :math:`\omega`: from moments of order 2 (rate that determines viscosity)
+                                 - numbered :math:`\omega_i` for the rest
+        maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
                                                used to compute the equilibrium moments
     """
     if relaxation_rate_getter is None:

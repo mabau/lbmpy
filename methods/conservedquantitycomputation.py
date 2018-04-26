@@ -17,7 +17,7 @@ class AbstractConservedQuantityComputation(abc.ABC):
     For example in zero centered hydrodynamic schemes with force model, the density has
     to be decreased by one, and the given velocity has to be shifted dependent on the force.
 
-    .. image:: moment_shift.svg
+    .. image:: /img/moment_shift.svg
 
     """
 

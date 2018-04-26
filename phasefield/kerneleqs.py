@@ -58,7 +58,7 @@ def force_kernel_using_pressure_tensor(force_field, pressure_tensor_field, extra
 
 
 def cahn_hilliard_fd_eq(phase_idx, phi, mu, velocity, mobility, dx, dt):
-    from pystencils.fd.finitedifferences import transient, advection, diffusion
+    from pystencils.fd import transient, advection, diffusion
     cahn_hilliard = transient(phi, phase_idx) + advection(phi, velocity, phase_idx) - diffusion(mu, mobility, phase_idx)
     return Discretization2ndOrder(dx, dt)(cahn_hilliard)
 

@@ -2,11 +2,7 @@ r"""
 Creating LBM kernels
 ====================
 
-Parameters
-----------
-
 The following list describes common parameters for the creation functions. They have to be passed as keyword parameters.
-
 
 Method parameters
 ^^^^^^^^^^^^^^^^^
@@ -173,6 +169,7 @@ from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_outpu
 
 
 def create_lb_function(ast=None, optimization={}, **kwargs):
+    """Creates a Python function for the LB method"""
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
     if ast is None:
@@ -188,6 +185,7 @@ def create_lb_function(ast=None, optimization={}, **kwargs):
 
 
 def create_lb_ast(update_rule=None, optimization={}, **kwargs):
+    """Creates a pystencils AST for the LB method"""
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
     if update_rule is None:
@@ -207,6 +205,7 @@ def create_lb_ast(update_rule=None, optimization={}, **kwargs):
 
 @disk_cache_no_fallback
 def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
+    """Creates an update rule (list of Assignments) for a LB method that describe a full sweep"""
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
     if collision_rule is None:
@@ -263,6 +262,7 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
 
 @disk_cache_no_fallback
 def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
+    """Creates a collision rule (list of Assignments) for a LB method describing the collision operator (no stream)"""
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
     if lb_method is None:
@@ -291,6 +291,7 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
 
 
 def create_lb_method(**params):
+    """Creates a LB method, defined by moments/cumulants for collision space, equilibrium and relaxation rates."""
     params, _ = update_with_default_parameters(params, {}, fail_on_unknown_parameter=False)
 
     if isinstance(params['stencil'], tuple) or isinstance(params['stencil'], list):
