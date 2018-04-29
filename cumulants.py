@@ -146,10 +146,10 @@ def cumulants_from_pdfs(stencil, cumulant_indices=None, pdf_symbols=None):
     """Transformation of pdfs (or other discrete function on a stencil) to cumulant space.
 
     Args:
-        stencil:
+        stencil: stencil object
         cumulant_indices: sequence of cumulant indices, could be tuples or polynomial representation
-                         if left to default and a full stencil was passed,
-                         the full set i.e. `moments_up_to_component_order(2)` is used
+                          if left to default and a full stencil was passed,
+                          the full set i.e. `moments_up_to_component_order` with 'order=2'  is used
         pdf_symbols: symbolic values for pdf values, if not passed they default to :math:`f_0, f_1, ...`
 
     Returns:

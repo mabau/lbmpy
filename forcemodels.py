@@ -4,7 +4,7 @@ r"""
 
 
 Get started:
------------
+------------
 
 This module offers different models to introduce a body force in the lattice Boltzmann scheme.
 If you don't know which model to choose, use :class:`lbmpy.forcemodels.Guo`.

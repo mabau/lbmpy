@@ -26,6 +26,13 @@ def add_box_boundary(boundary_handling, boundary=NoSlip(), replace=True):
     return flag
 
 
+def add_sphere(boundary_handling, midpoint, radius, boundary=NoSlip(), replace=True):
+    """Sets boundary in spherical region."""
+    def set_sphere(x, y):
+        return (x - midpoint[0]) ** 2 + (y - midpoint[1]) ** 2 < radius ** 2
+    return boundary_handling.set_boundary(boundary, mask_callback=set_sphere, replace=replace)
+
+
 def add_pipe_inflow_boundary(boundary_handling, u_max, slice_obj, flow_direction=0, diameter=None):
     """Adds velocity inflow UBB boundary for pipe flow.
 

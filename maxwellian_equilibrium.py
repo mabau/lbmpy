@@ -57,7 +57,7 @@ def discrete_maxwellian_equilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.sy
 
     :param stencil: tuple of directions
     :param rho: sympy symbol for the density
-    :param u: symbols for macroscopic velocity, only the first `dim` entries are used
+    :param u: symbols for macroscopic velocity, only the first 'dim' entries are used
     :param order: highest order of velocity terms (for hydrodynamics order 2 is sufficient)
     :param c_s_sq: square of speed of sound
     :param compressible: compressibility

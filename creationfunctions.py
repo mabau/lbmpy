@@ -11,7 +11,7 @@ General:
 
 - ``stencil='D2Q9'``: stencil name e.g. 'D2Q9', 'D3Q19'. See :func:`pystencils.stencils.get_stencil` for details
 - ``method='srt'``: name of lattice Boltzmann method. This determines the selection and relaxation pattern of
-  moments/cumulants, i.e. which moment/cumulant basis is chosen, and which of the basis vectors are relaxed together
+   moments/cumulants, i.e. which moment/cumulant basis is chosen, and which of the basis vectors are relaxed together
     - ``srt``: single relaxation time (:func:`lbmpy.methods.create_srt`)
     - ``trt``: two relaxation time, first relaxation rate is for even moments and determines the viscosity (as in SRT),
       the second relaxation rate is used for relaxing odd moments, and controls the bulk viscosity.
@@ -66,7 +66,7 @@ Entropic methods:
 
 LES methods:
 
-- ``smagorinsky=False``: set to Smagorinsky constant to activate turbulence model, `omega_output_field` can be set to
+- ``smagorinsky=False``: set to Smagorinsky constant to activate turbulence model, 'omega_output_field' can be set to
                          write out adapted relaxation rates
 
 
