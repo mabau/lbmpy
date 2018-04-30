@@ -39,8 +39,21 @@ def generic_equilibrium_ansatz_parameters(stencil):
 
 def match_generic_equilibrium_ansatz(stencil, equilibrium, u=sp.symbols("u_:3")):
     """Given a quadratic equilibrium, the generic coefficients A,B,C,D are determined.
-    Returns a dict that maps these coefficients to their values. If the equilibrium does not have a
-    generic quadratic form, a ValueError is raised"""
+
+    Returns:
+        dict that maps these coefficients to their values. If the equilibrium does not have a
+        generic quadratic form, a ValueError is raised
+
+    Example:
+          >>> from lbmpy.stencils import get_stencil
+          >>> from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
+          >>> stencil = get_stencil("D2Q9")
+          >>> result = match_generic_equilibrium_ansatz(get_stencil('D2Q9'), discrete_maxwellian_equilibrium(stencil) )
+          >>> result[sp.Symbol('A_0')]
+          4*rho/9
+          >>> result[sp.Symbol('B_1')]
+          rho/(9*c_s**2)
+    """
     dim = len(stencil[0])
     u = u[:dim]
 
