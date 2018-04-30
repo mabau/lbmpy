@@ -215,36 +215,20 @@ class NeumannByCopy(Boundary):
         return type(other) == NeumannByCopy
 
 
-class StreamInZero(Boundary):
+class StreamInConstant(Boundary):
+    def __init__(self, constant, name=None):
+        super(StreamInConstant, self).__init__(name)
+        self._constant = constant
+
     def __call__(self, pdf_field, direction_symbol, lb_method, **kwargs):
         neighbor = BoundaryOffsetInfo.offset_from_dir(direction_symbol, lb_method.dim)
         inverse_dir = BoundaryOffsetInfo.inv_dir(direction_symbol)
-        return [Assignment(pdf_field[neighbor](inverse_dir), 0),
-                Assignment(pdf_field[neighbor](direction_symbol), 0)]
+        return [Assignment(pdf_field[neighbor](inverse_dir), self._constant),
+                Assignment(pdf_field[neighbor](direction_symbol), self._constant)]
 
     def __hash__(self):
         # All boundaries of these class behave equal -> should also be equal
-        return hash("StreamInZero")
+        return hash("StreamInConstant")
 
     def __eq__(self, other):
-        return type(other) == StreamInZero
-
-
-class AntiBounceBack(Boundary):
-
-    """No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle"""
-    def __call__(self, pdf_field, direction_symbol, lb_method, **kwargs):
-        neighbor = BoundaryOffsetInfo.offset_from_dir(direction_symbol, lb_method.dim)
-        inverse_dir = BoundaryOffsetInfo.inv_dir(direction_symbol)
-        rhs = pdf_field(direction_symbol)
-        t = -rhs
-        return [SympyAssignment(pdf_field[neighbor](inverse_dir), t)]
-
-    def __hash__(self):
-        # All boundaries of these class behave equal -> should also be equal (as long as name is equal)
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, AntiBounceBack):
-            return False
-        return self.name == other.name
+        return type(other) == StreamInConstant
