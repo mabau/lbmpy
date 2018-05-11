@@ -104,20 +104,3 @@ def create_pdf_array(size, num_directions, ghost_layers=1, layout='fzyx'):
     if isinstance(layout, str):
         layout = layout_string_to_tuple(layout, dim + 1)
     return create_numpy_array_with_layout(size_with_gl + [num_directions], layout)
-
-
-# ------------------------------------------- Add output fields to kernel ----------------------------------------------
-
-
-def add_output_field_for_conserved_quantities(collision_rule, conserved_quantities_to_output_field_dict):
-    method = collision_rule.method
-    cqc = method.conserved_quantity_computation.output_equations_from_pdfs(method.pre_collision_pdf_symbols,
-                                                                           conserved_quantities_to_output_field_dict)
-    return collision_rule.new_merged(cqc)
-
-
-def write_quantities_to_field(collision_rule, symbols, output_field):
-    if not hasattr(symbols, "__len__"):
-        symbols = [symbols]
-    eqs = [Assignment(output_field(i), s) for i, s in enumerate(symbols)]
-    return collision_rule.copy(collision_rule.main_assignments + eqs)
