@@ -53,6 +53,7 @@ class LatticeBoltzmannStep:
         self.velocity_data_name = name + "_velocity" if velocity_data_name is None else velocity_data_name
         self.density_data_name = name + "_density" if density_data_name is None else density_data_name
         self.density_data_index = density_data_index
+        self._optimization = optimization
 
         self._gpu = target == 'gpu'
         layout = optimization['field_layout']
@@ -283,17 +284,20 @@ class LatticeBoltzmannStep:
             tuple (residuum, steps_run) if successful or raises ValueError if not converged
         """
         dh = self.data_handling
+        gpu = self._optimization['target'] == 'gpu'
 
         def on_first_call():
             self._velocity_init_vel_backup = 'velocity_init_vel_backup'
-            dh.add_array_like(self._velocity_init_vel_backup, self.velocity_data_name)
-            velocity_field = dh.fields[self.velocity_data_name]
-            collision_rule = create_advanced_velocity_setter_collision_rule(self.method, velocity_field,
+            vel_backup_field = dh.add_array_like(self._velocity_init_vel_backup, self.velocity_data_name, cpu=True,
+                                                 gpu=gpu)
+
+            collision_rule = create_advanced_velocity_setter_collision_rule(self.method, vel_backup_field,
                                                                             velocity_relaxation_rate)
+            optimization = self._optimization.copy()
+            optimization['symbolic_field'] = dh.fields[self._pdf_arr_name]
 
             kernel = create_lb_function(collision_rule=collision_rule, field_name=self._pdf_arr_name,
-                                        temporary_field_name=self._tmp_arr_name,
-                                        optimization={'symbolic_field': dh.fields[self._pdf_arr_name]})
+                                        temporary_field_name=self._tmp_arr_name, optimization=optimization)
             self._velocity_init_kernel = kernel
 
         def make_velocity_backup():
@@ -319,14 +323,17 @@ class LatticeBoltzmannStep:
         global_residuum = None
         steps_run = 0
         for outer_iteration in range(outer_iterations):
+            self._data_handling.all_to_gpu()
             for i in range(check_residuum_after):
                 steps_run += 1
                 self._sync()
                 self._boundary_handling(**self.kernel_params)
                 self._data_handling.run_kernel(self._velocity_init_kernel, **self.kernel_params)
-                self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name)
+                self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name, gpu=gpu)
+            self._data_handling.all_to_cpu()
             self._data_handling.run_kernel(self._getterKernel, **self.kernel_params)
             global_residuum = compute_residuum()
+            print("Initialization iteration {}, residuum {}".format(steps_run, global_residuum))
             if np.isnan(global_residuum) or global_residuum < convergence_threshold:
                 break
 
