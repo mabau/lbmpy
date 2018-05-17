@@ -4,13 +4,14 @@ from pystencils import Field
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 
 
-def create_lbm_split_groups(cr: LbmCollisionRule):
+def create_lbm_split_groups(cr: LbmCollisionRule, opposing_directions=True):
     """
     Creates split groups for LBM collision equations. For details about split groups see
     :func:`pystencils.transformation.split_inner_loop` .
     The split groups are added as simplification hint 'split_groups'
 
-    Split groups are created in the following way: Opposing directions are put into a single group.
+    Split groups are created in the following way: Opposing directions are put
+    into a single group if opposing_directions, else all stores are put into separate loops
     The velocity subexpressions are pre-computed as well as all subexpressions which are used in all
     non-center collision equations, and depend on at least one pdf.
 
@@ -45,18 +46,22 @@ def create_lbm_split_groups(cr: LbmCollisionRule):
     direction_groups = defaultdict(list)
     dim = len(stencil[0])
 
-    for direction, eq in zip(stencil, cr.main_assignments):
-        if direction == tuple([0] * dim):
-            split_groups[0].append(eq.lhs)
-            continue
+    if opposing_directions:
+        for direction, eq in zip(stencil, cr.main_assignments):
+            if direction == tuple([0] * dim):
+                split_groups[0].append(eq.lhs)
+                continue
 
-        inverse_dir = tuple([-i for i in direction])
+            inverse_dir = tuple([-i for i in direction])
 
-        if inverse_dir in direction_groups:
-            direction_groups[inverse_dir].append(eq.lhs)
-        else:
-            direction_groups[direction].append(eq.lhs)
-    split_groups += direction_groups.values()
+            if inverse_dir in direction_groups:
+                direction_groups[inverse_dir].append(eq.lhs)
+            else:
+                direction_groups[direction].append(eq.lhs)
+        split_groups += direction_groups.values()
+    else:
+        for e in cr.main_assignments:
+            split_groups.append([e.lhs])
 
     cr.simplification_hints['split_groups'] = split_groups
     return cr

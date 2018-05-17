@@ -414,12 +414,12 @@ def force_model_from_string(force_model_name, force_values):
     return force_model_class(force_values)
 
 
-def switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, kernel_params):
+def switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, kernel_params, force=False):
     """
     For entropic kernels the relaxation rate has to be a variable. If a constant was passed a
     new dummy variable is inserted and the value of this variable is later on passed to the kernel
     """
-    if method_parameters['entropic'] or method_parameters['smagorinsky']:
+    if method_parameters['entropic'] or method_parameters['smagorinsky'] or force:
         value_to_symbol_map = {}
         new_relaxation_rates = []
         for rr in method_parameters['relaxation_rates']:

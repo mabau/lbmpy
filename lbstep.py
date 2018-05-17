@@ -19,7 +19,7 @@ class LatticeBoltzmannStep:
                  velocity_data_name=None, density_data_name=None, density_data_index=None,
                  compute_velocity_in_every_step=False, compute_density_in_every_step=False,
                  velocity_input_array_name=None, time_step_order='stream_collide', flag_interface=None,
-                 alignment_if_vectorized=64, fixed_loop_sizes=True, **method_parameters):
+                 alignment_if_vectorized=64, fixed_loop_sizes=True, fixed_relaxation_rates=True, **method_parameters):
 
         # --- Parameter normalization  ---
         if data_handling is not None:
@@ -93,7 +93,8 @@ class LatticeBoltzmannStep:
 
         # --- Kernel creation ---
         if lbm_kernel is None:
-            switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, self.kernel_params)
+            switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, self.kernel_params,
+                                                                           force=not fixed_relaxation_rates)
             if fixed_loop_sizes:
                 optimization['symbolic_field'] = data_handling.fields[self._pdf_arr_name]
             method_parameters['field_name'] = self._pdf_arr_name
@@ -251,7 +252,7 @@ class LatticeBoltzmannStep:
         mlups = self.number_of_cells / duration_of_time_step * 1e-6
         return mlups
 
-    def benchmark(self, time_for_benchmark=5, init_time_steps=10, number_of_time_steps_for_estimation=20):
+    def benchmark(self, time_for_benchmark=5, init_time_steps=2, number_of_time_steps_for_estimation='auto'):
         time_loop = TimeLoop()
         time_loop.add_step(self)
         duration_of_time_step = time_loop.benchmark(time_for_benchmark, init_time_steps,

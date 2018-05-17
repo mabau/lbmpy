@@ -163,6 +163,32 @@ def get_pipe_velocity_field(domain_size, u_max, flow_direction=0, diameter=None)
     return u
 
 
+def get_shear_flow_velocity_field(domain_size, u_max, random_y_factor=0.01):
+    """Returns a velocity field with two shear layers.
+
+    -----------------------------
+    | ->  ->  ->  ->  ->  ->  ->| Upper layer moves to the right
+    | ->  ->  ->  ->  ->  ->  ->|
+    | <-  <-  <-  <-  <-  <-  <-| Middle layer to the left
+    | <-  <-  <-  <-  <-  <-  <-|
+    | ->  ->  ->  ->  ->  ->  ->| Lower layer to the right again
+    | ->  ->  ->  ->  ->  ->  ->|
+    -----------------------------
+
+    Args:
+        domain_size: size of the domain, tuple with (x,y) or (x,y,z)
+        u_max: magnitude of x component of the velocity
+        random_y_factor: to break the symmetry the y velocity component is initialized randomly
+                         its maximum value is u_max * random_y_factor
+    """
+    height = domain_size[2] if len(domain_size) == 3 else domain_size[1]
+    velocity = np.empty(tuple(domain_size) + (len(domain_size),))
+    velocity[:, :, 0] = u_max
+    velocity[:, height // 3: height // 3 * 2, 0] = -u_max
+    velocity[:, :, 1] = random_y_factor * u_max * np.random.rand(*domain_size)
+    return velocity
+
+
 def add_black_and_white_image(boundary_handling, image_file, target_slice=None, plane=(0, 1), boundary=NoSlip(),
                               keep_aspect_ratio=False):
     """Sets boundary from a black and white image, setting boundary where image is black.
