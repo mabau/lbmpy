@@ -19,7 +19,7 @@ class LatticeBoltzmannStep:
                  velocity_data_name=None, density_data_name=None, density_data_index=None,
                  compute_velocity_in_every_step=False, compute_density_in_every_step=False,
                  velocity_input_array_name=None, time_step_order='stream_collide', flag_interface=None,
-                 **method_parameters):
+                 alignment_if_vectorized=64, fixed_loop_sizes=True, **method_parameters):
 
         # --- Parameter normalization  ---
         if data_handling is not None:
@@ -60,7 +60,7 @@ class LatticeBoltzmannStep:
 
         alignment = False
         if optimization['target'] == 'cpu' and optimization['vectorization']:
-            alignment = 128
+            alignment = alignment_if_vectorized
 
         self._data_handling.add_array(self._pdf_arr_name, values_per_cell=q, gpu=self._gpu, layout=layout,
                                       latex_name='src', dtype=field_dtype, alignment=alignment)
@@ -94,7 +94,8 @@ class LatticeBoltzmannStep:
         # --- Kernel creation ---
         if lbm_kernel is None:
             switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, self.kernel_params)
-            optimization['symbolic_field'] = data_handling.fields[self._pdf_arr_name]
+            if fixed_loop_sizes:
+                optimization['symbolic_field'] = data_handling.fields[self._pdf_arr_name]
             method_parameters['field_name'] = self._pdf_arr_name
             method_parameters['temporary_field_name'] = self._tmp_arr_name
             if time_step_order == 'stream_collide':

@@ -86,11 +86,22 @@ Simplifications / Transformations:
 
 Field size information:
 
-- ``pdf_arr=None``: pass a numpy array here to create kernels with fixed size and create the loop nest according 
-    to layout of this array
+- ``pdf_arr=None``: pass a numpy array here to create kernels with fixed size and create the loop nest according
+  to layout of this array
 - ``field_size=None``: create kernel for fixed field size
 - ``field_layout='c'``:   ``'c'`` or ``'numpy'`` for standard numpy layout, ``'reverse_numpy'`` or ``'f'`` for fortran
   layout, this does not apply when pdf_arr was given, then the same layout as pdf_arr is used
+
+
+CPU:
+
+- ``openmp=True``: Can be a boolean to turn multi threading on/off, or an integer
+  specifying the number of threads. If True is specified OpenMP chooses the number of threads
+- ``vectorization=False``: controls manual vectorization using SIMD instrinsics. If True default vectorization settings
+  are use. Alternatively a dictionary with parameters for vectorize function can be passed. For example
+  ``{'instruction_set': 'avx', 'assume_aligned': True, 'nontemporal': True}``. Nontemporal stores are only used if
+  assume_aligned is also activated.
+
 
 GPU:
 
@@ -99,6 +110,7 @@ GPU:
 - ``gpu_indexing='block'``: determines mapping of CUDA threads to cells. Can be either ``'block'`` or ``'line'``
 - ``gpu_indexing_params='block'``: parameters passed to init function of gpu indexing.
   For ``'block'`` indexing one can e.g. specify the block size ``{'block_size' : (128, 4, 1)}``
+
 
 Other:
 
