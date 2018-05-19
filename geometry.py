@@ -183,9 +183,10 @@ def get_shear_flow_velocity_field(domain_size, u_max, random_y_factor=0.01):
     """
     height = domain_size[2] if len(domain_size) == 3 else domain_size[1]
     velocity = np.empty(tuple(domain_size) + (len(domain_size),))
-    velocity[:, :, 0] = u_max
-    velocity[:, height // 3: height // 3 * 2, 0] = -u_max
-    velocity[:, :, 1] = random_y_factor * u_max * np.random.rand(*domain_size)
+    velocity[..., 0] = u_max
+    velocity[..., height // 3: height // 3 * 2, 0] = -u_max
+    for j in range(1, len(domain_size)):
+        velocity[..., j] = random_y_factor * u_max * np.random.rand(*domain_size)
     return velocity
 
 
