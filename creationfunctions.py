@@ -244,6 +244,8 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
         smagorinsky_constant = 0.12 if params['smagorinsky'] is True else params['smagorinsky']
         collision_rule = add_smagorinsky_model(collision_rule, smagorinsky_constant,
                                                omega_output_field=params['omega_output_field'])
+        if 'split_groups' in collision_rule.simplification_hints:
+            collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
 
     field_data_type = 'float64' if opt_params['double_precision'] else 'float32'
 
