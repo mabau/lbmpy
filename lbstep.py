@@ -360,7 +360,7 @@ class LatticeBoltzmannStep:
         pdf_symbols = [pdf_field(i) for i in range(q)]
 
         getter_eqs = cqc.output_equations_from_pdfs(pdf_symbols, {'density': rho_field, 'velocity': vel_field})
-        getter_kernel = create_kernel(getter_eqs, target='cpu').compile()
+        getter_kernel = create_kernel(getter_eqs, target='cpu', cpu_openmp=self._optimization['openmp']).compile()
 
         inp_eqs = cqc.equilibrium_input_equations_from_init_values(rho_field, [vel_field(i) for i in range(dim)])
         setter_eqs = lb_method.get_equilibrium(conserved_quantity_equations=inp_eqs)
@@ -368,5 +368,5 @@ class LatticeBoltzmannStep:
                                                         for i, sym in enumerate(lb_method.post_collision_pdf_symbols)})
 
         setter_eqs = create_simplification_strategy(lb_method)(setter_eqs)
-        setter_kernel = create_kernel(setter_eqs, target='cpu').compile()
+        setter_kernel = create_kernel(setter_eqs, target='cpu', cpu_openmp=self._optimization['openmp']).compile()
         return getter_kernel, setter_kernel
