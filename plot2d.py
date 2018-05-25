@@ -1,5 +1,6 @@
 from itertools import cycle
 import matplotlib.patches as patches
+from matplotlib.text import Text
 
 from pystencils import make_slice
 from pystencils.plot2d import *
@@ -102,7 +103,8 @@ class LbGrid:
                 self._patches.append(patches.Rectangle((x, y), 1.0, 1.0, fill=False, linewidth=3, color='#bbbbbb'))
 
         self._cellBoundaries = dict()  # mapping cell to rectangle patch
-        self._arrows = dict()  # mapping (cell, direction) tuples to arrow patches
+        self.arrows = dict()  # mapping (cell, direction) tuples to arrow patches
+        self.annotations = dict()
 
     def add_cell_boundary(self, cell, **kwargs):
         """Draws a rectangle around a single cell. Keyword arguments are passed to the matplotlib Rectangle patch"""
@@ -117,14 +119,16 @@ class LbGrid:
             for y in range(self._yCells):
                 self.add_cell_boundary((x, y), **kwargs)
 
-    def add_arrow(self, cell, arrow_position, arrow_direction, **kwargs):
+    def add_arrow(self, cell, arrow_position, arrow_direction, annotation='', **kwargs):
         """
         Draws an arrow in a cell. If an arrow exists already at this position, it is replaced.
 
-        :param cell: cell coordinate as tuple (x,y)
-        :param arrow_position: each cell has 9 possible positions specified as tuple e.g. upper left (-1, 1)
-        :param arrow_direction: direction of the arrow as (x,y) tuple
-        :param kwargs: arguments passed directly to the FancyArrow patch of matplotlib
+        Args:
+            cell: cell coordinate as tuple (x,y)
+            arrow_position: each cell has 9 possible positions specified as tuple e.g. upper left (-1, 1)
+            arrow_direction: direction of the arrow as (x,y) tuple
+            annotation: text to display at end of arrow
+            kwargs: arguments passed directly to the FancyArrow patch of matplotlib
         """
         cell_midpoint = (0.5 + cell[0], 0.5 + cell[1])
 
@@ -133,19 +137,22 @@ class LbGrid:
 
         if arrow_position == (0, 0):
             del kwargs['width']
-            self._arrows[(cell, arrow_position)] = patches.Circle(cell_midpoint, radius=0.03, **kwargs)
+            self.arrows[(cell, arrow_position)] = patches.Circle(cell_midpoint, radius=0.03, **kwargs)
+            if annotation:
+                self.annotations[(cell, arrow_position)] = Text(*cell_midpoint, annotation)
         else:
             arrow_midpoint = (cell_midpoint[0] + arrow_position[0] * 0.25,
                               cell_midpoint[1] + arrow_position[1] * 0.25)
             length = 0.75
             arrow_start = (arrow_midpoint[0] - arrow_direction[0] * 0.25 * length,
                            arrow_midpoint[1] - arrow_direction[1] * 0.25 * length)
-
-            patch = patches.FancyArrow(arrow_start[0], arrow_start[1],
-                                       0.25 * length * arrow_direction[0],
-                                       0.25 * length * arrow_direction[1],
-                                       **kwargs)
-            self._arrows[(cell, arrow_position)] = patch
+            arrow_direction = (0.25 * length * arrow_direction[0],
+                               0.25 * length * arrow_direction[1])
+            arrow_end = tuple(a + b for a, b in zip(arrow_start, arrow_direction))
+            patch = patches.FancyArrow(*arrow_start, *arrow_direction, **kwargs)
+            self.arrows[(cell, arrow_position)] = patch
+            if annotation:
+                self.annotations[(cell, arrow_position)] = Text(*arrow_end, annotation)
 
     def fill_with_default_arrows(self, **kwargs):
         """Fills the complete grid with the default pdf arrows"""
@@ -164,8 +171,11 @@ class LbGrid:
         for p in self._patches:
             ax.add_patch(p)
 
-        for arrow_patch in self._arrows.values():
+        for arrow_patch in self.arrows.values():
             ax.add_patch(arrow_patch)
+
+        for text_obj in self.annotations.values():
+            ax.add_artist(text_obj)
 
         offset = 0.1
         ax.set_xlim(-offset, self._xCells+offset)
