@@ -59,7 +59,7 @@ def get_index_array(fluid_cell_arr, flag_arr, ghost_layers, stencil, fluid_flag,
                 else:
                     raise ValueError("Could not find neighbor for {} direction {}".format(cell, direction))
 
-            ctr += 1 # TODO
+            ctr += 1  # TODO
     return np.array(result, dtype=np.uint32)
 
 
@@ -87,14 +87,3 @@ def plot_index_array(fluid_cell_arr, stencil, ghost_layers=1, index_arr=None, **
                            direction, direction, str(annotation), **kwargs)
             index += 1
     return grid
-
-
-if __name__ == '__main__':
-    x = np.arange(9 * 7).reshape(9, 7)
-    ind = np.argwhere(x > 50)
-    print(ind)
-    res = get_cell_index(ind, (7, 2))
-    print("result index", res)
-    print("element ", ind[res])
-
-
