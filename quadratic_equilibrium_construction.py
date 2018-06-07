@@ -48,7 +48,8 @@ def match_generic_equilibrium_ansatz(stencil, equilibrium, u=sp.symbols("u_:3"))
           >>> from lbmpy.stencils import get_stencil
           >>> from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
           >>> stencil = get_stencil("D2Q9")
-          >>> result = match_generic_equilibrium_ansatz(get_stencil('D2Q9'), discrete_maxwellian_equilibrium(stencil) )
+          >>> eq = discrete_maxwellian_equilibrium(stencil)
+          >>> result = match_generic_equilibrium_ansatz(stencil, eq)
           >>> result[sp.Symbol('A_0')]
           4*rho/9
           >>> result[sp.Symbol('B_1')]

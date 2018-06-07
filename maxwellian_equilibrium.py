@@ -15,7 +15,7 @@ from pystencils.cache import disk_cache
 def get_weights(stencil, c_s_sq):
     q = len(stencil)
 
-    if c_s_sq != sp.Rational(1, 3):
+    if c_s_sq != sp.Rational(1, 3) and c_s_sq != sp.Symbol("c_s") ** 2:
         warnings.warn("Weights of discrete equilibrium are only valid if c_s^2 = 1/3")
 
     def weight_for_direction(direction):
@@ -55,12 +55,13 @@ def discrete_maxwellian_equilibrium(stencil, rho=sp.Symbol("rho"), u=tuple(sp.sy
     """
     Returns the common discrete LBM equilibrium as a list of sympy expressions
 
-    :param stencil: tuple of directions
-    :param rho: sympy symbol for the density
-    :param u: symbols for macroscopic velocity, only the first 'dim' entries are used
-    :param order: highest order of velocity terms (for hydrodynamics order 2 is sufficient)
-    :param c_s_sq: square of speed of sound
-    :param compressible: compressibility
+    Args:
+        stencil: tuple of directions
+        rho: sympy symbol for the density
+        u: symbols for macroscopic velocity, only the first 'dim' entries are used
+        order: highest order of velocity terms (for hydrodynamics order 2 is sufficient)
+        c_s_sq: square of speed of sound
+        compressible: compressibility
     """
     weights = get_weights(stencil, c_s_sq)
     assert len(stencil) == len(weights)
