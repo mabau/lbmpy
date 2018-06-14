@@ -119,7 +119,10 @@ class LatticeBoltzmannStep:
         self.ast = self._lbmKernels[0].ast
 
         # -- Boundary Handling  & Synchronization ---
-        self._sync = data_handling.synchronization_function([self._pdf_arr_name], method_parameters['stencil'], target)
+        stencil_name = method_parameters['stencil']
+        self._sync_src = data_handling.synchronization_function([self._pdf_arr_name], stencil_name, target)
+        self._sync_tmp = data_handling.synchronization_function([self._tmp_arr_name], stencil_name, target)
+
         self._boundary_handling = LatticeBoltzmannBoundaryHandling(self.method, self._data_handling, self._pdf_arr_name,
                                                                    name=name + "_boundary_handling",
                                                                    flag_interface=flag_interface,
@@ -223,16 +226,42 @@ class LatticeBoltzmannStep:
     def time_step(self):
         if len(self._lbmKernels) == 2:  # collide stream
             self._data_handling.run_kernel(self._lbmKernels[0], **self.kernel_params)
-            self._sync()
+            self._sync_src()
             self._boundary_handling(**self.kernel_params)
             self._data_handling.run_kernel(self._lbmKernels[1], **self.kernel_params)
         else:  # stream collide
-            self._sync()
+            self._sync_src()
             self._boundary_handling(**self.kernel_params)
             self._data_handling.run_kernel(self._lbmKernels[0], **self.kernel_params)
 
         self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name, self._gpu)
-        self.time_steps_run += 1
+
+    def get_time_loop(self):
+        self.pre_run()  # make sure GPU arrays are allocated
+
+        fixed_loop = TimeLoop(steps=2)
+        fixed_loop.add_pre_run_function(self.pre_run)
+        fixed_loop.add_post_run_function(self.post_run)
+        fixed_loop.add_single_step_function(self.time_step)
+
+        for t in range(2):
+            if len(self._lbmKernels) == 2:  # collide stream
+                collide_args = self._data_handling.get_kernel_kwargs(self._lbmKernels[0], **self.kernel_params)
+                fixed_loop.add_call(self._lbmKernels[0], collide_args)
+
+                fixed_loop.add_call(self._sync_src if t == 0 else self._sync_tmp, {})
+                self._boundary_handling.add_fixed_steps(fixed_loop, **self.kernel_params)
+
+                stream_args = self._data_handling.get_kernel_kwargs(self._lbmKernels[1], **self.kernel_params)
+                fixed_loop.add_call(self._lbmKernels[1], stream_args)
+            else:  # stream collide
+                fixed_loop.add_call(self._sync_src if t == 0 else self._sync_tmp, {})
+                self._boundary_handling.add_fixed_steps(fixed_loop, **self.kernel_params)
+                stream_collide_args = self._data_handling.get_kernel_kwargs(self._lbmKernels[0], **self.kernel_params)
+                fixed_loop.add_call(self._lbmKernels[0], stream_collide_args)
+
+            self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name, self._gpu)
+        return fixed_loop
 
     def post_run(self):
         if self._gpu:
@@ -240,24 +269,31 @@ class LatticeBoltzmannStep:
         self._data_handling.run_kernel(self._getterKernel, **self.kernel_params)
 
     def run(self, time_steps):
+        time_loop = self.get_time_loop()
+        time_loop.run(time_steps)
+        self.time_steps_run += time_loop.time_steps_run
+
+    def run_old(self, time_steps):
         self.pre_run()
         for i in range(time_steps):
             self.time_step()
         self.post_run()
 
+        self.time_steps_run += time_steps
+
     def benchmark_run(self, time_steps):
-        time_loop = TimeLoop()
-        time_loop.add_step(self)
+        time_loop = self.get_time_loop()
         duration_of_time_step = time_loop.benchmark_run(time_steps)
         mlups = self.number_of_cells / duration_of_time_step * 1e-6
+        self.time_steps_run += time_loop.time_steps_run
         return mlups
 
     def benchmark(self, time_for_benchmark=5, init_time_steps=2, number_of_time_steps_for_estimation='auto'):
-        time_loop = TimeLoop()
-        time_loop.add_step(self)
+        time_loop = self.get_time_loop()
         duration_of_time_step = time_loop.benchmark(time_for_benchmark, init_time_steps,
                                                     number_of_time_steps_for_estimation)
         mlups = self.number_of_cells / duration_of_time_step * 1e-6
+        self.time_steps_run += time_loop.time_steps_run
         return mlups
 
     def write_vtk(self):
@@ -328,7 +364,7 @@ class LatticeBoltzmannStep:
             self._data_handling.all_to_gpu()
             for i in range(check_residuum_after):
                 steps_run += 1
-                self._sync()
+                self._sync_src()
                 self._boundary_handling(**self.kernel_params)
                 self._data_handling.run_kernel(self._velocity_init_kernel, **self.kernel_params)
                 self._data_handling.swap(self._pdf_arr_name, self._tmp_arr_name, gpu=gpu)

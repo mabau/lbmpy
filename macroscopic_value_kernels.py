@@ -1,3 +1,4 @@
+import functools
 from copy import deepcopy
 from pystencils.field import Field, get_layout_of_array
 from lbmpy.simplificationfactory import create_simplification_strategy
@@ -7,12 +8,15 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
     """
     Create kernel to compute macroscopic value(s) from a pdf field (e.g. density or velocity)
 
-    :param lb_method: instance of :class:`lbmpy.methods.AbstractLbMethod`
-    :param output_quantities: sequence of quantities to compute e.g. ['density', 'velocity']
-    :param pdf_arr: optional numpy array for pdf field - used to get optimal loop structure for kernel
-    :param field_layout: layout for output field, also used for pdf field if pdf_arr is not given
-    :param target: 'cpu' or 'gpu'
-    :return: a function to compute macroscopic values:
+    Args:
+        lb_method: instance of :class:`lbmpy.methods.AbstractLbMethod`
+        output_quantities: sequence of quantities to compute e.g. ['density', 'velocity']
+        pdf_arr: optional numpy array for pdf field - used to get optimal loop structure for kernel
+        field_layout: layout for output field, also used for pdf field if pdf_arr is not given
+        target: 'cpu' or 'gpu'
+
+    Returns:
+        a function to compute macroscopic values:
         - pdf_array
         - keyword arguments from name of conserved quantity (as in output_quantities) to numpy field
     """
@@ -83,12 +87,15 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
     Creates a function that sets a pdf field to specified macroscopic quantities
     The returned function can be called with the pdf field to set as single argument
 
-    :param lb_method: instance of :class:`lbmpy.methods.AbstractLbMethod`
-    :param quantities_to_set: map from conserved quantity name to fixed value or numpy array
-    :param pdf_arr: optional numpy array for pdf field - used to get optimal loop structure for kernel
-    :param field_layout: layout of the pdf field if pdf_arr was not given
-    :param target: 'cpu' or 'gpu'
-    :return: function taking pdf array as single argument and which sets the field to the given values
+    Args:
+        lb_method: instance of :class:`lbmpy.methods.AbstractLbMethod`
+        quantities_to_set: map from conserved quantity name to fixed value or numpy array
+        pdf_arr: optional numpy array for pdf field - used to get optimal loop structure for kernel
+        field_layout: layout of the pdf field if pdf_arr was not given
+        target: 'cpu' or 'gpu'
+
+    Returns:
+        function taking pdf array as single argument and which sets the field to the given values
     """
     if pdf_arr is not None:
         pdf_field = Field.create_from_numpy_array('pdfs', pdf_arr, index_dimensions=1)
@@ -128,10 +135,12 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
 
     if target == 'cpu':
         import pystencils.cpu as cpu
-        kernel = cpu.make_python_function(cpu.create_kernel(eq), argument_dict=fixed_kernel_parameters)
+        kernel = cpu.make_python_function(cpu.create_kernel(eq))
+        kernel = functools.partial(kernel, **fixed_kernel_parameters)
     elif target == 'gpu':
         import pystencils.gpucuda as gpu
-        kernel = gpu.make_python_function(gpu.create_cuda_kernel(eq), argument_dict=fixed_kernel_parameters)
+        kernel = gpu.make_python_function(gpu.create_cuda_kernel(eq))
+        kernel = functools.partial(kernel, **fixed_kernel_parameters)
     else:
         raise ValueError("Unknown target '%s'. Possible targets are 'cpu' and 'gpu'" % (target,))
 
@@ -153,7 +162,7 @@ def create_advanced_velocity_setter_collision_rule(method, velocity_field: Field
         method: lattice boltzmann method object
         velocity_field: pystencils field
         velocity_relaxation_rate: relaxation rate for the velocity moments - determines convergence behaviour
-                                of the initialization scheme
+                                  of the initialization scheme
 
     Returns:
         LB collision rule
