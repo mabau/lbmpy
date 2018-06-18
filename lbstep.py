@@ -184,17 +184,16 @@ class LatticeBoltzmannStep:
             slice_obj = make_slice[:, :] if self.dim == 2 else make_slice[:, :, 0.5]
 
         result = self._data_handling.gather_array(data_name, slice_obj)
-        if result is None:
-            return
 
         if masked:
             mask = self.boundary_handling.get_mask(slice_obj[:self.dim], 'domain', True)
-            if len(mask.shape) < len(result.shape):
-                assert len(mask.shape) + 1 == len(result.shape)
-                mask = np.repeat(mask[..., np.newaxis], result.shape[-1], axis=2)
+            if result is not None:
+                if len(mask.shape) < len(result.shape):
+                    assert len(mask.shape) + 1 == len(result.shape)
+                    mask = np.repeat(mask[..., np.newaxis], result.shape[-1], axis=2)
 
-            result = np.ma.masked_array(result, mask)
-        return result.squeeze()
+                result = np.ma.masked_array(result, mask).squeeze()
+        return result
 
     def velocity_slice(self, slice_obj=None, masked=True):
         return self._get_slice(self.velocity_data_name, slice_obj, masked)
@@ -281,10 +280,12 @@ class LatticeBoltzmannStep:
 
         self.time_steps_run += time_steps
 
-    def benchmark_run(self, time_steps):
+    def benchmark_run(self, time_steps, number_of_cells=None):
+        if number_of_cells is None:
+            number_of_cells = self.number_of_cells
         time_loop = self.get_time_loop()
         duration_of_time_step = time_loop.benchmark_run(time_steps)
-        mlups = self.number_of_cells / duration_of_time_step * 1e-6
+        mlups = number_of_cells / duration_of_time_step * 1e-6
         self.time_steps_run += time_loop.time_steps_run
         return mlups
 
