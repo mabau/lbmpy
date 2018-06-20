@@ -41,6 +41,7 @@ def create_lbm_split_groups(cr: LbmCollisionRule, opposing_directions=True):
     important_sub_expressions.update(sh['velocity'])
 
     subexpressions_to_pre_compute = list(important_sub_expressions)
+    subexpressions_to_pre_compute.sort(key=lambda e: e.name)  # ensures that exactly the same code is produced (caching)
     split_groups = [subexpressions_to_pre_compute + other_written_fields, ]
 
     direction_groups = defaultdict(list)
