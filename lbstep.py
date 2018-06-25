@@ -120,8 +120,10 @@ class LatticeBoltzmannStep:
 
         # -- Boundary Handling  & Synchronization ---
         stencil_name = method_parameters['stencil']
-        self._sync_src = data_handling.synchronization_function([self._pdf_arr_name], stencil_name, target)
-        self._sync_tmp = data_handling.synchronization_function([self._tmp_arr_name], stencil_name, target)
+        self._sync_src = data_handling.synchronization_function([self._pdf_arr_name], stencil_name, target,
+                                                                stencil_restricted=True)
+        self._sync_tmp = data_handling.synchronization_function([self._tmp_arr_name], stencil_name, target,
+                                                                stencil_restricted=True)
 
         self._boundary_handling = LatticeBoltzmannBoundaryHandling(self.method, self._data_handling, self._pdf_arr_name,
                                                                    name=name + "_boundary_handling",

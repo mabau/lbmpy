@@ -464,13 +464,16 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
     Creates a table showing which moments of a discrete stencil/equilibrium coincide with the
     corresponding continuous moments
 
-    :param stencil: list of stencil velocities
-    :param discrete_equilibrium: list of sympy expr to compute discrete equilibrium for each direction, if left
-                                to default the standard discrete Maxwellian equilibrium is used
-    :param continuous_equilibrium: continuous equilibrium, if left to default, the continuous Maxwellian is used
-    :param max_order: compare moments up to this order (number of rows in table)
-    :param truncate_order: moments are considered equal if they match up to this order
-    :return: Object to display in an Jupyter notebook
+    Args:
+        stencil: list of stencil velocities
+        discrete_equilibrium: list of sympy expr to compute discrete equilibrium for each direction, if left
+                             to default the standard discrete Maxwellian equilibrium is used
+        continuous_equilibrium: continuous equilibrium, if left to default, the continuous Maxwellian is used
+        max_order: compare moments up to this order (number of rows in table)
+        truncate_order: moments are considered equal if they match up to this order
+
+    Returns:
+        Object to display in an Jupyter notebook
     """
     import ipy_table
     from lbmpy.continuous_distribution_measures import continuous_moment
@@ -535,10 +538,11 @@ def moment_equality_table_by_stencil(name_to_stencil_dict, moments, truncate_ord
     Creates a table for display in IPython notebooks that shows which moments agree between continuous and
     discrete equilibrium, group by stencils
 
-    :param name_to_stencil_dict: dict from stencil name to stencil
-    :param moments: sequence of moments to compare - assumes that permutations have similar properties
-                    so just one representative is shown labeled with its multiplicity
-    :param truncate_order: compare up to this order
+    Args:
+        name_to_stencil_dict: dict from stencil name to stencil
+        moments: sequence of moments to compare - assumes that permutations have similar properties
+                 so just one representative is shown labeled with its multiplicity
+        truncate_order: compare up to this order
     """
     import ipy_table
     from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
