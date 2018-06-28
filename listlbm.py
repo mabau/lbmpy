@@ -118,6 +118,9 @@ class SparseLbmMapping:
 
         result = []
         for direction_idx, direction in enumerate(stencil):
+            if all(d_i == 0 for d_i in direction):
+                assert direction_idx == 0
+                continue
             for own_cell_idx, cell in enumerate(self.fluid_coordinates):
                 inv_neighbor_cell = np.array([cell_i - dir_i for cell_i, dir_i in zip(cell, direction)])
                 if flag_arr[tuple(inv_neighbor_cell)] & fluid_boundary_mask:
@@ -142,7 +145,7 @@ class SparseLbmMapping:
                         raise ValueError("Could not find neighbor for {} direction {}".format(cell, direction))
 
         index_array = np.array(result, dtype=np.uint32)
-        index_arr = index_array.reshape([len(stencil), self.num_fluid_cells])
+        index_arr = index_array.reshape([len(stencil) - 1, self.num_fluid_cells])
         index_arr = index_arr.swapaxes(0, 1)
         return index_arr
 
