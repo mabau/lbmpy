@@ -48,7 +48,7 @@ General:
   velocity everywhere, or a numpy array with the same size of the domain, with a last coordinate of shape dim to set
   velocities on cell level
 - ``output={}``: a dictionary mapping macroscopic quantites e.g. the strings 'density' and 'velocity' to pystencils
-                fields. In each timestep the corresponding quantities are written to the given fields.
+  fields. In each timestep the corresponding quantities are written to the given fields.
 - ``velocity_input``: symbolic field where the velocities are read from (for advection diffusion LBM)
 - ``kernel_type``: supported values: 'stream_pull_collide' (default), 'collide_only'
 
