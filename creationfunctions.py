@@ -230,23 +230,6 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
         output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, params['output'])
         collision_rule = collision_rule.new_merged(output_eqs)
 
-    if params['entropic']:
-        if params['entropic_newton_iterations']:
-            if isinstance(params['entropic_newton_iterations'], bool):
-                iterations = 3
-            else:
-                iterations = params['entropic_newton_iterations']
-            collision_rule = add_iterative_entropy_condition(collision_rule, newton_iterations=iterations,
-                                                             omega_output_field=params['omega_output_field'])
-        else:
-            collision_rule = add_entropy_condition(collision_rule, omega_output_field=params['omega_output_field'])
-    elif params['smagorinsky']:
-        smagorinsky_constant = 0.12 if params['smagorinsky'] is True else params['smagorinsky']
-        collision_rule = add_smagorinsky_model(collision_rule, smagorinsky_constant,
-                                               omega_output_field=params['omega_output_field'])
-        if 'split_groups' in collision_rule.simplification_hints:
-            collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
-
     field_data_type = 'float64' if opt_params['double_precision'] else 'float32'
 
     if opt_params['symbolic_field'] is not None:
@@ -301,7 +284,26 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     else:
         collision_rule = lb_method.get_collision_rule()
 
-    return simplification(collision_rule)
+    collision_rule = simplification(collision_rule)
+
+    if params['entropic']:
+        if params['entropic_newton_iterations']:
+            if isinstance(params['entropic_newton_iterations'], bool):
+                iterations = 3
+            else:
+                iterations = params['entropic_newton_iterations']
+            collision_rule = add_iterative_entropy_condition(collision_rule, newton_iterations=iterations,
+                                                             omega_output_field=params['omega_output_field'])
+        else:
+            collision_rule = add_entropy_condition(collision_rule, omega_output_field=params['omega_output_field'])
+    elif params['smagorinsky']:
+        smagorinsky_constant = 0.12 if params['smagorinsky'] is True else params['smagorinsky']
+        collision_rule = add_smagorinsky_model(collision_rule, smagorinsky_constant,
+                                               omega_output_field=params['omega_output_field'])
+        if 'split_groups' in collision_rule.simplification_hints:
+            collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
+
+    return collision_rule
 
 
 def create_lb_method(**params):
