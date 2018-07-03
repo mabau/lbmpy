@@ -9,7 +9,7 @@ from pystencils.boundaries.createindexlist import create_boundary_index_list, bo
     direction_member_name
 
 
-class SparseLbmMapping:
+class SparseLbMapper:
     """Manages the mapping of cell coordinates to indices and back.
 
     Args:
@@ -150,7 +150,7 @@ class SparseLbmMapping:
         return index_arr
 
 
-class SparseLbmBoundaryMapper:
+class SparseLbBoundaryMapper:
     NEIGHBOR_IDX_NAME = 'nidx{}'
     DIR_SYMBOL = TypedSymbol("dir", np.uint32)
 
@@ -203,7 +203,7 @@ class SparseLbmBoundaryMapper:
             subs_dict[BoundaryOffsetInfo.inv_dir(self.DIR_SYMBOL)] = inv_idx
         return result
 
-    def create_index_arr(self, mapping: SparseLbmMapping, boundary_mask, nr_of_ghost_layers=1):
+    def create_index_arr(self, mapping: SparseLbMapper, boundary_mask, nr_of_ghost_layers=1):
         stencil = self.method.stencil
         flag_dtype = mapping.flag_array.dtype.type
         idx_arr = create_boundary_index_list(mapping.flag_array, stencil,
