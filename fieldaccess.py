@@ -4,6 +4,12 @@ from lbmpy.stencils import inverse_direction
 from pystencils import Field
 
 
+__all__ = ['PdfFieldAccessor', 'CollideOnlyInplaceAccessor', 'StreamPullTwoFieldsAccessor',
+           'AAEvenTimeStepAccessor', 'AAOddTimeStepAccessor',
+           'EsoTwistEvenTimeStepAccessor', 'EsoTwistOddTimeStepAccessor',
+           'visualize_pdf_field_accessor', 'visualize_field_mapping']
+
+
 # ------------------------------------------------ Interface -----------------------------------------------------------
 from pystencils.astnodes import LoopOverCoordinate
 
@@ -119,6 +125,44 @@ class AAOddTimeStepAccessor(PdfFieldAccessor):
     @staticmethod
     def write(field, stencil):
         return [field[d](i) for i, d in enumerate(stencil)]
+
+
+class EsoTwistOddTimeStepAccessor(PdfFieldAccessor):
+    @staticmethod
+    def read(field, stencil):
+        result = []
+        for direction in stencil:
+            inv_dir = inverse_direction(direction)
+            spatial_offset = tuple(max(e, 0) for e in inv_dir)
+            result.append(field[spatial_offset](stencil.index(inv_dir)))
+        return result
+
+    @staticmethod
+    def write(field, stencil):
+        result = []
+        for i, direction in enumerate(stencil):
+            spatial_offset = tuple(max(e, 0) for e in direction)
+            result.append(field[spatial_offset](i))
+        return result
+
+
+class EsoTwistEvenTimeStepAccessor(PdfFieldAccessor):
+    @staticmethod
+    def read(field, stencil):
+        result = []
+        for i, direction in enumerate(stencil):
+            spatial_offset = tuple(max(-e, 0) for e in direction)
+            result.append(field[spatial_offset](i))
+        return result
+
+    @staticmethod
+    def write(field, stencil):
+        result = []
+        for direction in stencil:
+            inv_dir = inverse_direction(direction)
+            spatial_offset = tuple(max(e, 0) for e in direction)
+            result.append(field[spatial_offset](stencil.index(inv_dir)))
+        return result
 
 
 # -------------------------------------------- Visualization -----------------------------------------------------------
