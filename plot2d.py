@@ -119,7 +119,7 @@ class LbGrid:
             for y in range(self._yCells):
                 self.add_cell_boundary((x, y), **kwargs)
 
-    def add_arrow(self, cell, arrow_position, arrow_direction, annotation='', **kwargs):
+    def add_arrow(self, cell, arrow_position, arrow_direction, annotation='', annotation_kwargs=None, **kwargs):
         """
         Draws an arrow in a cell. If an arrow exists already at this position, it is replaced.
 
@@ -128,18 +128,24 @@ class LbGrid:
             arrow_position: each cell has 9 possible positions specified as tuple e.g. upper left (-1, 1)
             arrow_direction: direction of the arrow as (x,y) tuple
             annotation: text to display at end of arrow
+            annotation_kwargs: dict passed to matplotlib Text for annotation
             kwargs: arguments passed directly to the FancyArrow patch of matplotlib
         """
         cell_midpoint = (0.5 + cell[0], 0.5 + cell[1])
 
-        kwargs.setdefault('width', 0.005)
+        kwargs.setdefault('width', 0.05)
         kwargs.setdefault('color', 'k')
+
+        if annotation_kwargs is None:
+            annotation_kwargs = {}
+        annotation_kwargs.setdefault('horizontalalignment', 'center')
+        annotation_kwargs.setdefault('verticalalignment', 'center')
 
         if arrow_position == (0, 0):
             del kwargs['width']
             self.arrows[(cell, arrow_position)] = patches.Circle(cell_midpoint, radius=0.03, **kwargs)
             if annotation:
-                self.annotations[(cell, arrow_position)] = Text(*cell_midpoint, annotation)
+                self.annotations[(cell, arrow_position)] = Text(*cell_midpoint, annotation, **annotation_kwargs)
         else:
             arrow_midpoint = (cell_midpoint[0] + arrow_position[0] * 0.25,
                               cell_midpoint[1] + arrow_position[1] * 0.25)
@@ -152,7 +158,8 @@ class LbGrid:
             patch = patches.FancyArrow(*arrow_start, *arrow_direction, **kwargs)
             self.arrows[(cell, arrow_position)] = patch
             if annotation:
-                self.annotations[(cell, arrow_position)] = Text(*arrow_end, annotation)
+                self.annotations[(cell, arrow_position)] = Text(arrow_end[0], arrow_end[1], annotation,
+                                                                **annotation_kwargs)
 
     def fill_with_default_arrows(self, **kwargs):
         """Fills the complete grid with the default pdf arrows"""
@@ -161,8 +168,6 @@ class LbGrid:
                 for dx in [-1, 0, 1]:
                     for dy in [-1, 0, 1]:
                         kwargs.setdefault('color', '#bbbbbb')
-                        kwargs.setdefault('width', 0.066)
-
                         self.add_arrow((x, y), (dx, dy), (dx, dy), **kwargs)
 
     def draw(self, ax):
