@@ -235,7 +235,7 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
     if opt_params['symbolic_field'] is not None:
         src_field = opt_params['symbolic_field']
     elif opt_params['field_size']:
-        field_size = [s + 2 for s in opt_params['field_size']] + [len(collision_rule.stencil)]
+        field_size = [s + 2 for s in opt_params['field_size']] + [len(collision_rule.method.stencil)]
         src_field = Field.create_fixed_size(params['field_name'], field_size, index_dimensions=1,
                                             layout=opt_params['field_layout'], dtype=field_data_type)
     else:
