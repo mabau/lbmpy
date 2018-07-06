@@ -266,11 +266,8 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
         lb_method = create_lb_method(**params)
 
     split_inner_loop = 'split' in opt_params and opt_params['split']
-
-    dir_cse = 'cse_pdfs'
-    cse_pdfs = False if dir_cse not in opt_params else opt_params[dir_cse]
-    cse_global = False if 'cse_global' not in opt_params else opt_params['cse_global']
-    simplification = create_simplification_strategy(lb_method, cse_pdfs, cse_global, split_inner_loop)
+    simplification = create_simplification_strategy(lb_method, cse_pdfs=False, cse_global=False,
+                                                    split_inner_loop=split_inner_loop)
     cqc = lb_method.conserved_quantity_computation
 
     if params['velocity_input'] is not None:
@@ -302,6 +299,15 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
                                                omega_output_field=params['omega_output_field'])
         if 'split_groups' in collision_rule.simplification_hints:
             collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
+
+    cse_pdfs = False if 'cse_pdfs' not in opt_params else opt_params['cse_pdfs']
+    cse_global = False if 'cse_global' not in opt_params else opt_params['cse_global']
+    if cse_pdfs:
+        from lbmpy.methods.momentbasedsimplifications import cse_in_opposing_directions
+        collision_rule = cse_in_opposing_directions(collision_rule)
+    if cse_global:
+        from pystencils.simp import sympy_cse
+        collision_rule = sympy_cse(collision_rule)
 
     return collision_rule
 

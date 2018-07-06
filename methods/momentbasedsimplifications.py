@@ -147,9 +147,12 @@ def cse_in_opposing_directions(cr: LbmCollisionRule):
     """
     sh = cr.simplification_hints
     assert 'relaxation_rates' in sh, "Needs simplification hint 'relaxation_rates': Sequence of relaxation rates"
-
     update_rules = cr.main_assignments
     stencil = cr.method.stencil
+
+    if not sh['relaxation_rates']:
+        return cr
+
     relaxation_rates = sp.Matrix(sh['relaxation_rates']).atoms(sp.Symbol)
 
     replacement_symbol_generator = cr.subexpression_symbol_generator

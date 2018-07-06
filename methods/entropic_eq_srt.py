@@ -65,8 +65,9 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
             all_subexpressions += force_subexpressions
             collision_eqs = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
                              for eq, force_term_symbol in zip(collision_eqs, force_term_symbols)]
-
-        return LbmCollisionRule(self, collision_eqs, all_subexpressions)
+        cr = LbmCollisionRule(self, collision_eqs, all_subexpressions)
+        cr.simplification_hints['relaxation_rates'] = []
+        return cr
 
     def get_collision_rule(self):
         return self._get_collision_rule_with_relaxation_rate(self._relaxationRate)
