@@ -75,6 +75,27 @@ def init_sharp_interface(pf_step, phase_idx, x1=None, x2=None, inverse=False):
     pf_step.set_pdf_fields_from_macroscopic_values()
 
 
+def init_tanh(pf_step, phase_idx, x1=None, x2=None, width=1):
+    domain_size = pf_step.data_handling.shape
+    if x1 is None:
+        x1 = domain_size[0] // 4
+    if x2 is None:
+        x2 = 3 * x1
+
+    if phase_idx >= pf_step.num_order_parameters:
+        return
+
+    for b in pf_step.data_handling.iterate():
+        x = b.cell_index_arrays[0]
+        phi = b[pf_step.phi_field_name]
+
+        phi[..., phase_idx] = (1 + np.tanh((x - x1)  / (2 * width))) / 2 + \
+                              (1 + np.tanh((-x + x2) / (2 * width))) / 2 \
+                              -1
+
+    pf_step.set_pdf_fields_from_macroscopic_values()
+
+
 def tanh_test(pf_step, phase0, phase1, expected_interface_width=1, time_steps=10000):
     """
     Initializes a sharp interface and checks if tanh-shaped profile is developing
