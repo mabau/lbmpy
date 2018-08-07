@@ -80,7 +80,9 @@ def free_energy_functional_n_phases_penalty_term(order_parameters, interface_wid
 def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_symbolic_surface_tension,
                                     interface_width=interface_width_symbol, order_parameters=None,
                                     include_bulk=True, include_interface=True, symbolic_lambda=False,
-                                    symbolic_dependent_variable=False):
+                                    symbolic_dependent_variable=False,
+                                    f1=lambda c: c ** 2 * (1 - c) ** 2,
+                                    f2=lambda c: c ** 2 * (1 - c) ** 2):
     r"""
     Returns a symbolic expression for the free energy of a system with N phases and
     specified surface tensions. The total free energy is the sum of a bulk and an interface component.
@@ -100,17 +102,19 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
 
         f(c) = c^2( 1-c)^2
 
-    :param num_phases: number of phases, called N above
-    :param surface_tensions: surface tension function, called with two phase indices (two integers)
-    :param interface_width: called :math:`\eta` above, controls the interface width
-    :param order_parameters: explicitly
-
-    Parameter useful for viewing / debugging the function
-    :param include_bulk: if false no bulk term is added
-    :param include_interface:if false no interface contribution is added
-    :param symbolic_lambda: surface energy coefficient is represented by symbol, not in expanded form
-    :param symbolic_dependent_variable: last phase variable is defined as 1-other_phase_vars, if this is set to True
-                                      it is represented by phi_A for better readability
+    Args:
+        num_phases: number of phases, called N above
+        surface_tensions: surface tension function, called with two phase indices (two integers)
+        interface_width: called :math:`\eta` above, controls the interface width
+        order_parameters: explicitly
+        f1: bulk energy is computed as f1(c_i) + f1(c_j) - f2(c_i + c_j)
+        f2: see f2
+      Parameters useful for viewing / debugging the function
+        include_bulk: if false no bulk term is added
+        include_interface:if false no interface contribution is added
+        symbolic_lambda: surface energy coefficient is represented by symbol, not in expanded form
+        symbolic_dependent_variable: last phase variable is defined as 1-other_phase_vars, if this is set to True
+                                   it is represented by phi_A for better readability
     """
     assert not (num_phases is None and order_parameters is None)
     if order_parameters is None:
@@ -124,13 +128,18 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
     else:
         phi = tuple(phi) + (sp.Symbol("phi_D"), )
 
+    if callable(surface_tensions):
+        surface_tensions = surface_tensions
+    else:
+        t = surface_tensions
+
+        def surface_tensions(i, j):
+            return t if i != j else 0
+
     # Compared to handwritten notes we scale the interface width parameter here to obtain the correct
     # equations for the interface profile and the surface tensions i.e. to pass tests
     # test_analyticInterfaceSolution and test_surfaceTensionDerivation
     interface_width *= sp.sqrt(2)
-
-    def f(c):
-        return c ** 2 * (1 - c) ** 2
 
     def lambda_coeff(k, l):
         if symbolic_lambda:
@@ -142,7 +151,7 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
                                                    surface_tensions(l, n) - surface_tensions(k, l))
 
     def bulk_term(i, j):
-        return surface_tensions(i, j) / 2 * (f(phi[i]) + f(phi[j]) - f(phi[i] + phi[j]))
+        return surface_tensions(i, j) / 2 * (f1(phi[i]) + f1(phi[j]) - f2(phi[i] + phi[j]))
 
     f_bulk = 3 / sp.sqrt(2) / interface_width * sum(bulk_term(i, j) for i, j in multi_sum(2, num_phases) if i != j)
     f_interface = sum(lambda_coeff(i, j) / 2 * Diff(phi[i]) * Diff(phi[j]) for i, j in multi_sum(2, num_phases - 1))
