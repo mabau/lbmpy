@@ -43,6 +43,7 @@ class PhaseFieldStep:
         gpu = target == 'gpu'
         self.gpu = gpu
         self.num_order_parameters = len(order_parameters)
+        self.order_parameters = order_parameters
         pressure_tensor_size = len(symmetric_tensor_linearization(data_handling.dim))
 
         self.name = name
@@ -59,7 +60,7 @@ class PhaseFieldStep:
         self.mu_field = dh.add_array(self.mu_field_name, values_per_cell=phi_size, gpu=gpu, latex_name="μ")
         self.vel_field = dh.add_array(self.vel_field_name, values_per_cell=data_handling.dim, gpu=gpu, latex_name="u")
         self.force_field = dh.add_array(self.force_field_name, values_per_cell=dh.dim, gpu=gpu, latex_name="F")
-        self.pressure_tensor_field = data_handling.add_array(self.pressure_tensor_field_name,
+        self.pressure_tensor_field = data_handling.add_array(self.pressure_tensor_field_name, gpu=gpu,
                                                              values_per_cell=pressure_tensor_size, latex_name='P')
         self.flag_interface = FlagInterface(data_handling, 'flags')
 
