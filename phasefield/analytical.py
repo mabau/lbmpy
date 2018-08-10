@@ -1,5 +1,6 @@
 import sympy as sp
 from collections import defaultdict
+from functools import partial
 
 from pystencils.sympyextensions import multidimensional_sum as multi_sum, normalize_product, prod
 from pystencils.fd import functional_derivative, expand_diff_linear, Diff, expand_diff_full
@@ -300,22 +301,56 @@ def pressure_tensor_interface_component(free_energy, order_parameters, dim, a, b
     return result
 
 
-def pressure_tensor_from_free_energy(free_energy, order_parameters, dim):
+def pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transformation_matrix=None,
+                                     include_bulk=True, include_interface=True):
+
+    def transform(f, matrix, from_symbols, to_symbols):
+        transformed_vals = matrix * sp.Matrix(to_symbols)
+        substitutions = {a: b for a, b in zip(from_symbols, transformed_vals)}
+        return f.subs(substitutions)
+
+    c = sp.symbols("C_:{}".format(len(order_parameters)))
+
+    if transformation_matrix:
+        phi_to_c = partial(transform, matrix=transformation_matrix, from_symbols=order_parameters, to_symbols=c)
+        free_energy = expand_diff_full(phi_to_c(free_energy))
+        op = c
+    else:
+        op = order_parameters
+
     def get_entry(i, j):
-        p_if = pressure_tensor_interface_component(free_energy, order_parameters, dim, i, j)
-        p_b = pressure_tensor_bulk_component(free_energy, order_parameters) if i == j else 0
+        p_if = pressure_tensor_interface_component(free_energy, op, dim, i, j) if include_interface else 0
+        if include_bulk:
+            p_b = pressure_tensor_bulk_component(free_energy, op) if i == j else 0
+        else:
+            p_b = 0
         return sp.expand(p_if + p_b)
 
-    return sp.Matrix(dim, dim, get_entry)
+    result = sp.Matrix(dim, dim, get_entry)
+
+    if transformation_matrix:
+        c_to_phi = partial(transform, matrix=transformation_matrix.inv(), from_symbols=c, to_symbols=order_parameters)
+        result = result.applyfunc(lambda e: expand_diff_full(c_to_phi(e)))
+
+    return result
 
 
-def force_from_pressure_tensor(pressure_tensor, functions=None):
+def force_from_pressure_tensor(pressure_tensor, functions=None, pbs=None):
     assert len(pressure_tensor.shape) == 2 and pressure_tensor.shape[0] == pressure_tensor.shape[1]
     dim = pressure_tensor.shape[0]
 
     def force_component(b):
         r = -sum(Diff(pressure_tensor[a, b], a) for a in range(dim))
         r = expand_diff_full(r, functions=functions)
+
+        if pbs is not None:
+            r += 2 * Diff(pbs, b) * pbs
+
         return r
 
     return sp.Matrix([force_component(b) for b in range(dim)])
+
+
+def pressure_tensor_bulk_sqrt_term(free_energy, order_parameters, density, c_s_sq=sp.Rational(1, 3)):
+    pbs = sp.sqrt(density*c_s_sq - pressure_tensor_bulk_component(free_energy, order_parameters))
+    return pbs

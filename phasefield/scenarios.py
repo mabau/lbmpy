@@ -10,29 +10,21 @@ def create_three_phase_model(alpha=1, kappa=(0.015, 0.015, 0.015), include_rho=T
                   sp.Symbol("kappa_0"): kappa[0],
                   sp.Symbol("kappa_1"): kappa[1],
                   sp.Symbol("kappa_2"): kappa[2]}
+    if 'cahn_hilliard_gammas' not in kwargs:
+        kwargs['cahn_hilliard_gammas'] = [1, 1, 1/3]
+
     if include_rho:
         order_parameters = sp.symbols("rho phi psi")
         free_energy, transformation_matrix = free_energy_functional_3_phases(order_parameters)
         free_energy = free_energy.subs(parameters)
-        op_transformation = np.array(transformation_matrix).astype(float)
-        op_transformation_inv = np.array(transformation_matrix.inv()).astype(float)
-
-        def concentration_to_order_parameters(c):
-            phi = np.tensordot(c, op_transformation, axes=([-1], [1]))
-            return phi
-
         return PhaseFieldStep(free_energy, order_parameters, density_order_parameter=order_parameters[0],
-                              concentration_to_order_parameters=concentration_to_order_parameters,
-                              order_parameters_to_concentrations=lambda phi: np.tensordot(phi, op_transformation_inv,
-                                                                                          axes=([-1], [1])),
-                              **kwargs)
+                              transformation_matrix=transformation_matrix, **kwargs)
     else:
         order_parameters = sp.symbols("phi psi")
         free_energy, transformation_matrix = free_energy_functional_3_phases((1,) + order_parameters)
         free_energy = free_energy.subs(parameters)
         op_transformation = transformation_matrix.copy()
-        op_transformation.row_del(0)  # rho is assumed to be 1 - is not required
-        op_transformation = np.array(op_transformation).astype(float)
+        op_transformation.row_del(0)  # ρ is assumed to be 1 - is not required
         reverse = transformation_matrix.inv() * sp.Matrix(sp.symbols("rho phi psi"))
         op_transformation_inv = sp.lambdify(sp.symbols("phi psi"), reverse.subs(sp.Symbol("rho"), 1))
 
@@ -41,12 +33,8 @@ def create_three_phase_model(alpha=1, kappa=(0.015, 0.015, 0.015), include_rho=T
             transformed = op_transformation_inv(phi[..., 0], phi[..., 1])
             return np.moveaxis(transformed[:, 0], 0, -1)
 
-        def concentration_to_order_parameters(c):
-            phi = np.tensordot(c, op_transformation, axes=([-1], [1]))
-            return phi
-
         return PhaseFieldStep(free_energy, order_parameters, density_order_parameter=None,
-                              concentration_to_order_parameters=concentration_to_order_parameters,
+                              transformation_matrix=transformation_matrix,
                               order_parameters_to_concentrations=order_parameters_to_concentrations,
                               **kwargs)
 

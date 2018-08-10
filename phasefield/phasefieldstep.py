@@ -6,7 +6,7 @@ import numpy as np
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
 from lbmpy.phasefield.kerneleqs import mu_kernel, CahnHilliardFDStep, pressure_tensor_kernel, \
-    force_kernel_using_pressure_tensor
+    force_kernel_using_pressure_tensor, pressure_tensor_kernel_pbs
 from pystencils import create_kernel, create_data_handling
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, symmetric_tensor_linearization
 from pystencils.boundaries.boundaryhandling import FlagInterface
@@ -19,11 +19,17 @@ class PhaseFieldStep:
 
     def __init__(self, free_energy, order_parameters, domain_size=None, data_handling=None,
                  name='pf', hydro_lbm_parameters=MappingProxyType({}),
-                 hydro_dynamic_relaxation_rate=1.0, cahn_hilliard_relaxation_rates=1.0, density_order_parameter=None,
+                 hydro_dynamic_relaxation_rate=1.0,
+                 cahn_hilliard_relaxation_rates=1.0,
+                 cahn_hilliard_gammas=1,
+                 density_order_parameter=None,
                  optimization=None, kernel_params=MappingProxyType({}),
                  dx=1, dt=1, solve_cahn_hilliard_with_finite_differences=False,
-                 order_parameter_force=None, concentration_to_order_parameters=None,
-                 order_parameters_to_concentrations=None, homogeneous_neumann_boundaries=False):
+                 order_parameter_force=None,
+                 transformation_matrix=None,
+                 concentration_to_order_parameters=None,
+                 order_parameters_to_concentrations=None,
+                 homogeneous_neumann_boundaries=False):
 
         if optimization is None:
             optimization = {'openmp': False, 'target': 'cpu'}
@@ -34,8 +40,17 @@ class PhaseFieldStep:
             data_handling = create_data_handling(domain_size, periodicity=True, parallel=False)
 
         self.free_energy = free_energy
+
         self.concentration_to_order_parameter = concentration_to_order_parameters
         self.order_parameters_to_concentrations = order_parameters_to_concentrations
+        if transformation_matrix:
+            op_transformation = np.array(transformation_matrix).astype(float)
+            op_transformation_inv = np.array(transformation_matrix.inv()).astype(float)
+            axes = ([-1], [1])
+            if self.concentration_to_order_parameter is None:
+                self.concentration_to_order_parameter = lambda c: np.tensordot(c, op_transformation, axes=axes)
+            if self.order_parameters_to_concentrations is None:
+                self.order_parameters_to_concentrations = lambda p: np.tensordot(p, op_transformation_inv, axes=axes)
 
         self.chemical_potentials = chemical_potentials_from_free_energy(free_energy, order_parameters)
 
@@ -71,8 +86,7 @@ class PhaseFieldStep:
         if homogeneous_neumann_boundaries:
             def apply_neumann_boundaries(eqs):
                 fields = [data_handling.fields[self.phi_field_name],
-                          data_handling.fields[self.pressure_tensor_field_name],
-                          ]
+                          data_handling.fields[self.pressure_tensor_field_name]]
                 flag_field = data_handling.fields[self.flag_interface.flag_field_name]
                 return add_neumann_boundary(eqs, fields, flag_field, "neumann_flag", inverse_flag=False)
         else:
@@ -82,8 +96,19 @@ class PhaseFieldStep:
         # μ and pressure tensor update
         self.phi_sync = data_handling.synchronization_function([self.phi_field_name], target=target)
         self.mu_eqs = mu_kernel(F, phi, self.phi_field, self.mu_field, dx)
-        self.pressure_tensor_eqs = pressure_tensor_kernel(self.free_energy, order_parameters,
-                                                          self.phi_field, self.pressure_tensor_field, dx)
+
+        pbs = False
+        if pbs:
+            self.pbs_field_name = name + "_pbs"
+            self.pbs_field = dh.add_array(self.pbs_field_name, gpu=gpu)
+            self.pressure_tensor_eqs = pressure_tensor_kernel_pbs(self.free_energy, order_parameters, self.phi_field,
+                                                                  self.pressure_tensor_field, self.pbs_field, dx=dx,
+                                                                  density_field=None) # TODO get current density! not last one
+            # TODO call post-run on hydro-lbm before computing pbs to store the latest density
+        else:
+            self.pressure_tensor_eqs = pressure_tensor_kernel(self.free_energy, order_parameters,
+                                                              self.phi_field, self.pressure_tensor_field, dx=dx,
+                                                              transformation_matrix=transformation_matrix)
         mu_and_pressure_tensor_eqs = self.mu_eqs + self.pressure_tensor_eqs
         mu_and_pressure_tensor_eqs = apply_neumann_boundaries(mu_and_pressure_tensor_eqs)
         self.mu_and_pressure_tensor_kernel = create_kernel(sympy_cse_on_assignment_list(mu_and_pressure_tensor_eqs),
@@ -126,6 +151,9 @@ class PhaseFieldStep:
         if not hasattr(cahn_hilliard_relaxation_rates, '__len__'):
             cahn_hilliard_relaxation_rates = [cahn_hilliard_relaxation_rates] * len(order_parameters)
 
+        if not hasattr(cahn_hilliard_gammas, '__len__'):
+            cahn_hilliard_gammas = [cahn_hilliard_gammas] * len(order_parameters)
+
         self.cahn_hilliard_steps = []
 
         if solve_cahn_hilliard_with_finite_differences:
@@ -141,8 +169,10 @@ class PhaseFieldStep:
                 if op == density_order_parameter:
                     continue
 
+                print("CH Gamma", cahn_hilliard_gammas[i])
                 ch_method = cahn_hilliard_lb_method(self.hydro_lbm_step.method.stencil, self.mu_field(i),
-                                                    relaxation_rate=cahn_hilliard_relaxation_rates[i])
+                                                    relaxation_rate=cahn_hilliard_relaxation_rates[i],
+                                                    gamma=cahn_hilliard_gammas[i])
                 ch_step = LatticeBoltzmannStep(data_handling=data_handling, relaxation_rate=1, lb_method=ch_method,
                                                velocity_input_array_name=self.vel_field.name,
                                                density_data_name=self.phi_field.name,
