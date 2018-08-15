@@ -148,7 +148,7 @@ def get_pipe_velocity_field(domain_size, u_max, flow_direction=0, diameter=None)
         radius = int(round(diameter / 2))
 
     params = [np.arange(s) + 0.5 for s in domain_size]
-    grid: Tuple[np.array] = np.meshgrid(*params, indexing='ij')
+    grid = np.meshgrid(*params, indexing='ij')
 
     dist = 0
     for i in range(len(domain_size)):
