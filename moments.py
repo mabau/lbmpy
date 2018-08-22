@@ -294,9 +294,10 @@ def discrete_moment(func, moment, stencil):
     where :math:`p(d)` is the moment polynomial where :math:`x, y, z` have been replaced with the components of the
     stencil direction, and :math:`f_i` is the i'th entry in the passed function sequence
 
-    :param func: list of distribution functions for each direction
-    :param moment: can either be a exponent tuple, or a sympy polynomial expression
-    :param stencil: sequence of directions
+    Args:
+        func: list of distribution functions for each direction
+        moment: can either be a exponent tuple, or a sympy polynomial expression
+        stencil: sequence of directions
     """
     assert len(stencil) == len(func)
     res = 0
