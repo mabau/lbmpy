@@ -301,6 +301,21 @@ def pressure_tensor_interface_component(free_energy, order_parameters, dim, a, b
     return result
 
 
+def pressure_tensor_interface_component_new(free_energy, order_parameters, dim, a, b):
+    gamma = extract_gamma(free_energy, order_parameters)
+    d = Diff
+    result = 0
+    for i, c_i in enumerate(order_parameters):
+        for j, c_j in enumerate(order_parameters):
+            t = 2 * d(c_i, a) * d(c_j, b)
+            if a == b:
+                t -= sum(d(c_i, g) * d(c_j, g) for g in range(dim))
+                t -= 2 * sum(c_i * d(d(c_j, g), g) for g in range(dim))
+            gamma_ij = gamma[(i, j)] if i < j else gamma[(j, i)]
+            result += t * gamma_ij / 2
+    return result
+
+
 def pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transformation_matrix=None,
                                      include_bulk=True, include_interface=True):
 
