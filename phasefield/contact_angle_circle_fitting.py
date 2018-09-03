@@ -95,6 +95,18 @@ def neumann_angles_from_surface_tensions(surface_tensions):
 
 
 def liquid_lens_neumann_angles(concentration, drop_phase_idx=2, enclosing_phase1=0, enclosing_phase2=1):
+    """Assumes a liquid lens setup, where a drop is enclosed between two other phases in the middle of the domain.
+
+    Args:
+        concentration: array with concentrations
+        drop_phase_idx: index of the drop phase
+        enclosing_phase1: index of the first enclosing phase
+        enclosing_phase2: index of the second enclosing phase
+
+    Returns:
+        tuple with three angles
+        (angle enclosing phase1, angle enclosing phase2, angle droplet)
+    """
     circles = [fit_circle(contour_line(concentration, enclosing_phase1, drop_phase_idx)),
                fit_circle(contour_line(concentration, enclosing_phase2, drop_phase_idx))]
 
