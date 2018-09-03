@@ -169,7 +169,6 @@ class PhaseFieldStep:
                 if op == density_order_parameter:
                     continue
 
-                print("CH Gamma", cahn_hilliard_gammas[i])
                 ch_method = cahn_hilliard_lb_method(self.hydro_lbm_step.method.stencil, self.mu_field(i),
                                                     relaxation_rate=cahn_hilliard_relaxation_rates[i],
                                                     gamma=cahn_hilliard_gammas[i])
@@ -295,8 +294,21 @@ class PhaseFieldStep:
         return self._get_slice(self.phi_field_name, slice_obj)
 
     def concentration_slice(self, slice_obj=None):
+        if slice_obj is not None and len(slice_obj) > self.data_handling.dim:
+            assert len(slice_obj) - 1 == self.data_handling.dim
+            last_index = slice_obj[-1]
+            slice_obj = slice_obj[:-1]
+        else:
+            last_index = None
+
         phi = self.phi_slice(slice_obj)
-        return phi if self.order_parameters_to_concentrations is None else self.order_parameters_to_concentrations(phi)
+        if self.order_parameters_to_concentrations is None:
+            return phi
+        else:
+            result = self.order_parameters_to_concentrations(phi)
+            if last_index is not None:
+                result = result[..., last_index]
+            return result
 
     def mu_slice(self, slice_obj=None):
         return self._get_slice(self.mu_field_name, slice_obj)

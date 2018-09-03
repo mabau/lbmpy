@@ -78,6 +78,12 @@ def free_energy_functional_n_phases_penalty_term(order_parameters, interface_wid
     return bulk + interface + penalty_term_factor * bulk_penalty_term
 
 
+def n_phases_correction_function(c, beta, power=2):
+    return sp.Piecewise((-beta * c ** power, c < 0),
+                        (-beta * (1 - c) ** 2, c > 1),
+                        (c ** 2 * (1 - c) ** power, True))
+
+
 def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_symbolic_surface_tension,
                                     interface_width=interface_width_symbol, order_parameters=None,
                                     include_bulk=True, include_interface=True, symbolic_lambda=False,
