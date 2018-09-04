@@ -89,9 +89,8 @@ def init_tanh(pf_step, phase_idx, x1=None, x2=None, width=1):
         x = b.cell_index_arrays[0]
         phi = b[pf_step.phi_field_name]
 
-        phi[..., phase_idx] = (1 + np.tanh((x - x1)  / (2 * width))) / 2 + \
-                              (1 + np.tanh((-x + x2) / (2 * width))) / 2 \
-                              -1
+        phi[..., phase_idx] = (1 + np.tanh((x - x1) / (2 * width))) / 2 + \
+                              (1 + np.tanh((-x + x2) / (2 * width))) / 2 - 1
 
     pf_step.set_pdf_fields_from_macroscopic_values()
 

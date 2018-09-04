@@ -2,8 +2,8 @@ import sympy as sp
 from pystencils import Assignment
 from pystencils.fd import Discretization2ndOrder
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, substitute_laplacian_by_sum, \
-    force_from_phi_and_mu, symmetric_tensor_linearization, pressure_tensor_from_free_energy, force_from_pressure_tensor, \
-    pressure_tensor_bulk_sqrt_term
+    force_from_phi_and_mu, symmetric_tensor_linearization, pressure_tensor_from_free_energy, \
+    force_from_pressure_tensor, pressure_tensor_bulk_sqrt_term
 
 
 # ---------------------------------- Kernels to compute force ----------------------------------------------------------

@@ -11,7 +11,7 @@ def create_three_phase_model(alpha=1, kappa=(0.015, 0.015, 0.015), include_rho=T
                   sp.Symbol("kappa_1"): kappa[1],
                   sp.Symbol("kappa_2"): kappa[2]}
     if 'cahn_hilliard_gammas' not in kwargs:
-        kwargs['cahn_hilliard_gammas'] = [1, 1, 1/3]
+        kwargs['cahn_hilliard_gammas'] = [1, 1, 1 / 3]
 
     if include_rho:
         order_parameters = sp.symbols("rho phi psi")

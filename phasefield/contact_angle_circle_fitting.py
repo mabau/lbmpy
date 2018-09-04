@@ -69,7 +69,7 @@ def fit_circle(points):
 
     def point_distances(xc, yc):
         """ calculate the distance of each 2D points from the center (xc, yc) """
-        return np.sqrt((points[:, 0]-xc)**2 + (points[:, 1]-yc)**2)
+        return np.sqrt((points[:, 0] - xc) ** 2 + (points[:, 1] - yc) ** 2)
 
     def f(c):
         """ calculate the algebraic distance between the data points and the mean circle centered at c=(xc, yc) """

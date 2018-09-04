@@ -103,7 +103,8 @@ class PhaseFieldStep:
             self.pbs_field = dh.add_array(self.pbs_field_name, gpu=gpu)
             self.pressure_tensor_eqs = pressure_tensor_kernel_pbs(self.free_energy, order_parameters, self.phi_field,
                                                                   self.pressure_tensor_field, self.pbs_field, dx=dx,
-                                                                  density_field=None) # TODO get current density! not last one
+                                                                  density_field=None)
+            # TODO get current density! not last one
             # TODO call post-run on hydro-lbm before computing pbs to store the latest density
         else:
             self.pressure_tensor_eqs = pressure_tensor_kernel(self.free_energy, order_parameters,

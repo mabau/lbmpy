@@ -373,5 +373,5 @@ def force_from_pressure_tensor(pressure_tensor, functions=None, pbs=None):
 
 
 def pressure_tensor_bulk_sqrt_term(free_energy, order_parameters, density, c_s_sq=sp.Rational(1, 3)):
-    pbs = sp.sqrt(density*c_s_sq - pressure_tensor_bulk_component(free_energy, order_parameters))
+    pbs = sp.sqrt(density * c_s_sq - pressure_tensor_bulk_component(free_energy, order_parameters))
     return pbs
