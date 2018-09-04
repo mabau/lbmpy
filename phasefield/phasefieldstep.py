@@ -309,13 +309,10 @@ class PhaseFieldStep:
             last_index = None
 
         phi = self.phi_slice(slice_obj)
-        if self.order_parameters_to_concentrations is None:
-            return phi
-        else:
-            result = self.order_parameters_to_concentrations(phi)
-            if last_index is not None:
-                result = result[..., last_index]
-            return result
+        result = self.order_parameters_to_concentrations(phi) if self.order_parameters_to_concentrations else phi
+        if last_index is not None:
+            result = result[..., last_index]
+        return result
 
     def mu_slice(self, slice_obj=None):
         return self._get_slice(self.mu_field_name, slice_obj)

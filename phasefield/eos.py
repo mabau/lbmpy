@@ -50,11 +50,12 @@ def maxwell_construction(eos, tolerance=1e-4):
     max_rho, min_rho, _ = critical_points
     max_p, min_p = eos.subs(rho, max_rho), eos.subs(rho, min_rho)
     shift_max = max_p * 0.999
-    shift_min = max_p * 0.0001
-
+    shift_min = max(0, min_p)
+    
     c = (shift_max + shift_min) / 2
     deviation = tolerance * 2
     while abs(deviation) > tolerance:
+        print("Deviation", deviation, "Shift", c)
         zeros = sp.solve(eos - c)
         integral_bounds = (min(zeros), max(zeros))
         deviation = get_deviation(float(integral_bounds[0]), float(integral_bounds[1]), float(c))
@@ -87,4 +88,3 @@ def carnahan_starling_eos(density, gas_constant, temperature, a, b):
 
 def carnahan_starling_critical_temperature(a, b, gas_constant):
     return 0.3773 * a / b / gas_constant
-

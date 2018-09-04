@@ -36,7 +36,6 @@ def create_three_phase_model(alpha=1, kappa=(0.015, 0.015, 0.015), include_rho=T
         return PhaseFieldStep(free_energy, order_parameters, density_order_parameter=None,
                               transformation_matrix=transformation_matrix,
                               order_parameters_to_concentrations=order_parameters_to_concentrations,
-                              cahn_hilliard_gammas=[1, 1, 1 / 3],
                               **kwargs)
 
 
