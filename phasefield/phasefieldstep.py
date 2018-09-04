@@ -274,6 +274,12 @@ class PhaseFieldStep:
             for i in range(phi.shape[-1]):
                 b[self.phi_field_name][..., i] = phi[i]
 
+    def set_single_concentration(self, slice_obj, phase_idx, value=1):
+        num_phases = self.concentration[:, :, :].shape[-1]
+        zeros = [0] * num_phases
+        zeros[phase_idx] = value
+        self.set_concentration(slice_obj, zeros)
+
     def set_density(self, slice_obj, value):
         for b in self.data_handling.iterate(slice_obj):
             for i in range(self.num_order_parameters):
