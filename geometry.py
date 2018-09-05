@@ -1,5 +1,4 @@
 import numpy as np
-from typing import Tuple
 
 from lbmpy.boundaries import NoSlip, UBB
 from pystencils.slicing import normalize_slice, shift_slice, slice_intersection, slice_from_direction
