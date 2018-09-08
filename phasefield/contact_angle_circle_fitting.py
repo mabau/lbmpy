@@ -94,6 +94,14 @@ def neumann_angles_from_surface_tensions(surface_tensions):
     return [np.rad2deg(a) for a in angles]
 
 
+def surface_tension_from_kappas(kappas, surface_width):
+    def surface_tensions(i, j):
+        if i == j:
+            return 0
+        return (kappas[i] + kappas[j]) / 6 * surface_width
+    return surface_tensions
+
+
 def liquid_lens_neumann_angles(concentration, drop_phase_idx=2, enclosing_phase1=0, enclosing_phase2=1):
     """Assumes a liquid lens setup, where a drop is enclosed between two other phases in the middle of the domain.
 
