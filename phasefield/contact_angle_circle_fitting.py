@@ -122,19 +122,25 @@ def liquid_lens_neumann_angles(concentration, drop_phase_idx=2, enclosing_phase1
 
     y1, y2 = (i[1] for i in intersections)
     assert np.abs(y1 - y2) < 0.1, "Liquid lens is not aligned in y direction (rotated?)"
-    y_horizontal = (y1 + y2) / 2
 
-    xs = np.sqrt(circles[0].radius ** 2 - (y_horizontal - circles[0].center[1]) ** 2)
-    angle = np.rad2deg(np.arctan(-xs / np.sqrt(circles[0].radius ** 2 - xs ** 2))) % 180
-    angle = 180 - angle
-    neumann3_upper = angle
-    neumann1 = 180 - neumann3_upper
+    left_intersection = sorted(intersections, key=lambda e: e[0])[0]
+    lower_circle, upper_circle = sorted(circles, key=lambda c: c.center[1])
 
-    xs = np.sqrt(circles[1].radius ** 2 - (y_horizontal - circles[1].center[1]) ** 2)
-    angle = np.rad2deg(np.arctan(-xs / np.sqrt(circles[1].radius ** 2 - xs ** 2))) % 180
-    angle = 180 - angle
-    neumann3_lower = angle
-    neumann2 = 180 - neumann3_lower
+    def rotate90_ccw(vector):
+        return np.array([-vector[1], vector[0]])
 
-    neumann3 = neumann3_upper + neumann3_lower
-    return neumann1, neumann2, neumann3
+    def rotate90_cw(vector):
+        return np.array([vector[1], -vector[0]])
+
+    def normalize(vector):
+        return vector / np.linalg.norm(vector)
+
+    vector_20 = normalize(rotate90_ccw(lower_circle.center - left_intersection))
+    vector_01 = np.array([-1, 0])
+    vector_12 = normalize(rotate90_cw(upper_circle.center - left_intersection))
+
+    angles = [np.rad2deg(np.arccos(np.dot(v1, v2))) for v1, v2 in [(vector_20, vector_01),
+                                                                   (vector_01, vector_12),
+                                                                   (vector_12, vector_20)]
+              ]
+    return angles
