@@ -384,7 +384,8 @@ def get_default_moment_set_for_stencil(stencil):
     """
     Returns a sequence of moments that are commonly used to construct a LBM equilibrium for the given stencil
     """
-    from lbmpy.stencils import get_stencil, stencils_have_same_entries
+    from lbmpy.stencils import get_stencil
+    from pystencils.stencils import stencils_have_same_entries
 
     to_poly = exponents_to_polynomial_representations
 

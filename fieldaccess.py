@@ -1,6 +1,6 @@
 import sympy as sp
 import abc
-from lbmpy.stencils import inverse_direction
+from pystencils.stencils import inverse_direction
 from pystencils import Field
 
 

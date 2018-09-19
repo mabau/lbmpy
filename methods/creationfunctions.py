@@ -7,7 +7,8 @@ import operator
 import itertools
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.momentbased import MomentBasedLbMethod
-from lbmpy.stencils import stencils_have_same_entries, get_stencil
+from lbmpy.stencils import get_stencil
+from pystencils.stencils import stencils_have_same_entries
 from lbmpy.moments import is_even, gram_schmidt, get_default_moment_set_for_stencil, MOMENT_SYMBOLS, \
     exponents_to_polynomial_representations, moments_of_order, moments_up_to_component_order, \
     sort_moments_into_groups_of_same_order, get_order, discrete_moment

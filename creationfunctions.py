@@ -173,7 +173,8 @@ from lbmpy.methods import create_srt, create_trt, create_mrt_orthogonal, create_
 from lbmpy.methods.entropic import add_iterative_entropy_condition, add_entropy_condition
 from lbmpy.methods.entropic_eq_srt import create_srt_entropic
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
-from lbmpy.stencils import get_stencil, stencils_have_same_entries
+from lbmpy.stencils import get_stencil
+from pystencils.stencils import stencils_have_same_entries
 import lbmpy.forcemodels as forcemodels
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor

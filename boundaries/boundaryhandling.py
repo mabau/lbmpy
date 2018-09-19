@@ -4,7 +4,7 @@ from pystencils import TypedSymbol, create_indexed_kernel, Assignment
 from pystencils.backends.cbackend import CustomCppCode
 from pystencils.boundaries import BoundaryHandling
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
-from lbmpy.stencils import inverse_direction
+from pystencils.stencils import inverse_direction
 
 
 class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
