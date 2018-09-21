@@ -1,6 +1,6 @@
 import sympy as sp
 from pystencils import Assignment
-from pystencils.fd import Discretization2ndOrder
+from pystencils.fd import Discretization2ndOrder, discretize_spatial
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, substitute_laplacian_by_sum, \
     force_from_phi_and_mu, symmetric_tensor_linearization, pressure_tensor_from_free_energy, \
     force_from_pressure_tensor, pressure_tensor_bulk_sqrt_term
@@ -9,45 +9,43 @@ from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, su
 # ---------------------------------- Kernels to compute force ----------------------------------------------------------
 
 
-def mu_kernel(free_energy, order_parameters, phi_field, mu_field, dx=1):
+def mu_kernel(free_energy, order_parameters, phi_field, mu_field, dx=1, discretization='standard'):
     """Reads from order parameter (phi) field and updates chemical potentials"""
     assert phi_field.spatial_dimensions == mu_field.spatial_dimensions
     dim = phi_field.spatial_dimensions
     chemical_potential = chemical_potentials_from_free_energy(free_energy, order_parameters)
     chemical_potential = substitute_laplacian_by_sum(chemical_potential, dim)
     chemical_potential = chemical_potential.subs({op: phi_field(i) for i, op in enumerate(order_parameters)})
-    discretize = Discretization2ndOrder(dx=dx)
-    return [Assignment(mu_field(i), discretize(mu_i)) for i, mu_i in enumerate(chemical_potential)]
+    return [Assignment(mu_field(i), discretize_spatial(mu_i, dx, discretization))
+            for i, mu_i in enumerate(chemical_potential)]
 
 
-def force_kernel_using_mu(force_field, phi_field, mu_field, dx=1):
+def force_kernel_using_mu(force_field, phi_field, mu_field, dx=1, discretization='standard'):
     """Computes forces using precomputed chemical potential - needs mu_kernel first"""
     assert mu_field.index_dimensions == 1
     force = force_from_phi_and_mu(phi_field.center_vector, mu=mu_field.center_vector, dim=mu_field.spatial_dimensions)
-    discretize = Discretization2ndOrder(dx=dx)
     return [Assignment(force_field(i),
-                       discretize(f_i)).expand() for i, f_i in enumerate(force)]
+                       discretize_spatial(f_i, dx, discretization)).expand() for i, f_i in enumerate(force)]
 
 
 def pressure_tensor_kernel(free_energy, order_parameters, phi_field, pressure_tensor_field,
-                           transformation_matrix=None, dx=1):
+                           transformation_matrix=None, dx=1, discretization='standard'):
     dim = phi_field.spatial_dimensions
 
     p = pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transformation_matrix)
 
     p = p.subs({op: phi_field(i) for i, op in enumerate(order_parameters)})
     index_map = symmetric_tensor_linearization(dim)
-    discretize = Discretization2ndOrder(dx=dx)
     eqs = []
     for index, lin_index in index_map.items():
-        eq = Assignment(pressure_tensor_field(lin_index), discretize(p[index]).expand())
+        eq = Assignment(pressure_tensor_field(lin_index), discretize_spatial(p[index], dx, discretization).expand())
         eqs.append(eq)
     return eqs
 
 
 def pressure_tensor_kernel_pbs(free_energy, order_parameters,
                                phi_field, pressure_tensor_field, pbs_field, density_field,
-                               transformation_matrix=None, dx=1):
+                               transformation_matrix=None, dx=1, discretization='standard'):
     dim = phi_field.spatial_dimensions
 
     p = pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transformation_matrix, include_bulk=False)
@@ -55,20 +53,20 @@ def pressure_tensor_kernel_pbs(free_energy, order_parameters,
 
     p = p.subs({op: phi_field(i) for i, op in enumerate(order_parameters)})
     index_map = symmetric_tensor_linearization(dim)
-    discretize = Discretization2ndOrder(dx=dx)
     eqs = []
     for index, lin_index in index_map.items():
-        eq = Assignment(pressure_tensor_field(lin_index), discretize(p[index]).expand())
+        eq = Assignment(pressure_tensor_field(lin_index), discretize_spatial(p[index], dx, discretization).expand())
         eqs.append(eq)
 
-    pbs = Assignment(pbs_field.center,
-                     discretize(pressure_tensor_bulk_sqrt_term(free_energy, order_parameters, density_field.center)))
+    rhs = pressure_tensor_bulk_sqrt_term(free_energy, order_parameters, density_field.center)
+    pbs = Assignment(pbs_field.center, discretize_spatial(rhs, dx, discretization))
 
     eqs.append(pbs)
     return eqs
 
 
-def force_kernel_using_pressure_tensor(force_field, pressure_tensor_field, extra_force=None, pbs=None, dx=1):
+def force_kernel_using_pressure_tensor(force_field, pressure_tensor_field, extra_force=None,
+                                       pbs=None, dx=1, discretization='standard'):
     dim = force_field.spatial_dimensions
     index_map = symmetric_tensor_linearization(dim)
 
@@ -76,8 +74,7 @@ def force_kernel_using_pressure_tensor(force_field, pressure_tensor_field, extra
     f = force_from_pressure_tensor(p, pbs=pbs)
     if extra_force:
         f += extra_force
-    discretize = Discretization2ndOrder(dx=dx)
-    return [Assignment(force_field(i), discretize(f_i).expand())
+    return [Assignment(force_field(i), discretize_spatial(f_i, dx, discretization).expand())
             for i, f_i in enumerate(f)]
 
 

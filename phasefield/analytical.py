@@ -80,7 +80,7 @@ def free_energy_functional_n_phases_penalty_term(order_parameters, interface_wid
 
 def n_phases_correction_function(c, beta, power=2):
     return sp.Piecewise((-beta * c ** power, c < 0),
-                        (-beta * (1 - c) ** 2, c > 1),
+                        (-beta * (1 - c) ** power, c > 1),
                         (c ** 2 * (1 - c) ** power, True))
 
 
@@ -340,7 +340,7 @@ def pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transfo
         op = order_parameters
 
     def get_entry(i, j):
-        p_if = pressure_tensor_interface_component(free_energy, op, dim, i, j) if include_interface else 0
+        p_if = pressure_tensor_interface_component_new(free_energy, op, dim, i, j) if include_interface else 0
         if include_bulk:
             p_b = pressure_tensor_bulk_component(free_energy, op) if i == j else 0
         else:

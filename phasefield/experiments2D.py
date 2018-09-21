@@ -37,7 +37,7 @@ def write_phase_velocity_picture_sequence(sc, filename='falling_drop_%05d.png',
     plt.show()
 
 
-def liquid_lens_setup(domain_size=(200, 120), omega=1.2, kappa3=0.05, alpha=1, **kwargs):
+def liquid_lens_setup(domain_size=(200, 120), omega=1.2, kappas=(0.01, 0.02, 0.05), alpha=1, **kwargs):
     """Sets up a liquid lens scenario with the 3 phase model.
 
               ---------
@@ -47,7 +47,6 @@ def liquid_lens_setup(domain_size=(200, 120), omega=1.2, kappa3=0.05, alpha=1, *
               ---------
 
     """
-    kappas = (0.01, 0.02, kappa3)
     sc = create_three_phase_model(domain_size=domain_size, alpha=alpha, kappa=kappas,
                                   hydro_dynamic_relaxation_rate=omega, **kwargs)
     sc.set_concentration(make_slice[:, 0.5:], [1, 0, 0])

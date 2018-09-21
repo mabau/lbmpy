@@ -29,7 +29,8 @@ class PhaseFieldStep:
                  transformation_matrix=None,
                  concentration_to_order_parameters=None,
                  order_parameters_to_concentrations=None,
-                 homogeneous_neumann_boundaries=False):
+                 homogeneous_neumann_boundaries=False,
+                 discretization='standard'):
 
         if optimization is None:
             optimization = {'openmp': False, 'target': 'cpu'}
@@ -103,13 +104,14 @@ class PhaseFieldStep:
             self.pbs_field = dh.add_array(self.pbs_field_name, gpu=gpu)
             self.pressure_tensor_eqs = pressure_tensor_kernel_pbs(self.free_energy, order_parameters, self.phi_field,
                                                                   self.pressure_tensor_field, self.pbs_field, dx=dx,
-                                                                  density_field=None)
+                                                                  density_field=None, discretization=discretization)
             # TODO get current density! not last one
             # TODO call post-run on hydro-lbm before computing pbs to store the latest density
         else:
             self.pressure_tensor_eqs = pressure_tensor_kernel(self.free_energy, order_parameters,
                                                               self.phi_field, self.pressure_tensor_field, dx=dx,
-                                                              transformation_matrix=transformation_matrix)
+                                                              transformation_matrix=transformation_matrix,
+                                                              discretization=discretization)
         mu_and_pressure_tensor_eqs = self.mu_eqs + self.pressure_tensor_eqs
         mu_and_pressure_tensor_eqs = apply_neumann_boundaries(mu_and_pressure_tensor_eqs)
         self.mu_and_pressure_tensor_kernel = create_kernel(sympy_cse_on_assignment_list(mu_and_pressure_tensor_eqs),
@@ -121,7 +123,7 @@ class PhaseFieldStep:
             for order_parameter_idx, force in order_parameter_force.items():
                 extra_force += self.phi_field(order_parameter_idx) * sp.Matrix(force)
         self.force_eqs = force_kernel_using_pressure_tensor(self.force_field, self.pressure_tensor_field, dx=dx,
-                                                            extra_force=extra_force)
+                                                            extra_force=extra_force, discretization=discretization)
         self.force_from_pressure_tensor_kernel = create_kernel(apply_neumann_boundaries(self.force_eqs),
                                                                target=target, cpu_openmp=openmp).compile()
         self.pressure_tensor_sync = data_handling.synchronization_function([self.pressure_tensor_field_name],
