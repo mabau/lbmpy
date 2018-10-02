@@ -1,7 +1,7 @@
 import sympy as sp
 import functools
 from pystencils.fd import Diff, DiffOperator, expand_diff_linear, normalize_diff_order, \
-    collect_diffs, diff
+    collect_diffs
 from pystencils.sympyextensions import normalize_product, multidimensional_sum, kronecker_delta
 from lbmpy.chapman_enskog.chapman_enskog import LbMethodEqMoments, CeMoment, take_moments, insert_moments
 from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol, chapman_enskog_ansatz, remove_higher_order_u
@@ -274,7 +274,15 @@ class SteadyStateChapmanEnskogAnalysisSRT:
         """
         dim = self.method.dim
 
-        d = diff
+        def d(arg, *args):
+            """Shortcut to create nested derivatives"""
+            assert arg is not None
+            args = sorted(args, reverse=True, key=lambda e: e.name if isinstance(e, sp.Symbol) else e)
+            res = arg
+            for i in args:
+                res = Diff(res, i)
+            return res
+
         s = functools.partial(multidimensional_sum, dim=dim)
         kd = kronecker_delta
 
@@ -291,6 +299,6 @@ class SteadyStateChapmanEnskogAnalysisSRT:
         first_order_terms = expand_diff_linear(first_order_terms, constants=[sp.Symbol("rho")])
 
         match_coeff_equations = []
-        for d in navier_stokes_ref.atoms(Diff):
-            match_coeff_equations.append(navier_stokes_ref.coeff(d) - first_order_terms.coeff(d))
+        for item in navier_stokes_ref.atoms(Diff):
+            match_coeff_equations.append(navier_stokes_ref.coeff(item) - first_order_terms.coeff(item))
         return sp.solve(match_coeff_equations, [eta, eta_b])
