@@ -1,7 +1,7 @@
 import sympy as sp
 import functools
 from pystencils.fd import Diff, DiffOperator, expand_diff_linear, normalize_diff_order, \
-    collect_diffs, create_nested_diff
+    collect_diffs, diff
 from pystencils.sympyextensions import normalize_product, multidimensional_sum, kronecker_delta
 from lbmpy.chapman_enskog.chapman_enskog import LbMethodEqMoments, CeMoment, take_moments, insert_moments
 from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol, chapman_enskog_ansatz, remove_higher_order_u
@@ -274,7 +274,7 @@ class SteadyStateChapmanEnskogAnalysisSRT:
         """
         dim = self.method.dim
 
-        d = create_nested_diff
+        d = diff
         s = functools.partial(multidimensional_sum, dim=dim)
         kd = kronecker_delta
 
@@ -291,6 +291,6 @@ class SteadyStateChapmanEnskogAnalysisSRT:
         first_order_terms = expand_diff_linear(first_order_terms, constants=[sp.Symbol("rho")])
 
         match_coeff_equations = []
-        for diff in navier_stokes_ref.atoms(Diff):
-            match_coeff_equations.append(navier_stokes_ref.coeff(diff) - first_order_terms.coeff(diff))
+        for d in navier_stokes_ref.atoms(Diff):
+            match_coeff_equations.append(navier_stokes_ref.coeff(d) - first_order_terms.coeff(d))
         return sp.solve(match_coeff_equations, [eta, eta_b])
