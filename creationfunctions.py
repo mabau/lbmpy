@@ -232,16 +232,17 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
         collision_rule = collision_rule.new_merged(output_eqs)
 
     field_data_type = 'float64' if opt_params['double_precision'] else 'float32'
+    q = len(collision_rule.method.stencil)
 
     if opt_params['symbolic_field'] is not None:
         src_field = opt_params['symbolic_field']
     elif opt_params['field_size']:
-        field_size = [s + 2 for s in opt_params['field_size']] + [len(collision_rule.method.stencil)]
+        field_size = [s + 2 for s in opt_params['field_size']] + [q]
         src_field = Field.create_fixed_size(params['field_name'], field_size, index_dimensions=1,
                                             layout=opt_params['field_layout'], dtype=field_data_type)
     else:
         src_field = Field.create_generic(params['field_name'], spatial_dimensions=collision_rule.method.dim,
-                                         index_dimensions=1, layout=opt_params['field_layout'], dtype=field_data_type)
+                                         index_shape=(q,), layout=opt_params['field_layout'], dtype=field_data_type)
 
     dst_field = src_field.new_field_with_different_name(params['temporary_field_name'])
 
