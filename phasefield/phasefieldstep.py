@@ -121,7 +121,7 @@ class PhaseFieldStep:
         extra_force = sp.Matrix([0] * self.data_handling.dim)
         if order_parameter_force is not None:
             for order_parameter_idx, force in order_parameter_force.items():
-                extra_force += self.phi_field(order_parameter_idx) * sp.Matrix(force)
+                extra_force += sp.Matrix([f_i * self.phi_field(order_parameter_idx) for f_i in force])
         self.force_eqs = force_kernel_using_pressure_tensor(self.force_field, self.pressure_tensor_field, dx=dx,
                                                             extra_force=extra_force, discretization=discretization)
         self.force_from_pressure_tensor_kernel = create_kernel(apply_neumann_boundaries(self.force_eqs),
