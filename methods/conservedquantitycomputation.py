@@ -5,7 +5,7 @@ from pystencils import Field, Assignment, AssignmentCollection
 
 
 class AbstractConservedQuantityComputation(abc.ABC):
-    """
+    r"""
 
     This class defines how conserved quantities are computed as functions of the pdfs.
     Conserved quantities are used for output and as input to the equilibrium in the collision step
@@ -221,7 +221,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
 
 def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs,
                                                     symbolic_zeroth_moment, symbolic_first_moments):
-    """
+    r"""
     Returns an equation system that computes the zeroth and first order moments with the least amount of operations
 
     The first equation of the system is equivalent to
@@ -274,7 +274,7 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs,
 
 
 def divide_first_order_moments_by_rho(assignment_collection, dim):
-    """
+    r"""
     Assumes that the equations of the passed equation collection are the following
         - rho = f_0  + f_1 + ...
         - u_0 = ...
@@ -290,7 +290,7 @@ def divide_first_order_moments_by_rho(assignment_collection, dim):
 
 
 def add_density_offset(assignment_collection, offset=sp.Rational(1, 1)):
-    """
+    r"""
     Assumes that first equation is the density (zeroth moment). Changes the density equations by adding offset to it.
     """
     old_eqs = assignment_collection.main_assignments

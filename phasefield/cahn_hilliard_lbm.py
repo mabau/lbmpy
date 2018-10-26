@@ -6,7 +6,7 @@ from lbmpy.maxwellian_equilibrium import get_weights
 
 
 def cahn_hilliard_lb_method(stencil, mu, relaxation_rate=sp.Symbol("omega"), gamma=1):
-    """Returns LB equilibrium that solves the Cahn Hilliard equation.
+    r"""Returns LB equilibrium that solves the Cahn Hilliard equation.
 
     ..math ::
 

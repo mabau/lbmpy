@@ -186,7 +186,7 @@ def separate_into_bulk_and_interface(free_energy):
 
 
 def analytic_interface_profile(x, interface_width=interface_width_symbol):
-    """Analytic expression for a 1D interface normal to x with given interface width.
+    r"""Analytic expression for a 1D interface normal to x with given interface width.
 
     The following doctest shows that the returned analytical solution is indeed a solution of the ODE that we
     get from the condition :math:`\mu_0 = 0` (thermodynamic equilibrium) for a situation with only a single order

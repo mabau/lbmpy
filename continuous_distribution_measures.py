@@ -11,19 +11,22 @@ from pystencils.sympyextensions import complete_the_squares_in_exp
 
 @memorycache()
 def moment_generating_function(generating_function, symbols, symbols_in_result):
-    """
+    r"""
     Computes the moment generating function of a probability distribution. It is defined as:
 
     .. math ::
         F[f(\mathbf{x})](\mathbf{t}) = \int e^{<\mathbf{x}, \mathbf{t}>} f(x)\; dx
 
-    :param generating_function: sympy expression
-    :param symbols: a sequence of symbols forming the vector x
-    :param symbols_in_result: a sequence forming the vector t
-    :return: transformation result F: an expression that depends now on symbols_in_result
-             (symbols have been integrated out)
+    Args:
+        generating_function: sympy expression
+        symbols: a sequence of symbols forming the vector x
+        symbols_in_result: a sequence forming the vector t
 
-    .. note::
+    Returns:
+        transformation result F: an expression that depends now on symbols_in_result
+        (symbols have been integrated out)
+
+    Note:
          This function uses sympys symbolic integration mechanism, which may not work or take a large
          amount of time for some functions.
          Therefore this routine does some transformations/simplifications on the function first, which are

@@ -331,8 +331,8 @@ def substitute_collision_operator_moments(expr, lb_moment_computation, collision
     return expr.subs(subs_dict)
 
 
-def take_moments(eqn, pdf_to_moment_name=(('f', '\Pi'), ('\Omega f', '\\Upsilon')), velocity_name='c', max_expansion=5,
-                 use_one_neighborhood_aliasing=False):
+def take_moments(eqn, pdf_to_moment_name=(('f', '\\Pi'), ('\\Omega f', '\\Upsilon')), velocity_name='c',
+                 max_expansion=5, use_one_neighborhood_aliasing=False):
 
     pdf_symbols = [tuple(expanded_symbol(name, superscript=i) for i in range(max_expansion))
                    for name, _ in pdf_to_moment_name]
@@ -469,7 +469,7 @@ def remove_error_terms(expr):
 # ----------------------------------------------------------------------------------------------------------------------
 
 
-def get_taylor_expanded_lb_equation(pdf_symbol_name="f", pdfs_after_collision_operator="\Omega f", velocity_name="c",
+def get_taylor_expanded_lb_equation(pdf_symbol_name="f", pdfs_after_collision_operator="\\Omega f", velocity_name="c",
                                     dim=3, taylor_order=2, shift=True):
     dim_labels = [sp.Rational(i, 1) for i in range(dim)]
 
@@ -502,8 +502,8 @@ def get_taylor_expanded_lb_equation(pdf_symbol_name="f", pdfs_after_collision_op
 
 
 def chapman_enskog_ansatz(equation, time_derivative_orders=(1, 3), spatial_derivative_orders=(1, 2),
-                          pdfs=(['f', 0, 3], ['\Omega f', 1, 3]), commutative=True):
-    """Uses a Chapman Enskog Ansatz to expand given equation.
+                          pdfs=(['f', 0, 3], ['\\Omega f', 1, 3]), commutative=True):
+    r"""Uses a Chapman Enskog Ansatz to expand given equation.
 
     Args:
         equation: equation to expand

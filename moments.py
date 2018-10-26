@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 Module Overview
 ~~~~~~~~~~~~~~~
 
@@ -285,7 +285,7 @@ is_shear_moment.shear_moments = set([c[0] * c[1] for c in itertools.combinations
 
 @memorycache(maxsize=512)
 def discrete_moment(func, moment, stencil):
-    """
+    r"""
     Computes discrete moment of given distribution function
 
     .. math ::
@@ -340,15 +340,17 @@ def moment_matrix(moments, stencil):
 
 
 def gram_schmidt(moments, stencil, weights=None):
-    """
+    r"""
     Computes orthogonal set of moments using the method by Gram-Schmidt
 
-    :param moments: sequence of moments, either in tuple or polynomial form
-    :param stencil: stencil as sequence of directions
-    :param weights: optional weights, that define the scalar product which is used for normalization.
-                    Scalar product :math:`< a,b > = \sum a_i b_i w_i` with weights :math:`w_i`.
-                    Passing no weights sets all weights to 1.
-    :return: set of orthogonal moments in polynomial form
+    Args:
+        moments: sequence of moments, either in tuple or polynomial form
+        stencil: stencil as sequence of directions
+        weights: optional weights, that define the scalar product which is used for normalization.
+                 Scalar product :math:`< a,b > = \sum a_i b_i w_i` with weights :math:`w_i`.
+                 Passing no weights sets all weights to 1.
+    Returns:
+        set of orthogonal moments in polynomial form
     """
     if weights is None:
         weights = sp.eye(len(stencil))
