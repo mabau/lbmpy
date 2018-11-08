@@ -81,7 +81,18 @@ def free_energy_functional_n_phases_penalty_term(order_parameters, interface_wid
 def n_phases_correction_function(c, beta, power=2):
     return sp.Piecewise((-beta * c ** power, c < 0),
                         (-beta * (1 - c) ** power, c > 1),
+                        (c ** 2 * (1 - c) ** 2, True))
+
+def n_phases_correction_function_wrong(c, beta, power=2):
+    return sp.Piecewise((-beta * c ** power, c < 0),
+                        (-beta * (1 - c) ** power, c > 1),
                         (c ** 2 * (1 - c) ** power, True))
+
+
+def n_phases_correction_function_sign_switch(c, beta):
+    return sp.Piecewise((-beta * (c ** 2) * (1 - c) ** 2, c < 0),
+                        (-beta * (c ** 2) * (1 - c) ** 2, c > 1),
+                        (c ** 2 * (1 - c) ** 2, True))
 
 
 def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_symbolic_surface_tension,
@@ -121,7 +132,7 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
         include_interface:if false no interface contribution is added
         symbolic_lambda: surface energy coefficient is represented by symbol, not in expanded form
         symbolic_dependent_variable: last phase variable is defined as 1-other_phase_vars, if this is set to True
-                                   it is represented by phi_A for better readability
+                                     it is represented by phi_A for better readability
     """
     assert not (num_phases is None and order_parameters is None)
     if order_parameters is None:
