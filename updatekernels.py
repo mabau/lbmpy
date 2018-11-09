@@ -56,9 +56,9 @@ def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src"
 
     dim = len(stencil[0])
     if numpy_arr is None:
-        src = Field.create_generic(src_field_name, dim, index_dimensions=1,
+        src = Field.create_generic(src_field_name, dim, index_shape=(len(stencil),),
                                    layout=generic_layout, dtype=generic_field_type)
-        dst = Field.create_generic(dst_field_name, dim, index_dimensions=1,
+        dst = Field.create_generic(dst_field_name, dim,  index_shape=(len(stencil),),
                                    layout=generic_layout, dtype=generic_field_type)
     else:
         src = Field.create_from_numpy_array(src_field_name, numpy_arr, index_dimensions=1)
