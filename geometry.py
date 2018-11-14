@@ -253,7 +253,7 @@ def add_black_and_white_image(boundary_handling, image_file, target_slice=None, 
             image_target_slice = shift_slice(intersection_slice, [-s.start for s in image_slice])
             mask_target_slice = [mask_target_slice[i] if i in plane else slice(None, None) for i in range(dim)]
             image_target_slice = [image_target_slice[i] if i in plane else np.newaxis for i in range(dim)]
-            result[tuple(mask_target_slice)] = zoomed_image[image_target_slice]
+            result[tuple(mask_target_slice)] = zoomed_image[tuple(image_target_slice)]
             return result
 
     return boundary_handling.set_boundary(boundary, slice_obj=image_slice, mask_callback=callback,
