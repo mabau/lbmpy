@@ -83,6 +83,7 @@ def n_phases_correction_function(c, beta, power=2):
                         (-beta * (1 - c) ** power, c > 1),
                         (c ** 2 * (1 - c) ** 2, True))
 
+
 def n_phases_correction_function_wrong(c, beta, power=2):
     return sp.Piecewise((-beta * c ** power, c < 0),
                         (-beta * (1 - c) ** power, c > 1),

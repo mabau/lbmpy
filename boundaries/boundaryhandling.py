@@ -90,10 +90,9 @@ class LbmWeightInfo(CustomCppCode):
 
     def __init__(self, lb_method):
         weights = [str(w.evalf()) for w in lb_method.weights]
-        code = "const double __attribute__((unused)) %s [] = { %s };\n" % (
-                   LbmWeightInfo.WEIGHTS_SYMBOL.name, ",".join(weights))
-        super(LbmWeightInfo, self).__init__(code, symbols_read=set(),
-                                            symbols_defined={LbmWeightInfo.WEIGHTS_SYMBOL})
+        w_sym = LbmWeightInfo.WEIGHTS_SYMBOL
+        code = "const double __attribute__((unused)) %s [] = { %s };\n" % (w_sym.name, ",".join(weights))
+        super(LbmWeightInfo, self).__init__(code, symbols_read=set(), symbols_defined={w_sym})
 
 
 def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, boundary_functor,
