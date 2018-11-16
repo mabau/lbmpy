@@ -1,10 +1,10 @@
 from types import MappingProxyType
-
 import numpy as np
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import switch_to_symbolic_relaxation_rates_for_omega_adapting_methods, \
     create_lb_function, update_with_default_parameters
-from lbmpy.macroscopic_value_kernels import create_advanced_velocity_setter_collision_rule
+from lbmpy.macroscopic_value_kernels import create_advanced_velocity_setter_collision_rule, \
+    pdf_initialization_assignments
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
 from pystencils import create_kernel, make_slice, create_data_handling
@@ -389,23 +389,18 @@ class LatticeBoltzmannStep:
 
     def _compile_macroscopic_setter_and_getter(self):
         lb_method = self.method
-        dim = lb_method.dim
-        q = len(lb_method.stencil)
         cqc = lb_method.conserved_quantity_computation
         pdf_field = self._data_handling.fields[self._pdf_arr_name]
         rho_field = self._data_handling.fields[self.density_data_name]
         rho_field = rho_field.center if self.density_data_index is None else rho_field(self.density_data_index)
         vel_field = self._data_handling.fields[self.velocity_data_name]
-        pdf_symbols = [pdf_field(i) for i in range(q)]
 
-        getter_eqs = cqc.output_equations_from_pdfs(pdf_symbols, {'density': rho_field, 'velocity': vel_field})
+        getter_eqs = cqc.output_equations_from_pdfs(pdf_field.center_vector,
+                                                    {'density': rho_field, 'velocity': vel_field})
         getter_kernel = create_kernel(getter_eqs, target='cpu', cpu_openmp=self._optimization['openmp']).compile()
 
-        inp_eqs = cqc.equilibrium_input_equations_from_init_values(rho_field, [vel_field(i) for i in range(dim)])
-        setter_eqs = lb_method.get_equilibrium(conserved_quantity_equations=inp_eqs)
-        setter_eqs = setter_eqs.new_with_substitutions({sym: pdf_field(i)
-                                                        for i, sym in enumerate(lb_method.post_collision_pdf_symbols)})
-
+        setter_eqs = pdf_initialization_assignments(lb_method, rho_field,
+                                                    vel_field.center_vector, pdf_field.center_vector)
         setter_eqs = create_simplification_strategy(lb_method)(setter_eqs)
         setter_kernel = create_kernel(setter_eqs, target='cpu', cpu_openmp=self._optimization['openmp']).compile()
         return getter_kernel, setter_kernel

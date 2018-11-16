@@ -4,6 +4,16 @@ from pystencils.field import Field, get_layout_of_array
 from lbmpy.simplificationfactory import create_simplification_strategy
 
 
+def pdf_initialization_assignments(lb_method, density, velocity, pdfs):
+    """Assignments to initialize the pdf field with equilibrium"""
+    cqc = lb_method.conserved_quantity_computation
+    inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity)
+    setter_eqs = lb_method.get_equilibrium(conserved_quantity_equations=inp_eqs)
+    setter_eqs = setter_eqs.new_with_substitutions({sym: pdfs[i]
+                                                    for i, sym in enumerate(lb_method.post_collision_pdf_symbols)})
+    return setter_eqs
+
+
 def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None, field_layout='numpy', target='cpu'):
     """
     Create kernel to compute macroscopic value(s) from a pdf field (e.g. density or velocity)
