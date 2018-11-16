@@ -50,6 +50,8 @@ General:
 - ``output={}``: a dictionary mapping macroscopic quantites e.g. the strings 'density' and 'velocity' to pystencils
   fields. In each timestep the corresponding quantities are written to the given fields.
 - ``velocity_input``: symbolic field where the velocities are read from (for advection diffusion LBM)
+- ``density_input``: symbolic field or field access where to read density from. When passing this parameter,
+   ``velocity_input`` has to be passed as well
 - ``kernel_type``: supported values: 'stream_pull_collide' (default), 'collide_only'
 
 
@@ -174,6 +176,7 @@ from lbmpy.methods.entropic import add_iterative_entropy_condition, add_entropy_
 from lbmpy.methods.entropic_eq_srt import create_srt_entropic
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.stencils import get_stencil
+from pystencils.simp import add_subexpressions_for_field_reads
 from pystencils.stencils import stencils_have_same_entries
 import lbmpy.forcemodels as forcemodels
 from lbmpy.simplificationfactory import create_simplification_strategy
@@ -252,7 +255,8 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
             accessor = PeriodicTwoFieldsAccessor(opt_params['builtin_periodicity'], ghost_layers=1)
         return create_lbm_kernel(collision_rule, src_field, dst_field, accessor)
     elif params['kernel_type'] == 'collide_only':
-        return create_lbm_kernel(collision_rule, src_field, src_field, CollideOnlyInplaceAccessor)
+        result = create_lbm_kernel(collision_rule, src_field, src_field, CollideOnlyInplaceAccessor)
+        return add_subexpressions_for_field_reads(result, subexpressions=False, main_assignments=True)
     elif params['kernel_type'] == 'stream_pull_only':
         return create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, params['output'])
     else:
@@ -272,14 +276,22 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
                                                     split_inner_loop=split_inner_loop)
     cqc = lb_method.conserved_quantity_computation
 
-    if params['velocity_input'] is not None:
-        eqs = [Assignment(cqc.zeroth_order_moment_symbol, sum(lb_method.pre_collision_pdf_symbols))]
-        velocity_input = params['velocity_input']
-        if isinstance(velocity_input, Field):
-            velocity_input = velocity_input.center_vector
-        eqs += [Assignment(u_sym, velocity_input[i]) for i, u_sym in enumerate(cqc.first_order_moment_symbols)]
+    rho_in = params['density_input']
+    u_in = params['velocity_input']
+
+    if u_in is not None and isinstance(u_in, Field):
+        u_in = u_in.center_vector
+    if rho_in is not None and isinstance(rho_in, Field):
+        rho_in = rho_in.center
+
+    if u_in is not None:
+        density_rhs = sum(lb_method.pre_collision_pdf_symbols) if rho_in is None else rho_in
+        eqs = [Assignment(cqc.zeroth_order_moment_symbol, density_rhs)]
+        eqs += [Assignment(u_sym, u_in[i]) for i, u_sym in enumerate(cqc.first_order_moment_symbols)]
         eqs = AssignmentCollection(eqs, [])
         collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=eqs)
+    elif u_in is None and rho_in is not None:
+        raise ValueError("When setting 'density_input' parameter, 'velocity_input' has to be specified as well.")
     else:
         collision_rule = lb_method.get_collision_rule()
 
@@ -472,6 +484,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
 
         'output': {},
         'velocity_input': None,
+        'density_input': None,
 
         'kernel_type': 'stream_pull_collide',
 
