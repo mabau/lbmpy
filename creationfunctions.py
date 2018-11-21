@@ -93,6 +93,8 @@ Field size information:
 - ``field_size=None``: create kernel for fixed field size
 - ``field_layout='c'``:   ``'c'`` or ``'numpy'`` for standard numpy layout, ``'reverse_numpy'`` or ``'f'`` for fortran
   layout, this does not apply when pdf_arr was given, then the same layout as pdf_arr is used
+- ``symbolic_field``: pystencils field for source (pdf field that is read)
+- ``symbolic_temporary_field``: pystencils field for temporary (pdf field that is written in stream, or stream-collide)
 
 
 CPU:
@@ -247,7 +249,10 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
         src_field = Field.create_generic(params['field_name'], spatial_dimensions=collision_rule.method.dim,
                                          index_shape=(q,), layout=opt_params['field_layout'], dtype=field_data_type)
 
-    dst_field = src_field.new_field_with_different_name(params['temporary_field_name'])
+    if opt_params['symbolic_temporary_field'] is not None:
+        dst_field = opt_params['symbolic_temporary_field']
+    else:
+        dst_field = src_field.new_field_with_different_name(params['temporary_field_name'])
 
     if params['kernel_type'] == 'stream_pull_collide':
         accessor = StreamPullTwoFieldsAccessor
@@ -505,6 +510,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'field_size': None,
         'field_layout': 'fzyx',  # can be 'numpy' (='c'), 'reverse_numpy' (='f'), 'fzyx', 'zyxf'
         'symbolic_field': None,
+        'symbolic_temporary_field': None,
 
         'target': 'cpu',
         'openmp': False,
