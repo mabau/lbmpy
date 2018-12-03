@@ -39,6 +39,10 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
                                                              conserved_quantity_equations=conserved_quantity_equations,
                                                              include_force_terms=include_force_terms)
 
+    def get_equilibrium_terms(self):
+        equilibrium = self.get_equilibrium()
+        return sp.Matrix([eq.rhs for eq in equilibrium.main_assignments])
+
     def _get_collision_rule_with_relaxation_rate(self, relaxation_rate, include_force_terms=True,
                                                  conserved_quantity_equations=None):
         f = sp.Matrix(self.pre_collision_pdf_symbols)
@@ -72,8 +76,9 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
         cr.simplification_hints['relaxation_rates'] = []
         return cr
 
-    def get_collision_rule(self):
-        return self._get_collision_rule_with_relaxation_rate(self._relaxationRate)
+    def get_collision_rule(self, conserved_quantity_equations=None):
+        return self._get_collision_rule_with_relaxation_rate(self._relaxationRate,
+                                                             conserved_quantity_equations=conserved_quantity_equations)
 
 
 def create_srt_entropic(stencil, relaxation_rate, force_model, compressible):

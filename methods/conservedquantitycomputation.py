@@ -177,7 +177,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         if 'density' in output_quantity_names_to_symbols:
             density_output_symbol = output_quantity_names_to_symbols['density']
             if isinstance(density_output_symbol, Field):
-                density_output_symbol = density_output_symbol()
+                density_output_symbol = density_output_symbol.center
             if density_output_symbol != self._symbolOrder0:
                 main_assignments.append(Assignment(density_output_symbol, self._symbolOrder0))
             else:
@@ -186,8 +186,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         if 'velocity' in output_quantity_names_to_symbols:
             vel_output_symbols = output_quantity_names_to_symbols['velocity']
             if isinstance(vel_output_symbols, Field):
-                field = vel_output_symbols
-                vel_output_symbols = [field(i) for i in range(len(self._symbolsOrder1))]
+                vel_output_symbols = vel_output_symbols.center_vector
             if tuple(vel_output_symbols) != tuple(self._symbolsOrder1):
                 main_assignments += [Assignment(a, b) for a, b in zip(vel_output_symbols, self._symbolsOrder1)]
             else:
@@ -208,6 +207,17 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                                                           self._forceModel, self._compressible)
             for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.main_assignments[1:]):
                 main_assignments.append(Assignment(sym, val.rhs))
+        if 'moment0' in output_quantity_names_to_symbols:
+            moment0_output_symbol = output_quantity_names_to_symbols['moment0']
+            if isinstance(moment0_output_symbol, Field):
+                moment0_output_symbol = moment0_output_symbol.center
+            main_assignments.append(Assignment(moment0_output_symbol, sum(pdfs)))
+        if 'moment1' in output_quantity_names_to_symbols:
+            moment1_output_symbol = output_quantity_names_to_symbols['moment1']
+            if isinstance(moment1_output_symbol, Field):
+                moment1_output_symbol = moment1_output_symbol.center_vector
+            main_assignments.extend([Assignment(lhs, sum(d[i] * pdf for d, pdf in zip(self._stencil, pdfs)))
+                                     for i, lhs in enumerate(moment1_output_symbol)])
 
         ac = ac.copy(main_assignments, [Assignment(a, b) for a, b in eqs.items()])
         return ac.new_without_unused_subexpressions()
