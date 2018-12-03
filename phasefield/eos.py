@@ -1,9 +1,10 @@
 import sympy as sp
-
 from pystencils.cache import disk_cache
 
 
 # ---------------------------------- Equations of state ----------------------------------------------------------------
+from pystencils.sympyextensions import remove_small_floats
+
 
 def carnahan_starling_eos(density, gas_constant, temperature, a, b):
     """Carnahan Starling equation of state.
@@ -62,36 +63,43 @@ def maxwell_construction(eos, tolerance=1e-4):
     Returns:
         (gas density, liquid density)
     """
-    # The following solve and integrate calls can make use of the fact that the density is a positive, real number
     dofs = eos.atoms(sp.Symbol)
     assert len(dofs) == 1
     density = dofs.pop()
-    rho = sp.Dummy(real=True, positive=True)
-    eos = eos.subs(density, rho)
+    v = sp.Dummy()
+    eos = eos.subs(density, 1 / v)
 
     # pre-compute integral once - then it is evaluated in every bisection iteration
     symbolic_offset = sp.Dummy(real=True)
-    integral = sp.integrate(sp.nsimplify((eos - symbolic_offset) / (rho ** 2)), rho)
+    integral = sp.integrate(sp.nsimplify(eos + symbolic_offset), v)
     upper_bound, lower_bound = sp.Dummy(real=True), sp.Dummy(real=True)
-    symbolic_deviation = integral.subs(rho, upper_bound) - integral.subs(rho, lower_bound)
+    symbolic_deviation = integral.subs(v, upper_bound) - integral.subs(v, lower_bound)
     get_deviation = sp.lambdify((lower_bound, upper_bound, symbolic_offset), symbolic_deviation)
 
-    critical_points = sorted(sp.solve(sp.diff(eos, rho)))
-    max_rho, min_rho, _ = critical_points
-    max_p, min_p = eos.subs(rho, max_rho), eos.subs(rho, min_rho)
-    shift_max = max_p * 0.999
-    shift_min = max(0, min_p)
+    critical_points = sp.solve(sp.diff(eos, v))
+    critical_points = [remove_small_floats(e, 1e-14) for e in critical_points]
+    critical_points = [e for e in critical_points if e.is_real]
+    *_, v_min, v_max = critical_points
 
+    assert sp.diff(eos, v, v).subs(v, v_min) > 0
+    assert sp.diff(eos, v, v).subs(v, v_max) < 0
+
+    assert sp.limit(eos, v, sp.oo) == 0
+    # shift has to be negative, since equation of state approaches zero for v -> oo
+    shift_min, shift_max = -eos.subs(v, v_max), 0
     c = (shift_max + shift_min) / 2
     deviation = tolerance * 2
+
     while abs(deviation) > tolerance:
-        zeros = sp.solve(eos - c)
-        integral_bounds = (min(zeros), max(zeros))
+        solve_res = sp.solve(eos + c)
+        solve_res = [remove_small_floats(e, 1e-14) for e in solve_res]
+        zeros = sorted([e for e in solve_res if e.is_real])
+        integral_bounds = (zeros[-3], zeros[-1])
         deviation = get_deviation(float(integral_bounds[0]), float(integral_bounds[1]), float(c))
         if deviation > 0:
-            shift_min = c
-        else:
             shift_max = c
+        else:
+            shift_min = c
         c = (shift_max + shift_min) / 2
 
-    return integral_bounds
+    return 1 / integral_bounds[1], 1 / integral_bounds[0]
