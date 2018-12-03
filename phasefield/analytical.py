@@ -26,6 +26,7 @@ def symbolic_order_parameters(num_symbols):
 def free_energy_functional_3_phases(order_parameters=None, interface_width=interface_width_symbol, transformed=True,
                                     include_bulk=True, include_interface=True, expand_derivatives=True,
                                     kappa=sp.symbols("kappa_:3")):
+    """Free Energy of ternary multi-component model :cite:`Semprebon2016`. """
     kappa_prime = tuple(interface_width ** 2 * k for k in kappa)
     c = sp.symbols("C_:3")
 
@@ -287,12 +288,13 @@ def extract_gamma(free_energy, order_parameters):
             continue
 
         if len(diff_factors) != 2:
-            raise ValueError("Could not new_filtered Λ because of term " + str(product))
+            raise ValueError("Could not determine Λ because of term " + str(product))
 
         indices = sorted([order_parameters.index(d.args[0]) for d in diff_factors])
-        result[tuple(indices)] += prod(e for e in product if e.func != Diff)
+        increment = prod(e for e in product if e.func != Diff)
         if diff_factors[0] == diff_factors[1]:
-            result[tuple(indices)] *= 2
+            increment *= 2
+        result[tuple(indices)] += increment
     return result
 
 
@@ -352,7 +354,7 @@ def pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transfo
         op = order_parameters
 
     def get_entry(i, j):
-        p_if = pressure_tensor_interface_component_new(free_energy, op, dim, i, j) if include_interface else 0
+        p_if = pressure_tensor_interface_component(free_energy, op, dim, i, j) if include_interface else 0
         if include_bulk:
             p_b = pressure_tensor_bulk_component(free_energy, op) if i == j else 0
         else:
@@ -385,5 +387,5 @@ def force_from_pressure_tensor(pressure_tensor, functions=None, pbs=None):
 
 
 def pressure_tensor_bulk_sqrt_term(free_energy, order_parameters, density, c_s_sq=sp.Rational(1, 3)):
-    pbs = sp.sqrt(density * c_s_sq - pressure_tensor_bulk_component(free_energy, order_parameters))
+    pbs = sp.sqrt(sp.Abs(density * c_s_sq - pressure_tensor_bulk_component(free_energy, order_parameters)))
     return pbs

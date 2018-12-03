@@ -1,5 +1,37 @@
 import sympy as sp
 
+from pystencils.cache import disk_cache
+
+
+# ---------------------------------- Equations of state ----------------------------------------------------------------
+
+def carnahan_starling_eos(density, gas_constant, temperature, a, b):
+    """Carnahan Starling equation of state.
+
+    a, b are parameters specific to this equation of state
+    for details see: Equations of state in a lattice Boltzmann model, by Yuan and Schaefer, 2006
+    """
+    e = b * density / 4
+    fraction = (1 + e + e ** 2 - e ** 3) / (1 - e) ** 3
+    return density * gas_constant * temperature * fraction - a * density ** 2
+
+
+def carnahan_starling_critical_temperature(a, b, gas_constant):
+    return 0.3773 * a / b / gas_constant
+
+
+def van_der_walls_eos(density, gas_constant, temperature, a, b):
+    pressure = sp.Symbol("P")
+    vdw = sp.Equality((pressure + a * density ** 2) * (1 / density - b), gas_constant * temperature)
+    return sp.solve(vdw, pressure)[0]
+
+
+def van_der_walls_critical_temperature(a, b, gas_constant):
+    return 8 * a / 27 / b / gas_constant
+
+
+# ----------------------------- Functions operating on equation of states ----------------------------------------------
+
 
 def eos_from_free_energy(free_energy, density):
     """Compute equation of state from free energy"""
@@ -14,12 +46,10 @@ def free_energy_from_eos(eos, density, integration_constant):
         density: symbolic! density parameter
         integration_constant:
     """
-    return (sp.integrate(eos / (density**2), density) + integration_constant) * density
+    return (sp.integrate(eos / (density ** 2), density) + integration_constant) * density
 
 
-# ---------------------------------- Equations of state ----------------------------------------------------------------
-
-
+@disk_cache
 def maxwell_construction(eos, tolerance=1e-4):
     """Numerical Maxwell construction to find ρ_gas and ρ_liquid for a given equation of state.
 
@@ -51,11 +81,10 @@ def maxwell_construction(eos, tolerance=1e-4):
     max_p, min_p = eos.subs(rho, max_rho), eos.subs(rho, min_rho)
     shift_max = max_p * 0.999
     shift_min = max(0, min_p)
-    
+
     c = (shift_max + shift_min) / 2
     deviation = tolerance * 2
     while abs(deviation) > tolerance:
-        print("Deviation", deviation, "Shift", c)
         zeros = sp.solve(eos - c)
         integral_bounds = (min(zeros), max(zeros))
         deviation = get_deviation(float(integral_bounds[0]), float(integral_bounds[1]), float(c))
@@ -66,25 +95,3 @@ def maxwell_construction(eos, tolerance=1e-4):
         c = (shift_max + shift_min) / 2
 
     return integral_bounds
-
-
-# To get final free energy:
-# - from maxwell construciton $\rho_{min}$ and $\rho_{max}$
-# - remove slope from free energy function: C determined by $C = - \frac{d}{dρ} F(C=0)  $
-# - energy shift = $F(ρ_{liquid})$  or $F(ρ_{gas})$ (should be equal)
-# - final free energy := $F - F(ρ_{liquid})$
-
-
-def carnahan_starling_eos(density, gas_constant, temperature, a, b):
-    """Carnahan Starling equation of state.
-
-    a, b are parameters specific to this equation of state
-    for details see: Equations of state in a lattice Boltzmann model, by Yuan and Schaefer, 2006
-    """
-    e = b * density / 4
-    fraction = (1 + e + e**2 - e**3) / (1 - e)**3
-    return density * gas_constant * temperature * fraction - a * density ** 2
-
-
-def carnahan_starling_critical_temperature(a, b, gas_constant):
-    return 0.3773 * a / b / gas_constant
