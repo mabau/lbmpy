@@ -76,11 +76,13 @@ def phase_plot(phase_field: np.ndarray, linewidth=1.0, clip=True) -> None:
 
     assert len(phase_field.shape) == 3
 
-    for i in range(phase_field.shape[-1]):
-        scalar_field_alpha_value(phase_field[..., i], next(color_cycle), clip=clip, interpolation='bilinear')
-    if linewidth:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", lineno=1230)
         for i in range(phase_field.shape[-1]):
-            scalar_field_contour(phase_field[..., i], levels=[0.5], colors='k', linewidths=[linewidth])
+            scalar_field_alpha_value(phase_field[..., i], next(color_cycle), clip=clip, interpolation='bilinear')
+        if linewidth:
+            for i in range(phase_field.shape[-1]):
+                scalar_field_contour(phase_field[..., i], levels=[0.5], colors='k', linewidths=[linewidth])
 
 
 def phase_plot_for_step(phase_field_step, slice_obj=make_slice[:, :], **kwargs):

@@ -1,5 +1,6 @@
 import sympy as sp
 import numpy as np
+import warnings
 from lbmpy.phasefield.phasefieldstep import PhaseFieldStep
 from lbmpy.phasefield.analytical import free_energy_functional_3_phases, free_energy_functional_n_phases, \
     symbolic_order_parameters, free_energy_functional_n_phases_penalty_term
@@ -49,7 +50,32 @@ def create_n_phase_model(alpha=1, num_phases=4,
     free_energy = free_energy_functional_n_phases(num_phases, surface_tensions, alpha,
                                                   order_parameters, f1=f1, f2=f2,
                                                   triple_point_energy=triple_point_energy)
-    return PhaseFieldStep(free_energy, order_parameters, **kwargs)
+
+    def concentration_to_order_parameters(c):
+        c = np.array(c)
+        c_sum = np.sum(c, axis=-1)
+        if isinstance(c_sum, np.ndarray):
+            np.subtract(c_sum, 1, out=c_sum)
+            np.abs(c_sum, out=c_sum)
+            deviation = np.max(c_sum)
+        else:
+            deviation = np.abs(c_sum - 1)
+        if deviation > 1e-5:
+            warnings.warn("Initialization problem: concentrations have to add up to 1")
+        return c[..., :-1]
+
+    def order_parameters_to_concentrations(op):
+        op_shape = list(op.shape)
+        op_shape[-1] += 1
+        result = np.empty(op_shape)
+        np.copyto(result[..., :-1], op)
+        result[..., -1] = 1 - np.sum(op, axis=-1)
+        return result
+
+    return PhaseFieldStep(free_energy, order_parameters,
+                          concentration_to_order_parameters=concentration_to_order_parameters,
+                          order_parameters_to_concentrations=order_parameters_to_concentrations,
+                          **kwargs)
 
 
 def create_n_phase_model_penalty_term(alpha=1, num_phases=4, kappa=0.015, penalty_term_factor=0.01, **kwargs):

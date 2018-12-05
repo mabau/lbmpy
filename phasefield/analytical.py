@@ -1,7 +1,5 @@
 import sympy as sp
 from collections import defaultdict
-from functools import partial
-
 from pystencils.sympyextensions import multidimensional_sum as multi_sum, normalize_product, prod
 from pystencils.fd import functional_derivative, expand_diff_linear, Diff, expand_diff_full
 
