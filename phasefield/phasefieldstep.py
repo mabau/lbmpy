@@ -6,7 +6,7 @@ import numpy as np
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
 from lbmpy.phasefield.kerneleqs import mu_kernel, CahnHilliardFDStep, pressure_tensor_kernel, \
-    force_kernel_using_pressure_tensor, pressure_tensor_kernel_pbs
+    force_kernel_using_pressure_tensor
 from pystencils import create_kernel, create_data_handling
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, symmetric_tensor_linearization
 from pystencils.boundaries.boundaryhandling import FlagInterface
@@ -98,20 +98,9 @@ class PhaseFieldStep:
         self.phi_sync = data_handling.synchronization_function([self.phi_field_name], target=target)
         self.mu_eqs = mu_kernel(F, phi, self.phi_field, self.mu_field, dx)
 
-        pbs = False
-        if pbs:
-            self.pbs_field_name = name + "_pbs"
-            self.pbs_field = dh.add_array(self.pbs_field_name, gpu=gpu)
-            self.pressure_tensor_eqs = pressure_tensor_kernel_pbs(self.free_energy, order_parameters, self.phi_field,
-                                                                  self.pressure_tensor_field, self.pbs_field, dx=dx,
-                                                                  density_field=None, discretization=discretization)
-            # TODO get current density! not last one
-            # TODO call post-run on hydro-lbm before computing pbs to store the latest density
-        else:
-            self.pressure_tensor_eqs = pressure_tensor_kernel(self.free_energy, order_parameters,
-                                                              self.phi_field, self.pressure_tensor_field, dx=dx,
-                                                              transformation_matrix=transformation_matrix,
-                                                              discretization=discretization)
+        self.pressure_tensor_eqs = pressure_tensor_kernel(self.free_energy, order_parameters,
+                                                          self.phi_field, self.pressure_tensor_field, dx=dx,
+                                                          discretization=discretization)
         mu_and_pressure_tensor_eqs = self.mu_eqs + self.pressure_tensor_eqs
         mu_and_pressure_tensor_eqs = apply_neumann_boundaries(mu_and_pressure_tensor_eqs)
         self.mu_and_pressure_tensor_kernel = create_kernel(sympy_cse_on_assignment_list(mu_and_pressure_tensor_eqs),

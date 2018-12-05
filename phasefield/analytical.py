@@ -343,22 +343,9 @@ def pressure_tensor_interface_component_new(free_energy, order_parameters, dim, 
     return result
 
 
-def pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transformation_matrix=None,
+def pressure_tensor_from_free_energy(free_energy, order_parameters, dim,
                                      include_bulk=True, include_interface=True):
-
-    def transform(f, matrix, from_symbols, to_symbols):
-        transformed_vals = matrix * sp.Matrix(to_symbols)
-        substitutions = {a: b for a, b in zip(from_symbols, transformed_vals)}
-        return f.subs(substitutions)
-
-    c = sp.symbols("C_:{}".format(len(order_parameters)))
-
-    if transformation_matrix:
-        phi_to_c = partial(transform, matrix=transformation_matrix, from_symbols=order_parameters, to_symbols=c)
-        free_energy = expand_diff_full(phi_to_c(free_energy))
-        op = c
-    else:
-        op = order_parameters
+    op = order_parameters
 
     def get_entry(i, j):
         p_if = pressure_tensor_interface_component(free_energy, op, dim, i, j) if include_interface else 0
@@ -369,11 +356,6 @@ def pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transfo
         return sp.expand(p_if + p_b)
 
     result = sp.Matrix(dim, dim, get_entry)
-
-    if transformation_matrix:
-        c_to_phi = partial(transform, matrix=transformation_matrix.inv(), from_symbols=c, to_symbols=order_parameters)
-        result = result.applyfunc(lambda e: expand_diff_full(c_to_phi(e)))
-
     return result
 
 

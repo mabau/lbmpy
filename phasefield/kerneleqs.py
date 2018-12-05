@@ -29,10 +29,10 @@ def force_kernel_using_mu(force_field, phi_field, mu_field, dx=1, discretization
 
 
 def pressure_tensor_kernel(free_energy, order_parameters, phi_field, pressure_tensor_field,
-                           transformation_matrix=None, dx=1, discretization='standard'):
+                           dx=1, discretization='standard'):
     dim = phi_field.spatial_dimensions
 
-    p = pressure_tensor_from_free_energy(free_energy, order_parameters, dim, transformation_matrix)
+    p = pressure_tensor_from_free_energy(free_energy, order_parameters, dim)
 
     p = p.subs({op: phi_field(i) for i, op in enumerate(order_parameters)})
     index_map = symmetric_tensor_linearization(dim)
