@@ -8,6 +8,10 @@ from pystencils import create_data_handling, Assignment, create_kernel
 from pystencils.fd import Diff, expand_diff_full, discretize_spatial
 from pystencils.fd.derivation import FiniteDifferenceStencilDerivation
 
+import pyximport
+pyximport.install(language_level=3)
+from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
+
 
 def forth_order_isotropic_discretize(field):
     second_neighbor_stencil = [(i, j)
@@ -33,12 +37,10 @@ def forth_order_isotropic_discretize(field):
     return substitutions
 
 
-def create_model(domain_size, num_phases, kappas, epsilon_dict, alpha=1, penalty_factor=0.01):
+def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1, penalty_factor=0.01,
+                 simplex_projection=False):
     def lapl(e):
         return sum(Diff(Diff(e, i), i) for i in range(dh.dim))
-
-    def f(c):
-        return c ** 2 * (1 - c) ** 2
 
     def interfacial_chemical_potential(c):
         result = []
@@ -48,10 +50,21 @@ def create_model(domain_size, num_phases, kappas, epsilon_dict, alpha=1, penalty
             for k in range(n):
                 if i == k:
                     continue
-                eps = epsilon_dict[(i, k)] if i < k else epsilon_dict[k, i]
+                eps = coeff_epsilon[(k, i)] if i < k else coeff_epsilon[(i, k)]
                 entry += alpha ** 2 * eps ** 2 * (c[k] * lapl(c[i]) - c[i] * lapl(c[k]))
             result.append(entry)
         return -sp.Matrix(result)
+
+    def bulk(c):
+        result = 0
+        for i in range(num_phases):
+            for j in range(i):
+                result += (c[i] ** 2 * c[j] ** 2) / (4 * coeff_a[i, j])
+        for i in range(num_phases):
+            for j in range(i):
+                for k in range(j):
+                    result += gabd * c[i] * c[j] * c[k]
+        return result
 
     # -------------- Data ------------------
     dh = create_data_handling(domain_size, periodicity=(True, True), default_ghost_layers=2)
@@ -78,8 +91,8 @@ def create_model(domain_size, num_phases, kappas, epsilon_dict, alpha=1, penalty
     # ------------- Compute kernels --------
     c_vec = c.center_vector
     f_penalty = penalty_factor * (1 - sum(c_vec[i] for i in range(num_phases))) ** 2
-    f_bulk = sum(kappa_i * f(c_i) for kappa_i, c_i in zip(kappas, c_vec)) + f_penalty
-
+    f_bulk = bulk(c_vec) + f_penalty
+    print(f_bulk)
     mu_eq = chemical_potentials_from_free_energy(f_bulk, order_parameters=c_vec)
     mu_eq += interfacial_chemical_potential(c_vec)
     mu_eq = [expand_diff_full(mu_i, functions=c) for mu_i in mu_eq]
@@ -101,6 +114,7 @@ def create_model(domain_size, num_phases, kappas, epsilon_dict, alpha=1, penalty
         ch_methods.append(ch_method)
         ch_update_rule = create_lb_update_rule(lb_method=ch_method,
                                                kernel_type='collide_only',
+                                               density_input=c(i),
                                                velocity_input=u.center_vector,
                                                compressible=True,
                                                optimization={"symbolic_field": pdf_field[i]})
@@ -133,7 +147,7 @@ def create_model(domain_size, num_phases, kappas, epsilon_dict, alpha=1, penalty
     for i in range(num_phases):
         cqc = ch_methods[i].conserved_quantity_computation
         output_assign = cqc.output_equations_from_pdfs(pdf_field[i].center_vector,
-                                                       {'density': c.center[i]})
+                                                       {'density': c(i)})
         getter_kernel = create_kernel(output_assign).compile()
         getter_kernels.append(getter_kernel)
 
@@ -205,29 +219,8 @@ def create_model(domain_size, num_phases, kappas, epsilon_dict, alpha=1, penalty
                 dh.run_kernel(ch_stream_kernels[i])
                 dh.swap(pdf_field[i].name, pdf_dst_field[i].name)
                 dh.run_kernel(getter_kernels[i])
+            if simplex_projection:
+                simplex_projection_2d(dh.cpu_arrays[c.name])
         return dh.cpu_arrays[c.name][1:-1, 1:-1, :]
 
     return dh, init, run
-
-
-if __name__ == '__main__':
-    from collections import defaultdict
-    num_phases = 3
-    kappas = [0.01] * 3
-    epsilon_dict = defaultdict(lambda: 0.1)
-    alpha = 1
-    dh, init, run = create_model([100, 100], num_phases, kappas,
-                                 epsilon_dict, alpha, penalty_factor=0.01)
-
-    c_arr = dh.cpu_arrays['c']
-    nx, ny = dh.shape
-
-    c_arr[:, :int(0.5 * nx), 0] = 1
-    c_arr[:, int(0.5 * nx):, 1] = 1
-
-    c_arr[int(0.4 * nx):int(0.6 * nx), int(0.4 * ny):int(0.6 * ny), 0] = 0
-    c_arr[int(0.4 * nx):int(0.6 * nx), int(0.4 * ny):int(0.6 * ny), 1] = 0
-    c_arr[int(0.4 * nx):int(0.6 * nx), int(0.4 * ny):int(0.6 * ny), 2] = 1
-    init()
-
-    res = run(1)
