@@ -43,10 +43,12 @@ def create_n_phase_model(alpha=1, num_phases=4,
                          surface_tensions=lambda i, j: 0.005 if i != j else 0,
                          f1=lambda c: c ** 2 * (1 - c) ** 2,
                          f2=lambda c: c ** 2 * (1 - c) ** 2,
+                         triple_point_energy=0,
                          **kwargs):
     order_parameters = symbolic_order_parameters(num_phases - 1)
     free_energy = free_energy_functional_n_phases(num_phases, surface_tensions, alpha,
-                                                  order_parameters, f1=f1, f2=f2)
+                                                  order_parameters, f1=f1, f2=f2,
+                                                  triple_point_energy=triple_point_energy)
     return PhaseFieldStep(free_energy, order_parameters, **kwargs)
 
 

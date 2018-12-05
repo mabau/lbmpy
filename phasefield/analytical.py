@@ -102,7 +102,8 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
                                     include_bulk=True, include_interface=True, symbolic_lambda=False,
                                     symbolic_dependent_variable=False,
                                     f1=lambda c: c ** 2 * (1 - c) ** 2,
-                                    f2=lambda c: c ** 2 * (1 - c) ** 2):
+                                    f2=lambda c: c ** 2 * (1 - c) ** 2,
+                                    triple_point_energy=0):
     r"""
     Returns a symbolic expression for the free energy of a system with N phases and
     specified surface tensions. The total free energy is the sum of a bulk and an interface component.
@@ -129,6 +130,7 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
         order_parameters: explicitly
         f1: bulk energy is computed as f1(c_i) + f1(c_j) - f2(c_i + c_j)
         f2: see f2
+        triple_point_energy: term multiplying c[i]*c[j]*c[k] for i < j < k
       Parameters useful for viewing / debugging the function
         include_bulk: if false no bulk term is added
         include_interface:if false no interface contribution is added
@@ -175,6 +177,11 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
 
     f_bulk = 3 / sp.sqrt(2) / interface_width * sum(bulk_term(i, j) for i, j in multi_sum(2, num_phases) if i != j)
     f_interface = sum(lambda_coeff(i, j) / 2 * Diff(phi[i]) * Diff(phi[j]) for i, j in multi_sum(2, num_phases - 1))
+
+    for i in range(len(phi)):
+        for j in range(i):
+            for k in range(j):
+                f_bulk += triple_point_energy * phi[i] * phi[j] * phi[k]
 
     result = 0
     if include_bulk:
