@@ -303,7 +303,7 @@ def extract_gamma(free_energy, order_parameters):
     return result
 
 
-def pressure_tensor_bulk_component(free_energy, order_parameters, bulk_chemical_potential):
+def pressure_tensor_bulk_component(free_energy, order_parameters, bulk_chemical_potential=None):
     """Diagonal component of pressure tensor in bulk"""
     bulk_free_energy, _ = separate_into_bulk_and_interface(free_energy)
     if bulk_chemical_potential is None:
