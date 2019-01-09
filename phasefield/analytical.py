@@ -303,10 +303,13 @@ def extract_gamma(free_energy, order_parameters):
     return result
 
 
-def pressure_tensor_bulk_component(free_energy, order_parameters):
+def pressure_tensor_bulk_component(free_energy, order_parameters, bulk_chemical_potential):
     """Diagonal component of pressure tensor in bulk"""
     bulk_free_energy, _ = separate_into_bulk_and_interface(free_energy)
-    mu_bulk = chemical_potentials_from_free_energy(bulk_free_energy, order_parameters)
+    if bulk_chemical_potential is None:
+        mu_bulk = chemical_potentials_from_free_energy(bulk_free_energy, order_parameters)
+    else:
+        mu_bulk = bulk_chemical_potential
     return sum(c_i * mu_i for c_i, mu_i in zip(order_parameters, mu_bulk)) - bulk_free_energy
 
 
@@ -341,14 +344,14 @@ def pressure_tensor_interface_component_new(free_energy, order_parameters, dim, 
     return result
 
 
-def pressure_tensor_from_free_energy(free_energy, order_parameters, dim,
+def pressure_tensor_from_free_energy(free_energy, order_parameters, dim, bulk_chemical_potential=None,
                                      include_bulk=True, include_interface=True):
     op = order_parameters
 
     def get_entry(i, j):
         p_if = pressure_tensor_interface_component(free_energy, op, dim, i, j) if include_interface else 0
         if include_bulk:
-            p_b = pressure_tensor_bulk_component(free_energy, op) if i == j else 0
+            p_b = pressure_tensor_bulk_component(free_energy, op, bulk_chemical_potential) if i == j else 0
         else:
             p_b = 0
         return sp.expand(p_if + p_b)
