@@ -65,15 +65,6 @@ def psi(k, c, f):
     return result
 
 
-def psi2(k, c, f):
-    n = len(c)
-    assert k <= n
-    result = 0
-    for s in range(1, k + 1):
-        result += (-1) ** (k - s) * sp.binomial(n - s, k - s) * capital_s(s, c, f)
-    return result
-
-
 def h(u, v):
     return sp.Abs(v) * v / (sp.Abs(v) + u ** 2)
 
@@ -98,8 +89,10 @@ def l_bar(free_energy, alpha_bar, c):
 
 def free_energy_interfacial(c, surface_tensions, a, epsilon):
     n = len(c)
+    # this is different than in the paper: the sum is under the condition i < j, not i != j
+    # otherwise the model does not correctly reduce to equation 1.5
     return -epsilon * a / 2 * sum(surface_tensions[i, j] * Diff(c[i]) * Diff(c[j])
-                                  for i in range(n) for j in range(n))
+                                  for i in range(n) for j in range(i))
 
 
 def free_energy_bulk(capital_f, b, epsilon):
@@ -125,6 +118,23 @@ def capital_f0(c, surface_tension, f=lambda c: c ** 2 * (1 - c) ** 2):
         for i in range(j):
             result += surface_tension[i, j] / 2 * (f(c[i]) + f(c[j]) - f(c[i] + c[j]))
     return result
+
+
+def free_energy(c, epsilon, surface_tensions, stabilization_factor):
+    alpha, _ = diffusion_coefficients(surface_tensions)
+
+    capital_f = (capital_f0(c, surface_tensions) +
+                 correction_g(c, surface_tensions) +
+                 stabilization_factor * stabilization_term(c, alpha))
+
+    def f(x):
+        return x ** 2 * (1 - x) ** 2
+
+    a, b = compute_ab(f)
+
+    f_bulk = free_energy_bulk(capital_f, b, epsilon)
+    f_if = free_energy_interfacial(c, surface_tensions, a, epsilon)
+    return f_if + f_bulk
 
 
 def symbolic_surface_tensions(num_phases):
