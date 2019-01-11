@@ -173,18 +173,12 @@ class capital_h(sp.Function):
         else:
             raise sp.function.ArgumentIndexError(self, argindex)
 
-    @staticmethod
-    def insert(expr):
-        if isinstance(expr, capital_h):
-            u, v = expr.args
-            av = sp.Abs(v)
-            zero_cond = sp.And(sp.Eq(u, 0), sp.Eq(v, 0))
-            return sp.Piecewise((0, zero_cond),
-                                (av * v / (av + u**2), True))
-        else:
-            new_args = [capital_h.insert(arg) for arg in expr.args]
-            return expr.func(*new_args) if new_args else expr
-
+    def doit(self, **hints):
+        u, v = self.args
+        av = sp.Abs(v)
+        zero_cond = sp.And(sp.Eq(u, 0), sp.Eq(v, 0))
+        return sp.Piecewise((0, zero_cond),
+                            (av * v / (av + u**2), True))
 
 def correction_g(c, surface_tensions, symbolic_coefficients=False):
     assert len(c) == surface_tensions.rows
