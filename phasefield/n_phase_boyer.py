@@ -180,6 +180,7 @@ class capital_h(sp.Function):
         return sp.Piecewise((0, zero_cond),
                             (av * v / (av + u**2), True))
 
+
 def correction_g(c, surface_tensions, symbolic_coefficients=False):
     assert len(c) == surface_tensions.rows
     n = len(c)
