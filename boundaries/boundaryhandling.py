@@ -1,7 +1,7 @@
 import numpy as np
 import sympy as sp
 from pystencils import TypedSymbol, create_indexed_kernel, Assignment
-from pystencils.backends.cbackend import CustomCppCode
+from pystencils.backends.cbackend import CustomCodeNode
 from pystencils.boundaries import BoundaryHandling
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 from pystencils.stencils import inverse_direction
@@ -76,7 +76,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
                                                         boundary_obj, target=self._target, openmp=self._openmp)
 
 
-class LbmWeightInfo(CustomCppCode):
+class LbmWeightInfo(CustomCodeNode):
 
     # --------------------------- Functions to be used by boundaries --------------------------
 
