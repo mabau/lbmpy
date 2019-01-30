@@ -10,6 +10,9 @@ from lbmpy.boundaries.boundaryhandling import BoundaryOffsetInfo, LbmWeightInfo
 class Boundary:
     """Base class all boundaries should derive from"""
 
+    inner_or_boundary = True
+    single_link = False
+
     def __init__(self, name=None):
         self._name = name
 
@@ -77,7 +80,6 @@ class NoSlip(Boundary):
 
 
 class UBB(Boundary):
-
     """Velocity bounce back boundary condition, enforcing specified velocity at obstacle"""
 
     def __init__(self, velocity, adapt_velocity_to_force=False, dim=None, name=None):
