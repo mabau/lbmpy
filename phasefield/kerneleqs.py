@@ -99,7 +99,7 @@ class CahnHilliardFDStep:
         self.phi_field = self.data_handling.fields[phi_field_name]
         self.tmp_field = self.data_handling.add_array_like(name + '_tmp', phi_field_name, latex_name='tmp')
 
-        num_phases = self.data_handling.values_per_cell(phi_field_name)
+        num_phases = self.phi_field.index_shape[0]
         if not hasattr(mobilities, '__len__'):
             mobilities = [mobilities] * num_phases
 

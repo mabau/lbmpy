@@ -20,15 +20,19 @@ class Boundary:
         """
         This function defines the boundary behavior and must therefore be implemented by all boundaries.
         Here the boundary is defined as a list of sympy equations, from which a boundary kernel is generated.
-        :param pdf_field: pystencils field describing the pdf. The current cell is cell next to the boundary,
-                         which is influenced by the boundary cell i.e. has a link from the boundary cell to
-                         itself.
-        :param direction_symbol: a sympy symbol that can be used as index to the pdf_field. It describes
-                                the direction pointing from the fluid to the boundary cell 
-        :param lb_method: an instance of the LB method used. Use this to adapt the boundary to the method
-                         (e.g. compressibility)
-        :param index_field: the boundary index field that can be used to retrieve and update boundary data
-        :return: list of sympy equations
+
+        Args:
+            pdf_field: pystencils field describing the pdf. The current cell is cell next to the boundary,
+                      which is influenced by the boundary cell i.e. has a link from the boundary cell to
+                      itself.
+            direction_symbol: a sympy symbol that can be used as index to the pdf_field. It describes
+                             the direction pointing from the fluid to the boundary cell
+            lb_method: an instance of the LB method used. Use this to adapt the boundary to the method
+                      (e.g. compressibility)
+            index_field: the boundary index field that can be used to retrieve and update boundary data
+
+        Returns:
+            :return: list of sympy equations
         """
         raise NotImplementedError("Boundary class has to overwrite __call__")
 
@@ -84,11 +88,11 @@ class UBB(Boundary):
 
     def __init__(self, velocity, adapt_velocity_to_force=False, dim=None, name=None):
         """
-        
-        :param velocity: can either be a constant, an access into a field, or a callback function.
-                         The callback functions gets a numpy record array with members, 'x','y','z', 'dir' (direction) 
-                         and 'velocity' which has to be set to the desired velocity of the corresponding link
-        :param adapt_velocity_to_force:
+        Args:
+            velocity: can either be a constant, an access into a field, or a callback function.
+                      The callback functions gets a numpy record array with members, 'x','y','z', 'dir' (direction)
+                      and 'velocity' which has to be set to the desired velocity of the corresponding link
+            adapt_velocity_to_force:
         """
         super(UBB, self).__init__(name)
         self._velocity = velocity
