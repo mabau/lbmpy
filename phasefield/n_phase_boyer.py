@@ -296,24 +296,6 @@ def condition_variables(expression):
     return result
 
 
-def simplify_zero_conditions_old(expression, cond=True):
-    cond_vars = condition_variables(expression)
-    if not cond_vars:
-        return [(expression, cond)]
-
-    result = []
-    substitutions = {}
-    for cond_var in cond_vars:
-        zero_expr = expression.subs(cond_var, 0)
-        condition_type = sp.LessThan if cond_var.is_nonnegative else sp.Eq
-        result += simplify_zero_conditions_old(zero_expr, sp.And(cond, condition_type(cond_var, 0)))
-        substitutions[cond_var] = sp.Dummy(nonzero=True)
-
-    non_zero_expr = expression.subs(substitutions).subs({v: k for k, v in substitutions.items()})
-    result += [(non_zero_expr, cond)]
-    return result
-
-
 def simplify_zero_conditions(expression):
     cond_vars = condition_variables(expression)
     if not cond_vars:
@@ -353,7 +335,7 @@ def chemical_potential_n_phase_boyer(order_parameters, interface_width, surface_
     fe_if = free_energy_interfacial(c, sigma, a, interface_width)
 
     mu_bulk = chemical_potentials_from_free_energy(fe_bulk, order_parameters)
-    mu_bulk = sp.Matrix([simplify_zero_conditions(capital_h.insert(e)) for e in mu_bulk])
+    mu_bulk = sp.Matrix([simplify_zero_conditions(e.doit()) for e in mu_bulk])
     if zero_threshold != 0:
         substitutions = {sp.Eq(c_i, 0): sp.StrictLessThan(sp.Abs(c_i), zero_threshold) for c_i in c}
         mu_bulk = mu_bulk.subs(substitutions)
@@ -367,7 +349,7 @@ def chemical_potential_n_phase_boyer(order_parameters, interface_width, surface_
 
 
 # noinspection PyUnresolvedReferences
-def plot_h():
+def plot_h():  # pragma: no cover
     from mpl_toolkits.mplot3d import Axes3D  # noqa
     import matplotlib.pyplot as plt
     import numpy as np
