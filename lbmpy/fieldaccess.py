@@ -5,6 +5,7 @@ from pystencils import Field
 
 
 __all__ = ['PdfFieldAccessor', 'CollideOnlyInplaceAccessor', 'StreamPullTwoFieldsAccessor',
+           'StreamPushTwoFieldsAccessor',
            'AAEvenTimeStepAccessor', 'AAOddTimeStepAccessor',
            'EsoTwistEvenTimeStepAccessor', 'EsoTwistOddTimeStepAccessor',
            'visualize_pdf_field_accessor', 'visualize_field_mapping']
@@ -56,6 +57,16 @@ class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
     @staticmethod
     def write(field, stencil):
         return [field(i) for i in range(len(stencil))]
+
+
+class StreamPushTwoFieldsAccessor(PdfFieldAccessor):
+    @staticmethod
+    def read(field, stencil):
+        return [field(i) for i in range(len(stencil))]
+
+    @staticmethod
+    def write(field, stencil):
+        return [field[d](i) for i, d in enumerate(stencil)]
 
 
 class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
