@@ -123,9 +123,9 @@ def capital_f0(c, surface_tension, f=lambda c: c ** 2 * (1 - c) ** 2):
 def free_energy(c, epsilon, surface_tensions, stabilization_factor):
     alpha, _ = diffusion_coefficients(surface_tensions)
 
-    capital_f = (capital_f0(c, surface_tensions) +
-                 correction_g(c, surface_tensions) +
-                 stabilization_factor * stabilization_term(c, alpha))
+    capital_f = (capital_f0(c, surface_tensions)
+                 + correction_g(c, surface_tensions)
+                 + stabilization_factor * stabilization_term(c, alpha))
 
     def f(x):
         return x ** 2 * (1 - x) ** 2
@@ -200,9 +200,9 @@ def capital_gamma(sigma, i, index_tuple):
     assert tuple(sorted(index_tuple)) == index_tuple
     j, k, m = index_tuple
     alpha, gamma = diffusion_coefficients(sigma)
-    return -6 * (alpha[i, j] * (sigma[j, k] + sigma[j, m]) +
-                 alpha[i, k] * (sigma[j, k] + sigma[k, m]) +
-                 alpha[i, m] * (sigma[j, m] + sigma[k, m]) - gamma[i])
+    return -6 * (alpha[i, j] * (sigma[j, k] + sigma[j, m])
+                 + alpha[i, k] * (sigma[j, k] + sigma[k, m])
+                 + alpha[i, m] * (sigma[j, m] + sigma[k, m]) - gamma[i])
 
 
 def capital_lambda(surface_tensions, index_tuple):

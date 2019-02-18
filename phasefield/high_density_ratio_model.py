@@ -42,10 +42,10 @@ def free_energy_high_density_ratio(eos, density, density_gas, density_liquid, c_
     def f(c):
         return c ** 2 * (1 - c) ** 2
 
-    f_bulk = (lambdas[0] / 2 * (psi_eos - psi_0) +
-              lambdas[1] / 2 * f(c_liquid_1) +
-              lambdas[2] / 2 * f(c_liquid_2))
-    f_interface = (kappas[0] / 2 * Diff(density) ** 2 +
-                   kappas[1] / 2 * Diff(c_liquid_1) ** 2 +
-                   kappas[2] / 2 * Diff(c_liquid_2) ** 2)
+    f_bulk = (lambdas[0] / 2 * (psi_eos - psi_0)
+              + lambdas[1] / 2 * f(c_liquid_1)
+              + lambdas[2] / 2 * f(c_liquid_2))
+    f_interface = (kappas[0] / 2 * Diff(density) ** 2
+                   + kappas[1] / 2 * Diff(c_liquid_1) ** 2
+                   + kappas[2] / 2 * Diff(c_liquid_2) ** 2)
     return f_bulk + f_interface

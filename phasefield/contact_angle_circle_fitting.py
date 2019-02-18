@@ -23,12 +23,12 @@ def circle_intersections(midpoint0, midpoint1, radius0, radius1):
         yy = -(-b2 * k1 + b1 * k2) / (k1 - k2)
         return [(xx, yy)]
     elif np.abs(radius1 - radius0) < midpoint_distance < radius0 + radius1:
-        xx1 = (-b2 * k2 + x1 + k2 * y1 - np.sqrt(-b2 ** 2 + radius1 ** 2 + k2 ** 2 * radius1 ** 2 - 2 * b2 *
-               k2 * x1 - k2 ** 2 * x1 ** 2 + 2 * b2 * y1 + 2 * k2 * x1 * y1 - y1 ** 2)) / (1 + k2 ** 2)
+        xx1 = (-b2 * k2 + x1 + k2 * y1 - np.sqrt(-b2 ** 2 + radius1 ** 2 + k2 ** 2 * radius1 ** 2 - 2 * b2
+               * k2 * x1 - k2 ** 2 * x1 ** 2 + 2 * b2 * y1 + 2 * k2 * x1 * y1 - y1 ** 2)) / (1 + k2 ** 2)
         yy1 = k2 * xx1 + b2
 
-        xx2 = (-b2 * k2 + x1 + k2 * y1 + np.sqrt(-b2 ** 2 + radius1 ** 2 + k2 ** 2 * radius1 ** 2 - 2 * b2 *
-               k2 * x1 - k2 ** 2 * x1 ** 2 + 2 * b2 * y1 + 2 * k2 * x1 * y1 - y1 ** 2)) / (1 + k2 ** 2)
+        xx2 = (-b2 * k2 + x1 + k2 * y1 + np.sqrt(-b2 ** 2 + radius1 ** 2 + k2 ** 2 * radius1 ** 2 - 2 * b2
+               * k2 * x1 - k2 ** 2 * x1 ** 2 + 2 * b2 * y1 + 2 * k2 * x1 * y1 - y1 ** 2)) / (1 + k2 ** 2)
         yy2 = k2 * xx2 + b2
 
         return [(xx1, yy1), (xx2, yy2)]

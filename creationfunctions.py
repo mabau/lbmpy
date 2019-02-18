@@ -11,7 +11,7 @@ General:
 
 - ``stencil='D2Q9'``: stencil name e.g. 'D2Q9', 'D3Q19'. See :func:`pystencils.stencils.get_stencil` for details
 - ``method='srt'``: name of lattice Boltzmann method. This determines the selection and relaxation pattern of
-   moments/cumulants, i.e. which moment/cumulant basis is chosen, and which of the basis vectors are relaxed together
+  moments/cumulants, i.e. which moment/cumulant basis is chosen, and which of the basis vectors are relaxed together
     - ``srt``: single relaxation time (:func:`lbmpy.methods.create_srt`)
     - ``trt``: two relaxation time, first relaxation rate is for even moments and determines the viscosity (as in SRT),
       the second relaxation rate is used for relaxing odd moments, and controls the bulk viscosity.
@@ -51,7 +51,7 @@ General:
   fields. In each timestep the corresponding quantities are written to the given fields.
 - ``velocity_input``: symbolic field where the velocities are read from (for advection diffusion LBM)
 - ``density_input``: symbolic field or field access where to read density from. When passing this parameter,
-   ``velocity_input`` has to be passed as well
+  ``velocity_input`` has to be passed as well
 - ``kernel_type``: supported values: 'stream_pull_collide' (default), 'collide_only'
 
 

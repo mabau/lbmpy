@@ -167,8 +167,8 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
         n = num_phases - 1
         if k == l:
             assert surface_tensions(l, l) == 0
-        return 3 / sp.sqrt(2) * interface_width * (surface_tensions(k, n) +
-                                                   surface_tensions(l, n) - surface_tensions(k, l))
+        return 3 / sp.sqrt(2) * interface_width * (surface_tensions(k, n)
+                                                   + surface_tensions(l, n) - surface_tensions(k, l))
 
     def bulk_term(i, j):
         return surface_tensions(i, j) / 2 * (f1(phi[i]) + f1(phi[j]) - f2(phi[i] + phi[j]))

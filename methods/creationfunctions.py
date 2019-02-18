@@ -315,8 +315,8 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
     energy_transport_tensor = list(poly_repr([a for a in moments_of_order(3, dim, True)
                                               if 3 not in a]))
 
-    explicitly_defined = set(rho + velocity + shear_tensor_off_diagonal +
-                             shear_tensor_diagonal + energy_transport_tensor)
+    explicitly_defined = set(rho + velocity + shear_tensor_off_diagonal
+                             + shear_tensor_diagonal + energy_transport_tensor)
     rest = list(set(poly_repr(moments_up_to_component_order(2, dim))) - explicitly_defined)
     assert len(rest) + len(explicitly_defined) == 3**dim
 

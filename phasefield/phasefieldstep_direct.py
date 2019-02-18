@@ -119,8 +119,8 @@ class PhaseFieldStepDirect:
         # Sync functions
         self.phi_sync = dh.synchronization_function([self.phi_field.name])
         self.mu_sync = dh.synchronization_function([self.mu_field.name])
-        self.pdf_sync = dh.synchronization_function([self.hydro_pdfs[0].name] +
-                                                    [src.name for src, _ in self.ch_pdfs])
+        self.pdf_sync = dh.synchronization_function([self.hydro_pdfs[0].name]
+                                                    + [src.name for src, _ in self.ch_pdfs])
 
         self.reset()
 
