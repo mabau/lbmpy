@@ -1,0 +1,23 @@
+#nvidia-docker run --privileged=true -it --name "benchmark_martin" i10git.cs.fau.de:5005/software/pystencils/benchmark /bin/bash
+#docker exec -it benchmark_martin /bin/bash
+
+apt-get update; apt-get install -y vim htop
+pip install blitzdb
+
+export PATH=$PATH:/usr/local/likwid/bin
+
+likwid-setFrequencies -t 0
+likwid-setFrequencies -g performance
+likwid-setFrequencies -x 3.3 -y 3.3 # set frequency to 3.3
+
+git clone https://i10git.cs.fau.de/software/pystencils.git 
+cd pystencils; python install_all.py
+
+# Socket 1
+cd lbmpy_tests/benchmark
+export OMP_PLACES="{0}, {1}, {2}, {3}"  # pin to first socket
+taskset -c 0,1,2,3 python3 test_benchmark.py client -n i10swarm14_freq3.3 -H i10staff41
+
+# Socket 2
+export OMP_PLACES="{4}, {5}, {6}, {7}"  # pin to first socket
+taskset -c 4,5,6,7 python3 test_benchmark.py client -n i10swarm14_freq3.3 -H i10staff41

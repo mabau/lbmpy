@@ -1,0 +1,3 @@
+
+.. automodule:: lbmpy.scenarios
+   :members:
