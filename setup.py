@@ -1,6 +1,12 @@
+import os
+import sys
 from setuptools import setup, find_packages
+sys.path.insert(0, os.path.abspath('..'))
+from custom_pypi_index.pypi_index import get_current_dev_version_from_git
+
 
 setup(name='lbmpy',
+      version=get_current_dev_version_from_git(),
       description='Code Generation for Lattice Boltzmann Methods',
       author='Martin Bauer',
       license='AGPLv3',
@@ -24,5 +30,4 @@ setup(name='lbmpy',
             'interactive': ['pystencils[interactive]', 'scipy', 'scikit-image', 'cython'],
             'doc': ['pystencils[doc]'],
       },
-      version_format='{tag}.dev{commits}+{sha}',
       )
