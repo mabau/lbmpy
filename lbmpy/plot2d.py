@@ -77,7 +77,7 @@ def phase_plot(phase_field: np.ndarray, linewidth=1.0, clip=True) -> None:
     assert len(phase_field.shape) == 3
 
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", lineno=1230)
+        warnings.simplefilter("ignore")
         for i in range(phase_field.shape[-1]):
             scalar_field_alpha_value(phase_field[..., i], next(color_cycle), clip=clip, interpolation='bilinear')
         if linewidth:
