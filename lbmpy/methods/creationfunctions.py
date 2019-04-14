@@ -403,8 +403,10 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
         # The moments are weighted-orthogonal (Eq. 2.58)
         
         # Further references:
-        # Duenweg, B., Schiller, U. D., & Ladd, A. J. (2007). Statistical mechanics of the fluctuating lattice Boltzmann equation. Physical Review E, 76(3)
-        # Chun, B., & Ladd, A. J. (2007). Interpolated boundary condition for lattice Boltzmann simulations of flows in narrow gaps. Physical review E, 75(6)
+        # Duenweg, B., Schiller, U. D., & Ladd, A. J. (2007). Statistical mechanics of the fluctuating
+        # lattice Boltzmann equation. Physical Review E, 76(3)
+        # Chun, B., & Ladd, A. J. (2007). Interpolated boundary condition for lattice Boltzmann simulations of
+        # flows in narrow gaps. Physical review E, 75(6)
         sq = x ** 2 + y ** 2 + z ** 2
         nested_moments = [
             [one, x, y, z],  # [0, 3, 5, 7]
