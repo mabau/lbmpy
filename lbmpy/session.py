@@ -1,4 +1,5 @@
 from pystencils.sympy_gmpy_bug_workaround import *
+import pystencils as ps
 import sympy as sp
 import numpy as np
 from lbmpy.scenarios import *
