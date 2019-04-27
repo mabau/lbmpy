@@ -1,9 +1,7 @@
 import pytest
 import sympy as sp
 import functools
-from sympy.abc import a, b, x, y, z
-from pystencils.fd import expand_diff_products, combine_diff_products, Diff, \
-    expand_diff_linear, normalize_diff_order
+from pystencils.fd import Diff, normalize_diff_order
 from pystencils.sympyextensions import multidimensional_sum
 from lbmpy.chapman_enskog.chapman_enskog_higher_order import determine_higher_order_moments, get_solvability_conditions
 from lbmpy.chapman_enskog.chapman_enskog_steady_state import SteadyStateChapmanEnskogAnalysisSRT, \
@@ -13,29 +11,6 @@ from lbmpy.chapman_enskog.chapman_enskog import ChapmanEnskogAnalysis, LbMethodE
 from lbmpy.relaxationrates import lattice_viscosity_from_relaxation_rate
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.forcemodels import Guo
-
-
-def test_derivative_expand_collect():
-    original = Diff(x*y*z)
-    result = combine_diff_products(combine_diff_products(expand_diff_products(original))).expand()
-    assert original == result
-
-    original = -3 * y * z * Diff(x) + 2 * x * z * Diff(y)
-    result = expand_diff_products(combine_diff_products(original)).expand()
-    assert original == result
-
-    original = a + b * Diff(x ** 2 * y * z)
-    expanded = expand_diff_products(original)
-    collect_res = combine_diff_products(combine_diff_products(combine_diff_products(expanded)))
-    assert collect_res == original
-
-
-def test_diff_expand_using_linearity():
-    eps = sp.symbols("epsilon")
-    funcs = [a, b]
-    test = Diff(eps * Diff(a+b))
-    result = expand_diff_linear(test, functions=funcs)
-    assert result == eps * Diff(Diff(a)) + eps * Diff(Diff(b))
 
 
 def test_srt():

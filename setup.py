@@ -1,12 +1,53 @@
 import os
 import sys
+import io
 from setuptools import setup, find_packages
-sys.path.insert(0, os.path.abspath('..'))
-from custom_pypi_index.pypi_index import get_current_dev_version_from_git
+import distutils
+from contextlib import redirect_stdout
+from importlib import import_module
+sys.path.insert(0, os.path.abspath('doc'))
+from version_from_git import version_number_from_git
+
+
+quick_tests = [
+    'test_serial_scenarios.test_ldc_mrt',
+    'test_force_on_boundary.test_force_on_boundary',
+]
+
+
+class SimpleTestRunner(distutils.cmd.Command):
+    """A custom command to run selected tests"""
+
+    description = 'run some quick tests'
+    user_options = []
+
+    @staticmethod
+    def _run_tests_in_module(test):
+        """Short test runner function - to work also if py.test is not installed."""
+        test = 'lbmpy_tests.' + test
+        mod, function_name = test.rsplit('.', 1)
+        if isinstance(mod, str):
+            mod = import_module(mod)
+
+        func = getattr(mod, function_name)
+        print("   -> %s in %s" % (function_name, mod.__name__))
+        with redirect_stdout(io.StringIO()):
+            func()
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        """Run command."""
+        for test in quick_tests:
+            self._run_tests_in_module(test)
 
 
 setup(name='lbmpy',
-      version=get_current_dev_version_from_git(),
+      version=version_number_from_git(),
       description='Code Generation for Lattice Boltzmann Methods',
       author='Martin Bauer',
       license='AGPLv3',
@@ -30,4 +71,7 @@ setup(name='lbmpy',
             'interactive': ['pystencils[interactive]', 'scipy', 'scikit-image', 'cython'],
             'doc': ['pystencils[doc]'],
       },
+      cmdclass={
+          'quicktest': SimpleTestRunner
+      }
       )
