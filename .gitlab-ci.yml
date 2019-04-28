@@ -112,6 +112,7 @@ build-documentation:
   image: i10git.cs.fau.de:5005/software/pystencils/full
   script:
     - export PYTHONPATH=`pwd`
+    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - mkdir html_doc
     - sphinx-build -W -b html doc  html_doc
   tags:

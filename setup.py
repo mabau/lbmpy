@@ -11,7 +11,7 @@ from version_from_git import version_number_from_git
 
 quick_tests = [
     'test_serial_scenarios.test_ldc_mrt',
-    'test_force_on_boundary.test_force_on_boundary',
+    'test_serial_scenarios.test_channel_srt',
 ]
 
 
