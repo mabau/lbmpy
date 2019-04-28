@@ -1,6 +1,4 @@
-from itertools import cycle
 import matplotlib.patches as patches
-from matplotlib.text import Text
 
 from pystencils import make_slice
 from pystencils.plot2d import *
@@ -61,28 +59,6 @@ def boundary_handling(boundary_handling_obj, slice_obj=None, boundary_name_to_co
     axis('equal')
     if show_legend:
         legend(handles=path_list, bbox_to_anchor=(1.02, 0.5), loc=2, borderaxespad=0.)
-
-
-def phase_plot(phase_field: np.ndarray, linewidth=1.0, clip=True) -> None:
-    """Plots a phase field array using the phase variables as alpha channel.
-
-    Args:
-        phase_field: array with len(shape) == 3, first two dimensions are spatial, the last one indexes the phase
-                     components.
-        linewidth: line width of the 0.5 contour lines that are drawn over the alpha blended phase images
-        clip: see scalar_field_alpha_value function
-    """
-    color_cycle = cycle(['#fe0002', '#00fe00', '#0000ff', '#ffa800', '#f600ff'])
-
-    assert len(phase_field.shape) == 3
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        for i in range(phase_field.shape[-1]):
-            scalar_field_alpha_value(phase_field[..., i], next(color_cycle), clip=clip, interpolation='bilinear')
-        if linewidth:
-            for i in range(phase_field.shape[-1]):
-                scalar_field_contour(phase_field[..., i], levels=[0.5], colors='k', linewidths=[linewidth])
 
 
 def phase_plot_for_step(phase_field_step, slice_obj=make_slice[:, :], **kwargs):
