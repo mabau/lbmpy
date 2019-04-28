@@ -17,6 +17,7 @@ tests-and-coverage:
     - mkdir -p ~/.config/matplotlib
     - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
     - mkdir public
+    - pip install git+ssh://git@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=. -m "not longrun"
   tags:
     - docker
@@ -38,6 +39,7 @@ test-longrun:
     - export NUM_CORES=$(nproc --all)
     - mkdir -p ~/.config/matplotlib
     - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
+    - pip install git+ssh://git@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=.
   tags:
     - docker
@@ -60,6 +62,7 @@ minimal-windows:
     - source activate pystencils_dev
     - env
     - conda env list
+    - pip install git+ssh://git@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - python -c "import numpy"
     - python setup.py quicktest
 
@@ -70,6 +73,7 @@ minimal-ubuntu:
       - $ENABLE_NIGHTLY_BUILDS
   image: i10git.cs.fau.de:5005/software/pystencils/minimal_ubuntu
   script:
+    - pip install git+ssh://git@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - python3 setup.py quicktest
   tags:
     - docker
@@ -81,6 +85,7 @@ minimal-conda:
       - $ENABLE_NIGHTLY_BUILDS
   image: i10git.cs.fau.de:5005/software/pystencils/minimal_conda
   script:
+    - pip install git+ssh://git@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - python setup.py quicktest
   tags:
     - docker
