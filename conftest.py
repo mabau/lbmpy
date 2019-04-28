@@ -14,6 +14,7 @@ try:
     pyximport.install(language_level=3)
 except ImportError:
     pass
+from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
 
 
 SCRIPT_FOLDER = os.path.dirname(os.path.realpath(__file__))
