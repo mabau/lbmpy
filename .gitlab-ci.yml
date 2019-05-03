@@ -11,7 +11,7 @@ tests-and-coverage:
   except:
     variables:
       - $ENABLE_NIGHTLY_BUILDS
-  image: i10git.cs.fau.de:5005/software/pystencils/full
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
     - export NUM_CORES=$(nproc --all)
     - mkdir -p ~/.config/matplotlib
@@ -34,7 +34,7 @@ test-longrun:
   only:
     variables:
       - $ENABLE_NIGHTLY_BUILDS
-  image: i10git.cs.fau.de:5005/software/pystencils/full
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
     - export NUM_CORES=$(nproc --all)
     - mkdir -p ~/.config/matplotlib
@@ -71,7 +71,7 @@ minimal-ubuntu:
   except:
     variables:
       - $ENABLE_NIGHTLY_BUILDS
-  image: i10git.cs.fau.de:5005/software/pystencils/minimal_ubuntu
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_ubuntu
   script:
     - pip3 install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - python3 setup.py quicktest
@@ -83,7 +83,7 @@ minimal-conda:
   except:
     variables:
       - $ENABLE_NIGHTLY_BUILDS
-  image: i10git.cs.fau.de:5005/software/pystencils/minimal_conda
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
   script:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - python setup.py quicktest
@@ -99,7 +99,7 @@ flake8-lint:
   except:
     variables:
       - $ENABLE_NIGHTLY_BUILDS
-  image: i10git.cs.fau.de:5005/software/pystencils/full
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
     - flake8 lbmpy
   tags:
@@ -109,7 +109,7 @@ flake8-lint:
 
 build-documentation:
   stage: test
-  image: i10git.cs.fau.de:5005/software/pystencils/full
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
     - export PYTHONPATH=`pwd`
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
@@ -124,7 +124,7 @@ build-documentation:
 
 
 pages:
-  image: i10git.cs.fau.de:5005/software/pystencils/full
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   stage: deploy
   script:
     - ls -l
