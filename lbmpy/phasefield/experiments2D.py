@@ -7,7 +7,7 @@ from pystencils import make_slice
 
 def write_phase_field_picture_sequence(sc, filename='two_drops_%05d.png',
                                        time_steps_between_frames=25, total_steps=9000):
-    import lbmpy.plot2d as plt
+    import lbmpy.plot as plt
     outer_iterations = total_steps // time_steps_between_frames
     for i in range(outer_iterations):
         plt.figure(figsize=(14, 7))
@@ -20,7 +20,7 @@ def write_phase_field_picture_sequence(sc, filename='two_drops_%05d.png',
 
 def write_phase_velocity_picture_sequence(sc, filename='falling_drop_%05d.png',
                                           time_steps_between_frames=25, total_steps=9000):
-    import lbmpy.plot2d as plt
+    import lbmpy.plot as plt
     outer_iterations = total_steps // time_steps_between_frames
     for i in range(outer_iterations):
         plt.figure(figsize=(14, 10))

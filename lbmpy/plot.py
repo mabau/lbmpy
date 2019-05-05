@@ -1,7 +1,7 @@
 import matplotlib.patches as patches
 
 from pystencils import make_slice
-from pystencils.plot2d import *
+from pystencils.plot import *
 
 
 def boundary_handling(boundary_handling_obj, slice_obj=None, boundary_name_to_color=None, show_legend=True):

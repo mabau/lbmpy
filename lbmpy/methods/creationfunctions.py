@@ -8,7 +8,7 @@ import itertools
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.momentbased import MomentBasedLbMethod
 from lbmpy.stencils import get_stencil
-from pystencils.stencils import stencils_have_same_entries
+from pystencils.stencil import have_same_entries
 from lbmpy.moments import is_even, gram_schmidt, get_default_moment_set_for_stencil, MOMENT_SYMBOLS, \
     exponents_to_polynomial_representations, moments_of_order, moments_up_to_component_order, \
     sort_moments_into_groups_of_same_order, get_order, discrete_moment
@@ -380,12 +380,12 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
     one = sp.Rational(1, 1)
 
     moment_to_relaxation_rate_dict = OrderedDict()
-    if stencils_have_same_entries(stencil, get_stencil("D2Q9")):
+    if have_same_entries(stencil, get_stencil("D2Q9")):
         moments = get_default_moment_set_for_stencil(stencil)
         orthogonal_moments = gram_schmidt(moments, stencil)
         orthogonal_moments_scaled = [e * common_denominator(e) for e in orthogonal_moments]
         nested_moments = list(sort_moments_into_groups_of_same_order(orthogonal_moments_scaled).values())
-    elif stencils_have_same_entries(stencil, get_stencil("D3Q15")):
+    elif have_same_entries(stencil, get_stencil("D3Q15")):
         sq = x ** 2 + y ** 2 + z ** 2
         nested_moments = [
             [one, x, y, z],  # [0, 3, 5, 7]
@@ -395,7 +395,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
             [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 10, 11, 12, 13]
             [x * y * z]
         ]
-    elif stencils_have_same_entries(stencil, get_stencil("D3Q19")):
+    elif have_same_entries(stencil, get_stencil("D3Q19")):
         # This MRT variant mentioned in the dissertation of Ulf Schiller 
         # "Thermal fluctuations and boundary conditions in the lattice Boltzmann method" (2008), p. 24ff
         # There are some typos in the moment matrix on p.27
@@ -417,7 +417,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
             [(2 * sq - 3) * (3 * x ** 2 - sq), (2 * sq - 3) * (y ** 2 - z ** 2)],  # [10, 12]
             [(y ** 2 - z ** 2) * x, (z ** 2 - x ** 2) * y, (x ** 2 - y ** 2) * z]  # [16, 17, 18]
         ]
-    elif stencils_have_same_entries(stencil, get_stencil("D3Q27")):
+    elif have_same_entries(stencil, get_stencil("D3Q27")):
         xsq, ysq, zsq = x ** 2, y ** 2, z ** 2
         all_moments = [
             sp.Rational(1, 1),  # 0

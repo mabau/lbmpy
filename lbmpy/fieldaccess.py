@@ -1,6 +1,6 @@
 import sympy as sp
 import abc
-from pystencils.stencils import inverse_direction
+from pystencils.stencil import inverse_direction
 from pystencils import Field
 
 
@@ -169,7 +169,7 @@ class EsoTwistEvenTimeStepAccessor(PdfFieldAccessor):
 
 
 def visualize_field_mapping(axes, stencil, field_mapping, color='b'):
-    from lbmpy.plot2d import LbGrid
+    from lbmpy.plot import LbGrid
     grid = LbGrid(3, 3)
     grid.fill_with_default_arrows()
     for field_access, direction in zip(field_mapping, stencil):

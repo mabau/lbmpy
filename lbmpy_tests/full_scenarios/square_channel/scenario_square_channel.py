@@ -181,7 +181,7 @@ def run(convergence_check_interval=1000, convergence_threshold=1e-12, plot_resul
         last_vel_field = np.copy(vel)
 
     if plot_result:
-        import lbmpy.plot2d as plt
+        import lbmpy.plot as plt
         vel_profile = vel[1, params['domain_size'][1] // 2, :, 0]
         plt.subplot(1, 2, 1)
         plt.plot(vel_profile)

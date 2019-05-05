@@ -139,7 +139,7 @@ def long_run(steady=True, **kwargs):
         sc.run(10000)
         res = evaluate_static_quantities(sc)
         print(res)
-    import lbmpy.plot2d as plt
+    import lbmpy.plot as plt
     plt.vector_field_magnitude(sc.velocity[:, :])
     plt.show()
 

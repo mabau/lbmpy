@@ -2,7 +2,7 @@ import os
 import numpy as np
 from tempfile import TemporaryDirectory
 from lbmpy.scenarios import create_lid_driven_cavity
-import lbmpy.plot2d as plt
+import lbmpy.plot as plt
 
 
 def test_animation():
@@ -21,22 +21,22 @@ def test_animation():
     plt.cla()
 
     with TemporaryDirectory() as tmp_dir:
-        ani = plt.vector_field_magnitude_animation(run_vec, interval=1, frames=30)
+        ani = plt.vector_field_magnitude_animation(run_vec, interval=1, frames=2)
         ani.save(os.path.join(tmp_dir, "animation1.avi"))
 
-        ani = plt.vector_field_animation(run_vec, interval=1, frames=30, rescale=True)
+        ani = plt.vector_field_animation(run_vec, interval=1, frames=2, rescale=True)
         ani.save(os.path.join(tmp_dir, "animation2.avi"))
 
-        ani = plt.vector_field_animation(run_vec, interval=1, frames=30, rescale=False)
+        ani = plt.vector_field_animation(run_vec, interval=1, frames=2, rescale=False)
         ani.save(os.path.join(tmp_dir, "animation3.avi"))
 
-        ani = plt.scalar_field_animation(run_scalar, interval=1, frames=30, rescale=True)
+        ani = plt.scalar_field_animation(run_scalar, interval=1, frames=2, rescale=True)
         ani.save(os.path.join(tmp_dir, "animation4.avi"))
 
-        ani = plt.scalar_field_animation(run_scalar, interval=1, frames=30, rescale=False)
+        ani = plt.scalar_field_animation(run_scalar, interval=1, frames=2, rescale=False)
         ani.save(os.path.join(tmp_dir, "animation5.avi"))
 
-        ani = plt.surface_plot_animation(run_scalar, frames=30)
+        ani = plt.surface_plot_animation(run_scalar, frames=2)
         ani.save(os.path.join(tmp_dir, "animation6.avi"))
 
 

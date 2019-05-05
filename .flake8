@@ -1,5 +1,5 @@
 [flake8]
 max-line-length=120
-exclude=lbmpy/plot2d.py
+exclude=lbmpy/plot.py
         lbmpy/session.py
 ignore = W293 W503 W291

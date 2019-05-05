@@ -62,7 +62,7 @@ def create_force_driven_channel(force=1e-6, domain_size=None, dim=2, radius=None
 
 
 def plot_velocity_fields(vel1, vel2):
-    import lbmpy.plot2d as plt
+    import lbmpy.plot as plt
     diff = np.average(np.abs(vel2 - vel1))
     has_diff = diff > 1e-12
     num_plots = 3 if has_diff else 2

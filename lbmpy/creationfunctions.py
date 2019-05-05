@@ -181,7 +181,7 @@ from lbmpy.methods.entropic_eq_srt import create_srt_entropic
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.stencils import get_stencil
 from pystencils.simp import add_subexpressions_for_field_reads
-from pystencils.stencils import stencils_have_same_entries
+from pystencils.stencil import have_same_entries
 import lbmpy.forcemodels as forcemodels
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor
@@ -391,9 +391,9 @@ def create_lb_method(**params):
     elif method_name.lower() == 'mrt3':
         method = create_mrt3(stencil_entries, relaxation_rates, **common_params)
     elif method_name.lower().startswith('trt-kbc-n'):
-        if stencils_have_same_entries(stencil_entries, get_stencil("D2Q9")):
+        if have_same_entries(stencil_entries, get_stencil("D2Q9")):
             dim = 2
-        elif stencils_have_same_entries(stencil_entries, get_stencil("D3Q27")):
+        elif have_same_entries(stencil_entries, get_stencil("D3Q27")):
             dim = 3
         else:
             raise NotImplementedError("KBC type TRT methods can only be constructed for D2Q9 and D3Q27 stencils")

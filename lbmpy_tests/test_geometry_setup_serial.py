@@ -25,7 +25,7 @@ def test_pipe():
                                       optimization={})
             add_pipe_walls(sc.boundary_handling, diameter)
             if plot:
-                import lbmpy.plot2d as plt
+                import lbmpy.plot as plt
                 from pystencils.slicing import make_slice
                 if len(domain_size) == 2:
                     plt.boundary_handling(sc.boundary_handling)

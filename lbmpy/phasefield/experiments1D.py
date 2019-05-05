@@ -6,7 +6,7 @@ from pystencils.fd import Diff
 
 
 def plot_status(phase_field_step, from_x=None, to_x=None):
-    import lbmpy.plot2d as plt
+    import lbmpy.plot as plt
 
     domain_size = phase_field_step.data_handling.shape
     assert len(domain_size) == 2 and domain_size[1] == 1, "Not a 1D scenario"
@@ -38,7 +38,7 @@ def plot_status(phase_field_step, from_x=None, to_x=None):
 
 def plot_free_energy_bulk_contours(free_energy, order_parameters, phase0=0, phase1=1,
                                    x_range=(-0.2, 1.2), y_range=(-0.2, 1.2), **kwargs):
-    import lbmpy.plot2d as plt
+    import lbmpy.plot as plt
 
     x = np.linspace(x_range[0], x_range[1], 100)
     y = np.linspace(y_range[0], y_range[1], 100)
@@ -109,7 +109,7 @@ def tanh_test(pf_step, phase0, phase1, expected_interface_width=1, time_steps=10
     Returns:
         deviation of simulated profile from analytical solution as average(abs(simulation-analytic))
     """
-    import lbmpy.plot2d as plt
+    import lbmpy.plot as plt
     from lbmpy.phasefield.analytical import analytic_interface_profile
 
     domain_size = pf_step.data_handling.shape
@@ -151,7 +151,7 @@ def galilean_invariance_test(pf_step, velocity=0.05, rounds=3, phase0=0, phase1=
     Returns:
         change in velocity
     """
-    import lbmpy.plot2d as plt
+    import lbmpy.plot as plt
     from lbmpy.phasefield.analytical import analytic_interface_profile
 
     domain_size = pf_step.data_handling.shape

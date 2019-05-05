@@ -2,10 +2,9 @@ import pytest
 import itertools
 import warnings
 import sympy as sp
+import pystencils as ps
 import lbmpy.stencils as s
-import pystencils.stencils
 from lbmpy.stencils import get_stencil
-from pystencils.stencils import is_valid_stencil, is_symmetric_stencil, visualize_stencil
 
 
 def get_3d_stencils():
@@ -51,18 +50,18 @@ def test_uniqueness():
 
 def test_run_self_check():
     for st in get_all_stencils():
-        assert pystencils.stencils.is_valid_stencil(st, max_neighborhood=1)
-        assert pystencils.stencils.is_symmetric_stencil(st)
+        assert ps.stencil.is_valid(st, max_neighborhood=1)
+        assert ps.stencil.is_symmetric(st)
 
 
 def test_inverse_direction():
-    assert pystencils.stencils.inverse_direction((1, 0, -1)), (-1, 0 == 1)
+    assert ps.stencil.inverse_direction((1, 0, -1)), (-1, 0 == 1)
 
 
 def test_free_functions():
-    assert not is_symmetric_stencil([(1, 0), (0, 1)])
-    assert not is_valid_stencil([(1, 0), (1, 1, 0)])
-    assert not is_valid_stencil([(2, 0), (0, 1)], max_neighborhood=1)
+    assert not ps.stencil.is_symmetric([(1, 0), (0, 1)])
+    assert not ps.stencil.is_valid([(1, 0), (1, 1, 0)])
+    assert not ps.stencil.is_valid([(2, 0), (0, 1)], max_neighborhood=1)
 
     with pytest.raises(ValueError) as e:
         get_stencil("name_that_does_not_exist")
@@ -78,5 +77,5 @@ def test_visualize():
     figure = plt.gcf()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        visualize_stencil(d2q9, figure=figure, data=[str(i) for i in range(9)])
-        visualize_stencil(d3q19, figure=figure, data=sp.symbols("a_:19"))
+        ps.stencil.plot(d2q9, figure=figure, data=[str(i) for i in range(9)])
+        ps.stencil.plot(d3q19, figure=figure, data=sp.symbols("a_:19"))

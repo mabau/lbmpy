@@ -387,21 +387,21 @@ def get_default_moment_set_for_stencil(stencil):
     Returns a sequence of moments that are commonly used to construct a LBM equilibrium for the given stencil
     """
     from lbmpy.stencils import get_stencil
-    from pystencils.stencils import stencils_have_same_entries
+    from pystencils.stencil import have_same_entries
 
     to_poly = exponents_to_polynomial_representations
 
-    if stencils_have_same_entries(stencil, get_stencil("D2Q9")):
+    if have_same_entries(stencil, get_stencil("D2Q9")):
         return sorted(to_poly(moments_up_to_component_order(2, dim=2)), key=moment_sort_key)
 
     all27_moments = moments_up_to_component_order(2, dim=3)
-    if stencils_have_same_entries(stencil, get_stencil("D3Q27")):
+    if have_same_entries(stencil, get_stencil("D3Q27")):
         return to_poly(all27_moments)
-    if stencils_have_same_entries(stencil, get_stencil("D3Q19")):
+    if have_same_entries(stencil, get_stencil("D3Q19")):
         non_matched_moments = [(1, 2, 2), (1, 1, 2), (2, 2, 2), (1, 1, 1)]
         moments19 = set(all27_moments) - set(extend_moments_with_permutations(non_matched_moments))
         return sorted(to_poly(moments19), key=moment_sort_key)
-    if stencils_have_same_entries(stencil, get_stencil("D3Q15")):
+    if have_same_entries(stencil, get_stencil("D3Q15")):
         x, y, z = MOMENT_SYMBOLS
         non_matched_moments = [(1, 2, 0), (2, 2, 0), (1, 1, 2), (1, 2, 2), (2, 2, 2)]
         additional_moments = (6 * (x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2),
