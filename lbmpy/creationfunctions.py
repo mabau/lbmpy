@@ -184,7 +184,9 @@ from pystencils.simp import add_subexpressions_for_field_reads
 from pystencils.stencil import have_same_entries
 import lbmpy.forcemodels as forcemodels
 from lbmpy.simplificationfactory import create_simplification_strategy
-from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor
+from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor, \
+    EsoTwistEvenTimeStepAccessor, EsoTwistOddTimeStepAccessor, AAEvenTimeStepAccessor, AAOddTimeStepAccessor, \
+    StreamPushTwoFieldsAccessor, PdfFieldAccessor
 from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
 
 
@@ -256,18 +258,33 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
     else:
         dst_field = src_field.new_field_with_different_name(params['temporary_field_name'])
 
-    if params['kernel_type'] == 'stream_pull_collide':
+    kernel_type = params['kernel_type']
+    if isinstance(kernel_type, PdfFieldAccessor):
+        accessor = kernel_type
+        return create_lbm_kernel(collision_rule, src_field, dst_field, accessor)
+    elif params['kernel_type'] == 'stream_pull_collide':
         accessor = StreamPullTwoFieldsAccessor
         if any(opt_params['builtin_periodicity']):
             accessor = PeriodicTwoFieldsAccessor(opt_params['builtin_periodicity'], ghost_layers=1)
         return create_lbm_kernel(collision_rule, src_field, dst_field, accessor)
     elif params['kernel_type'] == 'collide_only':
-        result = create_lbm_kernel(collision_rule, src_field, src_field, CollideOnlyInplaceAccessor)
+        result = create_lbm_kernel(collision_rule, src_field, src_field, CollideOnlyInplaceAccessor())
         return add_subexpressions_for_field_reads(result, subexpressions=False, main_assignments=True)
     elif params['kernel_type'] == 'stream_pull_only':
         return create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, params['output'])
     else:
-        raise ValueError("Invalid value of parameter 'kernel_type'", params['kernel_type'])
+        kernel_type_to_accessor = {
+            'collide_stream_push': StreamPushTwoFieldsAccessor,
+            'esotwist_even': EsoTwistEvenTimeStepAccessor,
+            'esotwist_odd': EsoTwistOddTimeStepAccessor,
+            'aa_even': AAEvenTimeStepAccessor,
+            'aa_odd': AAOddTimeStepAccessor,
+        }
+        try:
+            accessor = kernel_type_to_accessor[kernel_type]()
+        except KeyError:
+            raise ValueError("Invalid value of parameter 'kernel_type'", params['kernel_type'])
+        return create_lbm_kernel(collision_rule, src_field, dst_field, accessor)
 
 
 @disk_cache_no_fallback

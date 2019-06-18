@@ -3,6 +3,7 @@ import sympy as sp
 
 from pystencils import Field, Assignment, AssignmentCollection
 from pystencils.field import create_numpy_array_with_layout, layout_string_to_tuple
+from pystencils.simp import add_subexpressions_for_field_reads
 from pystencils.sympyextensions import fast_subs
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
@@ -17,13 +18,17 @@ def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
     Args:
         collision_rule:  instance of LbmCollisionRule, defining the collision step
         input_field: field used for reading pdf values
-        output_field: field used for writing pdf values (may be the same as input field for certain accessors)
+        output_field: field used for writing pdf values
+                      if accessor.is_inplace this parameter is ignored
         accessor: instance of PdfFieldAccessor, defining where to read and write values
                   to create e.g. a fused stream-collide kernel
 
     Returns:
         LbmCollisionRule where pre- and post collision symbols have been replaced
     """
+    if accessor.is_inplace:
+        output_field = input_field
+
     method = collision_rule.method
     pre_collision_symbols = method.pre_collision_pdf_symbols
     post_collision_symbols = method.post_collision_pdf_symbols
@@ -43,6 +48,9 @@ def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
         for split_group in result.simplification_hints['split_groups']:
             new_split_groups.append([fast_subs(e, substitutions) for e in split_group])
         result.simplification_hints['split_groups'] = new_split_groups
+
+    if accessor.is_inplace:
+        result = add_subexpressions_for_field_reads(result, subexpressions=False, main_assignments=True)
 
     return result
 

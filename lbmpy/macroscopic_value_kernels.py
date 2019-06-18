@@ -14,6 +14,20 @@ def pdf_initialization_assignments(lb_method, density, velocity, pdfs):
     return setter_eqs
 
 
+def macroscopic_values_getter(lb_method, density, velocity, pdfs):
+    cqc = lb_method.conserved_quantity_computation
+    assert not (velocity is None and density is None)
+    output_spec = {}
+    if velocity is not None:
+        output_spec['velocity'] = velocity
+    if density is not None:
+        output_spec['density'] = density
+    return cqc.output_equations_from_pdfs(pdfs, output_spec)
+
+
+macroscopic_values_setter = pdf_initialization_assignments
+
+
 def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None, field_layout='numpy', target='cpu'):
     """
     Create kernel to compute macroscopic value(s) from a pdf field (e.g. density or velocity)

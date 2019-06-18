@@ -14,7 +14,7 @@ __all__ = ['PdfFieldAccessor', 'CollideOnlyInplaceAccessor', 'StreamPullTwoField
 from pystencils.astnodes import LoopOverCoordinate
 
 
-class PdfFieldAccessor(object):
+class PdfFieldAccessor:
     """
     Defines how data is read and written in an LBM time step.
 
@@ -34,11 +34,20 @@ class PdfFieldAccessor(object):
         """Returns sequence  of field accesses for all stencil values where pdfs are written to"""
         pass
 
+    @property
+    @abc.abstractmethod
+    def is_inplace(self):
+        """True if accessor writes the same entries that are read. In this case all values are first read into
+        temporaries."""
+        pass
+
 
 # ----------------------------------------------- Implementation -------------------------------------------------------
 
 
 class CollideOnlyInplaceAccessor(PdfFieldAccessor):
+    is_inplace = True
+
     @staticmethod
     def read(field, stencil):
         return [field(i) for i in range(len(stencil))]
@@ -49,6 +58,8 @@ class CollideOnlyInplaceAccessor(PdfFieldAccessor):
 
 
 class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
+    is_inplace = False
+
     @staticmethod
     def read(field, stencil):
         return [field[inverse_direction(d)](i) for i, d in enumerate(stencil)]
@@ -56,6 +67,18 @@ class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
     @staticmethod
     def write(field, stencil):
         return [field(i) for i in range(len(stencil))]
+
+
+class StreamPushTwoFieldsAccessor(PdfFieldAccessor):
+    is_inplace = False
+
+    @staticmethod
+    def read(field, stencil):
+        return [field(i) for i in range(len(stencil))]
+
+    @staticmethod
+    def write(field, stencil):
+        return [field[d](i) for i, d in enumerate(stencil)]
 
 
 class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
@@ -66,6 +89,8 @@ class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
     of assumed ghost layers of the field. For the periodic kernel itself no ghost layers are required,
     however other kernels might need them.
     """
+    is_inplace = False
+
     def __init__(self, periodicity, ghost_layers=0):
         self._periodicity = periodicity
         self._ghostLayers = ghost_layers
@@ -103,6 +128,8 @@ class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
 
 
 class AAEvenTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
     @staticmethod
     def read(field, stencil):
         return [field(i) for i in range(len(stencil))]
@@ -113,6 +140,8 @@ class AAEvenTimeStepAccessor(PdfFieldAccessor):
 
 
 class AAOddTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
     @staticmethod
     def read(field, stencil):
         res = []
@@ -128,6 +157,8 @@ class AAOddTimeStepAccessor(PdfFieldAccessor):
 
 
 class EsoTwistOddTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
     @staticmethod
     def read(field, stencil):
         result = []
@@ -147,6 +178,8 @@ class EsoTwistOddTimeStepAccessor(PdfFieldAccessor):
 
 
 class EsoTwistEvenTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
     @staticmethod
     def read(field, stencil):
         result = []
