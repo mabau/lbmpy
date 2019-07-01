@@ -10,7 +10,7 @@ def test_hash_equivalence():
     exactly the same code (not only functionally equivalent code) should be produced.
     Due to undefined order in sets and dicts this may no be the case.
     """
-    ref_value = "5dfbb90b02e4940f05dcca11b43e1bb885d5655566735b52ad8c64f511848420"
+    ref_value = "bd20ebb3cb8ca2aa00128a0920c5c0fa5b1b15251111e5695c1759fe29849743"
     ast = create_lb_ast(stencil='D3Q19', method='srt', optimization={'openmp': False})
     code = generate_c(ast)
     hash_value = sha256(code.encode()).hexdigest()
@@ -18,7 +18,7 @@ def test_hash_equivalence():
 
 
 def test_hash_equivalence_llvm():
-    ref_value = "52dad2fb2c144062b524ab0b514115a1a1b22d7e7f1c8e3d0f3169e08954f8ea"
+    ref_value = "6db6ed9e2cbd05edae8fcaeb8168e3178dd578c2681133f3ae9228b23d2be432"
     ast = create_lb_ast(stencil='D3Q19', method='srt', optimization={'target': 'llvm'})
     code = generate_llvm(ast)
     hash_value = sha256(str(code).encode()).hexdigest()
