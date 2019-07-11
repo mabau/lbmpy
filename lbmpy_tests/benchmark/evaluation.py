@@ -1,5 +1,5 @@
 """Function to process benchmark results in pandas."""
-from pystencils.runhelper.db import remove_constant_columns, Database
+from pystencils.runhelper.db import Database, remove_constant_columns
 
 db = None
 

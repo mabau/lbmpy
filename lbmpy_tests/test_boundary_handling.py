@@ -1,10 +1,11 @@
 import numpy as np
-from pystencils import make_slice, create_data_handling
-from lbmpy.creationfunctions import create_lb_function
+
+from lbmpy.boundaries import UBB, NeumannByCopy, NoSlip, StreamInConstant
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
-from lbmpy.boundaries import NoSlip, UBB, StreamInConstant, NeumannByCopy
-from lbmpy.lbstep import LatticeBoltzmannStep
+from lbmpy.creationfunctions import create_lb_function
 from lbmpy.geometry import add_box_boundary
+from lbmpy.lbstep import LatticeBoltzmannStep
+from pystencils import create_data_handling, make_slice
 
 
 def test_simple():

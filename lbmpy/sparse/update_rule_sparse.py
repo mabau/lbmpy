@@ -1,7 +1,6 @@
-from pystencils import AssignmentCollection, Assignment
-from pystencils.field import Field, FieldType
+from pystencils import Assignment, AssignmentCollection
 # noinspection PyProtectedMember
-from pystencils.field import compute_strides
+from pystencils.field import Field, FieldType, compute_strides
 
 AC = AssignmentCollection
 

@@ -2,13 +2,14 @@
 Hierarchy of consistent n-component Cahn-Hilliard systems by Franck Boyer, Sebastian Minjeaud
 """
 
-import sympy as sp
 from itertools import combinations
 
+import sympy as sp
+
+import pystencils.fd as fd
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy
 from pystencils.cache import memorycache
 from pystencils.fd import Diff
-import pystencils.fd as fd
 from pystencils.sympyextensions import prod
 
 

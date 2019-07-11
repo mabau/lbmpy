@@ -8,8 +8,7 @@ import sympy as sp
 from lbmpy.continuous_distribution_measures import multi_differentiation
 from lbmpy.moments import moments_up_to_component_order
 from pystencils.cache import memorycache
-from pystencils.sympyextensions import fast_subs
-from pystencils.sympyextensions import scalar_product
+from pystencils.sympyextensions import fast_subs, scalar_product
 
 
 def __get_indexed_symbols(passed_symbols, prefix, indices):

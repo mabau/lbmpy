@@ -1,8 +1,8 @@
 from lbmpy.creationfunctions import create_lb_method
-from lbmpy.moments import discrete_moment, exponents_to_polynomial_representations, \
-    exponent_to_polynomial_representation
-from lbmpy.stencils import get_stencil
 from lbmpy.cumulants import *
+from lbmpy.moments import (
+    discrete_moment, exponent_to_polynomial_representation, exponents_to_polynomial_representations)
+from lbmpy.stencils import get_stencil
 
 
 def test_cumulants_from_pdfs():

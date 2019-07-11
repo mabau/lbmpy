@@ -1,7 +1,6 @@
 import sympy as sp
+
 from pystencils.cache import disk_cache
-
-
 # ---------------------------------- Equations of state ----------------------------------------------------------------
 from pystencils.sympyextensions import remove_small_floats
 

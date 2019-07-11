@@ -1,7 +1,10 @@
-import numpy as np
 from functools import partial
-from lbmpy.phasefield.analytical import n_phases_correction_function, analytic_interface_profile, \
-    n_phases_correction_function_sign_switch
+
+import numpy as np
+
+from lbmpy.phasefield.analytical import (
+    analytic_interface_profile, n_phases_correction_function,
+    n_phases_correction_function_sign_switch)
 from lbmpy.phasefield.experiments1D import init_sharp_interface
 from lbmpy.phasefield.scenarios import create_n_phase_model
 from pystencils import create_data_handling, make_slice

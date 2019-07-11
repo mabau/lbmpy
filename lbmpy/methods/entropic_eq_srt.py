@@ -1,8 +1,9 @@
 import sympy as sp
-from pystencils import Assignment
+
 from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
+from pystencils import Assignment
 
 
 class EntropicEquilibriumSRT(AbstractLbMethod):

@@ -1,14 +1,17 @@
 import os
 import warnings
 from tempfile import TemporaryDirectory
+
 import numpy as np
 import sympy as sp
-from lbmpy.phasefield.phasefieldstep import PhaseFieldStep
-from lbmpy.phasefield.analytical import free_energy_functional_n_phases_penalty_term
-from pystencils import make_slice
+
 from lbmpy.boundaries import NoSlip
-from lbmpy.phasefield.experiments2D import create_two_drops_between_phases, write_phase_field_picture_sequence, \
-    write_phase_velocity_picture_sequence
+from lbmpy.phasefield.analytical import free_energy_functional_n_phases_penalty_term
+from lbmpy.phasefield.experiments2D import (
+    create_two_drops_between_phases, write_phase_field_picture_sequence,
+    write_phase_velocity_picture_sequence)
+from lbmpy.phasefield.phasefieldstep import PhaseFieldStep
+from pystencils import make_slice
 
 
 def create_falling_drop(domain_size=(160, 200), omega=1.9, kappas=(0.001, 0.001, 0.0005), **kwargs):

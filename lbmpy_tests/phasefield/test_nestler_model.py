@@ -1,6 +1,8 @@
-import sympy as sp
-import numpy as np
 from collections import defaultdict
+
+import numpy as np
+import sympy as sp
+
 from lbmpy.phasefield.nphase_nestler import create_model
 
 
@@ -44,4 +46,3 @@ def test_main():
 
     res = run(100)
     assert np.isfinite(np.max(res))
-

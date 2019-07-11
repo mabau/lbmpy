@@ -1,6 +1,7 @@
 import sympy as sp
-from pystencils.fd import Diff
+
 from lbmpy.phasefield.eos import free_energy_from_eos
+from pystencils.fd import Diff
 from pystencils.sympyextensions import remove_small_floats
 
 

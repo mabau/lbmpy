@@ -1,4 +1,5 @@
 import numpy as np
+
 from lbmpy.geometry import get_shear_flow_velocity_field
 from lbmpy.scenarios import create_fully_periodic_flow
 

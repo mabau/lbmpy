@@ -1,7 +1,7 @@
 import sympy as sp
 
-from pystencils import Assignment
 from lbmpy.relaxationrates import get_shear_relaxation_rate
+from pystencils import Assignment
 
 
 def second_order_moment_tensor(function_values, stencil):

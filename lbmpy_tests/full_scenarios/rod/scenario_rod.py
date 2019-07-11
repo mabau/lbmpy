@@ -8,8 +8,10 @@ The deficiencies of the D3Q19 model can be resolved by choosing a better equilib
 """
 import os
 import sys
+
 import numpy as np
 import sympy as sp
+
 from lbmpy.boundaries import FixedDensity, NoSlip
 from lbmpy.geometry import add_pipe_inflow_boundary, add_pipe_walls
 from lbmpy.lbstep import LatticeBoltzmannStep

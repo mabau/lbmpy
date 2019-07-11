@@ -1,18 +1,19 @@
 from types import MappingProxyType
 
-import sympy as sp
 import numpy as np
+import sympy as sp
 
 from lbmpy.lbstep import LatticeBoltzmannStep
+from lbmpy.phasefield.analytical import (
+    chemical_potentials_from_free_energy, symmetric_tensor_linearization)
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
-from lbmpy.phasefield.kerneleqs import mu_kernel, CahnHilliardFDStep, pressure_tensor_kernel, \
-    force_kernel_using_pressure_tensor
-from pystencils import create_kernel, create_data_handling
-from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, symmetric_tensor_linearization
+from lbmpy.phasefield.kerneleqs import (
+    CahnHilliardFDStep, force_kernel_using_pressure_tensor, mu_kernel, pressure_tensor_kernel)
+from pystencils import create_data_handling, create_kernel
 from pystencils.boundaries.boundaryhandling import FlagInterface
 from pystencils.boundaries.inkernel import add_neumann_boundary
 from pystencils.simp import sympy_cse_on_assignment_list
-from pystencils.slicing import make_slice, SlicedGetter
+from pystencils.slicing import SlicedGetter, make_slice
 
 
 class PhaseFieldStep:

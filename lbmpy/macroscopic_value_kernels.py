@@ -1,7 +1,8 @@
 import functools
 from copy import deepcopy
-from pystencils.field import Field, get_layout_of_array
+
 from lbmpy.simplificationfactory import create_simplification_strategy
+from pystencils.field import Field, get_layout_of_array
 
 
 def pdf_initialization_assignments(lb_method, density, velocity, pdfs):

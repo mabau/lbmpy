@@ -1,4 +1,5 @@
 import pytest
+
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.relaxationrates import get_shear_relaxation_rate
 

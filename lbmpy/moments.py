@@ -36,14 +36,14 @@ Functions
 """
 import itertools
 import math
-from copy import copy
 from collections import Counter, defaultdict
-from typing import Iterable, List, Sequence, Tuple, TypeVar, Optional
+from copy import copy
+from typing import Iterable, List, Optional, Sequence, Tuple, TypeVar
+
 import sympy as sp
 
 from pystencils.cache import memorycache
 from pystencils.sympyextensions import remove_higher_order_terms
-
 
 MOMENT_SYMBOLS = sp.symbols('x y z')
 T = TypeVar('T')

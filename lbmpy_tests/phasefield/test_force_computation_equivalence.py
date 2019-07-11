@@ -4,8 +4,10 @@ more stable. Mathematically they should be equivalent.
 This test ensures that the complicated pressure tensor formulation yields the same force as computed directly."""
 
 import sympy as sp
-from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, substitute_laplacian_by_sum, \
-    pressure_tensor_interface_component_new, force_from_pressure_tensor, force_from_phi_and_mu
+
+from lbmpy.phasefield.analytical import (
+    chemical_potentials_from_free_energy, force_from_phi_and_mu, force_from_pressure_tensor,
+    pressure_tensor_interface_component_new, substitute_laplacian_by_sum)
 from pystencils.fd import Diff, expand_diff_full, normalize_diff_order
 
 

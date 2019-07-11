@@ -1,4 +1,5 @@
 import sympy as sp
+
 from pystencils.fd import Diff
 
 

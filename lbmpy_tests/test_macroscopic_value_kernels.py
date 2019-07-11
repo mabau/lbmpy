@@ -1,6 +1,8 @@
 import numpy as np
+
 from lbmpy.creationfunctions import create_lb_method
-from lbmpy.macroscopic_value_kernels import compile_macroscopic_values_getter, compile_macroscopic_values_setter
+from lbmpy.macroscopic_value_kernels import (
+    compile_macroscopic_values_getter, compile_macroscopic_values_setter)
 
 
 def test_set_get_density_velocity_with_fields():
@@ -51,4 +53,3 @@ def test_set_get_constant_velocity():
                     computed_velocity = velocity_output_field[0, 0, 0, :]
 
                 np.testing.assert_almost_equal(np.array(ref_velocity[:method.dim]), computed_velocity)
-

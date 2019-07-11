@@ -87,6 +87,7 @@ second moment nonzero   :class:`Luo`         :class:`Guo`
 """
 
 import sympy as sp
+
 from lbmpy.relaxationrates import get_shear_relaxation_rate
 
 

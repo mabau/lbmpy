@@ -1,7 +1,8 @@
 from hashlib import sha256
+
+from lbmpy.creationfunctions import create_lb_ast
 from pystencils.backends.cbackend import generate_c
 from pystencils.llvm.llvmjit import generate_llvm
-from lbmpy.creationfunctions import create_lb_ast
 
 
 def test_hash_equivalence():
@@ -10,7 +11,7 @@ def test_hash_equivalence():
     exactly the same code (not only functionally equivalent code) should be produced.
     Due to undefined order in sets and dicts this may no be the case.
     """
-    ref_value = "bd20ebb3cb8ca2aa00128a0920c5c0fa5b1b15251111e5695c1759fe29849743"
+    ref_value = "2cde9763ab71a9d5caba056e6d0011e553fa01ab71668ee32024ce3f68e7d698"
     ast = create_lb_ast(stencil='D3Q19', method='srt', optimization={'openmp': False})
     code = generate_c(ast)
     hash_value = sha256(code.encode()).hexdigest()

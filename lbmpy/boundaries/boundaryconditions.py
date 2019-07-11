@@ -1,10 +1,11 @@
 import sympy as sp
-from pystencils import Field, Assignment
-from pystencils.astnodes import SympyAssignment
-from pystencils.sympyextensions import get_symmetric_part
-from pystencils.data_types import create_type
-from lbmpy.simplificationfactory import create_simplification_strategy
+
 from lbmpy.boundaries.boundaryhandling import BoundaryOffsetInfo, LbmWeightInfo
+from lbmpy.simplificationfactory import create_simplification_strategy
+from pystencils import Assignment, Field
+from pystencils.astnodes import SympyAssignment
+from pystencils.data_types import create_type
+from pystencils.sympyextensions import get_symmetric_part
 
 
 class Boundary:

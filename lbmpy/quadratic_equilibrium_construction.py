@@ -3,11 +3,12 @@ Method to construct a quadratic equilibrium using a generic quadratic ansatz acc
 Wolf-Gladrow, section 5.4
 """
 
-import sympy as sp
 import numpy as np
-from pystencils.sympyextensions import scalar_product
-from lbmpy.moments import discrete_moment
+import sympy as sp
+
 from lbmpy.maxwellian_equilibrium import compressible_to_incompressible_moment_value
+from lbmpy.moments import discrete_moment
+from pystencils.sympyextensions import scalar_product
 
 
 def generic_equilibrium_ansatz(stencil, u=sp.symbols("u_:3")):

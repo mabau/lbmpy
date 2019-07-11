@@ -1,8 +1,10 @@
 import os
+from types import MappingProxyType
+
 import numpy as np
+
 from lbmpy.scenarios import create_lid_driven_cavity as run_ldc_lbmpy
 from pystencils import make_slice
-from types import MappingProxyType
 
 
 def create_force_driven_channel(force=1e-6, domain_size=None, dim=2, radius=None, length=None,

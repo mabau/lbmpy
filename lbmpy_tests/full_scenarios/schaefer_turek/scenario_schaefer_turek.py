@@ -5,8 +5,10 @@ a cylinder. In Flow simulation with high-performance computers II (pp. 547-566).
 
 - boundaries are not set correctly yet (halfway-bounce back is not considered)
 """
-import numpy as np
 import warnings
+
+import numpy as np
+
 from lbmpy.boundaries.boundaryconditions import NoSlip
 from lbmpy.geometry import get_pipe_velocity_field
 from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity

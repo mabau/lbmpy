@@ -1,5 +1,5 @@
-from lbmpy.stencils import get_stencil
 from lbmpy.moments import *
+from lbmpy.stencils import get_stencil
 
 
 def test_moment_permutation_multiplicity():

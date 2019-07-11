@@ -1,7 +1,7 @@
-from collections import namedtuple
-import numpy as np
 import warnings
+from collections import namedtuple
 
+import numpy as np
 
 TriplePoint = namedtuple("TriplePoint", ['center', 'branch_points', 'angles'])
 

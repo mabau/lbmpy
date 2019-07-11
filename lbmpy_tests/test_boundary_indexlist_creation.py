@@ -1,4 +1,5 @@
 import numpy as np
+
 import pystencils.boundaries.createindexlist as cil
 from lbmpy.stencils import get_stencil
 

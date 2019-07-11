@@ -1,13 +1,16 @@
 from types import MappingProxyType
+
 import numpy as np
+
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
-from lbmpy.creationfunctions import switch_to_symbolic_relaxation_rates_for_omega_adapting_methods, \
-    create_lb_function, update_with_default_parameters
-from lbmpy.macroscopic_value_kernels import create_advanced_velocity_setter_collision_rule, \
-    pdf_initialization_assignments
+from lbmpy.creationfunctions import (
+    create_lb_function, switch_to_symbolic_relaxation_rates_for_omega_adapting_methods,
+    update_with_default_parameters)
+from lbmpy.macroscopic_value_kernels import (
+    create_advanced_velocity_setter_collision_rule, pdf_initialization_assignments)
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
-from pystencils import create_kernel, make_slice, create_data_handling
+from pystencils import create_data_handling, create_kernel, make_slice
 from pystencils.slicing import SlicedGetter
 from pystencils.timeloop import TimeLoop
 

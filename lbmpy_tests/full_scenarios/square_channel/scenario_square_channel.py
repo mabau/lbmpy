@@ -12,10 +12,9 @@ python3 scenario_square_channel.py client --host i10staff41 -P '{ "optimization"
 import numpy as np
 import sympy as sp
 
-from pystencils import make_slice
-from lbmpy.scenarios import create_channel
 from lbmpy.methods.creationfunctions import relaxation_rate_from_magic_number
-
+from lbmpy.scenarios import create_channel
+from pystencils import make_slice
 
 defaultParameters = {
     'stencil': 'D3Q19',

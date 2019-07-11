@@ -1,6 +1,7 @@
-import pytest
 import numpy as np
-from lbmpy.scenarios import create_lid_driven_cavity, create_fully_periodic_flow
+import pytest
+
+from lbmpy.scenarios import create_fully_periodic_flow, create_lid_driven_cavity
 
 try:
     import pycuda.driver

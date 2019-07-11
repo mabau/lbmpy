@@ -1,9 +1,12 @@
-import sympy as sp
-import numpy as np
 import warnings
+
+import numpy as np
+import sympy as sp
+
+from lbmpy.phasefield.analytical import (
+    free_energy_functional_3_phases, free_energy_functional_n_phases,
+    free_energy_functional_n_phases_penalty_term, symbolic_order_parameters)
 from lbmpy.phasefield.phasefieldstep import PhaseFieldStep
-from lbmpy.phasefield.analytical import free_energy_functional_3_phases, free_energy_functional_n_phases, \
-    symbolic_order_parameters, free_energy_functional_n_phases_penalty_term
 
 
 def create_three_phase_model(alpha=1, kappa=(0.015, 0.015, 0.015), include_rho=True, **kwargs):

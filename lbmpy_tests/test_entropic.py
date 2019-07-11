@@ -1,5 +1,6 @@
 import numpy as np
 import sympy as sp
+
 from lbmpy.forcemodels import Guo
 from lbmpy.methods.entropic_eq_srt import create_srt_entropic
 from lbmpy.scenarios import create_lid_driven_cavity

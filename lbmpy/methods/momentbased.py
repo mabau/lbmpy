@@ -1,10 +1,12 @@
-import sympy as sp
 from collections import OrderedDict
-from pystencils import Assignment
-from pystencils.sympyextensions import subs_additive
+
+import sympy as sp
+
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, moment_matrix
+from pystencils import Assignment
+from pystencils.sympyextensions import subs_additive
 
 
 class MomentBasedLbMethod(AbstractLbMethod):

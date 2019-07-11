@@ -23,8 +23,9 @@ Examples:
 
 
 """
-import numpy as np
 import warnings
+
+import numpy as np
 
 # Optional packages cpuinfo, pycuda and psutil for hardware queries
 try:

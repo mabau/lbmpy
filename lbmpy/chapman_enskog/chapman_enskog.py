@@ -1,13 +1,18 @@
-import sympy as sp
 from collections import namedtuple
+
+import sympy as sp
 from sympy.core.cache import cacheit
+
+from lbmpy.chapman_enskog.derivative import (
+    chapman_enskog_derivative_expansion, chapman_enskog_derivative_recombination)
+from lbmpy.moments import (
+    discrete_moment, get_moment_indices, moment_matrix, non_aliased_moment,
+    polynomial_to_exponent_representation)
 from pystencils.cache import disk_cache
-from pystencils.fd import expand_diff_full, Diff, DiffOperator, expand_diff_linear, \
-    expand_diff_products, normalize_diff_order
+from pystencils.fd import (
+    Diff, DiffOperator, expand_diff_full, expand_diff_linear, expand_diff_products,
+    normalize_diff_order)
 from pystencils.sympyextensions import normalize_product, symmetric_product
-from lbmpy.moments import discrete_moment, moment_matrix, polynomial_to_exponent_representation, get_moment_indices, \
-    non_aliased_moment
-from lbmpy.chapman_enskog.derivative import chapman_enskog_derivative_recombination, chapman_enskog_derivative_expansion
 
 
 class ChapmanEnskogAnalysis:

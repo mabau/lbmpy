@@ -1,5 +1,6 @@
 import sympy as sp
-from lbmpy.moments import is_shear_moment, get_order
+
+from lbmpy.moments import get_order, is_shear_moment
 
 
 def relaxation_rate_from_lattice_viscosity(nu):

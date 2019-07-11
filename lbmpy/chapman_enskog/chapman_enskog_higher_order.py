@@ -1,9 +1,10 @@
-import sympy as sp
-from pystencils.fd import expand_diff_full
-from lbmpy.chapman_enskog.chapman_enskog import CeMoment, Diff, take_moments
-from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol
-from lbmpy.moments import moments_up_to_order, moments_of_order
 from collections import OrderedDict, namedtuple
+
+import sympy as sp
+
+from lbmpy.chapman_enskog.chapman_enskog import CeMoment, Diff, expanded_symbol, take_moments
+from lbmpy.moments import moments_of_order, moments_up_to_order
+from pystencils.fd import expand_diff_full
 
 
 def poly_moments(order, dim):

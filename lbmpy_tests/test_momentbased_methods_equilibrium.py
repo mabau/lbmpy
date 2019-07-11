@@ -4,11 +4,12 @@ This test checks if the equilibrium formula obtained by this method is the same 
 given discrete_maxwellian_equilibrium
 """
 import sympy as sp
-from lbmpy.methods import create_srt, create_trt, create_mrt_orthogonal
+
+from lbmpy.creationfunctions import create_lb_method
 from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
+from lbmpy.methods import create_mrt_orthogonal, create_srt, create_trt
 from lbmpy.relaxationrates import get_shear_relaxation_rate
 from lbmpy.stencils import get_stencil
-from lbmpy.creationfunctions import create_lb_method
 
 
 def check_for_matching_equilibrium(method_name, stencil, compressibility):

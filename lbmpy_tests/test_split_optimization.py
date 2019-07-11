@@ -1,8 +1,9 @@
-import pytest
 import numpy as np
-from pystencils.sympyextensions import count_operations_in_ast
+import pytest
+
 from lbmpy.creationfunctions import create_lb_ast
 from lbmpy.scenarios import create_lid_driven_cavity
+from pystencils.sympyextensions import count_operations_in_ast
 
 
 def test_split_number_of_operations():

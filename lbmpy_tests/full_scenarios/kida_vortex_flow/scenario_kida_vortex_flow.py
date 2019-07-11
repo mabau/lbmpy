@@ -4,11 +4,12 @@ Boesch, Chikatamarla, Karlin: Entropic multirelaxation lattice Boltzmann models 
 """
 import numpy as np
 import sympy as sp
+
 import pystencils as ps
 from lbmpy.lbstep import LatticeBoltzmannStep
-from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity, relaxation_rate_from_magic_number
+from lbmpy.relaxationrates import (
+    relaxation_rate_from_lattice_viscosity, relaxation_rate_from_magic_number)
 from pystencils.runhelper import ParameterStudy
-
 
 # --------------------------------------------- Setup ------------------------------------------------------------------
 
@@ -288,4 +289,3 @@ def create_full_parameter_study(gpu=False):
 if __name__ == '__main__':
     parameter_study = create_full_parameter_study(gpu=True)
     parameter_study.run_from_command_line()
-

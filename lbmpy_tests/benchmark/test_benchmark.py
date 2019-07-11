@@ -1,10 +1,12 @@
-import pytest
-import numpy as np
-import sympy as sp
-from lbmpy.scenarios import create_lid_driven_cavity
-from pystencils.runhelper import ParameterStudy
 from statistics import median
+
+import numpy as np
+import pytest
+import sympy as sp
+
+from lbmpy.scenarios import create_lid_driven_cavity
 from pystencils.cpu.cpujit import add_or_change_compiler_flags
+from pystencils.runhelper import ParameterStudy
 
 
 def parameter_filter(parameters):

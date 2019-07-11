@@ -163,31 +163,32 @@ For example, to modify the AST one can run::
     func = create_lb_function(ast=ast, ...)
 
 """
-import sympy as sp
 from copy import copy
 
+import sympy as sp
+
+import lbmpy.forcemodels as forcemodels
+from lbmpy.fieldaccess import (
+    AAEvenTimeStepAccessor, AAOddTimeStepAccessor, CollideOnlyInplaceAccessor,
+    EsoTwistEvenTimeStepAccessor, EsoTwistOddTimeStepAccessor, PdfFieldAccessor,
+    PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor, StreamPushTwoFieldsAccessor)
+from lbmpy.methods import (
+    create_mrt3, create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.creationfunctions import create_generic_mrt
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
-from pystencils.cache import disk_cache_no_fallback
-from pystencils.data_types import collate_types
-from pystencils import AssignmentCollection
-from pystencils.field import get_layout_of_array, Field
-from pystencils import create_kernel, Assignment
-from lbmpy.turbulence_models import add_smagorinsky_model
-from lbmpy.methods import create_srt, create_trt, create_mrt_orthogonal, create_trt_kbc, \
-    create_mrt_raw, create_mrt3
-from lbmpy.methods.entropic import add_iterative_entropy_condition, add_entropy_condition
+from lbmpy.methods.entropic import add_entropy_condition, add_iterative_entropy_condition
 from lbmpy.methods.entropic_eq_srt import create_srt_entropic
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
+from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
+from lbmpy.turbulence_models import add_smagorinsky_model
+from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
+from pystencils import Assignment, AssignmentCollection, create_kernel
+from pystencils.cache import disk_cache_no_fallback
+from pystencils.data_types import collate_types
+from pystencils.field import Field, get_layout_of_array
 from pystencils.simp import add_subexpressions_for_field_reads
 from pystencils.stencil import have_same_entries
-import lbmpy.forcemodels as forcemodels
-from lbmpy.simplificationfactory import create_simplification_strategy
-from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, PeriodicTwoFieldsAccessor, CollideOnlyInplaceAccessor, \
-    EsoTwistEvenTimeStepAccessor, EsoTwistOddTimeStepAccessor, AAEvenTimeStepAccessor, AAOddTimeStepAccessor, \
-    StreamPushTwoFieldsAccessor, PdfFieldAccessor
-from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
 
 
 def create_lb_function(ast=None, optimization={}, **kwargs):

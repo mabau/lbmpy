@@ -1,7 +1,9 @@
-import sympy as sp
 from collections import defaultdict
-from pystencils import Field
+
+import sympy as sp
+
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
+from pystencils import Field
 
 
 def create_lbm_split_groups(cr: LbmCollisionRule, opposing_directions=True):

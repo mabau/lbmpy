@@ -1,7 +1,8 @@
 import numpy as np
-from pystencils import make_slice
-from lbmpy.boundaries import NoSlip, UBB
+
+from lbmpy.boundaries import UBB, NoSlip
 from lbmpy.scenarios import create_channel
+from pystencils import make_slice
 
 try:
     import waLBerla as wLB

@@ -1,16 +1,20 @@
+import functools
+
 import pytest
 import sympy as sp
-import functools
-from pystencils.fd import Diff, normalize_diff_order
-from pystencils.sympyextensions import multidimensional_sum
-from lbmpy.chapman_enskog.chapman_enskog_higher_order import determine_higher_order_moments, get_solvability_conditions
-from lbmpy.chapman_enskog.chapman_enskog_steady_state import SteadyStateChapmanEnskogAnalysisSRT, \
-    SteadyStateChapmanEnskogAnalysis
-from lbmpy.chapman_enskog.chapman_enskog import ChapmanEnskogAnalysis, LbMethodEqMoments, take_moments, \
-    get_taylor_expanded_lb_equation, chapman_enskog_ansatz
-from lbmpy.relaxationrates import lattice_viscosity_from_relaxation_rate
+
+from lbmpy.chapman_enskog.chapman_enskog import (
+    ChapmanEnskogAnalysis, LbMethodEqMoments, chapman_enskog_ansatz,
+    get_taylor_expanded_lb_equation, take_moments)
+from lbmpy.chapman_enskog.chapman_enskog_higher_order import (
+    determine_higher_order_moments, get_solvability_conditions)
+from lbmpy.chapman_enskog.chapman_enskog_steady_state import (
+    SteadyStateChapmanEnskogAnalysis, SteadyStateChapmanEnskogAnalysisSRT)
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.forcemodels import Guo
+from lbmpy.relaxationrates import lattice_viscosity_from_relaxation_rate
+from pystencils.fd import Diff, normalize_diff_order
+from pystencils.sympyextensions import multidimensional_sum
 
 
 def test_srt():

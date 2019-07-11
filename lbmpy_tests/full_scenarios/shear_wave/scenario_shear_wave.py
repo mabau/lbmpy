@@ -6,9 +6,11 @@
 """
 import numpy as np
 import sympy as sp
-from lbmpy.scenarios import create_fully_periodic_flow
-from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity, relaxation_rate_from_magic_number
+
 from lbmpy.creationfunctions import update_with_default_parameters
+from lbmpy.relaxationrates import (
+    relaxation_rate_from_lattice_viscosity, relaxation_rate_from_magic_number)
+from lbmpy.scenarios import create_fully_periodic_flow
 
 
 def get_exponent_term(l, **kwargs):

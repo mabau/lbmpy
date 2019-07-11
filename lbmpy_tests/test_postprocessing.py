@@ -1,4 +1,5 @@
 import numpy as np
+
 from lbmpy.postprocessing import scalar_field_interpolator, vector_field_interpolator
 
 

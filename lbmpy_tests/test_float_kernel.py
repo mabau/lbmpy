@@ -1,6 +1,6 @@
-from pystencils import show_code
-from lbmpy.scenarios import create_lid_driven_cavity
 from lbmpy.creationfunctions import create_lb_function
+from lbmpy.scenarios import create_lid_driven_cavity
+from pystencils import show_code
 
 
 def test_creation():

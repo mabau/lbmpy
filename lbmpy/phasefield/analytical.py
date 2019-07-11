@@ -1,7 +1,10 @@
-import sympy as sp
 from collections import defaultdict
-from pystencils.sympyextensions import multidimensional_sum as multi_sum, normalize_product, prod
-from pystencils.fd import functional_derivative, expand_diff_linear, Diff, expand_diff_full
+
+import sympy as sp
+
+from pystencils.fd import Diff, expand_diff_full, expand_diff_linear, functional_derivative
+from pystencils.sympyextensions import multidimensional_sum as multi_sum
+from pystencils.sympyextensions import normalize_product, prod
 
 order_parameter_symbol_name = "phi"
 surface_tension_symbol_name = "tau"

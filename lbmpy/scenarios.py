@@ -26,11 +26,12 @@ at :mod:`lbmpy.creationfunctions`. The only mandatory keyword parameter is ``rel
 that defines the viscosity of the fluid (valid values being between 0 and 2).
 """
 import numpy as np
-from lbmpy.geometry import add_pipe_walls, add_pipe_inflow_boundary
+
+from lbmpy.boundaries import UBB, FixedDensity, NoSlip
+from lbmpy.geometry import add_pipe_inflow_boundary, add_pipe_walls
 from lbmpy.lbstep import LatticeBoltzmannStep
 from pystencils.datahandling import create_data_handling
 from pystencils.slicing import slice_from_direction
-from lbmpy.boundaries import NoSlip, UBB, FixedDensity
 
 
 def create_fully_periodic_flow(initial_velocity, periodicity_in_kernel=False, lbm_kernel=None,

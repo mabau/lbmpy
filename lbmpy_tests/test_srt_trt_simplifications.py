@@ -5,8 +5,8 @@ known acceptable values.
 import sympy as sp
 
 from lbmpy.forcemodels import Guo
-from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.methods import create_srt, create_trt, create_trt_with_magic_number
+from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
 
 

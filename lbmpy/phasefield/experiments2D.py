@@ -1,6 +1,7 @@
 import sympy as sp
-from lbmpy.phasefield.phasefieldstep import PhaseFieldStep
+
 from lbmpy.phasefield.analytical import free_energy_functional_n_phases_penalty_term
+from lbmpy.phasefield.phasefieldstep import PhaseFieldStep
 from lbmpy.phasefield.scenarios import create_three_phase_model
 from pystencils import make_slice
 

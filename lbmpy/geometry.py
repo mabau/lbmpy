@@ -1,7 +1,8 @@
 import numpy as np
 
-from lbmpy.boundaries import NoSlip, UBB
-from pystencils.slicing import normalize_slice, shift_slice, slice_intersection, slice_from_direction
+from lbmpy.boundaries import UBB, NoSlip
+from pystencils.slicing import (
+    normalize_slice, shift_slice, slice_from_direction, slice_intersection)
 
 
 def add_box_boundary(boundary_handling, boundary=NoSlip(), replace=True):

@@ -1,9 +1,11 @@
-import pytest
 import itertools
 import warnings
+
+import pytest
 import sympy as sp
-import pystencils as ps
+
 import lbmpy.stencils as s
+import pystencils as ps
 from lbmpy.stencils import get_stencil
 
 

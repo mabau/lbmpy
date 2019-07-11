@@ -1,17 +1,16 @@
-import sympy as sp
 import abc
-from pystencils.stencil import inverse_direction
-from pystencils import Field
 
+import sympy as sp
+
+from pystencils import Field
+# ------------------------------------------------ Interface -----------------------------------------------------------
+from pystencils.astnodes import LoopOverCoordinate
+from pystencils.stencil import inverse_direction
 
 __all__ = ['PdfFieldAccessor', 'CollideOnlyInplaceAccessor', 'StreamPullTwoFieldsAccessor',
            'AAEvenTimeStepAccessor', 'AAOddTimeStepAccessor',
            'EsoTwistEvenTimeStepAccessor', 'EsoTwistOddTimeStepAccessor',
            'visualize_pdf_field_accessor', 'visualize_field_mapping']
-
-
-# ------------------------------------------------ Interface -----------------------------------------------------------
-from pystencils.astnodes import LoopOverCoordinate
 
 
 class PdfFieldAccessor:
@@ -24,6 +23,7 @@ class PdfFieldAccessor:
          - esoteric twist single field update
          -
     """
+
     @abc.abstractmethod
     def read(self, field, stencil):
         """Returns sequence of field accesses for all stencil values where pdfs are read from"""

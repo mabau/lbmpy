@@ -1,5 +1,6 @@
-import pytest
 import numpy as np
+import pytest
+
 from lbmpy.scenarios import create_lid_driven_cavity
 
 

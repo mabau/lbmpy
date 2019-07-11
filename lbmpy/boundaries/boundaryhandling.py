@@ -1,6 +1,7 @@
 import numpy as np
 import sympy as sp
-from pystencils import TypedSymbol, create_indexed_kernel, Assignment
+
+from pystencils import Assignment, TypedSymbol, create_indexed_kernel
 from pystencils.backends.cbackend import CustomCodeNode
 from pystencils.boundaries import BoundaryHandling
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo

@@ -1,5 +1,5 @@
-from pystencils import make_slice
 from lbmpy.phasefield.scenarios import *
+from pystencils import make_slice
 
 
 def test_setup():

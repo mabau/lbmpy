@@ -2,15 +2,17 @@
 The update equations should not change if a relaxation rate of a conserved quantity (density/velocity)
 changes. This test checks that for moment-based methods
 """
+from copy import copy
+
 import pytest
 import sympy as sp
-from copy import copy
-from lbmpy.methods.creationfunctions import create_srt, create_trt, create_trt_kbc, RelaxationInfo
+
+from lbmpy.methods.creationfunctions import RelaxationInfo, create_srt, create_trt, create_trt_kbc
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.momentbased import MomentBasedLbMethod
+from lbmpy.moments import MOMENT_SYMBOLS
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
-from lbmpy.moments import MOMENT_SYMBOLS
 
 
 def __change_relaxation_rate_of_conserved_moments(method, new_relaxation_rate=sp.Symbol("test_omega")):

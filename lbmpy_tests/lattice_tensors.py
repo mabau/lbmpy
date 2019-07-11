@@ -1,4 +1,5 @@
 import itertools
+
 from pystencils.sympyextensions import kronecker_delta as kd
 
 

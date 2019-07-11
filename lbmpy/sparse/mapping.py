@@ -1,12 +1,13 @@
-import sympy as sp
-import numpy as np
 from typing import Tuple
 
+import numpy as np
+import sympy as sp
+
 from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
-from pystencils import Field, TypedSymbol, Assignment
+from pystencils import Assignment, Field, TypedSymbol
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
-from pystencils.boundaries.createindexlist import create_boundary_index_list, boundary_index_array_coordinate_names, \
-    direction_member_name
+from pystencils.boundaries.createindexlist import (
+    boundary_index_array_coordinate_names, create_boundary_index_list, direction_member_name)
 
 
 class SparseLbMapper:

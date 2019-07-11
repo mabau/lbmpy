@@ -1,8 +1,10 @@
 import os
-import numpy as np
 from tempfile import TemporaryDirectory
-from lbmpy.scenarios import create_lid_driven_cavity
+
+import numpy as np
+
 import lbmpy.plot as plt
+from lbmpy.scenarios import create_lid_driven_cavity
 
 
 def test_animation():

@@ -1,8 +1,10 @@
 import sympy as sp
+
 from lbmpy.innerloopsplit import create_lbm_split_groups
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
-from pystencils.simp import apply_to_all_assignments, \
-    subexpression_substitution_in_main_assignments, sympy_cse, add_subexpressions_for_divisions
+from pystencils.simp import (
+    add_subexpressions_for_divisions, apply_to_all_assignments,
+    subexpression_substitution_in_main_assignments, sympy_cse)
 
 
 def create_simplification_strategy(lb_method, cse_pdfs=False, cse_global=False, split_inner_loop=False):

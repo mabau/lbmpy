@@ -1,4 +1,5 @@
 import numpy as np
+
 from lbmpy.creationfunctions import create_lb_function
 
 

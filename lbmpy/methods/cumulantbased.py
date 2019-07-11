@@ -1,11 +1,14 @@
-import sympy as sp
 from collections import OrderedDict
-from pystencils import Assignment
-from pystencils.sympyextensions import fast_subs, subs_additive
+
+import sympy as sp
+
+from lbmpy.cumulants import cumulant_as_function_of_raw_moments, raw_moment_as_function_of_cumulants
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
-from lbmpy.moments import MOMENT_SYMBOLS, extract_monomials, moment_matrix, monomial_to_polynomial_transformation_matrix
-from lbmpy.cumulants import cumulant_as_function_of_raw_moments, raw_moment_as_function_of_cumulants
+from lbmpy.moments import (
+    MOMENT_SYMBOLS, extract_monomials, moment_matrix, monomial_to_polynomial_transformation_matrix)
+from pystencils import Assignment
+from pystencils.sympyextensions import fast_subs, subs_additive
 
 
 class CumulantBasedLbMethod(AbstractLbMethod):

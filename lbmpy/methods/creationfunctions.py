@@ -1,24 +1,28 @@
+import itertools
+import operator
+from collections import OrderedDict
+from functools import reduce
 from warnings import warn
 
 import sympy as sp
-from collections import OrderedDict
-from functools import reduce
-import operator
-import itertools
+
+from lbmpy.maxwellian_equilibrium import (
+    compressible_to_incompressible_moment_value, get_cumulants_of_continuous_maxwellian_equilibrium,
+    get_cumulants_of_discrete_maxwellian_equilibrium,
+    get_moments_of_continuous_maxwellian_equilibrium,
+    get_moments_of_discrete_maxwellian_equilibrium)
+from lbmpy.methods.abstractlbmethod import RelaxationInfo
+from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.momentbased import MomentBasedLbMethod
+from lbmpy.moments import (
+    MOMENT_SYMBOLS, discrete_moment, exponents_to_polynomial_representations,
+    get_default_moment_set_for_stencil, get_order, gram_schmidt, is_even, moments_of_order,
+    moments_up_to_component_order, sort_moments_into_groups_of_same_order)
+from lbmpy.relaxationrates import default_relaxation_rate_names, relaxation_rate_from_magic_number
 from lbmpy.stencils import get_stencil
 from pystencils.stencil import have_same_entries
-from lbmpy.moments import is_even, gram_schmidt, get_default_moment_set_for_stencil, MOMENT_SYMBOLS, \
-    exponents_to_polynomial_representations, moments_of_order, moments_up_to_component_order, \
-    sort_moments_into_groups_of_same_order, get_order, discrete_moment
 from pystencils.sympyextensions import common_denominator
-from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
-from lbmpy.methods.abstractlbmethod import RelaxationInfo
-from lbmpy.maxwellian_equilibrium import get_moments_of_discrete_maxwellian_equilibrium, \
-    get_moments_of_continuous_maxwellian_equilibrium, get_cumulants_of_discrete_maxwellian_equilibrium, \
-    get_cumulants_of_continuous_maxwellian_equilibrium, compressible_to_incompressible_moment_value
-from lbmpy.relaxationrates import relaxation_rate_from_magic_number, default_relaxation_rate_names
 
 
 def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,

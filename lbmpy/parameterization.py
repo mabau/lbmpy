@@ -1,8 +1,11 @@
 from collections import namedtuple
+
 import ipywidgets.widgets as widgets
 from IPython.display import display
-from ipywidgets.widgets import FloatText, Label, VBox, HBox, Select, BoundedFloatText, Button
-from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity, lattice_viscosity_from_relaxation_rate
+from ipywidgets.widgets import BoundedFloatText, Button, FloatText, HBox, Label, Select, VBox
+
+from lbmpy.relaxationrates import (
+    lattice_viscosity_from_relaxation_rate, relaxation_rate_from_lattice_viscosity)
 
 
 class ScalingWidget:

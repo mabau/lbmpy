@@ -1,7 +1,8 @@
 import sympy as sp
+
+from lbmpy.relaxationrates import get_shear_relaxation_rate
 from pystencils import Assignment
 from pystencils.sympyextensions import fast_subs
-from lbmpy.relaxationrates import get_shear_relaxation_rate
 
 
 def add_entropy_condition(collision_rule, omega_output_field=None):

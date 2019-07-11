@@ -1,8 +1,9 @@
-from lbmpy.maxwellian_equilibrium import *
-from lbmpy.moments import MOMENT_SYMBOLS, moments_up_to_order, moments_up_to_component_order, moment_matrix, \
-    exponents_to_polynomial_representations
-from lbmpy.stencils import get_stencil
 from lbmpy.cumulants import raw_moment_as_function_of_cumulants
+from lbmpy.maxwellian_equilibrium import *
+from lbmpy.moments import (
+    MOMENT_SYMBOLS, exponents_to_polynomial_representations, moment_matrix,
+    moments_up_to_component_order, moments_up_to_order)
+from lbmpy.stencils import get_stencil
 from pystencils.sympyextensions import remove_higher_order_terms
 
 

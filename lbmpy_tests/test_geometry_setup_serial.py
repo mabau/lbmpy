@@ -1,10 +1,11 @@
-import numpy as np
 import os
 
+import numpy as np
+
+from lbmpy.boundaries import NoSlip
+from lbmpy.geometry import add_black_and_white_image, add_pipe_walls
 from lbmpy.lbstep import LatticeBoltzmannStep
 from pystencils.slicing import make_slice
-from lbmpy.geometry import add_pipe_walls, add_black_and_white_image
-from lbmpy.boundaries import NoSlip
 
 
 def test_pipe():

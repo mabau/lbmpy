@@ -1,11 +1,12 @@
 import numpy as np
+
 from lbmpy.creationfunctions import create_lb_function
 from lbmpy.macroscopic_value_kernels import pdf_initialization_assignments
 from lbmpy.phasefield.analytical import force_from_phi_and_mu
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
 from lbmpy.phasefield.kerneleqs import mu_kernel
 from lbmpy.stencils import get_stencil
-from pystencils import create_data_handling, Assignment, create_kernel
+from pystencils import Assignment, create_data_handling, create_kernel
 from pystencils.fd import discretize_spatial
 from pystencils.fd.spatial import fd_stencils_forth_order_isotropic
 from pystencils.simp import sympy_cse_on_assignment_list

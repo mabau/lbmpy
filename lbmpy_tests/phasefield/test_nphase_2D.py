@@ -1,13 +1,15 @@
-import numpy as np
 from functools import partial
-from lbmpy.phasefield.analytical import n_phases_correction_function, n_phases_correction_function_sign_switch
+from time import time
+
+import numpy as np
+
+from lbmpy.phasefield.analytical import (
+    n_phases_correction_function, n_phases_correction_function_sign_switch)
 from lbmpy.phasefield.contact_angle_circle_fitting import liquid_lens_neumann_angles
 from lbmpy.phasefield.post_processing import analytic_neumann_angles
 from lbmpy.phasefield.scenarios import create_n_phase_model, create_three_phase_model
 from pystencils import create_data_handling, make_slice
 from pystencils.runhelper import ParameterStudy
-from time import time
-
 from pystencils.utils import boolean_array_bounding_box
 
 color = {'yellow': '\033[93m',
@@ -215,5 +217,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-

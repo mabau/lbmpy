@@ -7,7 +7,8 @@ import sympy as sp
 
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 from pystencils import Assignment
-from pystencils.sympyextensions import subs_additive, replace_second_order_products, extract_most_common_factor
+from pystencils.sympyextensions import (
+    extract_most_common_factor, replace_second_order_products, subs_additive)
 
 
 def replace_second_order_velocity_products(cr: LbmCollisionRule):

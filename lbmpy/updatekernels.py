@@ -1,13 +1,12 @@
 import numpy as np
 import sympy as sp
 
-from pystencils import Field, Assignment, AssignmentCollection
+from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
+from lbmpy.methods.abstractlbmethod import LbmCollisionRule
+from pystencils import Assignment, AssignmentCollection, Field
 from pystencils.field import create_numpy_array_with_layout, layout_string_to_tuple
 from pystencils.simp import add_subexpressions_for_field_reads
 from pystencils.sympyextensions import fast_subs
-from lbmpy.methods.abstractlbmethod import LbmCollisionRule
-from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
-
 
 # -------------------------------------------- LBM Kernel Creation -----------------------------------------------------
 

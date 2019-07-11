@@ -1,4 +1,4 @@
-from lbmpy.parameterization import ScalingWidget, Scaling
+from lbmpy.parameterization import Scaling, ScalingWidget
 
 
 def test_scaling_widget():

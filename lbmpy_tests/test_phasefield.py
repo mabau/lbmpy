@@ -1,10 +1,11 @@
 import sympy as sp
 
+from lbmpy.phasefield.analytical import (
+    analytic_interface_profile, chemical_potentials_from_free_energy, cosh_integral,
+    force_from_phi_and_mu, force_from_pressure_tensor, free_energy_functional_n_phases,
+    pressure_tensor_from_free_energy, substitute_laplacian_by_sum, symbolic_order_parameters,
+    symmetric_symbolic_surface_tension)
 from pystencils.fd import evaluate_diffs, expand_diff_full
-from lbmpy.phasefield.analytical import free_energy_functional_n_phases, symbolic_order_parameters, \
-    analytic_interface_profile, symmetric_symbolic_surface_tension, chemical_potentials_from_free_energy, \
-    cosh_integral, pressure_tensor_from_free_energy, force_from_pressure_tensor, force_from_phi_and_mu, \
-    substitute_laplacian_by_sum
 
 
 def test_analytic_interface_solution():

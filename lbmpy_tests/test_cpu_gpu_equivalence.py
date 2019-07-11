@@ -1,6 +1,8 @@
-import pytest
-import numpy as np
 from copy import deepcopy
+
+import numpy as np
+import pytest
+
 from lbmpy.scenarios import create_channel
 
 

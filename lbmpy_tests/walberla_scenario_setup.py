@@ -1,5 +1,5 @@
 import waLBerla.field as field
-from waLBerla import makeSlice, createUniformBufferedScheme, createUniformBlockGrid
+from waLBerla import createUniformBlockGrid, createUniformBufferedScheme, makeSlice
 
 
 def create_walberla_lattice_model(stencil, method, relaxation_rates, compressible=False, order=2,

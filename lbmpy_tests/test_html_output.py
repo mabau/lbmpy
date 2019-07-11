@@ -1,6 +1,7 @@
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.methods.creationfunctions import compare_moment_based_lb_methods
-from lbmpy.moments import moment_equality_table_by_stencil, moment_equality_table, moments_up_to_component_order
+from lbmpy.moments import (
+    moment_equality_table, moment_equality_table_by_stencil, moments_up_to_component_order)
 from lbmpy.stencils import get_stencil
 
 

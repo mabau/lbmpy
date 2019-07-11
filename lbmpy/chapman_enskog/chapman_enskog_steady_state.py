@@ -1,10 +1,13 @@
-import sympy as sp
 import functools
-from pystencils.fd import Diff, DiffOperator, expand_diff_linear, normalize_diff_order, \
-    collect_diffs
-from pystencils.sympyextensions import normalize_product, multidimensional_sum, kronecker_delta
-from lbmpy.chapman_enskog.chapman_enskog import LbMethodEqMoments, CeMoment, take_moments, insert_moments
-from lbmpy.chapman_enskog.chapman_enskog import expanded_symbol, chapman_enskog_ansatz, remove_higher_order_u
+
+import sympy as sp
+
+from lbmpy.chapman_enskog.chapman_enskog import (
+    CeMoment, LbMethodEqMoments, chapman_enskog_ansatz, expanded_symbol, insert_moments,
+    remove_higher_order_u, take_moments)
+from pystencils.fd import (
+    Diff, DiffOperator, collect_diffs, expand_diff_linear, normalize_diff_order)
+from pystencils.sympyextensions import kronecker_delta, multidimensional_sum, normalize_product
 
 
 class SteadyStateChapmanEnskogAnalysis:

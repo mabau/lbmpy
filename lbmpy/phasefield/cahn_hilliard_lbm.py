@@ -1,8 +1,9 @@
 import sympy as sp
+
+from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.methods.creationfunctions import create_from_equilibrium
 from lbmpy.stencils import get_stencil
 from pystencils.sympyextensions import kronecker_delta, multidimensional_sum
-from lbmpy.maxwellian_equilibrium import get_weights
 
 
 def cahn_hilliard_lb_method(stencil, mu, relaxation_rate=sp.Symbol("omega"), gamma=1):
