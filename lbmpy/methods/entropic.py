@@ -69,8 +69,7 @@ def add_entropy_condition(collision_rule, omega_output_field=None):
     new_collision_rule.simplification_hints['entropic_newton_iterations'] = None
 
     if omega_output_field:
-        from lbmpy.updatekernels import write_quantities_to_field
-        new_collision_rule = write_quantities_to_field(new_collision_rule, omega_h, omega_output_field)
+        new_collision_rule.main_assignments.append(Assignment(omega_output_field.center, omega_h))
 
     return new_collision_rule
 
