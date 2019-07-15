@@ -323,6 +323,8 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     collision_rule = simplification(collision_rule)
 
     if params['entropic']:
+        if params['smagorinsky']:
+            raise ValueError("Choose either entropic or smagorinsky")
         if params['entropic_newton_iterations']:
             if isinstance(params['entropic_newton_iterations'], bool):
                 iterations = 3
@@ -400,8 +402,11 @@ def create_lb_method(**params):
         next_relaxation_rate = [0]
 
         def relaxation_rate_getter(_):
-            res = relaxation_rates[next_relaxation_rate[0]]
-            next_relaxation_rate[0] += 1
+            try:
+                res = relaxation_rates[next_relaxation_rate[0]]
+                next_relaxation_rate[0] += 1
+            except IndexError:
+                raise ValueError("Too few relaxation rates specified")
             return res
         method = create_mrt_orthogonal(stencil_entries, relaxation_rate_getter, **common_params)
     elif method_name.lower() == 'mrt_raw':
