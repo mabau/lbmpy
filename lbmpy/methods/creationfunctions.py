@@ -382,6 +382,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
 
     x, y, z = MOMENT_SYMBOLS
     one = sp.Rational(1, 1)
+    is_cumulant = 'cumulant' in kwargs and kwargs['cumulant']
 
     moment_to_relaxation_rate_dict = OrderedDict()
     if have_same_entries(stencil, get_stencil("D2Q9")):
@@ -411,44 +412,101 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
         # lattice Boltzmann equation. Physical Review E, 76(3)
         # Chun, B., & Ladd, A. J. (2007). Interpolated boundary condition for lattice Boltzmann simulations of
         # flows in narrow gaps. Physical review E, 75(6)
-        sq = x ** 2 + y ** 2 + z ** 2
-        nested_moments = [
-            [one, x, y, z],  # [0, 3, 5, 7]
-            [sq - 1],  # [1]
-            [3 * sq ** 2 - 6 * sq + 1],  # [2]
-            [(3 * sq - 5) * x, (3 * sq - 5) * y, (3 * sq - 5) * z],  # [4, 6, 8]
-            [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 11, 13, 14, 15]
-            [(2 * sq - 3) * (3 * x ** 2 - sq), (2 * sq - 3) * (y ** 2 - z ** 2)],  # [10, 12]
-            [(y ** 2 - z ** 2) * x, (z ** 2 - x ** 2) * y, (x ** 2 - y ** 2) * z]  # [16, 17, 18]
-        ]
+        if is_cumulant:
+            nested_moments = [
+                [sp.sympify(1), x, y, z],  # conserved
+                [x * y,
+                 x * z,
+                 y * z,
+                 x ** 2 - y ** 2,
+                 x ** 2 - z ** 2],  # shear
+
+                [x ** 2 + y ** 2 + z ** 2],  # bulk
+
+                [x * y ** 2 + x * z ** 2,
+                 x ** 2 * y + y * z ** 2,
+                 x ** 2 * z + y ** 2 * z],
+                [x * y ** 2 - x * z ** 2,
+                 x ** 2 * y - y * z ** 2,
+                 x ** 2 * z - y ** 2 * z],
+
+                [x ** 2 * y ** 2 - 2 * x ** 2 * z ** 2 + y ** 2 * z ** 2,
+                 x ** 2 * y ** 2 + x ** 2 * z ** 2 - 2 * y ** 2 * z ** 2],
+                [x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2],
+            ]
+        else:
+            sq = x ** 2 + y ** 2 + z ** 2
+            nested_moments = [
+                [one, x, y, z],  # [0, 3, 5, 7]
+                [sq - 1],  # [1]
+                [3 * sq ** 2 - 6 * sq + 1],  # [2]
+                [(3 * sq - 5) * x, (3 * sq - 5) * y, (3 * sq - 5) * z],  # [4, 6, 8]
+                [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 11, 13, 14, 15]
+                [(2 * sq - 3) * (3 * x ** 2 - sq), (2 * sq - 3) * (y ** 2 - z ** 2)],  # [10, 12]
+                [(y ** 2 - z ** 2) * x, (z ** 2 - x ** 2) * y, (x ** 2 - y ** 2) * z]  # [16, 17, 18]
+            ]
     elif have_same_entries(stencil, get_stencil("D3Q27")):
-        xsq, ysq, zsq = x ** 2, y ** 2, z ** 2
-        all_moments = [
-            sp.Rational(1, 1),  # 0
-            x, y, z,  # 1, 2, 3
-            x * y, x * z, y * z,  # 4, 5, 6
-            xsq - ysq,  # 7
-            (xsq + ysq + zsq) - 3 * zsq,  # 8
-            (xsq + ysq + zsq) - 2,  # 9
-            3 * (x * ysq + x * zsq) - 4 * x,  # 10
-            3 * (xsq * y + y * zsq) - 4 * y,  # 11
-            3 * (xsq * z + ysq * z) - 4 * z,  # 12
-            x * ysq - x * zsq,  # 13
-            xsq * y - y * zsq,  # 14
-            xsq * z - ysq * z,  # 15
-            x * y * z,  # 16
-            3 * (xsq * ysq + xsq * zsq + ysq * zsq) - 4 * (xsq + ysq + zsq) + 4,  # 17
-            3 * (xsq * ysq + xsq * zsq - 2 * ysq * zsq) - 2 * (2 * xsq - ysq - zsq),  # 18
-            3 * (xsq * ysq - xsq * zsq) - 2 * (ysq - zsq),  # 19
-            3 * (xsq * y * z) - 2 * (y * z),  # 20
-            3 * (x * ysq * z) - 2 * (x * z),  # 21
-            3 * (x * y * zsq) - 2 * (x * y),  # 22
-            9 * (x * ysq * zsq) - 6 * (x * ysq + x * zsq) + 4 * x,  # 23
-            9 * (xsq * y * zsq) - 6 * (xsq * y + y * zsq) + 4 * y,  # 24
-            9 * (xsq * ysq * z) - 6 * (xsq * z + ysq * z) + 4 * z,  # 25
-            27 * (xsq * ysq * zsq) - 18 * (xsq * ysq + xsq * zsq + ysq * zsq) + 12 * (xsq + ysq + zsq) - 8,  # 26
-        ]
-        nested_moments = list(sort_moments_into_groups_of_same_order(all_moments).values())
+        if is_cumulant:
+            nested_moments = [
+                [sp.sympify(1), x, y, z],  # conserved
+                [x * y,
+                 x * z,
+                 y * z,
+                 x ** 2 - y ** 2,
+                 x ** 2 - z ** 2],  # shear
+
+                [x ** 2 + y ** 2 + z ** 2],  # bulk
+
+                [x * y ** 2 + x * z ** 2,
+                 x ** 2 * y + y * z ** 2,
+                 x ** 2 * z + y ** 2 * z],
+                [x * y ** 2 - x * z ** 2,
+                 x ** 2 * y - y * z ** 2,
+                 x ** 2 * z - y ** 2 * z],
+                [x * y * z],
+
+                [x ** 2 * y ** 2 - 2 * x ** 2 * z ** 2 + y ** 2 * z ** 2,
+                 x ** 2 * y ** 2 + x ** 2 * z ** 2 - 2 * y ** 2 * z ** 2],
+                [x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2],
+
+                [x ** 2 * y * z,
+                 x * y ** 2 * z,
+                 x * y * z ** 2],
+
+                [x ** 2 * y ** 2 * z,
+                 x ** 2 * y * z ** 2,
+                 x * y ** 2 * z ** 2],
+
+                [x ** 2 * y ** 2 * z ** 2],
+            ]
+        else:
+            xsq, ysq, zsq = x ** 2, y ** 2, z ** 2
+            all_moments = [
+                sp.Rational(1, 1),  # 0
+                x, y, z,  # 1, 2, 3
+                x * y, x * z, y * z,  # 4, 5, 6
+                xsq - ysq,  # 7
+                (xsq + ysq + zsq) - 3 * zsq,  # 8
+                (xsq + ysq + zsq) - 2,  # 9
+                3 * (x * ysq + x * zsq) - 4 * x,  # 10
+                3 * (xsq * y + y * zsq) - 4 * y,  # 11
+                3 * (xsq * z + ysq * z) - 4 * z,  # 12
+                x * ysq - x * zsq,  # 13
+                xsq * y - y * zsq,  # 14
+                xsq * z - ysq * z,  # 15
+                x * y * z,  # 16
+                3 * (xsq * ysq + xsq * zsq + ysq * zsq) - 4 * (xsq + ysq + zsq) + 4,  # 17
+                3 * (xsq * ysq + xsq * zsq - 2 * ysq * zsq) - 2 * (2 * xsq - ysq - zsq),  # 18
+                3 * (xsq * ysq - xsq * zsq) - 2 * (ysq - zsq),  # 19
+                3 * (xsq * y * z) - 2 * (y * z),  # 20
+                3 * (x * ysq * z) - 2 * (x * z),  # 21
+                3 * (x * y * zsq) - 2 * (x * y),  # 22
+                9 * (x * ysq * zsq) - 6 * (x * ysq + x * zsq) + 4 * x,  # 23
+                9 * (xsq * y * zsq) - 6 * (xsq * y + y * zsq) + 4 * y,  # 24
+                9 * (xsq * ysq * z) - 6 * (xsq * z + ysq * z) + 4 * z,  # 25
+                27 * (xsq * ysq * zsq) - 18 * (xsq * ysq + xsq * zsq + ysq * zsq) + 12 * (xsq + ysq + zsq) - 8,  # 26
+            ]
+            nested_moments = list(sort_moments_into_groups_of_same_order(all_moments).values())
     else:
         raise NotImplementedError("No MRT model is available (yet) for this stencil. "
                                   "Create a custom MRT using 'create_with_discrete_maxwellian_eq_moments'")
