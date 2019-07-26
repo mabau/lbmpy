@@ -69,9 +69,10 @@ def multi_differentiation(generating_function, index, symbols):
     Computes moment from moment-generating function or cumulant from cumulant-generating function,
     by differentiating the generating function, as specified by index and evaluating the derivative at symbols=0
 
-    :param generating_function: function with is differentiated
-    :param index: the i'th index specifies how often to differentiate w.r.t. to symbols[i]
-    :param symbols: symbol to differentiate
+    Args:
+        generating_function: function with is differentiated
+        index: the i'th index specifies how often to differentiate w.r.t. to symbols[i]
+        symbols: symbol to differentiate
     """
     assert len(index) == len(symbols), "Length of index and length of symbols has to match"
 
@@ -119,9 +120,10 @@ def __continuous_moment_or_cumulant(func, moment, symbols, generating_function):
 def continuous_moment(func, moment, symbols=None):
     """Computes moment of given function.
 
-    :param func: function to compute moments of
-    :param moment: tuple or polynomial describing the moment
-    :param symbols: if moment is given as polynomial, pass the moment symbols, i.e. the dof of the polynomial
+    Args:
+        func: function to compute moments of
+        moment: tuple or polynomial describing the moment
+        symbols: if moment is given as polynomial, pass the moment symbols, i.e. the dof of the polynomial
     """
     return __continuous_moment_or_cumulant(func, moment, symbols, moment_generating_function)
 

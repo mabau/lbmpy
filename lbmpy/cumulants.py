@@ -43,7 +43,7 @@ def __partition(collection):
 
 
 def __cumulant_raw_moment_transform(index, dependent_var_dict, outer_function, default_prefix, centralized):
-    """Function to express cumulants as function of moments as vice versa.
+    """Function to express cumulants as function of moments and vice versa.
 
     Uses multivariate version of Faa di Bruno's formula.
 

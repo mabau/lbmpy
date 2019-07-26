@@ -199,6 +199,24 @@ def get_moments_of_discrete_maxwellian_equilibrium(stencil, moments,
 
 
 def compressible_to_incompressible_moment_value(term, rho, u):
+    """Compressible to incompressible equilibrium moments
+
+    Transforms so-called compressible equilibrium moments (as obtained from the continuous Maxwellian) by
+    removing the density factor in all monomials where velocity components are multiplied to the density.
+
+    Examples:
+        >>> rho, *u = sp.symbols("rho u_:2")
+        >>> compressible_to_incompressible_moment_value(rho  + rho * u[0] + rho * u[0]*u[1], rho, u)
+        rho + u_0*u_1 + u_0
+
+    Args:
+        term: compressible equilibrium value
+        rho: symbol for density
+        u: symbol for velocity
+
+    Returns:
+        incompressible equilibrium value
+    """
     term = sp.sympify(term)
     term = term.expand()
     if term.func != sp.Add:
