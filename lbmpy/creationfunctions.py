@@ -73,6 +73,12 @@ LES methods:
 - ``smagorinsky=False``: set to Smagorinsky constant to activate turbulence model, ``omega_output_field`` can be set to
   write out adapted relaxation rates
 
+Fluctuating LB:
+
+- ``fluctuating=(variance1, variance2, )``: enables fluctuating lattice Boltzmann by randomizing collision process.
+  Pass sequence of variances for each moment, or `True` to use symbolic variances
+
+
 
 Optimization Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -169,11 +175,11 @@ import sympy as sp
 
 import lbmpy.forcemodels as forcemodels
 from lbmpy.fieldaccess import (
-    AAEvenTimeStepAccessor, AAOddTimeStepAccessor, CollideOnlyInplaceAccessor,
-    EsoTwistEvenTimeStepAccessor, EsoTwistOddTimeStepAccessor, PdfFieldAccessor,
-    PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor, StreamPushTwoFieldsAccessor)
-from lbmpy.methods import (
-    create_mrt3, create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
+    AAEvenTimeStepAccessor, AAOddTimeStepAccessor, CollideOnlyInplaceAccessor, EsoTwistEvenTimeStepAccessor,
+    EsoTwistOddTimeStepAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor,
+    StreamPushTwoFieldsAccessor)
+from lbmpy.fluctuatinglb import fluctuation_correction, method_with_rescaled_equilibrium_values
+from lbmpy.methods import create_mrt3, create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc
 from lbmpy.methods.creationfunctions import create_generic_mrt
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.entropic import add_entropy_condition, add_iterative_entropy_condition
@@ -187,7 +193,8 @@ from pystencils import Assignment, AssignmentCollection, create_kernel
 from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
 from pystencils.field import Field, get_layout_of_array
-from pystencils.simp import add_subexpressions_for_field_reads
+from pystencils.rng import random_symbol
+from pystencils.simp.assignment_collection import SymbolGen
 from pystencils.stencil import have_same_entries
 
 
@@ -302,6 +309,9 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     if rho_in is not None and isinstance(rho_in, Field):
         rho_in = rho_in.center
 
+    if params['fluctuating']:
+        lb_method = method_with_rescaled_equilibrium_values(lb_method)
+
     if u_in is not None:
         density_rhs = sum(lb_method.pre_collision_pdf_symbols) if rho_in is None else rho_in
         eqs = [Assignment(cqc.zeroth_order_moment_symbol, density_rhs)]
@@ -314,6 +324,14 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
         collision_rule = lb_method.get_collision_rule()
 
     collision_rule = simplification(collision_rule)
+
+    if params['fluctuating']:
+        variances = SymbolGen("variance") if params['fluctuating'] is True else params['fluctuating']
+        correction = fluctuation_correction(lb_method, random_symbol(collision_rule.subexpressions, dim=lb_method.dim),
+                                            variances)
+        for i, corr in enumerate(correction):
+            collision_rule.main_assignments[i] = Assignment(collision_rule.main_assignments[i].lhs,
+                                                            collision_rule.main_assignments[i].rhs + corr)
 
     if params['entropic']:
         if params['smagorinsky']:
@@ -509,6 +527,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'entropic_newton_iterations': None,
         'omega_output_field': None,
         'smagorinsky': False,
+        'fluctuating': False,
 
         'output': {},
         'velocity_input': None,

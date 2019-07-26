@@ -91,7 +91,7 @@ import sympy as sp
 from lbmpy.relaxationrates import get_shear_relaxation_rate
 
 
-class Simple(object):
+class Simple:
     r"""
     A simple force model which introduces the following additional force term in the
     collision process :math:`\frac{w_q}{c_s^2} c_{qi} \; a_i` (often: force = rho * acceleration)
@@ -114,7 +114,7 @@ class Simple(object):
         return default_velocity_shift(density, self._force)
 
 
-class Luo(object):
+class Luo:
     r"""Force model by Luo :cite:`luo1993lattice`.
 
     Shifts the macroscopic velocity by F/2, but does not change the equilibrium velocity.
@@ -136,7 +136,7 @@ class Luo(object):
         return default_velocity_shift(density, self._force)
 
 
-class Guo(object):
+class Guo:
     r"""
     Force model by Guo  :cite:`guo2002discrete`
     Adapts the calculation of the macroscopic velocity as well as the equilibrium velocity (both shifted by F/2)!
@@ -158,7 +158,7 @@ class Guo(object):
         return default_velocity_shift(density, self._force)
 
 
-class Buick(object):
+class Buick:
     r"""
     This force model :cite:`buick2000gravity` has a force term with zero second moment. 
     It is suited for incompressible lattice models.
@@ -181,7 +181,7 @@ class Buick(object):
         return default_velocity_shift(density, self._force)
 
 
-class EDM(object):
+class EDM:
     r"""Exact differencing force model"""
 
     def __init__(self, force):
