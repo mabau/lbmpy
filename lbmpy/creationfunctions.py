@@ -65,8 +65,8 @@ Entropic methods:
 - ``entropic_newton_iterations=None``: For moment methods the entropy optimum can be calculated in closed form.
   For cumulant methods this is not possible, in that case it is computed using Newton iterations. This parameter can be
   used to force Newton iterations and specify how many should be done
-- ``omega_output_field=None``: you can pass a pystencils Field here, where the calculated free relaxation
-  rate is written to
+- ``omega_output_field=None``: you can pass a pystencils Field here, where the calculated free relaxation rate of
+  an entropic or Smagorinsky method is written to
 
 LES methods:
 
