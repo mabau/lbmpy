@@ -178,7 +178,7 @@ from lbmpy.fieldaccess import (
     AAEvenTimeStepAccessor, AAOddTimeStepAccessor, CollideOnlyInplaceAccessor, EsoTwistEvenTimeStepAccessor,
     EsoTwistOddTimeStepAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor,
     StreamPushTwoFieldsAccessor)
-from lbmpy.fluctuatinglb import fluctuation_correction, method_with_rescaled_equilibrium_values
+from lbmpy.fluctuatinglb import fluctuation_correction, fluctuating_variance_equations
 from lbmpy.methods import create_mrt3, create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc
 from lbmpy.methods.creationfunctions import create_generic_mrt
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
@@ -309,9 +309,6 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     if rho_in is not None and isinstance(rho_in, Field):
         rho_in = rho_in.center
 
-    if params['fluctuating']:
-        lb_method = method_with_rescaled_equilibrium_values(lb_method)
-
     if u_in is not None:
         density_rhs = sum(lb_method.pre_collision_pdf_symbols) if rho_in is None else rho_in
         eqs = [Assignment(cqc.zeroth_order_moment_symbol, density_rhs)]
@@ -326,12 +323,25 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     collision_rule = simplification(collision_rule)
 
     if params['fluctuating']:
-        variances = SymbolGen("variance") if params['fluctuating'] is True else params['fluctuating']
+        variances = params["fluctuating"]
+        if params["fluctuating"] is True:
+            variances = [v for v, _ in zip(iter(SymbolGen("variance")), lb_method.moments)]
+
         correction = fluctuation_correction(lb_method, random_symbol(collision_rule.subexpressions, dim=lb_method.dim),
                                             variances)
+
         for i, corr in enumerate(correction):
             collision_rule.main_assignments[i] = Assignment(collision_rule.main_assignments[i].lhs,
                                                             collision_rule.main_assignments[i].rhs + corr)
+
+        if params["temperature"] is not None:
+            temperature = sp.Symbol("temperature") if params["temperature"] is True else params["temperature"]
+            variance_equations = fluctuating_variance_equations(method=lb_method,
+                                                                temperature=temperature,
+                                                                c_s_sq=params["c_s_sq"],
+                                                                variances=variances)
+            collision_rule.subexpressions += variance_equations
+            collision_rule.topological_sort(sort_subexpressions=True, sort_main_assignments=False)
 
     if params['entropic']:
         if params['smagorinsky']:
@@ -528,6 +538,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'omega_output_field': None,
         'smagorinsky': False,
         'fluctuating': False,
+        'temperature': None,
 
         'output': {},
         'velocity_input': None,

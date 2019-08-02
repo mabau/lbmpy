@@ -23,6 +23,20 @@ import sympy as sp
 
 from lbmpy.moments import MOMENT_SYMBOLS
 from pystencils.simp.assignment_collection import SymbolGen
+from pystencils import Assignment
+
+
+def fluctuating_variance_equations(method, temperature=sp.Symbol("fluctuating_temperature"),
+                                   c_s_sq=sp.Symbol("c_s") ** 2,
+                                   variances=SymbolGen("variance")):
+    """Produces variance equations according to (3.54) in Schiller08"""
+    normalization_factors = abs(method.moment_matrix) * sp.Matrix(method.weights)
+    relaxation_rates_sqr = [r ** 2 for r in method.relaxation_rates]
+    density = method.zeroth_order_equilibrium_moment_symbol
+    mu = temperature * density / c_s_sq
+
+    return [Assignment(v, sp.sqrt(mu * norm * (1 - rr)))
+            for v, norm, rr in zip(iter(variances), normalization_factors, relaxation_rates_sqr)]
 
 
 def method_with_rescaled_equilibrium_values(base_method):
