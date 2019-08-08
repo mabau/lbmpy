@@ -2,41 +2,45 @@
 
 to generate a fluctuating LBM the equilibrium moment values have to be scaled and an additive (random)
 correction term is added to the collision rule
-
-
-Usage example:
-
-    >>> from lbmpy.session import *
-    >>> from pystencils.rng import random_symbol
-    >>> method = create_lb_method(stencil='D2Q9', method='MRT')
-    >>> rescaled_method = method_with_rescaled_equilibrium_values(method)
-    >>> cr = create_lb_collision_rule(lb_method=rescaled_method)
-    >>> correction = fluctuation_correction(rescaled_method,
-    ...                                     rng_generator=random_symbol(cr.subexpressions, dim=method.dim))
-    >>> for i, corr in enumerate(correction):
-    ...     cr.main_assignments[i] = ps.Assignment(cr.main_assignments[i].lhs,
-    ...                                            cr.main_assignments[i].rhs + corr)
-    >>>
-
 """
+import numpy as np
 import sympy as sp
 
 from lbmpy.moments import MOMENT_SYMBOLS
+from pystencils import Assignment, TypedSymbol
+from pystencils.rng import PhiloxFourFloats, random_symbol
 from pystencils.simp.assignment_collection import SymbolGen
-from pystencils import Assignment
 
 
-def fluctuating_variance_equations(method, temperature=sp.Symbol("fluctuating_temperature"),
-                                   c_s_sq=sp.Symbol("c_s") ** 2,
-                                   variances=SymbolGen("variance")):
+def add_fluctuations_to_collision_rule(collision_rule, temperature=None, variances=(),
+                                       block_offsets=(0, 0, 0), seed=TypedSymbol("seed", np.uint32),
+                                       rng_node=PhiloxFourFloats, c_s_sq=sp.Rational(1, 3)):
+    """"""
+    if not (temperature and not variances) or (temperature and variances):
+        raise ValueError("Fluctuating LBM: Pass either 'temperature' or 'variances'.")
+
+    method = collision_rule.method
+    if not variances:
+        variances = fluctuating_variance_from_temperature(method, temperature, c_s_sq)
+
+    rng_symbol_gen = random_symbol(collision_rule.subexpressions, seed,
+                                   rng_node=rng_node, dim=method.dim, offsets=block_offsets)
+    correction = fluctuation_correction(method, rng_symbol_gen, variances)
+
+    for i, corr in enumerate(correction):
+        collision_rule.main_assignments[i] = Assignment(collision_rule.main_assignments[i].lhs,
+                                                        collision_rule.main_assignments[i].rhs + corr)
+
+
+def fluctuating_variance_from_temperature(method, temperature, c_s_sq=sp.Symbol("c_s") ** 2):
     """Produces variance equations according to (3.54) in Schiller08"""
     normalization_factors = abs(method.moment_matrix) * sp.Matrix(method.weights)
-    relaxation_rates_sqr = [r ** 2 for r in method.relaxation_rates]
     density = method.zeroth_order_equilibrium_moment_symbol
+    if method.conserved_quantity_computation.zero_centered_pdfs:
+        density += 1
     mu = temperature * density / c_s_sq
-
-    return [Assignment(v, sp.sqrt(mu * norm * (1 - rr)))
-            for v, norm, rr in zip(iter(variances), normalization_factors, relaxation_rates_sqr)]
+    return [sp.sqrt(mu * norm * (1 - (1 - rr) ** 2))
+            for norm, rr in zip(normalization_factors, method.relaxation_rates)]
 
 
 def method_with_rescaled_equilibrium_values(base_method):

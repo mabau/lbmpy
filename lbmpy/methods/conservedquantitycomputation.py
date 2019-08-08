@@ -243,10 +243,11 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs,
         \rho = \sum_{d \in S} f_d
         u_j = \sum_{d \in S} f_d u_jd
 
-    :param stencil: called :math:`S` above
-    :param symbolic_pdfs: called :math:`f` above
-    :param symbolic_zeroth_moment:  called :math:`\rho` above
-    :param symbolic_first_moments: called :math:`u` above
+    Args:
+        stencil: called :math:`S` above
+        symbolic_pdfs: called :math:`f` above
+        symbolic_zeroth_moment:  called :math:`\rho` above
+        symbolic_first_moments: called :math:`u` above
     """
     def filter_out_plus_terms(expr):
         result = 0

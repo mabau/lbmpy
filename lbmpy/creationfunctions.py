@@ -75,9 +75,8 @@ LES methods:
 
 Fluctuating LB:
 
-- ``fluctuating=(variance1, variance2, )``: enables fluctuating lattice Boltzmann by randomizing collision process.
-  Pass sequence of variances for each moment, or `True` to use symbolic variances
-
+- ``fluctuating``: enables fluctuating lattice Boltzmann by randomizing collision process.
+  Pass dictionary with parameters to  ``lbmpy.fluctuatinglb.add_fluctuations_to_collision_rule``
 
 
 Optimization Parameters
@@ -175,11 +174,12 @@ import sympy as sp
 
 import lbmpy.forcemodels as forcemodels
 from lbmpy.fieldaccess import (
-    AAEvenTimeStepAccessor, AAOddTimeStepAccessor, CollideOnlyInplaceAccessor, EsoTwistEvenTimeStepAccessor,
-    EsoTwistOddTimeStepAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor,
-    StreamPushTwoFieldsAccessor)
-from lbmpy.fluctuatinglb import fluctuation_correction, fluctuating_variance_equations
-from lbmpy.methods import create_mrt3, create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc
+    AAEvenTimeStepAccessor, AAOddTimeStepAccessor, CollideOnlyInplaceAccessor,
+    EsoTwistEvenTimeStepAccessor, EsoTwistOddTimeStepAccessor, PdfFieldAccessor,
+    PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor, StreamPushTwoFieldsAccessor)
+from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule, method_with_rescaled_equilibrium_values
+from lbmpy.methods import (
+    create_mrt3, create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.creationfunctions import create_generic_mrt
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.entropic import add_entropy_condition, add_iterative_entropy_condition
@@ -193,8 +193,6 @@ from pystencils import Assignment, AssignmentCollection, create_kernel
 from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
 from pystencils.field import Field, get_layout_of_array
-from pystencils.rng import random_symbol
-from pystencils.simp.assignment_collection import SymbolGen
 from pystencils.stencil import have_same_entries
 
 
@@ -309,6 +307,9 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     if rho_in is not None and isinstance(rho_in, Field):
         rho_in = rho_in.center
 
+    if params['fluctuating']:
+        lb_method = method_with_rescaled_equilibrium_values(lb_method)
+
     if u_in is not None:
         density_rhs = sum(lb_method.pre_collision_pdf_symbols) if rho_in is None else rho_in
         eqs = [Assignment(cqc.zeroth_order_moment_symbol, density_rhs)]
@@ -323,25 +324,7 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     collision_rule = simplification(collision_rule)
 
     if params['fluctuating']:
-        variances = params["fluctuating"]
-        if params["fluctuating"] is True:
-            variances = [v for v, _ in zip(iter(SymbolGen("variance")), lb_method.moments)]
-
-        correction = fluctuation_correction(lb_method, random_symbol(collision_rule.subexpressions, dim=lb_method.dim),
-                                            variances)
-
-        for i, corr in enumerate(correction):
-            collision_rule.main_assignments[i] = Assignment(collision_rule.main_assignments[i].lhs,
-                                                            collision_rule.main_assignments[i].rhs + corr)
-
-        if params["temperature"] is not None:
-            temperature = sp.Symbol("temperature") if params["temperature"] is True else params["temperature"]
-            variance_equations = fluctuating_variance_equations(method=lb_method,
-                                                                temperature=temperature,
-                                                                c_s_sq=params["c_s_sq"],
-                                                                variances=variances)
-            collision_rule.subexpressions += variance_equations
-            collision_rule.topological_sort(sort_subexpressions=True, sort_main_assignments=False)
+        add_fluctuations_to_collision_rule(collision_rule, **params['fluctuating'])
 
     if params['entropic']:
         if params['smagorinsky']:

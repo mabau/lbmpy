@@ -9,6 +9,7 @@ from pystencils.stencil import inverse_direction
 
 __all__ = ['PdfFieldAccessor', 'CollideOnlyInplaceAccessor', 'StreamPullTwoFieldsAccessor',
            'AAEvenTimeStepAccessor', 'AAOddTimeStepAccessor',
+           'PeriodicTwoFieldsAccessor', 'StreamPushTwoFieldsAccessor',
            'EsoTwistEvenTimeStepAccessor', 'EsoTwistOddTimeStepAccessor',
            'visualize_pdf_field_accessor', 'visualize_field_mapping']
 
