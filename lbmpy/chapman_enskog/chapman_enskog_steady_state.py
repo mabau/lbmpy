@@ -272,8 +272,9 @@ class SteadyStateChapmanEnskogAnalysisSRT:
 
         The bulk viscosity is predicted differently than by the normal Navier Stokes analysis...why??
 
-        :param coordinate: which momentum equation to use i.e. x,y or z, to approximate Navier Stokes
-                           all have to return the same result
+        Args:
+            coordinate: which momentum equation to use i.e. x,y or z, to approximate Navier Stokes
+                        all have to return the same result
         """
         dim = self.method.dim
 

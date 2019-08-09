@@ -15,9 +15,12 @@ def add_entropy_condition(collision_rule, omega_output_field=None):
     The entropy is approximated such that the optimality condition can be written explicitly, no Newton iterations
     have to be done.
 
-    :param collision_rule: collision rule with two relaxation times
-    :param omega_output_field: pystencils field where computed omegas are stored
-    :return: new collision rule which only one relaxation rate
+    Args:
+        collision_rule: collision rule with two relaxation times
+        omega_output_field: pystencils field where computed omegas are stored
+
+    Returns:
+        new collision rule which only one relaxation rate
     """
     if collision_rule.method.conserved_quantity_computation.zero_centered_pdfs:
         raise NotImplementedError("Entropic Methods only implemented for models where pdfs are centered around 1. "
@@ -81,13 +84,16 @@ def add_iterative_entropy_condition(collision_rule, free_omega=None, newton_iter
 
     A fixed number of Newton iterations is used to determine the maximum entropy relaxation rate.
 
-    :param collision_rule: collision rule with two relaxation times
-    :param free_omega: relaxation rate which should be determined by entropy condition. If left to None, the
-                      relaxation rate is automatically detected, which works only if there are 2 relaxation times
-    :param newton_iterations: (integer) number of newton iterations
-    :param initial_value: initial value of the relaxation rate
-    :param omega_output_field: pystencils field where computed omegas are stored
-    :return: new collision rule which only one relaxation rate
+    Args:
+        collision_rule: collision rule with two relaxation times
+        free_omega: relaxation rate which should be determined by entropy condition. If left to None, the
+                   relaxation rate is automatically detected, which works only if there are 2 relaxation times
+        newton_iterations: (integer) number of newton iterations
+        initial_value: initial value of the relaxation rate
+        omega_output_field: pystencils field where computed omegas are stored
+
+    Returns:
+        new collision rule which only one relaxation rate
     """
 
     if collision_rule.method.conserved_quantity_computation.zero_centered_pdfs:

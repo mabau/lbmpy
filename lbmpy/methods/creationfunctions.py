@@ -294,13 +294,14 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
     one for higher order moments. In entropic models this second relaxation rate is chosen subject to an entropy
     condition. Which moments are relaxed by which rate is determined by the method_name
 
-    :param dim: 2 or 3, leads to stencil D2Q9 or D3Q27
-    :param shear_relaxation_rate: relaxation rate that determines viscosity
-    :param higher_order_relaxation_rate: relaxation rate for higher order moments
-    :param method_name: string 'KBC-Nx' where x can be an number from 1 to 4, for details see
-                       "Karlin 2015: Entropic multi relaxation lattice Boltzmann models for turbulent flows"
-    :param maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
-                           used to compute the equilibrium moments
+    Args:
+        dim: 2 or 3, leads to stencil D2Q9 or D3Q27
+        shear_relaxation_rate: relaxation rate that determines viscosity
+        higher_order_relaxation_rate: relaxation rate for higher order moments
+        method_name: string 'KBC-Nx' where x can be an number from 1 to 4, for details see
+                    "Karlin 2015: Entropic multi relaxation lattice Boltzmann models for turbulent flows"
+        maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
+                        used to compute the equilibrium moments
     """
     def product(iterable):
         return reduce(operator.mul, iterable, 1)

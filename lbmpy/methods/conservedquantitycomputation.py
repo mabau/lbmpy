@@ -54,7 +54,8 @@ class AbstractConservedQuantityComputation(abc.ABC):
         of the pdfs.
         For hydrodynamic LBM schemes this is usually the density and velocity.
 
-        :param pdfs: values or symbols for the pdf values
+        Args:
+            pdfs: values or symbols for the pdf values
         """
 
     @abc.abstractmethod
@@ -63,9 +64,10 @@ class AbstractConservedQuantityComputation(abc.ABC):
         Returns an equation collection that defines conserved quantities for output. These conserved quantities might
         be slightly different that the ones used as input for the equilibrium e.g. due to a force model.
 
-        :param pdfs: values for the pdf entries
-        :param output_quantity_names_to_symbols: dict mapping of conserved quantity names
-                (See :func:`conserved_quantities`) to symbols or field accesses where they should be written to
+        Args:
+            pdfs: values for the pdf entries
+            output_quantity_names_to_symbols: dict mapping of conserved quantity names
+             (See :func:`conserved_quantities`) to symbols or field accesses where they should be written to
         """
 
     @abc.abstractmethod

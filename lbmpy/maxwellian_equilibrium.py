@@ -127,11 +127,12 @@ def continuous_maxwellian_equilibrium(dim=3, rho=sp.Symbol("rho"),
     """
     Returns sympy expression of Maxwell Boltzmann distribution
 
-    :param dim: number of space dimensions
-    :param rho: sympy symbol for the density
-    :param u: symbols for macroscopic velocity (expected value for velocity)
-    :param v: symbols for particle velocity
-    :param c_s_sq: symbol for speed of sound squared, defaults to symbol c_s**2
+    Args:
+        dim: number of space dimensions
+        rho: sympy symbol for the density
+        u: symbols for macroscopic velocity (expected value for velocity)
+        v: symbols for particle velocity
+        c_s_sq: symbol for speed of sound squared, defaults to symbol c_s**2
     """
     u = u[:dim]
     v = v[:dim]
@@ -150,13 +151,14 @@ def get_moments_of_continuous_maxwellian_equilibrium(moments, dim, rho=sp.Symbol
     """
     Computes moments of the continuous Maxwell Boltzmann equilibrium distribution
 
-    :param moments: moments to compute, either in polynomial or exponent-tuple form
-    :param dim: dimension (2 or 3)
-    :param rho: symbol or value for the density
-    :param u: symbols or values for the macroscopic velocity
-    :param c_s_sq: symbol for speed of sound squared, defaults to symbol c_s**2
-    :param order: if this parameter is not None, terms that have a higher polynomial order in the macroscopic velocity
-                  are removed
+    Args:
+        moments: moments to compute, either in polynomial or exponent-tuple form
+        dim: dimension (2 or 3)
+        rho: symbol or value for the density
+        u: symbols or values for the macroscopic velocity
+        c_s_sq: symbol for speed of sound squared, defaults to symbol c_s**2
+        order: if this parameter is not None, terms that have a higher polynomial order in the macroscopic velocity
+               are removed
 
     >>> get_moments_of_continuous_maxwellian_equilibrium( ( (0,0,0), (1,0,0), (0,1,0), (0,0,1), (2,0,0) ), dim=3 )
     [rho, rho*u_0, rho*u_1, rho*u_2, rho*(c_s**2 + u_0**2)]

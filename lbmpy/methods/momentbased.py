@@ -17,14 +17,15 @@ class MomentBasedLbMethod(AbstractLbMethod):
         space each component (moment) is relaxed to an equilibrium moment by a certain relaxation rate. These
         equilibrium moments can e.g. be determined by taking the equilibrium moments of the continuous Maxwellian.
 
-        :param stencil: see :func:`lbmpy.stencils.get_stencil`
-        :param moment_to_relaxation_info_dict: a dictionary mapping moments in either tuple or polynomial formulation
-                                           to a RelaxationInfo, which consists of the corresponding equilibrium moment
-                                           and a relaxation rate
-        :param conserved_quantity_computation: instance of :class:`lbmpy.methods.AbstractConservedQuantityComputation`.
-                                             This determines how conserved quantities are computed, and defines
-                                             the symbols used in the equilibrium moments like e.g. density and velocity
-        :param force_model: force model instance, or None if no forcing terms are required
+        Args:
+            stencil: see :func:`lbmpy.stencils.get_stencil`
+            moment_to_relaxation_info_dict: a dictionary mapping moments in either tuple or polynomial formulation
+                                        to a RelaxationInfo, which consists of the corresponding equilibrium moment
+                                        and a relaxation rate
+            conserved_quantity_computation: instance of :class:`lbmpy.methods.AbstractConservedQuantityComputation`.
+                                          This determines how conserved quantities are computed, and defines
+                                          the symbols used in the equilibrium moments like e.g. density and velocity
+            force_model: force model instance, or None if no forcing terms are required
         """
         assert isinstance(conserved_quantity_computation, AbstractConservedQuantityComputation)
         super(MomentBasedLbMethod, self).__init__(stencil)

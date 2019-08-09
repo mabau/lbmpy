@@ -3,11 +3,12 @@ def get_stencil(name, ordering='walberla'):
     Stencils are tuples of discrete velocities. They are commonly labeled in the 'DxQy' notation, where d is the
     dimension (length of the velocity tuples) and y is number of discrete velocities.
 
-    :param name: DxQy notation
-    :param ordering: the LBM literature does not use a common order of the discrete velocities, therefore here
-                     different common orderings are available. All orderings lead to the same method, it just has
-                     to be used consistently. Here more orderings are available to compare intermediate results with
-                     the literature.
+    Args:
+        name: DxQy notation
+        ordering: the LBM literature does not use a common order of the discrete velocities, therefore here
+                  different common orderings are available. All orderings lead to the same method, it just has
+                  to be used consistently. Here more orderings are available to compare intermediate results with
+                  the literature.
     """
     try:
         return get_stencil.data[name.upper()][ordering.lower()]

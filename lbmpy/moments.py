@@ -418,8 +418,10 @@ def get_default_moment_set_for_stencil(stencil):
 def extract_monomials(sequence_of_polynomials, dim=3):
     """
     Returns a set of exponent tuples of all monomials contained in the given set of polynomials
-    :param sequence_of_polynomials: sequence of polynomials in the MOMENT_SYMBOLS
-    :param dim: length of returned exponent tuples
+
+    Args:
+        sequence_of_polynomials: sequence of polynomials in the MOMENT_SYMBOLS
+        dim: length of returned exponent tuples
 
     >>> x, y, z = MOMENT_SYMBOLS
     >>> extract_monomials([x**2 + y**2 + y, y + y**2])
@@ -437,8 +439,10 @@ def extract_monomials(sequence_of_polynomials, dim=3):
 def monomial_to_polynomial_transformation_matrix(monomials, polynomials):
     """
     Returns a transformation matrix from a monomial to a polynomial representation
-    :param monomials: sequence of exponent tuples
-    :param polynomials: sequence of polynomials in the MOMENT_SYMBOLS
+
+    Args:
+        monomials: sequence of exponent tuples
+        polynomials: sequence of polynomials in the MOMENT_SYMBOLS
 
     >>> x, y, z = MOMENT_SYMBOLS
     >>> polys = [7 * x**2 + 3 * x + 2 * y **2, \

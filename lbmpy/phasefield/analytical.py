@@ -250,8 +250,10 @@ def force_from_phi_and_mu(order_parameters, dim, mu=None):
 def substitute_laplacian_by_sum(eq, dim):
     """Substitutes abstract Laplacian represented by ∂∂ by a sum over all dimensions
     i.e. in case of 3D: ∂∂ is replaced by ∂0∂0 + ∂1∂1 + ∂2∂2
-    :param eq: the term where the substitutions should be made
-    :param dim: spatial dimension, in example above, 3
+
+    Args:
+        eq: the term where the substitutions should be made
+        dim: spatial dimension, in example above, 3
     """
     functions = [d.args[0] for d in eq.atoms(Diff)]
     substitutions = {Diff(Diff(op)): sum(Diff(Diff(op, i), i) for i in range(dim))
