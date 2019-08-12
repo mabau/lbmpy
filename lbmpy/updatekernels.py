@@ -49,7 +49,7 @@ def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
         result.simplification_hints['split_groups'] = new_split_groups
 
     if accessor.is_inplace:
-        result = add_subexpressions_for_field_reads(result, subexpressions=False, main_assignments=True)
+        result = add_subexpressions_for_field_reads(result, subexpressions=True, main_assignments=True)
 
     return result
 
