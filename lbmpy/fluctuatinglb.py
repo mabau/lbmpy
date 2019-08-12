@@ -22,6 +22,8 @@ def add_fluctuations_to_collision_rule(collision_rule, temperature=None, varianc
     method = collision_rule.method
     if not variances:
         variances = fluctuating_variance_from_temperature(method, temperature, c_s_sq)
+    if block_offsets == 'walberla':
+        block_offsets = tuple(TypedSymbol("block_offset_{}".format(i), np.uint32) for i in range(3))
 
     rng_symbol_gen = random_symbol(collision_rule.subexpressions, seed,
                                    rng_node=rng_node, dim=method.dim, offsets=block_offsets)
