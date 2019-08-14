@@ -45,19 +45,6 @@ def fluctuating_variance_from_temperature(method, temperature, c_s_sq=sp.Symbol(
             for norm, rr in zip(normalization_factors, method.relaxation_rates)]
 
 
-def method_with_rescaled_equilibrium_values(base_method):
-    """Re-scales the equilibrium moments by 1 / sqrt(M*w) with moment matrix M and weights w"""
-    from lbmpy.creationfunctions import create_lb_method_from_existing
-
-    sig_k = abs(base_method.moment_matrix) * sp.Matrix(base_method.weights)
-
-    def modification_rule(moment, eq, rr):
-        i = base_method.moments.index(moment)
-        return moment, eq / sp.sqrt(sig_k[i]), rr
-
-    return create_lb_method_from_existing(base_method, modification_rule)
-
-
 def fluctuation_correction(method, rng_generator, variances=SymbolGen("variance")):
     """Returns additive correction terms to be added to the the collided pdfs"""
     conserved_moments = {sp.sympify(1), *MOMENT_SYMBOLS}
