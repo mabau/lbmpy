@@ -63,7 +63,8 @@ def fluctuation_correction(method, rng_generator, variances=SymbolGen("variance"
     conserved_moments = {sp.sympify(1), *MOMENT_SYMBOLS}
 
     # A diagonal matrix containing the random fluctuations
-    random_matrix = sp.Matrix([0 if m in conserved_moments else next(rng_generator) for m in method.moments])
+    random_matrix = sp.Matrix([0 if m in conserved_moments else (next(rng_generator) - 0.5) * sp.sqrt(12)
+                               for m in method.moments])
     random_variance = sp.diag(*[v for v, _ in zip(iter(variances), method.moments)])
 
     # corrections are applied in real space hence we need to convert to real space here
