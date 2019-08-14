@@ -177,7 +177,7 @@ from lbmpy.fieldaccess import (
     AAEvenTimeStepAccessor, AAOddTimeStepAccessor, CollideOnlyInplaceAccessor,
     EsoTwistEvenTimeStepAccessor, EsoTwistOddTimeStepAccessor, PdfFieldAccessor,
     PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor, StreamPushTwoFieldsAccessor)
-from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule, method_with_rescaled_equilibrium_values
+from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
 from lbmpy.methods import (
     create_mrt3, create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.creationfunctions import create_generic_mrt
@@ -306,9 +306,6 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
         u_in = u_in.center_vector
     if rho_in is not None and isinstance(rho_in, Field):
         rho_in = rho_in.center
-
-    if params['fluctuating']:
-        lb_method = method_with_rescaled_equilibrium_values(lb_method)
 
     if u_in is not None:
         density_rhs = sum(lb_method.pre_collision_pdf_symbols) if rho_in is None else rho_in
