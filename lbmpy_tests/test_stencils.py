@@ -67,7 +67,7 @@ def test_free_functions():
 
     with pytest.raises(ValueError) as e:
         get_stencil("name_that_does_not_exist")
-    assert "No such stencil" in str(e)
+    assert "No such stencil" in str(e.value)
 
 
 def test_visualize():

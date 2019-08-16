@@ -9,7 +9,7 @@ def test_relaxation_rate():
                               relaxation_rates=[1 + i / 10 for i in range(19)])
     with pytest.raises(ValueError) as e:
         get_shear_relaxation_rate(method)
-    assert 'Shear moments are relaxed with different relaxation' in str(e)
+    assert 'Shear moments are relaxed with different relaxation' in str(e.value)
 
     method = create_lb_method(stencil="D2Q9", method='mrt_raw',
                               relaxation_rates=[1 + i / 10 for i in range(9)])

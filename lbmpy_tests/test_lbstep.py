@@ -92,7 +92,7 @@ def test_advanced_initialization():
     shear_flow_scenario = create_fully_periodic_flow(initial_velocity=init_vel, relaxation_rate=1.95)
     with pytest.raises(ValueError) as e:
         shear_flow_scenario.run_iterative_initialization(max_steps=20000, check_residuum_after=500)
-    assert 'did not converge' in str(e)
+    assert 'did not converge' in str(e.value)
 
     shear_flow_scenario = create_fully_periodic_flow(initial_velocity=init_vel, relaxation_rate=1.6)
     shear_flow_scenario.run_iterative_initialization(max_steps=20000, check_residuum_after=500)
