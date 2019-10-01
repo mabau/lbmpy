@@ -26,6 +26,8 @@ def get_all_stencils():
         s.get_stencil('D3Q19', 'braunschweig'),
 
         s.get_stencil('D3Q27', 'premnath'),
+
+        s.get_stencil("D3Q27", "fakhari"),
     ]
 
 
