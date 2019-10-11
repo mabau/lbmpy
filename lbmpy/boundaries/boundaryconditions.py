@@ -3,7 +3,6 @@ import sympy as sp
 from lbmpy.boundaries.boundaryhandling import BoundaryOffsetInfo, LbmWeightInfo
 from lbmpy.simplificationfactory import create_simplification_strategy
 from pystencils import Assignment, Field
-from pystencils.astnodes import SympyAssignment
 from pystencils.data_types import create_type
 from pystencils.sympyextensions import get_symmetric_part
 
@@ -203,8 +202,8 @@ class FixedDensity(Boundary):
         subexpressions = [Assignment(eq.lhs, transformed_density if eq.lhs == density_symbol else eq.rhs)
                           for eq in symmetric_eq.subexpressions]
 
-        return subexpressions + [SympyAssignment(pdf_field[neighbor](inverse_dir),
-                                                 2 * eq_component - pdf_field(direction_symbol))]
+        return subexpressions + [Assignment(pdf_field[neighbor](inverse_dir),
+                                            2 * eq_component - pdf_field(direction_symbol))]
 
 
 class NeumannByCopy(Boundary):
