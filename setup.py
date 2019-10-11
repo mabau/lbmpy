@@ -66,10 +66,13 @@ setup(name='lbmpy',
       ],
       python_requires=">=3.6",
       extras_require={
-            'gpu': ['pystencils[gpu]'],
-            'alltrafos': ['pystencils[alltrafos]'],
-            'interactive': ['pystencils[interactive]', 'scipy', 'scikit-image', 'cython'],
-            'doc': ['pystencils[doc]'],
+          'gpu': ['pycuda'],
+          'opencl': ['pyopencl'],
+          'alltrafos': ['islpy', 'py-cpuinfo'],
+          'interactive': ['scipy', 'scikit-image', 'cython', 'matplotlib',
+                          'ipy_table', 'imageio', 'jupyter', 'pyevtk'],
+          'doc': ['sphinx', 'sphinx_rtd_theme', 'nbsphinx',
+                  'sphinxcontrib-bibtex', 'sphinx_autodoc_typehints', 'pandoc'],
       },
       cmdclass={
           'quicktest': SimpleTestRunner
