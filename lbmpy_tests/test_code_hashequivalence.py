@@ -1,21 +1,7 @@
 from hashlib import sha256
 
 from lbmpy.creationfunctions import create_lb_ast
-from pystencils.backends.cbackend import generate_c
 from pystencils.llvm.llvmjit import generate_llvm
-
-
-def test_hash_equivalence():
-    """
-    This test should ensure that if the Python interpreter is called multiple times to generated the same method
-    exactly the same code (not only functionally equivalent code) should be produced.
-    Due to undefined order in sets and dicts this may no be the case.
-    """
-    ref_value = "902be811a587c52e24ce03ec78d3defbb87d58eaaafbb9b47f823b960319e4be"
-    ast = create_lb_ast(stencil='D3Q19', method='srt', optimization={'openmp': False})
-    code = generate_c(ast)
-    hash_value = sha256(code.encode()).hexdigest()
-    assert hash_value == ref_value
 
 
 def test_hash_equivalence_llvm():
