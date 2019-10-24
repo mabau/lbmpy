@@ -284,7 +284,7 @@ is_shear_moment.shear_moments = set([c[0] * c[1] for c in itertools.combinations
 
 
 @memorycache(maxsize=512)
-def discrete_moment(func, moment, stencil):
+def discrete_moment(func, moment, stencil, shift_velocity=None):
     r"""
     Computes discrete moment of given distribution function
 
@@ -298,42 +298,48 @@ def discrete_moment(func, moment, stencil):
         func: list of distribution functions for each direction
         moment: can either be a exponent tuple, or a sympy polynomial expression
         stencil: sequence of directions
+        shift_velocity: velocity vector u to compute central moments, the lattice velocity is replaced by
+                        (lattice_velocity - shift_velocity)
     """
     assert len(stencil) == len(func)
+    if shift_velocity is None:
+        shift_velocity = (0,) * len(stencil[0])
     res = 0
     for factor, e in zip(func, stencil):
         if type(moment) is tuple:
-            for vel, exponent in zip(e, moment):
-                factor *= vel ** exponent
+            for vel, shift,  exponent in zip(e, shift_velocity, moment):
+                factor *= (vel - shift) ** exponent
             res += factor
         else:
             weight = moment
-            for variable, e_i in zip(MOMENT_SYMBOLS, e):
-                weight = weight.subs(variable, e_i)
+            for variable, e_i, shift in zip(MOMENT_SYMBOLS, e, shift_velocity):
+                weight = weight.subs(variable, e_i - shift)
             res += weight * factor
 
     return res
 
 
-def moment_matrix(moments, stencil):
+def moment_matrix(moments, stencil, shift_velocity=None):
     """
     Returns transformation matrix to moment space
 
     each row corresponds to a moment, each column to a direction of the stencil
     The entry i,j is the i'th moment polynomial evaluated at direction j
     """
+    if shift_velocity is None:
+        shift_velocity = (0,) * len(stencil[0])
 
     if type(moments[0]) is tuple:
         def generator(row, column):
             result = sp.Rational(1, 1)
-            for exponent, stencil_entry in zip(moments[row], stencil[column]):
-                result *= int(stencil_entry ** exponent)
+            for exponent, stencil_entry, shift in zip(moments[row], stencil[column], shift_velocity):
+                result *= (sp.sympify(stencil_entry) - shift) ** exponent
             return result
     else:
         def generator(row, column):
             evaluated = moments[row]
-            for var, stencil_entry in zip(MOMENT_SYMBOLS, stencil[column]):
-                evaluated = evaluated.subs(var, stencil_entry)
+            for var, stencil_entry, shift in zip(MOMENT_SYMBOLS, stencil[column], shift_velocity):
+                evaluated = evaluated.subs(var, stencil_entry - shift)
             return evaluated
 
     return sp.Matrix(len(moments), len(stencil), generator)
