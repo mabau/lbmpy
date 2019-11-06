@@ -14,21 +14,24 @@ class MultiphaseForceModel:
         self._rho = rho
 
     def __call__(self, lb_method):
+        stencil = lb_method.stencil
 
-        simple = Simple(self._force)
+        force_symp = sp.symbols("force_:{}".format(lb_method.dim))
+        simple = Simple(force_symp)
         force = [f / self._rho for f in simple(lb_method)]
 
         moment_matrix = lb_method.moment_matrix
         relaxation_rates = sp.Matrix(np.diag(lb_method.relaxation_rates))
         mrt_collision_op = moment_matrix.inv() * relaxation_rates * moment_matrix
 
-        return -0.5 * mrt_collision_op * sp.Matrix(force) + sp.Matrix(force)
+        result = -0.5 * mrt_collision_op * sp.Matrix(force) + sp.Matrix(force)
 
-    def macroscopic_velocity_shift(self, density):
-        return default_velocity_shift(self._rho, self._force)
+        for i in range(0, len(stencil)):
+            result[i] = result[i].simplify()
 
-# --------------------------------  Helper functions  ------------------------------------------------------------------
+        subs_dict = dict(zip(force_symp, self._force))
 
+        for i in range(0, len(stencil)):
+            result[i] = result[i].subs(subs_dict)
 
-def default_velocity_shift(density, force):
-    return [f_i / (2 * density) for f_i in force]
+        return result
