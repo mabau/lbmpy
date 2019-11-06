@@ -35,8 +35,9 @@ def add_fluctuations_to_collision_rule(collision_rule, temperature=None, varianc
 
 
 def fluctuating_variance_from_temperature(method, temperature, c_s_sq=sp.Symbol("c_s") ** 2):
-    """Produces variance equations according to (3.54) in Schiller08"""
-    normalization_factors = abs(method.moment_matrix) * sp.Matrix(method.weights)
+    """Produces variance equations according to (2.60) and (3.54) in Schiller08"""
+    normalization_factors = sp.matrix_multiply_elementwise(method.moment_matrix, method.moment_matrix) * \
+        sp.Matrix(method.weights)
     density = method.zeroth_order_equilibrium_moment_symbol
     if method.conserved_quantity_computation.zero_centered_pdfs:
         density += 1
