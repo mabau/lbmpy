@@ -12,31 +12,32 @@ from pystencils.rng import PhiloxFourFloats, random_symbol
 from pystencils.simp.assignment_collection import SymbolGen
 
 
-def add_fluctuations_to_collision_rule(collision_rule, temperature=None, variances=(),
+def add_fluctuations_to_collision_rule(collision_rule, temperature=None, amplitudes=(),
                                        block_offsets=(0, 0, 0), seed=TypedSymbol("seed", np.uint32),
                                        rng_node=PhiloxFourFloats, c_s_sq=sp.Rational(1, 3)):
     """"""
-    if not (temperature and not variances) or (temperature and variances):
-        raise ValueError("Fluctuating LBM: Pass either 'temperature' or 'variances'.")
+    if not (temperature and not amplitudes) or (temperature and amplitudes):
+        raise ValueError("Fluctuating LBM: Pass either 'temperature' or 'amplitudes'.")
 
     method = collision_rule.method
-    if not variances:
-        variances = fluctuating_variance_from_temperature(method, temperature, c_s_sq)
+    if not amplitudes:
+        amplitudes = fluctuation_amplitude_from_temperature(method, temperature, c_s_sq)
     if block_offsets == 'walberla':
         block_offsets = tuple(TypedSymbol("block_offset_{}".format(i), np.uint32) for i in range(3))
 
     rng_symbol_gen = random_symbol(collision_rule.subexpressions, seed,
                                    rng_node=rng_node, dim=method.dim, offsets=block_offsets)
-    correction = fluctuation_correction(method, rng_symbol_gen, variances)
+    correction = fluctuation_correction(method, rng_symbol_gen, amplitudes)
 
     for i, corr in enumerate(correction):
         collision_rule.main_assignments[i] = Assignment(collision_rule.main_assignments[i].lhs,
                                                         collision_rule.main_assignments[i].rhs + corr)
 
 
-def fluctuating_variance_from_temperature(method, temperature, c_s_sq=sp.Symbol("c_s") ** 2):
-    """Produces variance equations according to (3.54) in Schiller08"""
-    normalization_factors = abs(method.moment_matrix) * sp.Matrix(method.weights)
+def fluctuation_amplitude_from_temperature(method, temperature, c_s_sq=sp.Symbol("c_s") ** 2):
+    """Produces amplitude equations according to (2.60) and (3.54) in Schiller08"""
+    normalization_factors = sp.matrix_multiply_elementwise(method.moment_matrix, method.moment_matrix) * \
+        sp.Matrix(method.weights)
     density = method.zeroth_order_equilibrium_moment_symbol
     if method.conserved_quantity_computation.zero_centered_pdfs:
         density += 1
@@ -45,14 +46,14 @@ def fluctuating_variance_from_temperature(method, temperature, c_s_sq=sp.Symbol(
             for norm, rr in zip(normalization_factors, method.relaxation_rates)]
 
 
-def fluctuation_correction(method, rng_generator, variances=SymbolGen("variance")):
+def fluctuation_correction(method, rng_generator, amplitudes=SymbolGen("phi")):
     """Returns additive correction terms to be added to the the collided pdfs"""
     conserved_moments = {sp.sympify(1), *MOMENT_SYMBOLS}
 
     # A diagonal matrix containing the random fluctuations
     random_matrix = sp.Matrix([0 if m in conserved_moments else (next(rng_generator) - 0.5) * sp.sqrt(12)
                                for m in method.moments])
-    random_variance = sp.diag(*[v for v, _ in zip(iter(variances), method.moments)])
+    amplitude_matrix = sp.diag(*[v for v, _ in zip(iter(amplitudes), method.moments)])
 
     # corrections are applied in real space hence we need to convert to real space here
-    return method.moment_matrix.inv() * random_variance * random_matrix
+    return method.moment_matrix.inv() * amplitude_matrix * random_matrix
