@@ -18,7 +18,7 @@ from pystencils.timeloop import TimeLoop
 class LatticeBoltzmannStep:
 
     def __init__(self, domain_size=None, lbm_kernel=None, periodicity=False,
-                 kernel_params=MappingProxyType({}), data_handling=None, name="lbm", optimization=None,
+                 kernel_params=MappingProxyType({}), data_handling=None, name="lbm", optimization={},
                  velocity_data_name=None, density_data_name=None, density_data_index=None,
                  compute_velocity_in_every_step=False, compute_density_in_every_step=False,
                  velocity_input_array_name=None, time_step_order='stream_collide', flag_interface=None,
@@ -29,11 +29,15 @@ class LatticeBoltzmannStep:
             if domain_size is not None:
                 raise ValueError("When passing a data_handling, the domain_size parameter can not be specified")
 
+        target = optimization.get('target', 'cpu')
         if data_handling is None:
             if domain_size is None:
                 raise ValueError("Specify either domain_size or data_handling")
-            data_handling = create_data_handling(domain_size, default_ghost_layers=1,
-                                                 periodicity=periodicity, parallel=False)
+            data_handling = create_data_handling(domain_size,
+                                                 default_ghost_layers=1,
+                                                 periodicity=periodicity,
+                                                 default_target=target,
+                                                 parallel=False)
 
         if 'stencil' not in method_parameters:
             method_parameters['stencil'] = 'D2Q9' if data_handling.dim == 2 else 'D3Q27'
@@ -47,7 +51,6 @@ class LatticeBoltzmannStep:
             q = len(lbm_kernel.method.stencil)
         else:
             q = len(get_stencil(method_parameters['stencil']))
-        target = optimization['target']
 
         self.name = name
         self._data_handling = data_handling
@@ -58,7 +61,7 @@ class LatticeBoltzmannStep:
         self.density_data_index = density_data_index
         self._optimization = optimization
 
-        self._gpu = target == 'gpu'
+        self._gpu = target == 'gpu' or target == 'opencl'
         layout = optimization['field_layout']
 
         alignment = False
