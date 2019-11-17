@@ -307,7 +307,7 @@ def discrete_moment(func, moment, stencil, shift_velocity=None):
     res = 0
     for factor, e in zip(func, stencil):
         if type(moment) is tuple:
-            for vel, shift,  exponent in zip(e, shift_velocity, moment):
+            for vel, shift, exponent in zip(e, shift_velocity, moment):
                 factor *= (vel - shift) ** exponent
             res += factor
         else:
