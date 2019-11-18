@@ -70,7 +70,10 @@ def test_relaxation_rate_setter():
 
 def test_mrt_orthogonal():
     m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True)
-    assert (m.moment_matrix * m.moment_matrix.T).is_diagonal()
+    assert m.is_orthogonal
+
+    m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True)
+    assert m.is_weighted_orthogonal
 
     m = create_mrt_orthogonal(get_stencil("D3Q27"), maxwellian_moments=True)
-    assert (m.moment_matrix * m.moment_matrix.T).is_diagonal()
+    assert m.is_orthogonal

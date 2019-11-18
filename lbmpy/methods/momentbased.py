@@ -2,6 +2,7 @@ from collections import OrderedDict
 
 import sympy as sp
 
+from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, moment_matrix
@@ -123,6 +124,16 @@ class MomentBasedLbMethod(AbstractLbMethod):
     @property
     def moment_matrix(self):
         return moment_matrix(self.moments, self.stencil)
+
+    @property
+    def is_orthogonal(self):
+        return (self.moment_matrix * self.moment_matrix.T).is_diagonal()
+
+    @property
+    def is_weighted_orthogonal(self):
+        w = get_weights(self.stencil, sp.Rational(1, 3))
+        return (sp.matrix_multiply_elementwise(self.moment_matrix, sp.Matrix([w] * len(w))) * self.moment_matrix.T
+                ).is_diagonal()
 
     def __getstate__(self):
         # Workaround for a bug in joblib
