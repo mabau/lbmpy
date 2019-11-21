@@ -396,7 +396,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
         nested_moments = [
             [one, x, y, z],  # [0, 3, 5, 7]
             [sq - 1],  # [1]
-            [3 * sq ** 2 - 6 * sq + 1],  # [2]
+            [3 * sq ** 2 - 9 * sq + 4],  # [2]
             [(3 * sq - 5) * x, (3 * sq - 5) * y, (3 * sq - 5) * z],  # [4, 6, 8]
             [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 10, 11, 12, 13]
             [x * y * z]

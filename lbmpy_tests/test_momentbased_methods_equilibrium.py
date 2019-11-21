@@ -72,6 +72,9 @@ def test_mrt_orthogonal():
     m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True)
     assert m.is_orthogonal
 
+    m = create_mrt_orthogonal(get_stencil("D3Q15"), maxwellian_moments=True)
+    assert m.is_weighted_orthogonal
+
     m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True)
     assert m.is_weighted_orthogonal
 
