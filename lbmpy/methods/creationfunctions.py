@@ -382,7 +382,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
                the default modes is performed.
     """
     if relaxation_rate_getter is None:
-        relaxation_rate_getter = default_relaxation_rate_names()
+        relaxation_rate_getter = default_relaxation_rate_names(dim=len(stencil[0]))
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
 

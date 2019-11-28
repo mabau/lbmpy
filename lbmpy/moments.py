@@ -273,14 +273,37 @@ def non_aliased_moment(moment_tuple: Sequence[int]) -> Tuple[int, ...]:
     return tuple(result)
 
 
-def is_shear_moment(moment):
-    """Shear moments in 3D are: x*y, x*z and y*z - in 2D its only x*y"""
-    if type(moment) is tuple:
-        moment = exponent_to_polynomial_representation(moment)
-    return moment in is_shear_moment.shear_moments
+def is_bulk_moment(moment, dim):
+    """The bulk moment is x**2+y**2+z**2"""
+    if type(moment) is not tuple:
+        moment = polynomial_to_exponent_representation(moment)
+    quadratic = False
+    found = [0 for _ in range(dim)]
+    for prefactor, monomial in moment:
+        if sum(monomial) == 2:
+            quadratic = True
+            for i, exponent in enumerate(monomial):
+                if exponent == 2:
+                    found[i] += prefactor
+        elif sum(monomial) > 2:
+            return False
+    return quadratic and found != [0] * dim and len(set(found)) == 1
 
 
-is_shear_moment.shear_moments = set([c[0] * c[1] for c in itertools.combinations(MOMENT_SYMBOLS, 2)])
+def is_shear_moment(moment, dim):
+    """Shear moments are the quadratic polynomials except for the bulk moment.
+       Linear combinations with lower-order polynomials don't harm because these correspond to conserved moments."""
+    if is_bulk_moment(moment, dim):
+        return False
+    if type(moment) is not tuple:
+        moment = polynomial_to_exponent_representation(moment)
+    quadratic = False
+    for prefactor, monomial in moment:
+        if sum(monomial) == 2:
+            quadratic = True
+        elif sum(monomial) > 2:
+            return False
+    return quadratic
 
 
 @memorycache(maxsize=512)
