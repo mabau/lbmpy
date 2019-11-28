@@ -381,8 +381,9 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
                `mrt_orthogonal_modes_literature`. If this argument is not provided, Gram-Schmidt orthogonalization of
                the default modes is performed.
     """
+    dim = len(stencil[0])
     if relaxation_rate_getter is None:
-        relaxation_rate_getter = default_relaxation_rate_names(dim=len(stencil[0]))
+        relaxation_rate_getter = default_relaxation_rate_names(dim=dim)
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
 
@@ -396,6 +397,13 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
     moment_to_relaxation_rate_dict = OrderedDict()
     if not nested_moments:
         moments = get_default_moment_set_for_stencil(stencil)
+        x, y, z = MOMENT_SYMBOLS
+        if dim == 2:
+            diagonal_viscous_moments = [x ** 2 + y ** 2, x ** 2]
+        else:
+            diagonal_viscous_moments = [x ** 2 + y ** 2 + z ** 2, x ** 2, y ** 2 - z ** 2]
+        for i, d in enumerate(MOMENT_SYMBOLS[:dim]):
+            moments[moments.index(d**2)] = diagonal_viscous_moments[i]
         orthogonal_moments = gram_schmidt(moments, stencil, weights)
         orthogonal_moments_scaled = [e * common_denominator(e) for e in orthogonal_moments]
         nested_moments = list(sort_moments_into_groups_of_same_order(orthogonal_moments_scaled).values())

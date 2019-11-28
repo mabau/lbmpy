@@ -425,7 +425,7 @@ def get_default_moment_set_for_stencil(stencil):
 
     all27_moments = moments_up_to_component_order(2, dim=3)
     if have_same_entries(stencil, get_stencil("D3Q27")):
-        return to_poly(all27_moments)
+        return sorted(to_poly(all27_moments), key=moment_sort_key)
     if have_same_entries(stencil, get_stencil("D3Q19")):
         non_matched_moments = [(1, 2, 2), (1, 1, 2), (2, 2, 2), (1, 1, 1)]
         moments19 = set(all27_moments) - set(extend_moments_with_permutations(non_matched_moments))

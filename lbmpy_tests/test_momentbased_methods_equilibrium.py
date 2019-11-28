@@ -8,6 +8,7 @@ import sympy as sp
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
 from lbmpy.methods import create_mrt_orthogonal, create_srt, create_trt, mrt_orthogonal_modes_literature
+from lbmpy.moments import is_bulk_moment, is_shear_moment
 from lbmpy.relaxationrates import get_shear_relaxation_rate
 from lbmpy.stencils import get_stencil
 
@@ -81,14 +82,36 @@ def test_mrt_orthogonal():
     m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True, weighted=True)
     assert m.is_weighted_orthogonal
 
+    m_ref = {}
+
     moments = mrt_orthogonal_modes_literature(get_stencil("D3Q15"), True, False)
     m = create_mrt_orthogonal(get_stencil("D3Q15"), maxwellian_moments=True, nested_moments=moments)
     assert m.is_weighted_orthogonal
+    m_ref[("D3Q15", True)] = m
 
     moments = mrt_orthogonal_modes_literature(get_stencil("D3Q19"), True, False)
     m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True, nested_moments=moments)
     assert m.is_weighted_orthogonal
+    m_ref[("D3Q19", True)] = m
 
     moments = mrt_orthogonal_modes_literature(get_stencil("D3Q27"), False, False)
     m = create_mrt_orthogonal(get_stencil("D3Q27"), maxwellian_moments=True, nested_moments=moments)
     assert m.is_orthogonal
+    m_ref[("D3Q27", False)] = m
+
+    for weighted in [True, False]:
+        for stencil in ["D2Q9", "D3Q15", "D3Q19", "D3Q27"]:
+            m = create_mrt_orthogonal(get_stencil(stencil), maxwellian_moments=True, weighted=weighted)
+            bulk_moments = set([mom for mom in m.moments if is_bulk_moment(mom, m.dim)])
+            shear_moments = set([mom for mom in m.moments if is_shear_moment(mom, m.dim)])
+            assert len(bulk_moments) == 1
+            assert len(shear_moments) == 1 + (m.dim - 2) + m.dim * (m.dim - 1) / 2
+
+            if (stencil, weighted) in m_ref:
+                ref = m_ref[(stencil, weighted)]
+                bulk_moments_lit = set([mom for mom in ref.moments if is_bulk_moment(mom, ref.dim)])
+                shear_moments_lit = set([mom for mom in ref.moments if is_shear_moment(mom, ref.dim)])
+
+                if stencil != "D3Q27":  # this one uses a different linear combination in literature
+                    assert shear_moments == shear_moments_lit
+                assert bulk_moments == bulk_moments_lit
