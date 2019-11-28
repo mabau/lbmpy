@@ -18,8 +18,8 @@ from lbmpy.methods.momentbased import MomentBasedLbMethod
 from lbmpy.moments import (
     MOMENT_SYMBOLS, discrete_moment, exponents_to_polynomial_representations,
     get_default_moment_set_for_stencil, get_order, gram_schmidt, is_even, moments_of_order,
-    moments_up_to_component_order, sort_moments_into_groups_of_same_order)
-from lbmpy.relaxationrates import default_relaxation_rate_names, relaxation_rate_from_magic_number
+    moments_up_to_component_order, sort_moments_into_groups_of_same_order, is_bulk_moment, is_shear_moment)
+from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.stencils import get_stencil
 from pystencils.stencil import have_same_entries
 from pystencils.sympyextensions import common_denominator
@@ -240,8 +240,11 @@ def create_mrt3(stencil, relaxation_rates, maxwellian_moments=False, **kwargs):
 
     The first rate controls viscosity, the second the bulk viscosity and the last is used to relax higher order moments.
     """
+    warn("create_mrt3 is deprecated. It uses non-orthogonal moments, use create_mrt instead", DeprecationWarning)
+
     def product(iterable):
         return reduce(operator.mul, iterable, 1)
+
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
 
@@ -358,7 +361,7 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
         return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_rr, **kwargs)
 
 
-def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_moments=False, weighted=None,
+def create_mrt_orthogonal(stencil, relaxation_rate_getter, maxwellian_moments=False, weighted=None,
                           nested_moments=None, **kwargs):
     r"""
     Returns an orthogonal multi-relaxation time model for the stencils D2Q9, D3Q15, D3Q19 and D3Q27.
@@ -369,26 +372,19 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
     Args:
         stencil: nested tuple defining the discrete velocity space. See `get_stencil`
         relaxation_rate_getter: function getting a list of moments as argument, returning the associated relaxation
-                              time. The default returns:
-
-                                 - 0 for moments of order 0 and 1 (conserved)
-                                 - :math:`\omega`: from moments of order 2 (rate that determines viscosity)
-                                 - numbered :math:`\omega_i` for the rest
         maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
                                                used to compute the equilibrium moments
         weighted: whether to use weighted or unweighted orthogonality
-        modes: a list of lists of modes, grouped by common relaxation times. This is usually used in conjunction with
-               `mrt_orthogonal_modes_literature`. If this argument is not provided, Gram-Schmidt orthogonalization of
-               the default modes is performed.
+        nested_moments: a list of lists of modes, grouped by common relaxation times. This is usually used in
+                        conjunction with `mrt_orthogonal_modes_literature`. If this argument is not provided,
+                        Gram-Schmidt orthogonalization of the default modes is performed.
     """
     dim = len(stencil[0])
-    if relaxation_rate_getter is None:
-        relaxation_rate_getter = default_relaxation_rate_names(dim=dim)
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
 
     if weighted is None and not nested_moments:
-        raise ValueError("Please specify whether you want weighted or unweighted orthogonality")
+        raise ValueError("Please specify whether you want weighted or unweighted orthogonality using 'weighted='")
     elif weighted:
         weights = get_weights(stencil, sp.Rational(1, 3))
     else:
@@ -407,7 +403,13 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
         orthogonal_moments = gram_schmidt(moments, stencil, weights)
         orthogonal_moments_scaled = [e * common_denominator(e) for e in orthogonal_moments]
         nested_moments = list(sort_moments_into_groups_of_same_order(orthogonal_moments_scaled).values())
-
+        # second order moments: separate bulk from shear
+        second_order_moments = nested_moments[2]
+        bulk_moment = [m for m in second_order_moments if is_bulk_moment(m, dim)]
+        shear_moments = [m for m in second_order_moments if is_shear_moment(m, dim)]
+        assert len(shear_moments) + len(bulk_moment) == len(second_order_moments)
+        nested_moments[2] = shear_moments
+        nested_moments.insert(3, bulk_moment)
     for moment_list in nested_moments:
         rr = relaxation_rate_getter(moment_list)
         for m in moment_list:
@@ -428,6 +430,8 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted, is_cumulant):
         stencil: nested tuple defining the discrete velocity space. See `get_stencil`
         is_weighted: whether to use weighted or unweighted orthogonality
         is_cumulant: whether a moment-based or cumulant-based model is desired
+
+    MRT schemes as described in the following references are used
     """
     x, y, z = MOMENT_SYMBOLS
     one = sp.Rational(1, 1)

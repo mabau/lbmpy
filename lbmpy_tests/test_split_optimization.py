@@ -30,14 +30,15 @@ def test_split_number_of_operations():
 
 @pytest.mark.longrun
 def test_equivalence():
-    relaxation_rates = [1.8, 1.7, 1.0]
+    relaxation_rates = [1.8, 1.7, 1.0, 1.0, 1.0, 1.0]
     for stencil in ['D2Q9', 'D3Q15', 'D3Q19', 'D3Q27']:
         for compressible in (True, False):
-            for method in ('srt', 'mrt3'):
+            for method in ('srt', 'mrt'):
                 for force in ((0, 0, 0), (1e-6, 1e-7, 2e-6)):
                     common_params = {'domain_size': (20, 30) if stencil.startswith('D2') else (10, 13, 7),
                                      'stencil': stencil,
                                      'method': method,
+                                     'weighted': True,
                                      'compressible': compressible,
                                      'force': force,
                                      'relaxation_rates': relaxation_rates}
@@ -50,12 +51,13 @@ def test_equivalence():
 
 
 def test_equivalence_short():
-    relaxation_rates = [1.8, 1.7, 1.0]
-    for stencil, compressible, method, force in [('D2Q9', True, 'srt', 1e-7), ('D3Q19', False, 'mrt3', 0)]:
+    relaxation_rates = [1.8, 1.7, 1.0, 1.0, 1.0, 1.0]
+    for stencil, compressible, method, force in [('D2Q9', True, 'srt', 1e-7), ('D3Q19', False, 'mrt', 0)]:
         dim = int(stencil[1])
         common_params = {'domain_size': (20, 30) if stencil.startswith('D2') else (10, 13, 7),
                          'stencil': stencil,
                          'method': method,
+                         'weighted': True,
                          'compressible': compressible,
                          'force': (force, 0, 0)[:dim],
                          'relaxation_rates': relaxation_rates}

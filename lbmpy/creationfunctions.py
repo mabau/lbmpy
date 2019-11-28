@@ -17,12 +17,16 @@ General:
     - ``trt``: two relaxation time, first relaxation rate is for even moments and determines the viscosity (as in SRT),
       the second relaxation rate is used for relaxing odd moments, and controls the bulk viscosity.
       (:func:`lbmpy.methods.create_trt`)
-    - ``mrt``: orthogonal multi relaxation time model, number of relaxation rates depends on the stencil
-      (:func:`lbmpy.methods.create_mrt_orthogonal`)
-    - ``mrt3``: three relaxation time method, where shear moments are relaxed with first relaxation rate (and therefore
-      determine viscosity, second rate relaxes the shear tensor trace (determines bulk viscosity) and last rate relaxes
-      all other, higher order moments. If two relaxation rates are chosen the same this is equivalent to a KBC type
-      relaxation (:func:`lbmpy.methods.create_mrt3`)
+    - ``mrt``: orthogonal multi relaxation time model, relaxation rates are used in this order for :
+      shear modes, bulk modes, 3rd order modes, 4th order modes, etc.
+      Requires also a parameter 'weighted' that should be True if the moments should be orthogonal w.r.t. weighted
+      scalar product using the lattice weights. If `False` the normal scalar product is used.
+      For custom definition of the method, a 'nested_moments' can be passed.
+      For example: [ [1, x, y], [x*y, x**2, y**2], ... ] that groups all moments together that should be relaxed with
+      the same rate. Literature values of this list can be obtained through
+      :func:`lbmpy.methods.creationfunctions.mrt_orthogonal_modes_literature`.
+      See also :func:`lbmpy.methods.create_mrt_orthogonal`
+    - ``mrt3``: deprecated
     - ``mrt_raw``: non-orthogonal MRT where all relaxation rates can be specified independently i.e. there are as many
       relaxation rates as stencil entries. Look at the generated method in Jupyter to see which moment<->relaxation rate
       mapping (:func:`lbmpy.methods.create_mrt_raw`)
@@ -184,6 +188,7 @@ from lbmpy.methods.creationfunctions import create_generic_mrt
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.entropic import add_entropy_condition, add_iterative_entropy_condition
 from lbmpy.methods.entropic_eq_srt import create_srt_entropic
+from lbmpy.moments import get_order
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
@@ -407,14 +412,16 @@ def create_lb_method(**params):
     elif method_name.lower() == 'mrt':
         next_relaxation_rate = [0]
 
-        def relaxation_rate_getter(_):
+        def relaxation_rate_getter(moments):
             try:
+                if all(get_order(m) < 2 for m in moments):
+                    return 0
                 res = relaxation_rates[next_relaxation_rate[0]]
                 next_relaxation_rate[0] += 1
             except IndexError:
                 raise ValueError("Too few relaxation rates specified")
             return res
-        weighted = params['weighted'] if 'weighted' in params else None
+        weighted = params['weighted'] if 'weighted' in params else True
         nested_moments = params['nested_moments'] if 'nested_moments' in params else None
         method = create_mrt_orthogonal(stencil_entries, relaxation_rate_getter, weighted=weighted,
                                        nested_moments=nested_moments, **common_params)
@@ -509,7 +516,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'compressible': False,
         'equilibrium_order': 2,
         'c_s_sq': sp.Rational(1, 3),
-        'weighted': None,
+        'weighted': True,
         'nested_moments': None,
 
         'force_model': 'none',

@@ -217,6 +217,6 @@ def test_ldc_mrt(action='Testing', plot="off"):
         moments = mrt_orthogonal_modes_literature(get_stencil("D3Q19"), True, False)
         compare_lid_driven_cavity(domain_size=(16, 17, 18), lid_velocity=0.005, stencil='D3Q19',
                                   method='MRT', nested_moments=moments, compressible=False, maxwellian_moments=False,
-                                  relaxation_rates=[1, 1.3, 1.4, 1.5, 1.25, 1.36, 1.12], action=action, plot=plot)
+                                  relaxation_rates=[1.3, 1.4, 1.5, 1.25, 1.36, 1.12], action=action, plot=plot)
     else:
         print("Possible Actions: Regenerate or Testing")

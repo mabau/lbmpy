@@ -3,6 +3,7 @@ Moment-based methods are created by specifying moments and their equilibrium val
 This test checks if the equilibrium formula obtained by this method is the same as the explicitly
 given discrete_maxwellian_equilibrium
 """
+import pytest
 import sympy as sp
 
 from lbmpy.creationfunctions import create_lb_method
@@ -35,27 +36,12 @@ def check_for_matching_equilibrium(method_name, stencil, compressibility):
     assert diff.is_zero
 
 
-def check_for_matching_equilibrium_for_stencil(stencil_name):
+@pytest.mark.parametrize("stencil_name", ["D2Q9", "D3Q15", "D3Q19", "D3Q27"])
+def test_for_matching_equilibrium_for_stencil(stencil_name):
     stencil = get_stencil(stencil_name)
     for method in ['srt', 'trt', 'mrt']:
         check_for_matching_equilibrium(method, stencil, True)
         check_for_matching_equilibrium(method, stencil, False)
-
-
-def test_d2_q9():
-    check_for_matching_equilibrium_for_stencil('D2Q9')
-
-
-def test_d3_q27():
-    check_for_matching_equilibrium_for_stencil('D3Q27')
-
-
-def test_d3_q19():
-    check_for_matching_equilibrium_for_stencil('D3Q19')
-
-
-def test_d3_q15():
-    check_for_matching_equilibrium_for_stencil('D3Q15')
 
 
 def test_relaxation_rate_setter():
@@ -74,28 +60,28 @@ def test_mrt_orthogonal():
     m_ref = {}
 
     moments = mrt_orthogonal_modes_literature(get_stencil("D2Q9"), True, False)
-    m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True, nested_moments=moments)
+    m = create_lb_method(stencil=get_stencil("D2Q9"), method='mrt', maxwellian_moments=True, nested_moments=moments)
     assert m.is_weighted_orthogonal
     m_ref[("D2Q9", True)] = m
 
     moments = mrt_orthogonal_modes_literature(get_stencil("D3Q15"), True, False)
-    m = create_mrt_orthogonal(get_stencil("D3Q15"), maxwellian_moments=True, nested_moments=moments)
+    m = create_lb_method(stencil=get_stencil("D3Q15"), method='mrt', maxwellian_moments=True, nested_moments=moments)
     assert m.is_weighted_orthogonal
     m_ref[("D3Q15", True)] = m
 
     moments = mrt_orthogonal_modes_literature(get_stencil("D3Q19"), True, False)
-    m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True, nested_moments=moments)
+    m = create_lb_method(stencil=get_stencil("D3Q19"), method='mrt', maxwellian_moments=True, nested_moments=moments)
     assert m.is_weighted_orthogonal
     m_ref[("D3Q19", True)] = m
 
     moments = mrt_orthogonal_modes_literature(get_stencil("D3Q27"), False, False)
-    m = create_mrt_orthogonal(get_stencil("D3Q27"), maxwellian_moments=True, nested_moments=moments)
+    m = create_lb_method(stencil=get_stencil("D3Q27"), method='mrt', maxwellian_moments=True, nested_moments=moments)
     assert m.is_orthogonal
     m_ref[("D3Q27", False)] = m
 
     for weighted in [True, False]:
         for stencil in ["D2Q9", "D3Q15", "D3Q19", "D3Q27"]:
-            m = create_mrt_orthogonal(get_stencil(stencil), maxwellian_moments=True, weighted=weighted)
+            m = create_lb_method(stencil=get_stencil(stencil), method='mrt', maxwellian_moments=True, weighted=weighted)
             if weighted:
                 assert m.is_weighted_orthogonal
             else:

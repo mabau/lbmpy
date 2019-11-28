@@ -1,6 +1,6 @@
 import sympy as sp
 
-from lbmpy.moments import get_order, is_shear_moment
+from lbmpy.moments import is_shear_moment
 
 
 def relaxation_rate_from_lattice_viscosity(nu):
@@ -57,26 +57,3 @@ def relaxation_rate_scaling(omega, level_scale_factor):
         relaxation rate on refined grid
     """
     return omega / (omega / 2 + level_scale_factor * (1 - omega / 2))
-
-
-def default_relaxation_rate_names(dim):
-    next_index = [0]
-
-    def result(moment_list):
-        shear_moment_inside = False
-        all_conserved_moments = True
-        for m in moment_list:
-            if is_shear_moment(m, dim):
-                shear_moment_inside = True
-            if not (get_order(m) == 0 or get_order(m) == 1):
-                all_conserved_moments = False
-
-        if shear_moment_inside:
-            return sp.Symbol("omega")
-        elif all_conserved_moments:
-            return 0
-        else:
-            next_index[0] += 1
-            return sp.Symbol("omega_%d" % (next_index[0],))
-
-    return result

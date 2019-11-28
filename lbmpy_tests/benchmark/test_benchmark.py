@@ -86,14 +86,16 @@ def method_options(dim=2, with_srt=False, with_mrt=False,
     rr_free = "rr_free"
     methods = [{'method': 'trt'}]
     if with_mrt:
-        methods += [{'method': 'mrt3'}, {'method': 'mrt_raw'}]
+        methods += [{'method': 'mrt'}, {'method': 'mrt_raw'}]
 
     if with_srt:
         methods += [{'method': 'srt'}]
 
     if with_entropic:
-        methods += [{'entropic': True, 'method': 'mrt3', 'relaxation_rates': [1.5, 1.5, rr_free]},
-                    {'entropic': True, 'method': 'mrt3', 'relaxation_rates': [1.5, rr_free, rr_free]},
+        methods += [{'entropic': True, 'method': 'mrt', 'relaxation_rates': [1.5, 1.5, rr_free, rr_free,
+                                                                             rr_free, rr_free]},
+                    {'entropic': True, 'method': 'mrt', 'relaxation_rates': [1.5, rr_free, rr_free, rr_free,
+                                                                             rr_free, rr_free]},
                     {'entropic': True, 'method': 'trt-kbc-n1'},
                     {'entropic': True, 'method': 'trt-kbc-n2'},
                     {'entropic': True, 'method': 'trt-kbc-n3'},
