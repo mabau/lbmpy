@@ -220,7 +220,7 @@ def interface_tracking_force(phi_field, stencil, interface_thickness):
     normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil)
     result = []
     for i in range(dimensions):
-        result.append(((1.0 - 4.0 * (phi_field.center - 0.5) ** 2.0) / interface_thickness) * normal_fd[i])
+        result.append(((1.0 - 4.0 * (phi_field.center - 0.5) ** 2) / interface_thickness) * normal_fd[i])
 
     return result
 
@@ -376,7 +376,7 @@ def initializer_kernel_phase_field_lb(phi_field_distributions, phi_field, veloci
 
     f = []
     for i, d in enumerate(stencil):
-        f.append(weights[i] * ((1.0 - 4.0 * (phi_field.center - 0.5) ** 2.0) / interface_thickness)
+        f.append(weights[i] * ((1.0 - 4.0 * (phi_field.center - 0.5) ** 2) / interface_thickness)
                  * scalar_product(d, normal_fd[0:dimensions]))
 
     for i, _ in enumerate(stencil):
