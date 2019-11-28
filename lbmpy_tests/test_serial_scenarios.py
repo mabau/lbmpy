@@ -210,10 +210,13 @@ def test_ldc_trt(action='Testing', plot="off"):
 
 
 def test_ldc_mrt(action='Testing', plot="off"):
+    from lbmpy.methods import mrt_orthogonal_modes_literature
+    from lbmpy.stencils import get_stencil
     if action == 'Testing' or action == 'Regenerate':
         print("%s LidDrivenCavity MRT, compressible 0" % action)
+        moments = mrt_orthogonal_modes_literature(get_stencil("D3Q19"), True, False)
         compare_lid_driven_cavity(domain_size=(16, 17, 18), lid_velocity=0.005, stencil='D3Q19',
-                                  method='MRT', compressible=False, maxwellian_moments=False,
+                                  method='MRT', nested_moments=moments, compressible=False, maxwellian_moments=False,
                                   relaxation_rates=[1, 1.3, 1.4, 1.5, 1.25, 1.36, 1.12], action=action, plot=plot)
     else:
         print("Possible Actions: Regenerate or Testing")

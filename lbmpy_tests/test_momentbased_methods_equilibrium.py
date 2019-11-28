@@ -20,7 +20,8 @@ def check_for_matching_equilibrium(method_name, stencil, compressibility):
     elif method_name == 'trt':
         method = create_trt(stencil, omega, omega, compressible=compressibility, equilibrium_order=2)
     elif method_name == 'mrt':
-        method = create_mrt_orthogonal(stencil, lambda v: omega, compressible=compressibility, equilibrium_order=2)
+        method = create_mrt_orthogonal(stencil, lambda v: omega, weighted=False, compressible=compressibility,
+                                       equilibrium_order=2)
     else:
         raise ValueError("Unknown method")
 

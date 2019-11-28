@@ -86,7 +86,8 @@ relaxation_rate = 1.0 / relaxation_time
 
 method_phase = create_lb_method(stencil=stencil_phase, method='srt', relaxation_rate=w_c, compressible=True)
 
-mrt = create_lb_method(method="mrt", stencil=stencil_hydro, relaxation_rates=[1, 1, relaxation_rate, 1, 1, 1, 1])
+mrt = create_lb_method(method="mrt", weighted=False, stencil=stencil_hydro,
+                       relaxation_rates=[1, 1, relaxation_rate, 1, 1, 1, 1])
 rr_dict = OrderedDict(zip(mrt.moments, mrt.relaxation_rates))
 
 method_hydro = create_with_discrete_maxwellian_eq_moments(stencil_hydro, rr_dict, compressible=False)

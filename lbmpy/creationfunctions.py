@@ -509,6 +509,8 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'compressible': False,
         'equilibrium_order': 2,
         'c_s_sq': sp.Rational(1, 3),
+        'weighted': None,
+        'nested_moments': None,
 
         'force_model': 'none',
         'force': (0, 0, 0),
