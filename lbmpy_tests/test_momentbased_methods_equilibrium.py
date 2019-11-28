@@ -70,19 +70,12 @@ def test_relaxation_rate_setter():
 
 
 def test_mrt_orthogonal():
-    m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True, weighted=False)
-    assert m.is_orthogonal
-
-    m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True, weighted=True)
-    assert m.is_weighted_orthogonal
-
-    m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True, weighted=False)
-    assert m.is_orthogonal
-
-    m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True, weighted=True)
-    assert m.is_weighted_orthogonal
-
     m_ref = {}
+
+    moments = mrt_orthogonal_modes_literature(get_stencil("D2Q9"), True, False)
+    m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True, nested_moments=moments)
+    assert m.is_weighted_orthogonal
+    m_ref[("D2Q9", True)] = m
 
     moments = mrt_orthogonal_modes_literature(get_stencil("D3Q15"), True, False)
     m = create_mrt_orthogonal(get_stencil("D3Q15"), maxwellian_moments=True, nested_moments=moments)
@@ -102,6 +95,10 @@ def test_mrt_orthogonal():
     for weighted in [True, False]:
         for stencil in ["D2Q9", "D3Q15", "D3Q19", "D3Q27"]:
             m = create_mrt_orthogonal(get_stencil(stencil), maxwellian_moments=True, weighted=weighted)
+            if weighted:
+                assert m.is_weighted_orthogonal
+            else:
+                assert m.is_orthogonal
             bulk_moments = set([mom for mom in m.moments if is_bulk_moment(mom, m.dim)])
             shear_moments = set([mom for mom in m.moments if is_shear_moment(mom, m.dim)])
             assert len(bulk_moments) == 1

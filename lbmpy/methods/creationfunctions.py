@@ -432,7 +432,16 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted, is_cumulant):
     x, y, z = MOMENT_SYMBOLS
     one = sp.Rational(1, 1)
 
-    if have_same_entries(stencil, get_stencil("D3Q15")) and is_weighted:
+    if have_same_entries(stencil, get_stencil("D2Q9")) and is_weighted:
+        # Reference:
+        # Duenweg, B., Schiller, U. D., & Ladd, A. J. (2007). Statistical mechanics of the fluctuating
+        # lattice Boltzmann equation. Physical Review E, 76(3)
+        sq = x ** 2 + y ** 2
+        all_moments = [one, x, y, 3 * sq - 2, 2 * x ** 2 - sq, x * y,
+                       (3 * sq - 4) * x, (3 * sq - 4) * y, 9 * sq ** 2 - 15 * sq + 2]
+        nested_moments = list(sort_moments_into_groups_of_same_order(all_moments).values())
+        return nested_moments
+    elif have_same_entries(stencil, get_stencil("D3Q15")) and is_weighted:
         sq = x ** 2 + y ** 2 + z ** 2
         nested_moments = [
             [one, x, y, z],  # [0, 3, 5, 7]

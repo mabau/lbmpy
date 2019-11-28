@@ -282,7 +282,7 @@ def is_bulk_moment(moment, dim):
     for prefactor, monomial in moment:
         if sum(monomial) == 2:
             quadratic = True
-            for i, exponent in enumerate(monomial):
+            for i, exponent in enumerate(monomial[:dim]):
                 if exponent == 2:
                     found[i] += prefactor
         elif sum(monomial) > 2:
