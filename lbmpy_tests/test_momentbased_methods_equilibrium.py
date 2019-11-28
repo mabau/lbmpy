@@ -7,7 +7,7 @@ import sympy as sp
 
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
-from lbmpy.methods import create_mrt_orthogonal, create_srt, create_trt
+from lbmpy.methods import create_mrt_orthogonal, create_srt, create_trt, mrt_orthogonal_modes_literature
 from lbmpy.relaxationrates import get_shear_relaxation_rate
 from lbmpy.stencils import get_stencil
 
@@ -69,14 +69,26 @@ def test_relaxation_rate_setter():
 
 
 def test_mrt_orthogonal():
-    m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True)
+    m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True, weighted=False)
     assert m.is_orthogonal
 
-    m = create_mrt_orthogonal(get_stencil("D3Q15"), maxwellian_moments=True)
+    m = create_mrt_orthogonal(get_stencil("D2Q9"), maxwellian_moments=True, weighted=True)
     assert m.is_weighted_orthogonal
 
-    m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True)
+    m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True, weighted=False)
+    assert m.is_orthogonal
+
+    m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True, weighted=True)
     assert m.is_weighted_orthogonal
 
-    m = create_mrt_orthogonal(get_stencil("D3Q27"), maxwellian_moments=True)
+    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q15"), True, False)
+    m = create_mrt_orthogonal(get_stencil("D3Q15"), maxwellian_moments=True, nested_moments=moments)
+    assert m.is_weighted_orthogonal
+
+    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q19"), True, False)
+    m = create_mrt_orthogonal(get_stencil("D3Q19"), maxwellian_moments=True, nested_moments=moments)
+    assert m.is_weighted_orthogonal
+
+    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q27"), False, False)
+    m = create_mrt_orthogonal(get_stencil("D3Q27"), maxwellian_moments=True, nested_moments=moments)
     assert m.is_orthogonal

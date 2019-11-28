@@ -10,7 +10,7 @@ from lbmpy.maxwellian_equilibrium import (
     compressible_to_incompressible_moment_value, get_cumulants_of_continuous_maxwellian_equilibrium,
     get_cumulants_of_discrete_maxwellian_equilibrium,
     get_moments_of_continuous_maxwellian_equilibrium,
-    get_moments_of_discrete_maxwellian_equilibrium)
+    get_moments_of_discrete_maxwellian_equilibrium, get_weights)
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
@@ -358,9 +358,10 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
         return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_rr, **kwargs)
 
 
-def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_moments=False, **kwargs):
+def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_moments=False, weighted=None,
+                          nested_moments=None, **kwargs):
     r"""
-    Returns a orthogonal multi-relaxation time model for the stencils D2Q9, D3Q15, D3Q19 and D3Q27.
+    Returns an orthogonal multi-relaxation time model for the stencils D2Q9, D3Q15, D3Q19 and D3Q27.
     These MRT methods are just one specific version - there are many MRT methods possible for all these stencils
     which differ by the linear combination of moments and the grouping into equal relaxation times.
     To create a generic MRT method use `create_with_discrete_maxwellian_eq_moments`
@@ -375,23 +376,55 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
                                  - numbered :math:`\omega_i` for the rest
         maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
                                                used to compute the equilibrium moments
+        weighted: whether to use weighted or unweighted orthogonality
+        modes: a list of lists of modes, grouped by common relaxation times. This is usually used in conjunction with
+               `mrt_orthogonal_modes_literature`. If this argument is not provided, Gram-Schmidt orthogonalization of
+               the default modes is performed.
     """
     if relaxation_rate_getter is None:
         relaxation_rate_getter = default_relaxation_rate_names()
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
 
-    x, y, z = MOMENT_SYMBOLS
-    one = sp.Rational(1, 1)
-    is_cumulant = 'cumulant' in kwargs and kwargs['cumulant']
+    if weighted is None and not nested_moments:
+        raise ValueError("Please specify whether you want weighted or unweighted orthogonality")
+    elif weighted:
+        weights = get_weights(stencil, sp.Rational(1, 3))
+    else:
+        weights = None
 
     moment_to_relaxation_rate_dict = OrderedDict()
-    if have_same_entries(stencil, get_stencil("D2Q9")):
+    if not nested_moments:
         moments = get_default_moment_set_for_stencil(stencil)
-        orthogonal_moments = gram_schmidt(moments, stencil)
+        orthogonal_moments = gram_schmidt(moments, stencil, weights)
         orthogonal_moments_scaled = [e * common_denominator(e) for e in orthogonal_moments]
         nested_moments = list(sort_moments_into_groups_of_same_order(orthogonal_moments_scaled).values())
-    elif have_same_entries(stencil, get_stencil("D3Q15")):
+
+    for moment_list in nested_moments:
+        rr = relaxation_rate_getter(moment_list)
+        for m in moment_list:
+            moment_to_relaxation_rate_dict[m] = rr
+
+    if maxwellian_moments:
+        return create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, **kwargs)
+    else:
+        return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, **kwargs)
+
+
+def mrt_orthogonal_modes_literature(stencil, is_weighted, is_cumulant):
+    """
+    Returns a list of lists of modes, grouped by common relaxation times.
+    This is for commonly used MRT models found in literature.
+
+    Args:
+        stencil: nested tuple defining the discrete velocity space. See `get_stencil`
+        is_weighted: whether to use weighted or unweighted orthogonality
+        is_cumulant: whether a moment-based or cumulant-based model is desired
+    """
+    x, y, z = MOMENT_SYMBOLS
+    one = sp.Rational(1, 1)
+
+    if have_same_entries(stencil, get_stencil("D3Q15")) and is_weighted:
         sq = x ** 2 + y ** 2 + z ** 2
         nested_moments = [
             [one, x, y, z],  # [0, 3, 5, 7]
@@ -401,7 +434,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
             [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 10, 11, 12, 13]
             [x * y * z]
         ]
-    elif have_same_entries(stencil, get_stencil("D3Q19")):
+    elif have_same_entries(stencil, get_stencil("D3Q19")) and is_weighted:
         # This MRT variant mentioned in the dissertation of Ulf Schiller 
         # "Thermal fluctuations and boundary conditions in the lattice Boltzmann method" (2008), p. 24ff
         # There are some typos in the moment matrix on p.27
@@ -446,7 +479,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
                 [(2 * sq - 3) * (3 * x ** 2 - sq), (2 * sq - 3) * (y ** 2 - z ** 2)],  # [10, 12]
                 [(y ** 2 - z ** 2) * x, (z ** 2 - x ** 2) * y, (x ** 2 - y ** 2) * z]  # [16, 17, 18]
             ]
-    elif have_same_entries(stencil, get_stencil("D3Q27")):
+    elif have_same_entries(stencil, get_stencil("D3Q27")) and not is_weighted:
         if is_cumulant:
             nested_moments = [
                 [sp.sympify(1), x, y, z],  # conserved
@@ -512,15 +545,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter=None, maxwellian_momen
         raise NotImplementedError("No MRT model is available (yet) for this stencil. "
                                   "Create a custom MRT using 'create_with_discrete_maxwellian_eq_moments'")
 
-    for moment_list in nested_moments:
-        rr = relaxation_rate_getter(moment_list)
-        for m in moment_list:
-            moment_to_relaxation_rate_dict[m] = rr
-
-    if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, **kwargs)
-    else:
-        return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, **kwargs)
+    return nested_moments
 
 
 # ----------------------------------------- Comparison view for notebooks ----------------------------------------------

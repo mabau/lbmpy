@@ -414,7 +414,10 @@ def create_lb_method(**params):
             except IndexError:
                 raise ValueError("Too few relaxation rates specified")
             return res
-        method = create_mrt_orthogonal(stencil_entries, relaxation_rate_getter, **common_params)
+        weighted = params['weighted'] if 'weighted' in params else None
+        nested_moments = params['nested_moments'] if 'nested_moments' in params else None
+        method = create_mrt_orthogonal(stencil_entries, relaxation_rate_getter, weighted=weighted,
+                                       nested_moments=nested_moments, **common_params)
     elif method_name.lower() == 'mrt_raw':
         method = create_mrt_raw(stencil_entries, relaxation_rates, **common_params)
     elif method_name.lower() == 'mrt3':
