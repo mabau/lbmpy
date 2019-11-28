@@ -73,3 +73,30 @@ def test_gram_schmidt_orthogonalization():
     orthogonal_moments = gram_schmidt(moments, stencil)
     pdfs_to_moments = moment_matrix(orthogonal_moments, stencil)
     assert (pdfs_to_moments * pdfs_to_moments.T).is_diagonal()
+
+
+def test_is_bulk_moment():
+    x, y, z = MOMENT_SYMBOLS
+    assert not is_bulk_moment(x, 2)
+    assert not is_bulk_moment(x ** 3, 2)
+    assert not is_bulk_moment(x * y, 2)
+    assert not is_bulk_moment(x ** 2, 2)
+    assert not is_bulk_moment(x ** 2 + y ** 2, 3)
+    assert is_bulk_moment(x ** 2 + y ** 2, 2)
+    assert is_bulk_moment(x ** 2 + y ** 2 + z ** 2, 3)
+    assert is_bulk_moment(x ** 2 + y ** 2 + x, 2)
+    assert is_bulk_moment(x ** 2 + y ** 2 + 1, 2)
+
+
+def test_is_shear_moment():
+    x, y, z = MOMENT_SYMBOLS
+    assert not is_shear_moment(x ** 3, 2)
+    assert not is_shear_moment(x, 2)
+    assert not is_shear_moment(x ** 2 + y ** 2, 2)
+    assert not is_shear_moment(x ** 2 + y ** 2 + z ** 2, 3)
+    assert is_shear_moment(x ** 2, 2)
+    assert is_shear_moment(x ** 2 - 1, 2)
+    assert is_shear_moment(x ** 2 - x, 2)
+    assert is_shear_moment(x * y, 2)
+    assert is_shear_moment(x * y - 1, 2)
+    assert is_shear_moment(x * y - x, 2)

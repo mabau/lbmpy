@@ -30,12 +30,12 @@ def run_scenario(scenario, steps):
     scenario.time_steps_run += steps
 
 
-def create_scenario(domain_size, temperature=None, viscosity=None, seed=2, target='cpu', openmp=4, method=None, num_rel_rates=None):
+def create_scenario(domain_size, temperature=None, viscosity=None, seed=2, target='cpu', openmp=4, num_rel_rates=None):
     rr = [relaxation_rate_from_lattice_viscosity(viscosity)]
     rr = rr*num_rel_rates
     cr = create_lb_collision_rule(
         stencil='D3Q19', compressible=True,
-        method=method, relaxation_rates=rr,
+        method='mrt', weighted=True, relaxation_rates=rr,
         fluctuating={'temperature': temperature, 'seed': seed},
         optimization={'cse_global': True, 'split': False,
                       'cse_pdfs': True, 'vectorization': True}
@@ -43,8 +43,7 @@ def create_scenario(domain_size, temperature=None, viscosity=None, seed=2, targe
     return LatticeBoltzmannStep(periodicity=(True, True, True), domain_size=domain_size, compressible=True, stencil='D3Q19', collision_rule=cr, optimization={'target': target, 'openmp': openmp})
 
 
-def run_for_method(method, num_rel_rates):
-    print("Testing", method)
+def test_fluctuating_mrt():
     # Unit conversions (MD to lattice) for parameters known to work with Espresso
     agrid = 1.
     m = 1.  # mass per node
@@ -53,7 +52,7 @@ def run_for_method(method, num_rel_rates):
     viscosity = 3. * tau / agrid**2
     n = 8
     sc = create_scenario((n, n, n), viscosity=viscosity, temperature=temperature,
-                         target='cpu', openmp=4, method=method, num_rel_rates=num_rel_rates)
+                         target='cpu', openmp=4, num_rel_rates=15)
     assert np.average(sc.velocity[:, :, :]) == 0.
 
     # Warmup
@@ -89,6 +88,3 @@ def run_for_method(method, num_rel_rates):
     np.testing.assert_allclose(
         v_hist[remove:-remove], v_expected[remove:-remove], rtol=0.005)
 
-
-def test_mrt():
-    run_for_method('mrt', 15)
