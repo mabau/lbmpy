@@ -22,7 +22,10 @@ class LatticeBoltzmannStep:
                  velocity_data_name=None, density_data_name=None, density_data_index=None,
                  compute_velocity_in_every_step=False, compute_density_in_every_step=False,
                  velocity_input_array_name=None, time_step_order='stream_collide', flag_interface=None,
-                 alignment_if_vectorized=64, fixed_loop_sizes=True, fixed_relaxation_rates=True, **method_parameters):
+                 alignment_if_vectorized=64, fixed_loop_sizes=True, fixed_relaxation_rates=True,
+                 timeloop_creation_function=TimeLoop, **method_parameters):
+
+        self._timeloop_creation_function = timeloop_creation_function
 
         # --- Parameter normalization  ---
         if data_handling is not None:
@@ -243,7 +246,7 @@ class LatticeBoltzmannStep:
     def get_time_loop(self):
         self.pre_run()  # make sure GPU arrays are allocated
 
-        fixed_loop = TimeLoop(steps=2)
+        fixed_loop = self._timeloop_creation_function(steps=2)
         fixed_loop.add_pre_run_function(self.pre_run)
         fixed_loop.add_post_run_function(self.post_run)
         fixed_loop.add_single_step_function(self.time_step)
