@@ -4,7 +4,6 @@ from lbmpy.fieldaccess import StreamPushTwoFieldsAccessor, CollideOnlyInplaceAcc
 from pystencils.fd.derivation import FiniteDifferenceStencilDerivation
 from lbmpy.maxwellian_equilibrium import get_weights
 from pystencils import Assignment, AssignmentCollection
-from lbmpy.phasefield_allen_cahn.derivatives import laplacian, isotropic_gradient
 
 import sympy as sp
 import numpy as np
@@ -15,30 +14,34 @@ def chemical_potential_symbolic(phi_field, stencil, beta, kappa):
     Get a symbolic expression for the chemical potential according to equation (5) in PhysRevE.96.053301.
     Args:
         phi_field: the phase-field on which the chemical potential is applied
-        stencil: stencil of the lattice Boltzmann step
+        stencil: stencil to derive the finite difference for the laplacian (2nd order isotropic)
         beta: coefficient related to surface tension and interface thickness
         kappa: coefficient related to surface tension and interface thickness
     """
     dimensions = len(stencil[0])
+    q = len(stencil)
+    lap = sp.simplify(0)
+    for i in range(dimensions):
+        deriv = FiniteDifferenceStencilDerivation((i, i), stencil)
+        for j in range(dimensions):
+            # assume the stencil is symmetric
+            deriv.assume_symmetric(dim=j, anti_symmetric=False)
 
-    deriv = FiniteDifferenceStencilDerivation((0, 0), stencil)
-    # assume the stencil is symmetric
-    deriv.assume_symmetric(0)
-    deriv.assume_symmetric(1)
-    if dimensions == 3:
-        deriv.assume_symmetric(2)
-
-    # set weights for missing degrees of freedom in the calculation
-    if len(stencil) == 9:
-        deriv.set_weight((1, 1), sp.Rational(1, 6))
-        deriv.set_weight((0, -1), sp.Rational(2, 3))
-        deriv.set_weight((0, 0), sp.Rational(-10, 3))
-
-        # assume the stencil is isotropic
-        res = deriv.get_stencil(isotropic=True)
-        lap = res.apply(phi_field.center)
-    else:
-        lap = laplacian(phi_field)
+        # set weights for missing degrees of freedom in the calculation and assume the stencil is isotropic
+        if q == 9:
+            res = deriv.get_stencil(isotropic=True)
+            lap += res.apply(phi_field.center)
+        elif q == 15:
+            deriv.set_weight((0, 0, 0), sp.Rational(-32, 27))
+            res = deriv.get_stencil(isotropic=True)
+            lap += res.apply(phi_field.center)
+        elif q == 19:
+            res = deriv.get_stencil(isotropic=True)
+            lap += res.apply(phi_field.center)
+        else:
+            deriv.set_weight((0, 0, 0), sp.Rational(-38, 27))
+            res = deriv.get_stencil(isotropic=True)
+            lap += res.apply(phi_field.center)
 
     # get the chemical potential
     mu = 4.0 * beta * phi_field.center * (phi_field.center - 1.0) * (phi_field.center - 0.5) - \
@@ -51,9 +54,10 @@ def isotropic_gradient_symbolic(phi_field, stencil):
     Get a symbolic expression for the isotropic gradient of the phase-field
     Args:
         phi_field: the phase-field on which the isotropic gradient is applied
-        stencil: stencil of the lattice Boltzmann step
+        stencil: stencil to derive the finite difference for the gradient (2nd order isotropic)
     """
     dimensions = len(stencil[0])
+    q = len(stencil)
     deriv = FiniteDifferenceStencilDerivation((0,), stencil)
 
     deriv.assume_symmetric(0, anti_symmetric=True)
@@ -61,39 +65,55 @@ def isotropic_gradient_symbolic(phi_field, stencil):
     if dimensions == 3:
         deriv.assume_symmetric(2, anti_symmetric=False)
 
-    if len(stencil) == 9:
+    # set weights for missing degrees of freedom in the calculation and assume the stencil is isotropic
+    # furthermore the stencils gets rotated to get the y and z components
+    if q == 9:
         res = deriv.get_stencil(isotropic=True)
         grad = [res.apply(phi_field.center), res.rotate_weights_and_apply(phi_field.center, (0, 1)), 0]
-    elif len(stencil) == 19:
-        deriv.set_weight((0, 0, 0), sp.Integer(0))
+    elif q == 15:
+        res = deriv.get_stencil(isotropic=True)
+        grad = [res.apply(phi_field.center),
+                res.rotate_weights_and_apply(phi_field.center, (0, 1)),
+                res.rotate_weights_and_apply(phi_field.center, (1, 2))]
+    elif q == 19:
+        deriv.set_weight((0, 0, 0), sp.sympify(0))
         deriv.set_weight((1, 0, 0), sp.Rational(1, 6))
-        deriv.set_weight((1, 1, 0), sp.Rational(1, 12))
 
         res = deriv.get_stencil(isotropic=True)
         grad = [res.apply(phi_field.center),
-                res.rotate_weights_and_apply(phi_field.center, (1, 0)),
-                res.rotate_weights_and_apply(phi_field.center, (2, 1))]
+                res.rotate_weights_and_apply(phi_field.center, (0, 1)),
+                res.rotate_weights_and_apply(phi_field.center, (1, 2))]
     else:
-        grad = isotropic_gradient(phi_field)
+        deriv.set_weight((0, 0, 0), sp.sympify(0))
+        deriv.set_weight((1, 0, 0), sp.Rational(2, 9))
+
+        res = deriv.get_stencil(isotropic=True)
+        grad = [res.apply(phi_field.center),
+                res.rotate_weights_and_apply(phi_field.center, (0, 1)),
+                res.rotate_weights_and_apply(phi_field.center, (1, 2))]
 
     return grad
 
 
-def normalized_isotropic_gradient_symbolic(phi_field, stencil):
+def normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil=None):
     r"""
     Get a symbolic expression for the normalized isotropic gradient of the phase-field
     Args:
         phi_field: the phase-field on which the normalized isotropic gradient is applied
         stencil: stencil of the lattice Boltzmann step
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
     """
-    iso_grad = isotropic_gradient_symbolic(phi_field, stencil)
-    tmp = (sum(map(lambda x: x * x, isotropic_gradient_symbolic(phi_field, stencil))) + 1.e-32) ** 0.5
+    if fd_stencil is None:
+        fd_stencil = stencil
 
-    result = [x / tmp for x in iso_grad]
+    tmp = (sum(map(lambda x: x * x, isotropic_gradient_symbolic(phi_field, fd_stencil))) + 1.e-32) ** 0.5
+
+    result = [x / tmp for x in isotropic_gradient_symbolic(phi_field, fd_stencil)]
     return result
 
 
-def pressure_force(phi_field, stencil, density_heavy, density_light):
+def pressure_force(phi_field, stencil, density_heavy, density_light, fd_stencil=None):
     r"""
     Get a symbolic expression for the pressure force
     Args:
@@ -101,13 +121,18 @@ def pressure_force(phi_field, stencil, density_heavy, density_light):
         stencil: stencil of the lattice Boltzmann step
         density_heavy: density of the heavier fluid
         density_light: density of the lighter fluid
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
     """
-    iso_grad = isotropic_gradient_symbolic(phi_field, stencil)
+    if fd_stencil is None:
+        fd_stencil = stencil
+
+    iso_grad = isotropic_gradient_symbolic(phi_field, fd_stencil)
     result = list(map(lambda x: sp.Rational(-1, 3) * sp.symbols("rho") * (density_heavy - density_light) * x, iso_grad))
     return result
 
 
-def viscous_force(lb_velocity_field, phi_field, mrt_method, tau, density_heavy, density_light):
+def viscous_force(lb_velocity_field, phi_field, mrt_method, tau, density_heavy, density_light, fd_stencil=None):
     r"""
     Get a symbolic expression for the viscous force
     Args:
@@ -117,11 +142,16 @@ def viscous_force(lb_velocity_field, phi_field, mrt_method, tau, density_heavy, 
         tau: relaxation time of the hydrodynamic lattice boltzmann step
         density_heavy: density of the heavier fluid
         density_light: density of the lighter fluid
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
     """
     stencil = mrt_method.stencil
     dimensions = len(stencil[0])
 
-    iso_grad = isotropic_gradient_symbolic(phi_field, stencil)
+    if fd_stencil is None:
+        fd_stencil = stencil
+
+    iso_grad = isotropic_gradient_symbolic(phi_field, fd_stencil)
 
     moment_matrix = mrt_method.moment_matrix
     rel = mrt_method.relaxation_rates
@@ -166,7 +196,7 @@ def viscous_force(lb_velocity_field, phi_field, mrt_method, tau, density_heavy, 
     return [fmx, fmy, fmz]
 
 
-def surface_tension_force(phi_field, stencil, beta, kappa):
+def surface_tension_force(phi_field, stencil, beta, kappa, fd_stencil=None):
     r"""
     Get a symbolic expression for the surface tension force
     Args:
@@ -174,14 +204,19 @@ def surface_tension_force(phi_field, stencil, beta, kappa):
         stencil: stencil of the lattice Boltzmann step
         beta: coefficient related to surface tension and interface thickness
         kappa: coefficient related to surface tension and interface thickness
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
     """
-    chemical_potential = chemical_potential_symbolic(phi_field, stencil, beta, kappa)
-    iso_grad = isotropic_gradient_symbolic(phi_field, stencil)
+    if fd_stencil is None:
+        fd_stencil = stencil
+
+    chemical_potential = chemical_potential_symbolic(phi_field, fd_stencil, beta, kappa)
+    iso_grad = isotropic_gradient_symbolic(phi_field, fd_stencil)
     return [chemical_potential * x for x in iso_grad]
 
 
 def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, tau,
-                       density_heavy, density_light, kappa, beta, body_force):
+                       density_heavy, density_light, kappa, beta, body_force, fd_stencil=None):
     r"""
     Get a symbolic expression for the hydrodynamic force
     Args:
@@ -194,12 +229,18 @@ def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, tau,
         beta: coefficient related to surface tension and interface thickness
         kappa: coefficient related to surface tension and interface thickness
         body_force: force acting on the fluids. Usually the gravity
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
     """
     stencil = lb_method.stencil
     dimensions = len(stencil[0])
-    fp = pressure_force(phi_field, stencil, density_heavy, density_light)
-    fm = viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, density_light)
-    fs = surface_tension_force(phi_field, stencil, beta, kappa)
+
+    if fd_stencil is None:
+        fd_stencil = stencil
+
+    fp = pressure_force(phi_field, stencil, density_heavy, density_light, fd_stencil)
+    fm = viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, density_light, fd_stencil)
+    fs = surface_tension_force(phi_field, stencil, beta, kappa, fd_stencil)
 
     result = []
     for i in range(dimensions):
@@ -208,16 +249,21 @@ def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, tau,
     return result
 
 
-def interface_tracking_force(phi_field, stencil, interface_thickness):
+def interface_tracking_force(phi_field, stencil, interface_thickness, fd_stencil=None):
     r"""
     Get a symbolic expression for the hydrodynamic force
     Args:
         phi_field: phase-field
         stencil: stencil of the phase-field distribution lattice Boltzmann step
         interface_thickness: interface thickness
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
     """
+    if fd_stencil is None:
+        fd_stencil = stencil
+
     dimensions = len(stencil[0])
-    normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil)
+    normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil)
     result = []
     for i in range(dimensions):
         result.append(((1.0 - 4.0 * (phi_field.center - 0.5) ** 2) / interface_thickness) * normal_fd[i])
@@ -264,15 +310,16 @@ def get_update_rules_velocity(src_field, u_in, lb_method, force, density):
     return update_u
 
 
-def get_collision_assignments_hydro(collision_rule=None, density=1, optimization={}, **kwargs):
+def get_collision_assignments_hydro(density=1, optimization=None, **kwargs):
     r"""
      Get collision assignments for the hydrodynamic lattice Boltzmann step. Here the force gets applied in the moment
      space. Afterwards the transformation back to the pdf space happens.
      Args:
-         collision_rule: arbitrary collision rule, e.g. created with create_lb_collision_rule
          density: the interpolated density of the simulation
          optimization: for details see createfunctions.py
      """
+    if optimization is None:
+        optimization = {}
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
     lb_method = params['lb_method']
@@ -288,12 +335,8 @@ def get_collision_assignments_hydro(collision_rule=None, density=1, optimization
 
     if opt_params['symbolic_field'] is not None:
         src_field = opt_params['symbolic_field']
-    elif opt_params['field_size']:
-        field_size = [s + 2 for s in opt_params['field_size']] + [q]
-        src_field = Field.create_fixed_size(params['field_name'], field_size, index_dimensions=1,
-                                            layout=opt_params['field_layout'], dtype=field_data_type)
     else:
-        src_field = Field.create_generic(params['field_name'], spatial_dimensions=collision_rule.method.dim,
+        src_field = Field.create_generic(params['field_name'], spatial_dimensions=lb_method.dim,
                                          index_shape=(q,), layout=opt_params['field_layout'], dtype=field_data_type)
 
     if opt_params['symbolic_temporary_field'] is not None:
@@ -348,26 +391,33 @@ def get_collision_assignments_hydro(collision_rule=None, density=1, optimization
     return hydro_lb_update_rule
 
 
-def initializer_kernel_phase_field_lb(phi_field_distributions, phi_field, velocity, mrt_method, interface_thickness):
+def initializer_kernel_phase_field_lb(lb_phase_field, phi_field, velocity_field, mrt_method, interface_thickness,
+                                      fd_stencil=None):
     r"""
     Returns an assignment list for initializing the phase-field distribution functions
     Args:
-        phi_field_distributions: source field of phase-field distribution function
+        lb_phase_field: source field of phase-field distribution function
         phi_field: phase-field
-        velocity: velocity field
+        velocity_field: velocity field
         mrt_method: lattice Boltzmann method of the phase-field lattice Boltzmann step
         interface_thickness: interface thickness
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
     """
     stencil = mrt_method.stencil
     dimensions = len(stencil[0])
+
+    if fd_stencil is None:
+        fd_stencil = stencil
+
     weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
     u_symp = sp.symbols("u_:{}".format(dimensions))
 
-    normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil)
+    normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil)
 
     gamma = mrt_method.get_equilibrium_terms()
     gamma = gamma.subs({sp.symbols("rho"): 1})
-    gamma_init = gamma.subs({x: y for x, y in zip(u_symp, velocity.center_vector)})
+    gamma_init = gamma.subs({x: y for x, y in zip(u_symp, velocity_field.center_vector)})
     # create the kernels for the initialization of the h field
     h_updates = list()
 
@@ -380,17 +430,17 @@ def initializer_kernel_phase_field_lb(phi_field_distributions, phi_field, veloci
                  * scalar_product(d, normal_fd[0:dimensions]))
 
     for i, _ in enumerate(stencil):
-        h_updates.append(Assignment(phi_field_distributions.center(i), phi_field.center * gamma_init[i] - 0.5 * f[i]))
+        h_updates.append(Assignment(lb_phase_field.center(i), phi_field.center * gamma_init[i] - 0.5 * f[i]))
 
     return h_updates
 
 
-def initializer_kernel_hydro_lb(velocity_distributions, velocity, mrt_method):
+def initializer_kernel_hydro_lb(lb_velocity_field, velocity_field, mrt_method):
     r"""
     Returns an assignment list for initializing the velocity distribution functions
     Args:
-        velocity_distributions: source field of velocity distribution function
-        velocity: velocity field
+        lb_velocity_field: source field of velocity distribution function
+        velocity_field: velocity field
         mrt_method: lattice Boltzmann method of the hydrodynamic lattice Boltzmann step
     """
     stencil = mrt_method.stencil
@@ -400,10 +450,10 @@ def initializer_kernel_hydro_lb(velocity_distributions, velocity, mrt_method):
 
     gamma = mrt_method.get_equilibrium_terms()
     gamma = gamma.subs({sp.symbols("rho"): 1})
-    gamma_init = gamma.subs({x: y for x, y in zip(u_symp, velocity.center_vector)})
+    gamma_init = gamma.subs({x: y for x, y in zip(u_symp, velocity_field.center_vector)})
 
     g_updates = list()
     for i, _ in enumerate(stencil):
-        g_updates.append(Assignment(velocity_distributions.center(i), gamma_init[i] - weights[i]))
+        g_updates.append(Assignment(lb_velocity_field.center(i), gamma_init[i] - weights[i]))
 
     return g_updates

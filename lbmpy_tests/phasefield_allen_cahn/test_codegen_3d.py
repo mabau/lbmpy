@@ -13,10 +13,9 @@ from lbmpy.phasefield_allen_cahn.parameter_calculation import (
     calculate_dimensionless_rising_bubble, calculate_parameters_rti)
 from lbmpy.stencils import get_stencil
 from pystencils import AssignmentCollection, fields
-from pystencils.simp import sympy_cse
 
 
-def test_codegen_3D():
+def test_codegen_3d():
     stencil_phase = get_stencil("D3Q15")
     stencil_hydro = get_stencil("D3Q27")
     assert (len(stencil_phase[0]) == len(stencil_hydro[0]))
@@ -69,7 +68,6 @@ def test_codegen_3D():
     # fields
     u = fields("vel_field(" + str(dimensions) + "): [" + str(dimensions) + "D]", layout='fzyx')
     C = fields("phase_field: [" + str(dimensions) + "D]", layout='fzyx')
-    force = fields("force(" + str(dimensions) + "): [" + str(dimensions) + "D]", layout='fzyx')
 
     h = fields("lb_phase_field(" + str(len(stencil_phase)) + "): [" + str(dimensions) + "D]", layout='fzyx')
     h_tmp = fields("lb_phase_field_tmp(" + str(len(stencil_phase)) + "): [" + str(dimensions) + "D]", layout='fzyx')
@@ -100,7 +98,8 @@ def test_codegen_3D():
     force_h = [f / 3 for f in interface_tracking_force(C, stencil_phase, W)]
     force_model_h = MultiphaseForceModel(force=force_h)
 
-    force_g = hydrodynamic_force(g, C, method_hydro, relaxation_time, density_liquid, density_gas, kappa, beta, body_force)
+    force_g = hydrodynamic_force(g, C, method_hydro,
+                                 relaxation_time, density_liquid, density_gas, kappa, beta, body_force)
     force_model_g = MultiphaseForceModel(force=force_g, rho=density)
 
     h_tmp_symbol_list = [h_tmp.center(i) for i, _ in enumerate(stencil_phase)]
@@ -122,22 +121,28 @@ def test_codegen_3D():
     allen_cahn_lb.set_main_assignments_from_dict({**allen_cahn_lb.main_assignments_dict, **{C.center: sum_h}})
     allen_cahn_update_rule = AssignmentCollection(main_assignments=allen_cahn_lb.main_assignments,
                                                   subexpressions=allen_cahn_lb.subexpressions)
-    allen_cahn_update_rule = sympy_cse(allen_cahn_update_rule)
-
     # ---------------------------------------------------------------------------------------------------------
 
     method_hydro = create_with_discrete_maxwellian_eq_moments(stencil_hydro, rr_dict, force_model=force_model_g)
 
-    hydro_lb_update_rule = get_collision_assignments_hydro(lb_method=method_hydro,
-                                                           density=density,
-                                                           velocity_input=u,
-                                                           force=force_g,
-                                                           optimization={"symbolic_field": g,
-                                                                         "symbolic_temporary_field": g_tmp},
-                                                           kernel_type='collide_only')
+    hydro_lb_update_rule_normal = get_collision_assignments_hydro(lb_method=method_hydro,
+                                                                  density=density,
+                                                                  velocity_input=u,
+                                                                  force=force_g,
+                                                                  optimization={"symbolic_field": g,
+                                                                                "symbolic_temporary_field": g_tmp},
+                                                                  kernel_type='collide_only')
 
-    # streaming of the hydrodynamic distribution
-    stream_hydro = create_lb_update_rule(stencil=stencil_hydro,
-                                         optimization={"symbolic_field": g,
-                                                       "symbolic_temporary_field": g_tmp},
-                                         kernel_type='stream_pull_only')
+    hydro_lb_update_rule_push = get_collision_assignments_hydro(lb_method=method_hydro,
+                                                                density=density,
+                                                                velocity_input=u,
+                                                                force=force_g,
+                                                                optimization={"symbolic_field": g,
+                                                                              "symbolic_temporary_field": g_tmp},
+                                                                kernel_type='collide_stream_push')
+
+    hydro_lb_update_rule_generic_fields = get_collision_assignments_hydro(lb_method=method_hydro,
+                                                                          density=density,
+                                                                          velocity_input=u,
+                                                                          force=force_g,
+                                                                          kernel_type='collide_only')
