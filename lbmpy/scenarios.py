@@ -85,7 +85,13 @@ def create_lid_driven_cavity(domain_size=None, lid_velocity=0.005, lbm_kernel=No
     """
     assert domain_size is not None or data_handling is not None
     if data_handling is None:
-        data_handling = create_data_handling(domain_size, periodicity=False, default_ghost_layers=1, parallel=parallel)
+        optimization = kwargs.get('optimization', None)
+        target = optimization.get('target', None) if optimization else None
+        data_handling = create_data_handling(domain_size,
+                                             periodicity=False,
+                                             default_ghost_layers=1,
+                                             parallel=parallel,
+                                             default_target=target)
     step = LatticeBoltzmannStep(data_handling=data_handling, lbm_kernel=lbm_kernel, name="ldc", **kwargs)
 
     my_ubb = UBB(velocity=[lid_velocity, 0, 0][:step.method.dim])
@@ -99,7 +105,7 @@ def create_lid_driven_cavity(domain_size=None, lid_velocity=0.005, lbm_kernel=No
 def create_channel(domain_size=None, force=None, pressure_difference=None, u_max=None, diameter_callback=None,
                    duct=False, wall_boundary=NoSlip(), parallel=False, data_handling=None, **kwargs):
     """Create a channel scenario (2D or 3D).
-    
+
     The channel can be driven either by force, velocity inflow or pressure difference. Choose one and pass
     exactly one of the parameters 'force', 'pressure_difference' or 'u_max'.
 
