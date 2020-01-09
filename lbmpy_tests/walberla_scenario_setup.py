@@ -1,3 +1,6 @@
+import pytest
+pytest.importorskip('waLBerla')
+
 import waLBerla.field as field
 from waLBerla import createUniformBlockGrid, createUniformBufferedScheme, makeSlice
 
