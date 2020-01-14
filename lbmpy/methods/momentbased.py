@@ -88,9 +88,9 @@ class MomentBasedLbMethod(AbstractLbMethod):
         equilibrium = self.get_equilibrium()
         return sp.Matrix([eq.rhs for eq in equilibrium.main_assignments])
 
-    def get_collision_rule(self, conserved_quantity_equations=None):
+    def get_collision_rule(self, conserved_quantity_equations=None, keep_rrs_symbolic=True):
         d = sp.diag(*self.relaxation_rates)
-        relaxation_rate_sub_expressions, d = self._generate_relaxation_matrix(d)
+        relaxation_rate_sub_expressions, d = self._generate_relaxation_matrix(d, keep_rrs_symbolic)
         ac = self._collision_rule_with_relaxation_matrix(d, relaxation_rate_sub_expressions,
                                                          True, conserved_quantity_equations)
         return ac
@@ -216,16 +216,15 @@ class MomentBasedLbMethod(AbstractLbMethod):
                                 simplification_hints)
 
     @staticmethod
-    def _generate_relaxation_matrix(relaxation_matrix):
+    def _generate_relaxation_matrix(relaxation_matrix, keep_rr_symbolic):
         """
         For SRT and TRT the equations can be easier simplified if the relaxation times are symbols, not numbers.
         This function replaces the numbers in the relaxation matrix with symbols in this case, and returns also
          the subexpressions, that assign the number to the newly introduced symbol
         """
         rr = [relaxation_matrix[i, i] for i in range(relaxation_matrix.rows)]
-        unique_relaxation_rates = set(rr)
-        if len(unique_relaxation_rates) <= 2:
-            # special handling for SRT and TRT
+        if keep_rr_symbolic <= 2:
+            unique_relaxation_rates = set(rr)
             subexpressions = {}
             for rt in unique_relaxation_rates:
                 rt = sp.sympify(rt)

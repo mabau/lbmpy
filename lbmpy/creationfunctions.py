@@ -198,6 +198,7 @@ from pystencils import Assignment, AssignmentCollection, create_kernel
 from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
 from pystencils.field import Field, get_layout_of_array
+from pystencils.simp import sympy_cse
 from pystencils.stencil import have_same_entries
 
 
@@ -300,8 +301,6 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
         lb_method = create_lb_method(**params)
 
     split_inner_loop = 'split' in opt_params and opt_params['split']
-    simplification = create_simplification_strategy(lb_method, cse_pdfs=False, cse_global=False,
-                                                    split_inner_loop=split_inner_loop)
     cqc = lb_method.conserved_quantity_computation
 
     rho_in = params['density_input']
@@ -312,17 +311,23 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     if rho_in is not None and isinstance(rho_in, Field):
         rho_in = rho_in.center
 
+    keep_rrs_symbolic = opt_params['keep_rrs_symbolic']
     if u_in is not None:
         density_rhs = sum(lb_method.pre_collision_pdf_symbols) if rho_in is None else rho_in
         eqs = [Assignment(cqc.zeroth_order_moment_symbol, density_rhs)]
         eqs += [Assignment(u_sym, u_in[i]) for i, u_sym in enumerate(cqc.first_order_moment_symbols)]
         eqs = AssignmentCollection(eqs, [])
-        collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=eqs)
+        collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=eqs,
+                                                      keep_rrs_symbolic=keep_rrs_symbolic)
     elif u_in is None and rho_in is not None:
         raise ValueError("When setting 'density_input' parameter, 'velocity_input' has to be specified as well.")
     else:
-        collision_rule = lb_method.get_collision_rule()
+        collision_rule = lb_method.get_collision_rule(keep_rrs_symbolic=keep_rrs_symbolic)
 
+    if opt_params['simplification'] == 'auto':
+        simplification = create_simplification_strategy(lb_method, split_inner_loop=split_inner_loop)
+    else:
+        simplification = opt_params['simplification']
     collision_rule = simplification(collision_rule)
 
     if params['fluctuating']:
@@ -353,7 +358,6 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
         from lbmpy.methods.momentbasedsimplifications import cse_in_opposing_directions
         collision_rule = cse_in_opposing_directions(collision_rule)
     if cse_global:
-        from pystencils.simp import sympy_cse
         collision_rule = sympy_cse(collision_rule)
 
     if params['output'] and params['kernel_type'] == 'stream_pull_collide':
@@ -550,6 +554,8 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
     default_optimization_description = {
         'cse_pdfs': False,
         'cse_global': False,
+        'simplification': 'auto',
+        'keep_rrs_symbolic': True,
         'split': False,
 
         'field_size': None,

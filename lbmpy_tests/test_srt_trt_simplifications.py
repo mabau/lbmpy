@@ -6,14 +6,15 @@ import sympy as sp
 
 from lbmpy.forcemodels import Guo
 from lbmpy.methods import create_srt, create_trt, create_trt_with_magic_number
+from lbmpy.methods.momentbasedsimplifications import cse_in_opposing_directions
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
 
 
 def check_method(method, limits_default, limits_cse):
-    strategy = create_simplification_strategy(method, cse_pdfs=False)
-    strategy_with_cse = create_simplification_strategy(method, cse_pdfs=True)
-
+    strategy = create_simplification_strategy(method)
+    strategy_with_cse = create_simplification_strategy(method)
+    strategy_with_cse = cse_in_opposing_directions(strategy_with_cse)
     collision_rule = method.get_collision_rule()
 
     ops_default = strategy(collision_rule).operation_count
