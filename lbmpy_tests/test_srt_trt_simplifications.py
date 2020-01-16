@@ -14,7 +14,7 @@ from lbmpy.stencils import get_stencil
 def check_method(method, limits_default, limits_cse):
     strategy = create_simplification_strategy(method)
     strategy_with_cse = create_simplification_strategy(method)
-    strategy_with_cse = cse_in_opposing_directions(strategy_with_cse)
+    strategy_with_cse.add(cse_in_opposing_directions)
     collision_rule = method.get_collision_rule()
 
     ops_default = strategy(collision_rule).operation_count
@@ -64,4 +64,4 @@ def test_simplifications_trt_d3q19_force_compressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
     force_model = Guo([sp.Rational(1, 3), sp.Rational(1, 2), sp.Rational(1, 5)])
     method = create_trt_with_magic_number(get_stencil("D3Q19"), o1, compressible=False, force_model=force_model)
-    check_method(method, [269, 282, 1], [242, 176, 1])
+    check_method(method, [270, 283, 1], [243, 177, 1])

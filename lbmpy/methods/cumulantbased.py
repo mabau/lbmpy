@@ -109,7 +109,8 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         return sp.Matrix([eq.rhs for eq in equilibrium.main_assignments])
 
     def get_collision_rule(self, conserved_quantity_equations=None, moment_subexpressions=False,
-                           pre_collision_subexpressions=True, post_collision_subexpressions=False):
+                           pre_collision_subexpressions=True, post_collision_subexpressions=False,
+                           keep_rrs_symbolic=None):
         return self._get_collision_rule_with_relaxation_matrix(sp.diag(*self.relaxation_rates),
                                                                conserved_quantity_equations,
                                                                moment_subexpressions, pre_collision_subexpressions,
