@@ -134,7 +134,7 @@ def compare_lid_driven_cavity(optimization=MappingProxyType({}), action='Testing
 
     try:
         from lbmpy_tests.walberla_scenario_setup import create_lid_driven_cavity as run_lid_driven_cavity_walberla
-    except ImportError:
+    except Exception:
         run_lid_driven_cavity_walberla = None
 
     return compare_scenario(run_ldc_lbmpy, run_lid_driven_cavity_walberla, optimization, action, name, plot, **kwargs)
@@ -152,7 +152,7 @@ def compare_force_driven_channel(optimization=MappingProxyType({}), action='Test
 
     try:
         from lbmpy_tests.walberla_scenario_setup import create_lid_driven_cavity as run_force_driven_channel_walberla
-    except ImportError:
+    except Exception:
         run_force_driven_channel_walberla = None
 
     return compare_scenario(lbmpy_func, run_force_driven_channel_walberla, optimization, action, name, plot, **kwargs)
