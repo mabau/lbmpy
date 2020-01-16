@@ -202,10 +202,10 @@ class EsoTwistEvenTimeStepAccessor(PdfFieldAccessor):
 # -------------------------------------------- Visualization -----------------------------------------------------------
 
 
-def visualize_field_mapping(axes, stencil, field_mapping, color='b'):
+def visualize_field_mapping(axes, stencil, field_mapping, inverted=False, color='b'):
     from lbmpy.plot import LbGrid
     grid = LbGrid(3, 3)
-    grid.fill_with_default_arrows()
+    grid.fill_with_default_arrows(inverted=inverted)
     for field_access, direction in zip(field_mapping, stencil):
         field_position = stencil[field_access.index[0]]
         neighbor = field_access.offsets
@@ -214,7 +214,8 @@ def visualize_field_mapping(axes, stencil, field_mapping, color='b'):
     grid.draw(axes)
 
 
-def visualize_pdf_field_accessor(pdf_field_accessor, figure=None):
+def visualize_pdf_field_accessor(pdf_field_accessor, title=True, read_plot_params={}, write_plot_params={},
+                                 figure=None):
     from lbmpy.stencils import get_stencil
 
     if figure is None:
@@ -232,8 +233,14 @@ def visualize_pdf_field_accessor(pdf_field_accessor, figure=None):
     ax_left = figure.add_subplot(1, 2, 1)
     ax_right = figure.add_subplot(1, 2, 2)
 
-    visualize_field_mapping(ax_left, stencil, pre_collision_accesses, color='k')
-    visualize_field_mapping(ax_right, stencil, post_collision_accesses, color='r')
+    if 'color' not in read_plot_params:
+        read_plot_params['color'] = 'k'
+    if 'color' not in write_plot_params:
+        write_plot_params['color'] = 'r'
 
-    ax_left.set_title("Read")
-    ax_right.set_title("Write")
+    visualize_field_mapping(ax_left, stencil, pre_collision_accesses, **read_plot_params)
+    visualize_field_mapping(ax_right, stencil, post_collision_accesses, **write_plot_params)
+
+    if title:
+        ax_left.set_title("Read")
+        ax_right.set_title("Write")

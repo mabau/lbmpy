@@ -139,14 +139,17 @@ class LbGrid:
                 self.annotations[(cell, arrow_position)] = Text(arrow_end[0], arrow_end[1], annotation,
                                                                 **annotation_kwargs)
 
-    def fill_with_default_arrows(self, **kwargs):
+    def fill_with_default_arrows(self, inverted=False, **kwargs):
         """Fills the complete grid with the default pdf arrows"""
         for x in range(self._xCells):
             for y in range(self._yCells):
                 for dx in [-1, 0, 1]:
                     for dy in [-1, 0, 1]:
                         kwargs.setdefault('color', '#bbbbbb')
-                        self.add_arrow((x, y), (dx, dy), (dx, dy), **kwargs)
+                        if not inverted:
+                            self.add_arrow((x, y), (dx, dy), (dx, dy), **kwargs)
+                        else:
+                            self.add_arrow((x, y), (dx, dy), (-dx, -dy), **kwargs)
 
     def draw(self, ax):
         """Draw the grid into a given matplotlib axes object"""
