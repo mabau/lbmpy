@@ -10,7 +10,7 @@ from version_from_git import version_number_from_git
 
 
 quick_tests = [
-    'test_serial_scenarios.test_ldc_mrt',
+    #'test_serial_scenarios.test_ldc_mrt',
     'test_serial_scenarios.test_channel_srt',
 ]
 
@@ -24,17 +24,12 @@ class SimpleTestRunner(distutils.cmd.Command):
     @staticmethod
     def _run_tests_in_module(test):
         """Short test runner function - to work also if py.test is not installed."""
-        print("at start")
         test = 'lbmpy_tests.' + test
         mod, function_name = test.rsplit('.', 1)
         if isinstance(mod, str):
-            print("before import ", mod)
             mod = import_module(mod)
-            print("after import ", mod)
 
-        print("before getattr")
         func = getattr(mod, function_name)
-        print("   -> %s in %s" % (function_name, mod.__name__))
         with redirect_stdout(io.StringIO()):
             func()
 
