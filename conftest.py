@@ -46,6 +46,11 @@ except ImportError:
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_serial_scenarios.py")]
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_datahandling_parallel.py")]
 
+try:
+    import blitzdb
+except ImportError:
+    collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/benchmark"),
+                       os.path.join(SCRIPT_FOLDER, "lbmpy_tests/full_scenarios/kida_vortex_flow/scenario_kida_vortex_flow.py")]
 
 collect_ignore += [os.path.join(SCRIPT_FOLDER, 'setup.py')]
 
@@ -104,7 +109,7 @@ class IPyNbFile(pytest.File):
         exporter.exclude_markdown = True
         exporter.exclude_input_prompt = True
 
-        notebook_contents = self.fspath.open()
+        notebook_contents = self.fspath.open(encoding='utf-8')
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", "IPython.core.inputsplitter is deprecated")

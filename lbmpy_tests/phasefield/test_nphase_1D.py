@@ -8,7 +8,6 @@ from lbmpy.phasefield.analytical import (
 from lbmpy.phasefield.experiments1D import init_sharp_interface
 from lbmpy.phasefield.scenarios import create_n_phase_model
 from pystencils import create_data_handling, make_slice
-from pystencils.runhelper import ParameterStudy
 
 
 def extract_profile(sc, width, phase_idx=1):
@@ -111,6 +110,7 @@ def study_1d(study):
 
 
 if __name__ == '__main__':
+    from pystencils.runhelper import ParameterStudy
     s = ParameterStudy(run_n_phase_1d)
     study_1d(s)
     s.run_from_command_line()
