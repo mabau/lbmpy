@@ -7,6 +7,8 @@
 import numpy as np
 import sympy as sp
 
+import pytest
+
 from lbmpy.creationfunctions import update_with_default_parameters
 from lbmpy.relaxationrates import (
     relaxation_rate_from_lattice_viscosity, relaxation_rate_from_magic_number)
@@ -212,6 +214,7 @@ def create_full_parameter_study():
 
 
 def test_shear_wave():
+    pytest.importorskip('pycuda')
     params = {
         'l_0': 32,
         'u_0': 0.096,

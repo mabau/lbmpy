@@ -1,3 +1,5 @@
+import pytest
+
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.methods.creationfunctions import compare_moment_based_lb_methods
 from lbmpy.moments import (
@@ -6,6 +8,7 @@ from lbmpy.stencils import get_stencil
 
 
 def test_moment_comparison_table():
+    pytest.importorskip('ipy_table')
     new = create_lb_method(stencil='D3Q19', maxwellian_moments=True)
     old = create_lb_method(stencil='D3Q19', maxwellian_moments=False)
 
@@ -25,6 +28,7 @@ def test_moment_comparison_table():
 
 
 def test_moment_equality_table():
+    pytest.importorskip('ipy_table')
     d3q19 = get_stencil('D3Q19')
     table1 = moment_equality_table(d3q19, max_order=3)
     assert len(table1.array) == 5
