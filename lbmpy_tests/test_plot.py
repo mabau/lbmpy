@@ -1,5 +1,8 @@
 import os
 from tempfile import TemporaryDirectory
+import shutil
+
+import pytest
 
 import numpy as np
 
@@ -7,6 +10,7 @@ import lbmpy.plot as plt
 from lbmpy.scenarios import create_lid_driven_cavity
 
 
+@pytest.mark.skipif(shutil.which('ffmpeg') is None, reason="ffmpeg not available")
 def test_animation():
 
     ldc = create_lid_driven_cavity((10, 10), relaxation_rate=1.8)

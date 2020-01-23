@@ -65,7 +65,7 @@ def plot_y_velocity(vel, **kwargs):
 
 def fit_and_get_slope(x_values, y_values):
     matrix = np.vstack([x_values, np.ones(len(x_values))]).T
-    m, _ = np.linalg.lstsq(matrix, y_values, rcond=None)[0]
+    m, _ = np.linalg.lstsq(matrix, y_values, rcond=1e-14)[0]
     return m
 
 
