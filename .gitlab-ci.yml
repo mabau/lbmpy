@@ -79,6 +79,7 @@ ubuntu:
     - pytest-3 -v -m "not longrun"
   tags:
     - docker
+    - cuda
 
 minimal-conda:
   stage: test
