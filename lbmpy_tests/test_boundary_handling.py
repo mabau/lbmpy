@@ -1,5 +1,7 @@
 import numpy as np
 
+import pytest
+
 from lbmpy.boundaries import UBB, NeumannByCopy, NoSlip, StreamInConstant
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import create_lb_function
@@ -8,9 +10,12 @@ from lbmpy.lbstep import LatticeBoltzmannStep
 from pystencils import create_data_handling, make_slice
 
 
-def test_simple():
+@pytest.mark.parametrize("gpu", [True, False])
+def test_simple(gpu):
+    import pytest
+    pytest.importorskip('pycuda')
     dh = create_data_handling((10, 5), parallel=False)
-    dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=True)
+    dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=gpu)
     lb_func = create_lb_function(stencil='D2Q9', compressible=False, relaxation_rate=1.8)
 
     bh = LatticeBoltzmannBoundaryHandling(lb_func.method, dh, 'pdfs')

@@ -107,9 +107,11 @@ def memory_sizes_of_current_machine():
 
     if get_cpu_info:
         cpu_info = get_cpu_info()
-        result.update({'L1': cpu_info['l1_data_cache_size'],
-                       'L2': cpu_info['l2_cache_size'],
-                       'L3': cpu_info['l3_cache_size']})
+        if 'l1_data_cache_size' in cpu_info:
+            result['L1'] = cpu_info['l1_data_cache_size']
+        result['L2'] = cpu_info['l2_cache_size']
+        if 'l3_cache_size' in cpu_info:
+            result['L3'] = cpu_info['l3_cache_size']
 
     if device:
         size = device.total_memory() / (1024 * 1024)

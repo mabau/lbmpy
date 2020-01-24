@@ -159,11 +159,11 @@ def viscous_force(lb_velocity_field, phi_field, mrt_method, tau, density_heavy, 
     eq = np.array(eq)
 
     g_vals = [lb_velocity_field.center(i) for i, _ in enumerate(stencil)]
-    m0 = np.dot(moment_matrix, g_vals)
+    m0 = np.dot(moment_matrix.tolist(), g_vals)
 
     m = m0 - eq
     m = m * rel
-    non_equilibrium = np.dot(moment_matrix.inv(), m)
+    non_equilibrium = np.dot(moment_matrix.inv().tolist(), m)
 
     stress_tensor = [0] * 6
     # Calculate Stress Tensor MRT
@@ -293,7 +293,7 @@ def get_update_rules_velocity(src_field, u_in, lb_method, force, density):
         indices.append(eq.index(first_eqs[i]))
 
     src = [src_field.center(i) for i, _ in enumerate(stencil)]
-    m0 = np.dot(moment_matrix, src)
+    m0 = np.dot(moment_matrix.tolist(), src)
 
     update_u = list()
     update_u.append(Assignment(sp.symbols("rho"), m0[0]))
@@ -356,7 +356,7 @@ def get_collision_assignments_hydro(density=1, optimization=None, **kwargs):
     eq = np.array(eq)
 
     g_vals = [src_field.center(i) for i, _ in enumerate(stencil)]
-    m0 = np.dot(moment_matrix, g_vals)
+    m0 = np.dot(moment_matrix.tolist(), g_vals)
 
     mf = np.zeros(len(stencil), dtype=object)
     for i in range(dimensions):
@@ -374,7 +374,7 @@ def get_collision_assignments_hydro(density=1, optimization=None, **kwargs):
         update_m.append(Assignment(m[i], m0[i] - (m0[i] - eq[i] + mf[i] / 2) * rel[i] + mf[i]))
 
     update_g = list()
-    var = np.dot(moment_matrix.inv(), m)
+    var = np.dot(moment_matrix.inv().tolist(), m)
     if params['kernel_type'] == 'collide_stream_push':
         push_accessor = StreamPushTwoFieldsAccessor()
         post_collision_accesses = push_accessor.write(dst_field, stencil)

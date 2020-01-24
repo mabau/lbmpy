@@ -9,7 +9,6 @@ from lbmpy.phasefield.contact_angle_circle_fitting import liquid_lens_neumann_an
 from lbmpy.phasefield.post_processing import analytic_neumann_angles
 from lbmpy.phasefield.scenarios import create_n_phase_model, create_three_phase_model
 from pystencils import create_data_handling, make_slice
-from pystencils.runhelper import ParameterStudy
 from pystencils.utils import boolean_array_bounding_box
 
 color = {'yellow': '\033[93m',
@@ -209,6 +208,7 @@ def study_2d(study, **kwargs):
 
 
 def main():
+    from pystencils.runhelper import ParameterStudy
     s = ParameterStudy(run_n_phase_2d)
     # study_3phase(s)
     study_2d(s)
