@@ -1,3 +1,15 @@
+------------------------   Important ---------------------------------
+
+lbmpy is under the following GNU AGPLv3 license. 
+This license holds for the sources of lbmpy itself as well 
+as for all kernels generated with lbmpy i.e. 
+the output of lbmpy is also protected by the GNU AGPLv3 license. 
+
+----------------------------------------------------------------------
+
+
+
+                    
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
