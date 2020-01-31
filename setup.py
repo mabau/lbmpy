@@ -45,8 +45,24 @@ class SimpleTestRunner(distutils.cmd.Command):
             self._run_tests_in_module(test)
 
 
+def readme():
+    with open('README.md') as f:
+        return f.read()
+
+try:
+    sys.path.insert(0, os.path.abspath('doc'))
+    from version_from_git import version_number_from_git
+
+    version = version_number_from_git()
+    with open("RELEASE-VERSION", "w") as f:
+        f.write(version)
+except ImportError:
+    version = open('RELEASE-VERSION', 'r').read()
+
+
 setup(name='lbmpy',
-      version=version_number_from_git(),
+      version=version,
+      long_description=readme(),
       description='Code Generation for Lattice Boltzmann Methods',
       author='Martin Bauer',
       license='AGPLv3',
