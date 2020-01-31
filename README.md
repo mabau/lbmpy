@@ -15,7 +15,6 @@ Installation
 ------------
 
 ```bash
-export PIP_EXTRA_INDEX_URL=https://www.walberla.net/pip
 pip install lbmpy[interactive]
 ```
 
