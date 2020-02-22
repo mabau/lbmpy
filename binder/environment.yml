@@ -32,4 +32,5 @@ dependencies:
       - ipy_table  # HTML tables for jupyter notebooks
       - pyevtk # VTK output for serial simulations
       - blitzdb # file-based No-SQL database to store simulation results
+      - pystencils
       #- pycuda # add this if you have CUDA installed
