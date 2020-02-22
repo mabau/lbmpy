@@ -334,7 +334,7 @@ class LatticeBoltzmannStep:
             tuple (residuum, steps_run) if successful or raises ValueError if not converged
         """
         dh = self.data_handling
-        gpu = self._optimization['target'] == 'gpu'
+        gpu = self._gpu
 
         def on_first_call():
             self._velocity_init_vel_backup = 'velocity_init_vel_backup'
