@@ -5,11 +5,11 @@ from setuptools import setup, find_packages
 import distutils
 from contextlib import redirect_stdout
 from importlib import import_module
+
 sys.path.insert(0, os.path.abspath('doc'))
 
-
 quick_tests = [
-    #'test_serial_scenarios.test_ldc_mrt',
+    # 'test_serial_scenarios.test_ldc_mrt',
     'test_serial_scenarios.test_channel_srt',
 ]
 
@@ -53,9 +53,15 @@ try:
 except ImportError:
     version = open('RELEASE-VERSION', 'r').read()
 
+def readme():
+    with open('README.md') as f:
+        return f.read()
+
+
 setup(name='lbmpy',
       version=version,
       description='Code Generation for Lattice Boltzmann Methods',
+      long_description=readme(),
       author='Martin Bauer',
       license='AGPLv3',
       author_email='martin.bauer@fau.de',
@@ -63,13 +69,13 @@ setup(name='lbmpy',
       packages=['lbmpy'] + ['lbmpy.' + s for s in find_packages('lbmpy')],
       install_requires=['pystencils'],
       classifiers=[
-            'Development Status :: 4 - Beta',
-            'Framework :: Jupyter',
-            'Topic :: Software Development :: Code Generators',
-            'Topic :: Scientific/Engineering :: Physics',
-            'Intended Audience :: Developers',
-            'Intended Audience :: Science/Research',
-            'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
+          'Development Status :: 4 - Beta',
+          'Framework :: Jupyter',
+          'Topic :: Software Development :: Code Generators',
+          'Topic :: Scientific/Engineering :: Physics',
+          'Intended Audience :: Developers',
+          'Intended Audience :: Science/Research',
+          'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
       ],
       python_requires=">=3.6",
       extras_require={
