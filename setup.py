@@ -6,7 +6,6 @@ import distutils
 from contextlib import redirect_stdout
 from importlib import import_module
 sys.path.insert(0, os.path.abspath('doc'))
-from version_from_git import version_number_from_git
 
 
 quick_tests = [
@@ -44,9 +43,18 @@ class SimpleTestRunner(distutils.cmd.Command):
         for test in quick_tests:
             self._run_tests_in_module(test)
 
+try:
+    sys.path.insert(0, os.path.abspath('doc'))
+    from version_from_git import version_number_from_git
+
+    version = version_number_from_git()
+    with open("RELEASE-VERSION", "w") as f:
+        f.write(version)
+except ImportError:
+    version = open('RELEASE-VERSION', 'r').read()
 
 setup(name='lbmpy',
-      version=version_number_from_git(),
+      version=version,
       description='Code Generation for Lattice Boltzmann Methods',
       author='Martin Bauer',
       license='AGPLv3',
