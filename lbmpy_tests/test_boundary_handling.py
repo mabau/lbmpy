@@ -1,5 +1,4 @@
 import numpy as np
-
 import pytest
 
 from lbmpy.boundaries import UBB, NeumannByCopy, NoSlip, StreamInConstant
@@ -10,15 +9,24 @@ from lbmpy.lbstep import LatticeBoltzmannStep
 from pystencils import create_data_handling, make_slice
 
 
-@pytest.mark.parametrize("gpu", [True, False])
-def test_simple(gpu):
-    import pytest
-    pytest.importorskip('pycuda')
-    dh = create_data_handling((10, 5), parallel=False)
-    dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=gpu)
-    lb_func = create_lb_function(stencil='D2Q9', compressible=False, relaxation_rate=1.8)
+@pytest.mark.parametrize("target", ['cpu', 'gpu', 'opencl'])
+def test_simple(target):
+    if target == 'gpu':
+        import pytest
+        pytest.importorskip('pycuda')
+    elif target == 'opencl':
+        import pytest
+        pytest.importorskip('pyopencl')
+        import pystencils.opencl.autoinit
 
-    bh = LatticeBoltzmannBoundaryHandling(lb_func.method, dh, 'pdfs')
+    dh = create_data_handling((10, 5), parallel=False, default_target=target)
+    dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=target!='cpu')
+    lb_func = create_lb_function(stencil='D2Q9',
+                                 compressible=False,
+                                 relaxation_rate=1.8,
+                                 optimization={'target': target})
+
+    bh = LatticeBoltzmannBoundaryHandling(lb_func.method, dh, 'pdfs', target=target)
 
     wall = NoSlip()
     moving_wall = UBB((0.001, 0))
