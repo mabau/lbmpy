@@ -109,6 +109,13 @@ class MomentBasedLbMethod(AbstractLbMethod):
             new_entry = RelaxationInfo(prev_entry[0], relaxation_rate)
             self._momentToRelaxationInfoDict[e] = new_entry
 
+    def set_conserved_moments_relaxation_rate(self, relaxation_rate):
+        self.set_zeroth_moment_relaxation_rate(relaxation_rate)
+        self.set_first_moment_relaxation_rate(relaxation_rate)
+
+    def set_force_model(self, force_model):
+        self._forceModel = force_model
+
     @property
     def collision_matrix(self):
         pdfs_to_moments = self.moment_matrix
@@ -220,7 +227,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         """
         For SRT and TRT the equations can be easier simplified if the relaxation times are symbols, not numbers.
         This function replaces the numbers in the relaxation matrix with symbols in this case, and returns also
-         the subexpressions, that assign the number to the newly introduced symbol
+        the subexpressions, that assign the number to the newly introduced symbol
         """
         rr = [relaxation_matrix[i, i] for i in range(relaxation_matrix.rows)]
         if keep_rr_symbolic <= 2:

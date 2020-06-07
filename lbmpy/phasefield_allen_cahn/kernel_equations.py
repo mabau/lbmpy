@@ -1,4 +1,3 @@
-from pystencils.field import Field
 from lbmpy.creationfunctions import update_with_default_parameters
 from lbmpy.fieldaccess import StreamPushTwoFieldsAccessor, CollideOnlyInplaceAccessor
 from pystencils.fd.derivation import FiniteDifferenceStencilDerivation
@@ -271,7 +270,7 @@ def interface_tracking_force(phi_field, stencil, interface_thickness, fd_stencil
     return result
 
 
-def get_update_rules_velocity(src_field, u_in, lb_method, force, density):
+def get_update_rules_velocity(src_field, u_in, lb_method, force, density, sub_iterations=2):
     r"""
      Get assignments to update the velocity with a force shift
      Args:
@@ -280,6 +279,7 @@ def get_update_rules_velocity(src_field, u_in, lb_method, force, density):
          lb_method: mrt lattice boltzmann method used for hydrodynamics
          force: force acting on the hydrodynamic lb step
          density: the interpolated density of the simulation
+         sub_iterations: number of updates of the velocity field
      """
     stencil = lb_method.stencil
     dimensions = len(stencil[0])
@@ -298,25 +298,36 @@ def get_update_rules_velocity(src_field, u_in, lb_method, force, density):
     update_u = list()
     update_u.append(Assignment(sp.symbols("rho"), m0[0]))
 
+    index = 0
     u_symp = sp.symbols("u_:{}".format(dimensions))
-    zw = sp.symbols("zw_:{}".format(dimensions))
-    for i in range(dimensions):
-        update_u.append(Assignment(zw[i], u_in.center_vector[i]))
+    aleph = sp.symbols("aleph_:{}".format(dimensions * sub_iterations))
 
-    subs_dict = dict(zip(u_symp, zw))
     for i in range(dimensions):
-        update_u.append(Assignment(u_in.center_vector[i], m0[indices[i]] + force[i].subs(subs_dict) / density / 2))
+        update_u.append(Assignment(aleph[i], u_in.center_vector[i]))
+        index += 1
+
+    for k in range(sub_iterations - 1):
+        subs_dict = dict(zip(u_symp, aleph[k * dimensions:index]))
+        for i in range(dimensions):
+            update_u.append(Assignment(aleph[index], m0[indices[i]] + force[i].subs(subs_dict) / density / 2))
+            index += 1
+
+    subs_dict = dict(zip(u_symp, aleph[index - dimensions:index]))
+    for i in range(dimensions):
+        update_u.append(Assignment(u_symp[i], m0[indices[i]] + force[i].subs(subs_dict) / density / 2))
+        # update_u.append(Assignment(u_in.center_vector[i], m0[indices[i]] + force[i].subs(subs_dict) / density / 2))
 
     return update_u
 
 
-def get_collision_assignments_hydro(density=1, optimization=None, **kwargs):
+def get_collision_assignments_hydro(density=1, optimization=None, sub_iterations=2, **kwargs):
     r"""
      Get collision assignments for the hydrodynamic lattice Boltzmann step. Here the force gets applied in the moment
      space. Afterwards the transformation back to the pdf space happens.
      Args:
          density: the interpolated density of the simulation
          optimization: for details see createfunctions.py
+         sub_iterations: number of updates of the velocity field
      """
     if optimization is None:
         optimization = {}
@@ -327,22 +338,11 @@ def get_collision_assignments_hydro(density=1, optimization=None, **kwargs):
     stencil = lb_method.stencil
     dimensions = len(stencil[0])
 
-    field_data_type = 'float64' if opt_params['double_precision'] else 'float32'
-    q = len(stencil)
-
     u_in = params['velocity_input']
     force = params['force']
 
-    if opt_params['symbolic_field'] is not None:
-        src_field = opt_params['symbolic_field']
-    else:
-        src_field = Field.create_generic(params['field_name'], spatial_dimensions=lb_method.dim,
-                                         index_shape=(q,), layout=opt_params['field_layout'], dtype=field_data_type)
-
-    if opt_params['symbolic_temporary_field'] is not None:
-        dst_field = opt_params['symbolic_temporary_field']
-    else:
-        dst_field = src_field.new_field_with_different_name(params['temporary_field_name'])
+    src_field = opt_params['symbolic_field']
+    dst_field = opt_params['symbolic_temporary_field']
 
     moment_matrix = lb_method.moment_matrix
     rel = lb_method.relaxation_rates
@@ -364,11 +364,8 @@ def get_collision_assignments_hydro(density=1, optimization=None, **kwargs):
 
     m = sp.symbols("m_:{}".format(len(stencil)))
 
-    update_m = get_update_rules_velocity(src_field, u_in, lb_method, force, density)
+    update_m = get_update_rules_velocity(src_field, u_in, lb_method, force, density, sub_iterations=sub_iterations)
     u_symp = sp.symbols("u_:{}".format(dimensions))
-
-    for i in range(dimensions):
-        update_m.append(Assignment(u_symp[i], u_in.center_vector[i]))
 
     for i in range(0, len(stencil)):
         update_m.append(Assignment(m[i], m0[i] - (m0[i] - eq[i] + mf[i] / 2) * rel[i] + mf[i]))
@@ -384,6 +381,9 @@ def get_collision_assignments_hydro(density=1, optimization=None, **kwargs):
 
     for i in range(0, len(stencil)):
         update_g.append(Assignment(post_collision_accesses[i], var[i]))
+
+    for i in range(dimensions):
+        update_g.append(Assignment(u_in.center_vector[i], u_symp[i]))
 
     hydro_lb_update_rule = AssignmentCollection(main_assignments=update_g,
                                                 subexpressions=update_m)

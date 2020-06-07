@@ -1,9 +1,6 @@
-from collections import OrderedDict
-
 import numpy as np
 
 from lbmpy.creationfunctions import create_lb_method, create_lb_update_rule
-from lbmpy.methods.creationfunctions import create_with_discrete_maxwellian_eq_moments
 from lbmpy.phasefield_allen_cahn.analytical import analytic_rising_speed
 from lbmpy.phasefield_allen_cahn.force_model import MultiphaseForceModel
 from lbmpy.phasefield_allen_cahn.kernel_equations import (
@@ -85,11 +82,9 @@ def test_codegen_3d():
 
     method_phase = create_lb_method(stencil=stencil_phase, method='srt', relaxation_rate=w_c, compressible=True)
 
-    mrt = create_lb_method(method="mrt", weighted=False, stencil=stencil_hydro,
-                           relaxation_rates=[1, 1, relaxation_rate, 1, 1, 1, 1])
-    rr_dict = OrderedDict(zip(mrt.moments, mrt.relaxation_rates))
-
-    method_hydro = create_with_discrete_maxwellian_eq_moments(stencil_hydro, rr_dict, compressible=False)
+    method_hydro = create_lb_method(stencil=stencil_hydro, method="mrt", weighted=True,
+                                    relaxation_rates=[relaxation_rate, 1, 1, 1, 1, 1],
+                                    maxwellian_moments=True, entropic=False)
 
     # create the kernels for the initialization of the g and h field
     h_updates = initializer_kernel_phase_field_lb(h, C, u, method_phase, W)
@@ -105,12 +100,8 @@ def test_codegen_3d():
     h_tmp_symbol_list = [h_tmp.center(i) for i, _ in enumerate(stencil_phase)]
     sum_h = np.sum(h_tmp_symbol_list[:])
 
-    method_phase = create_lb_method(stencil=stencil_phase,
-                                    method='srt',
-                                    relaxation_rate=w_c,
-                                    compressible=True,
-                                    force_model=force_model_h)
-
+    method_phase.set_force_model(force_model_h)
+    
     allen_cahn_lb = create_lb_update_rule(lb_method=method_phase,
                                           velocity_input=u,
                                           compressible=True,
@@ -122,8 +113,6 @@ def test_codegen_3d():
     allen_cahn_update_rule = AssignmentCollection(main_assignments=allen_cahn_lb.main_assignments,
                                                   subexpressions=allen_cahn_lb.subexpressions)
     # ---------------------------------------------------------------------------------------------------------
-
-    method_hydro = create_with_discrete_maxwellian_eq_moments(stencil_hydro, rr_dict, force_model=force_model_g)
 
     hydro_lb_update_rule_normal = get_collision_assignments_hydro(lb_method=method_hydro,
                                                                   density=density,
@@ -140,9 +129,3 @@ def test_codegen_3d():
                                                                 optimization={"symbolic_field": g,
                                                                               "symbolic_temporary_field": g_tmp},
                                                                 kernel_type='collide_stream_push')
-
-    hydro_lb_update_rule_generic_fields = get_collision_assignments_hydro(lb_method=method_hydro,
-                                                                          density=density,
-                                                                          velocity_input=u,
-                                                                          force=force_g,
-                                                                          kernel_type='collide_only')

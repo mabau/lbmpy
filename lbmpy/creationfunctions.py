@@ -58,8 +58,8 @@ General:
 - ``velocity_input``: symbolic field where the velocities are read from (for advection diffusion LBM)
 - ``density_input``: symbolic field or field access where to read density from. When passing this parameter,
   ``velocity_input`` has to be passed as well
-- ``kernel_type``: supported values: 'stream_pull_collide' (default), 'collide_only'
-
+- ``kernel_type``: supported values: 'stream_pull_collide' (default), 'collide_only', stream_pull_only,
+   collide_stream_push, esotwist_even, esotwist_odd, aa_even, aa_odd
 
 Entropic methods:
 
@@ -419,7 +419,10 @@ def create_lb_method(**params):
         def relaxation_rate_getter(moments):
             try:
                 if all(get_order(m) < 2 for m in moments):
-                    return 0
+                    if params['entropic']:
+                        return relaxation_rates[0]
+                    else:
+                        return 0
                 res = relaxation_rates[next_relaxation_rate[0]]
                 next_relaxation_rate[0] += 1
             except IndexError:
