@@ -89,7 +89,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         return sp.Matrix([eq.rhs for eq in equilibrium.main_assignments])
 
     def get_collision_rule(self, conserved_quantity_equations=None, keep_rrs_symbolic=True):
-        d = sp.diag(*self.relaxation_rates)
+        d = self.relaxation_matrix
         relaxation_rate_sub_expressions, d = self._generate_relaxation_matrix(d, keep_rrs_symbolic)
         ac = self._collision_rule_with_relaxation_matrix(d, relaxation_rate_sub_expressions,
                                                          True, conserved_quantity_equations)
@@ -119,18 +119,25 @@ class MomentBasedLbMethod(AbstractLbMethod):
     @property
     def collision_matrix(self):
         pdfs_to_moments = self.moment_matrix
-        relaxation_matrix = sp.diag(*self.relaxation_rates)
-        return pdfs_to_moments.inv() * relaxation_matrix * pdfs_to_moments
+        d = self.relaxation_matrix
+        return pdfs_to_moments.inv() * d * pdfs_to_moments
 
     @property
     def inverse_collision_matrix(self):
         pdfs_to_moments = self.moment_matrix
-        inverse_relaxation_matrix = sp.diag(*[1 / e for e in self.relaxation_rates])
+        inverse_relaxation_matrix = self.relaxation_matrix.inv()
         return pdfs_to_moments.inv() * inverse_relaxation_matrix * pdfs_to_moments
 
     @property
     def moment_matrix(self):
         return moment_matrix(self.moments, self.stencil)
+
+    @property
+    def relaxation_matrix(self):
+        d = sp.zeros(len(self.relaxation_rates))
+        for i in range(0, len(self.relaxation_rates)):
+            d[i, i] = self.relaxation_rates[i]
+        return d
 
     @property
     def is_orthogonal(self):

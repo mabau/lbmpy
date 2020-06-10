@@ -26,7 +26,6 @@ General:
       the same rate. Literature values of this list can be obtained through
       :func:`lbmpy.methods.creationfunctions.mrt_orthogonal_modes_literature`.
       See also :func:`lbmpy.methods.create_mrt_orthogonal`
-    - ``mrt3``: deprecated
     - ``mrt_raw``: non-orthogonal MRT where all relaxation rates can be specified independently i.e. there are as many
       relaxation rates as stencil entries. Look at the generated method in Jupyter to see which moment<->relaxation rate
       mapping (:func:`lbmpy.methods.create_mrt_raw`)
@@ -182,8 +181,7 @@ from lbmpy.fieldaccess import (
     EsoTwistEvenTimeStepAccessor, EsoTwistOddTimeStepAccessor, PdfFieldAccessor,
     PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor, StreamPushTwoFieldsAccessor)
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
-from lbmpy.methods import (
-    create_mrt3, create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
+from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.creationfunctions import create_generic_mrt
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.entropic import add_entropy_condition, add_iterative_entropy_condition
@@ -434,8 +432,6 @@ def create_lb_method(**params):
                                        nested_moments=nested_moments, **common_params)
     elif method_name.lower() == 'mrt_raw':
         method = create_mrt_raw(stencil_entries, relaxation_rates, **common_params)
-    elif method_name.lower() == 'mrt3':
-        method = create_mrt3(stencil_entries, relaxation_rates, **common_params)
     elif method_name.lower().startswith('trt-kbc-n'):
         if have_same_entries(stencil_entries, get_stencil("D2Q9")):
             dim = 2
