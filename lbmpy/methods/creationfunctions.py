@@ -17,7 +17,7 @@ from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.methods.momentbased import MomentBasedLbMethod
 from lbmpy.moments import (
     MOMENT_SYMBOLS, discrete_moment, exponents_to_polynomial_representations,
-    get_default_moment_set_for_stencil, get_order, gram_schmidt, is_even, moments_of_order,
+    get_default_moment_set_for_stencil, gram_schmidt, is_even, moments_of_order,
     moments_up_to_component_order, sort_moments_into_groups_of_same_order, is_bulk_moment, is_shear_moment)
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.stencils import get_stencil
@@ -233,61 +233,6 @@ def create_mrt_raw(stencil, relaxation_rates, maxwellian_moments=False, **kwargs
         return create_with_continuous_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
     else:
         return create_with_discrete_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
-
-
-def create_mrt3(stencil, relaxation_rates, maxwellian_moments=False, **kwargs):
-    """Creates a MRT with three relaxation times.
-
-    The first rate controls viscosity, the second the bulk viscosity and the last is used to relax higher order moments.
-    """
-    warn("create_mrt3 is deprecated. It uses non-orthogonal moments, use create_mrt instead", DeprecationWarning)
-
-    def product(iterable):
-        return reduce(operator.mul, iterable, 1)
-
-    if isinstance(stencil, str):
-        stencil = get_stencil(stencil)
-
-    dim = len(stencil[0])
-    the_moment = MOMENT_SYMBOLS[:dim]
-
-    shear_tensor_off_diagonal = [product(t) for t in itertools.combinations(the_moment, 2)]
-    shear_tensor_diagonal = [m_i * m_i for m_i in the_moment]
-    shear_tensor_trace = sum(shear_tensor_diagonal)
-    shear_tensor_trace_free_diagonal = [dim * d - shear_tensor_trace for d in shear_tensor_diagonal]
-
-    rest = [default_moment for default_moment in get_default_moment_set_for_stencil(stencil) 
-            if get_order(default_moment) != 2]
-
-    d = shear_tensor_off_diagonal + shear_tensor_trace_free_diagonal[:-1]
-    t = [shear_tensor_trace]
-    q = rest
-
-    if 'magic_number' in kwargs:
-        magic_number = kwargs['magic_number']
-    else:
-        magic_number = sp.Rational(3, 16)
-
-    if len(relaxation_rates) == 1:
-        relaxation_rates = [relaxation_rates[0],
-                            relaxation_rate_from_magic_number(relaxation_rates[0], magic_number=magic_number),
-                            1]
-    elif len(relaxation_rates) == 2:
-        relaxation_rates = [relaxation_rates[0],
-                            relaxation_rate_from_magic_number(relaxation_rates[0], magic_number=magic_number),
-                            relaxation_rates[1]]
-
-    relaxation_rates = [relaxation_rates[0]] * len(d) + \
-                       [relaxation_rates[1]] * len(t) + \
-                       [relaxation_rates[2]] * len(q)
-
-    all_moments = d + t + q
-    moment_to_rr = OrderedDict((m, rr) for m, rr in zip(all_moments, relaxation_rates))
-
-    if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil, moment_to_rr, **kwargs)
-    else:
-        return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_rr, **kwargs)
 
 
 def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, method_name='KBC-N4',
