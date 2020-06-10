@@ -27,7 +27,7 @@ def test_force_driven_channel_short():
     default = {
         'scenario_creator': create_channel,
         'domain_size': (32, 32),
-        'relaxation_rates': [1.95, 1.9, 1.92],
+        'relaxation_rates': [1.95, 1.9, 1.92, 1.92],
         'method': 'mrt3',
         'pressure_difference': 0.001,
         'optimization': {},
@@ -36,7 +36,7 @@ def test_force_driven_channel_short():
 
     # Different methods
     for ds, method, compressible, block_size, field_layout in [((17, 12), 'srt', False, (12, 4), 'reverse_numpy'),
-                                                               ((18, 20), 'mrt3', True, (4, 2), 'zyxf'),
+                                                               ((18, 20), 'mrt', True, (4, 2), 'zyxf'),
                                                                ((7, 11, 18), 'trt', False, False, 'numpy')]:
         params = deepcopy(default)
         if block_size is not False:
@@ -61,8 +61,8 @@ def test_force_driven_channel():
     default = {
         'scenario_creator': create_channel,
         'domain_size': (32, 32),
-        'relaxation_rates': [1.95, 1.9, 1.92],
-        'method': 'mrt3',
+        'relaxation_rates': [1.95, 1.9, 1.92, 1.92],
+        'method': 'mrt',
         'pressure_difference': 0.001,
         'optimization': {},
     }
@@ -70,7 +70,7 @@ def test_force_driven_channel():
     scenarios = []
 
     # Different methods
-    for method in ('srt', 'mrt3'):
+    for method in ('srt', 'mrt'):
         for compressible in (True, False):
             params = deepcopy(default)
             params['optimization'].update({
@@ -83,7 +83,7 @@ def test_force_driven_channel():
     # Blocked indexing with different block sizes
     for block_size in ((16, 16), (8, 16), (4, 2)):
         params = deepcopy(default)
-        params['method'] = 'mrt3'
+        params['method'] = 'mrt'
         params['compressible'] = True
         params['optimization'].update({
             'gpu_indexing': 'block',

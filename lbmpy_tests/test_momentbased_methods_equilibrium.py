@@ -47,13 +47,15 @@ def test_for_matching_equilibrium_for_stencil(stencil_name):
 def test_relaxation_rate_setter():
     o1, o2, o3 = sp.symbols("o1 o2 o3")
     method = create_lb_method(method='srt', stencil='D2Q9', relaxation_rates=[o3])
-    method2 = create_lb_method(method='mrt3', stencil='D2Q9', relaxation_rates=[o3, o3, o3])
+    method2 = create_lb_method(method='mrt', stencil='D2Q9', relaxation_rates=[o3, o3, o3, o3])
+    method3 = create_lb_method(method='mrt', stencil='D2Q9', relaxation_rates=[o3, o3, o3, o3], entropic=True)
     method.set_zeroth_moment_relaxation_rate(o1)
     method.set_first_moment_relaxation_rate(o2)
     assert get_shear_relaxation_rate(method) == o3
     method.set_zeroth_moment_relaxation_rate(o3)
     method.set_first_moment_relaxation_rate(o3)
-    assert method.collision_matrix == method2.collision_matrix
+    method2.set_conserved_moments_relaxation_rate(o3)
+    assert method.collision_matrix == method2.collision_matrix == method3.collision_matrix
 
 
 def test_mrt_orthogonal():
