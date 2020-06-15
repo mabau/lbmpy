@@ -33,7 +33,7 @@ def check_for_matching_equilibrium(method_name, stencil, compressibility):
 
     diff = sp.Matrix(reference_equilibrium) - sp.Matrix([eq.rhs for eq in equilibrium.main_assignments])
     diff = sp.simplify(diff)
-    assert diff.is_zero
+    assert sum(diff).is_zero
 
 
 @pytest.mark.parametrize("stencil_name", ["D2Q9", "D3Q15", "D3Q19", "D3Q27"])
