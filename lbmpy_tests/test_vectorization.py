@@ -16,7 +16,7 @@ def test_lbm_vectorization_short():
                                     optimization={'vectorization': {'instruction_set': 'avx',
                                                                     'assume_aligned': True,
                                                                     'nontemporal': True,
-                                                                    'assume_inner_stride_one': False,
+                                                                    'assume_inner_stride_one': True,
                                                                     'assume_sufficient_line_padding': False,
                                                                     }},
                                     fixed_loop_sizes=False)
