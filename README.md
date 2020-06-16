@@ -16,6 +16,7 @@ It even comes with an integrated Chapman Enskog analysis based on sympy!
 
 Common test scenarios can be set up quickly:
 ```python
+from lbmpy.scenarios import create_channel
 ch = create_channel(domain_size=(300,100, 100), force=1e-7, method="trt",
                     equilibrium_order=2, compressible=True,
                     relaxation_rates=[1.97, 1.6], optimization={'target': 'gpu'})
