@@ -322,6 +322,11 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     else:
         collision_rule = lb_method.get_collision_rule(keep_rrs_symbolic=keep_rrs_symbolic)
 
+    if params['output'] and params['kernel_type'] == 'stream_pull_collide':
+        cqc = lb_method.conserved_quantity_computation
+        output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, params['output'])
+        collision_rule = collision_rule.new_merged(output_eqs)
+
     if opt_params['simplification'] == 'auto':
         simplification = create_simplification_strategy(lb_method, split_inner_loop=split_inner_loop)
     else:
@@ -357,11 +362,6 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
         collision_rule = cse_in_opposing_directions(collision_rule)
     if cse_global:
         collision_rule = sympy_cse(collision_rule)
-
-    if params['output'] and params['kernel_type'] == 'stream_pull_collide':
-        cqc = lb_method.conserved_quantity_computation
-        output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, params['output'])
-        collision_rule = collision_rule.new_merged(output_eqs)
 
     return collision_rule
 
