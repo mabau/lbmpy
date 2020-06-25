@@ -88,7 +88,7 @@ second moment nonzero   :class:`Luo`         :class:`Guo`
 
 import sympy as sp
 
-from lbmpy.relaxationrates import get_shear_relaxation_rate
+from lbmpy.relaxationrates import get_bulk_relaxation_rate, get_shear_relaxation_rate
 
 
 class Simple:
@@ -148,6 +148,7 @@ class Guo:
         luo = Luo(self._force)
 
         shear_relaxation_rate = get_shear_relaxation_rate(lb_method)
+        assert len(set(lb_method.relaxation_rates)) == 1, "Guo only works for SRT, use Schiller instead"
         correction_factor = (1 - sp.Rational(1, 2) * shear_relaxation_rate)
         return [correction_factor * t for t in luo(lb_method)]
 
@@ -155,6 +156,35 @@ class Guo:
         return default_velocity_shift(density, self._force)
 
     def equilibrium_velocity_shift(self, density):
+        return default_velocity_shift(density, self._force)
+
+
+class Schiller:
+    r"""
+    Force model by Schiller  :cite:`schiller2008thermal`
+    Equivalent to Guo but not restricted to SRT.
+    """
+    def __init__(self, force):
+        self._force = force
+
+    def __call__(self, lb_method):
+        u = sp.Matrix(lb_method.first_order_equilibrium_moment_symbols)
+        force = sp.Matrix(self._force)
+        
+        uf = u.dot(force) * sp.eye(len(force))
+        omega = get_shear_relaxation_rate(lb_method)
+        omega_bulk = get_bulk_relaxation_rate(lb_method)
+        G = (u * force.transpose() + force * u.transpose() - uf * sp.Rational(2, 3)) * sp.Rational(1, 2) * \
+            (2 + omega) + uf * sp.Rational(1, 3) * (2 + omega_bulk)
+
+        result = []
+        for direction, w_i in zip(lb_method.stencil, lb_method.weights):
+            direction = sp.Matrix(direction)
+            tr = sp.trace(G * (direction * direction.transpose() - sp.Rational(1, 3) * sp.eye(len(force))))
+            result.append(3 * w_i * (force.dot(direction) + sp.Rational(3, 2) * tr))
+        return result
+    
+    def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
 
 

@@ -479,6 +479,7 @@ def force_model_from_string(force_model_name, force_values):
         'buick': forcemodels.Buick,
         'silva': forcemodels.Buick,
         'edm': forcemodels.EDM,
+        'schiller': forcemodels.Schiller,
     }
     if force_model_name.lower() not in force_model_dict:
         raise ValueError("Unknown force model %s" % (force_model_name,))
