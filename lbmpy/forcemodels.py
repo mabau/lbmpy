@@ -201,6 +201,7 @@ class Buick:
         simple = Simple(self._force)
 
         shear_relaxation_rate = get_shear_relaxation_rate(lb_method)
+        assert len(set(lb_method.relaxation_rates)) == 1, "Buick only works for SRT"
         correction_factor = (1 - sp.Rational(1, 2) * shear_relaxation_rate)
         return [correction_factor * t for t in simple(lb_method)]
 

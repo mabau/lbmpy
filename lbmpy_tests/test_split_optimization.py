@@ -16,6 +16,7 @@ def test_split_number_of_operations():
                 common_params = {'stencil': stencil,
                                  'method': method,
                                  'compressible': compressible,
+                                 'force_model': 'luo',
                                  'force': (1e-6, 1e-5, 1e-7)
                                  }
                 ast_with_splitting = create_lb_ast(optimization={'split': True}, **common_params)

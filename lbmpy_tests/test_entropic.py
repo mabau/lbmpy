@@ -10,13 +10,13 @@ from lbmpy.stencils import get_stencil
 def test_entropic_methods():
     sc_kbc = create_lid_driven_cavity((20, 20), method='trt-kbc-n4', relaxation_rate=1.9999,
                                       entropic_newton_iterations=3, entropic=True, compressible=True,
-                                      force=(-1e-10, 0))
+                                      force=(-1e-10, 0), force_model="luo")
 
     sc_srt = create_lid_driven_cavity((40, 40), relaxation_rate=1.9999, lid_velocity=0.05, compressible=True,
-                                      force=(-1e-10, 0))
+                                      force=(-1e-10, 0), force_model="luo")
 
     sc_entropic = create_lid_driven_cavity((40, 40), method='entropic-srt', relaxation_rate=1.9999,
-                                           lid_velocity=0.05, compressible=True, force=(-1e-10, 0))
+                                           lid_velocity=0.05, compressible=True, force=(-1e-10, 0), force_model="luo")
 
     sc_srt.run(1000)
     sc_kbc.run(1000)

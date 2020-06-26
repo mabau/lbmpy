@@ -1,8 +1,10 @@
 from pystencils.session import *
 from lbmpy.session import *
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
-import pytest
 import lbmpy.forcemodels
+
+import pytest
+from contextlib import ExitStack as does_not_raise
 
 
 force_models = [fm.lower() for fm in dir(lbmpy.forcemodels) if fm[0].isupper()]
@@ -25,14 +27,22 @@ def test_total_momentum(method, force_model, omega):
     ρ = dh.add_array('rho')
     u = dh.add_array('u', values_per_cell=dh.dim)
 
-    collision = create_lb_update_rule(method=method,
-                                      stencil=stencil,
-                                      relaxation_rate=omega, 
-                                      compressible=True,
-                                      force_model=force_model, 
-                                      force=F,
-                                      kernel_type='collide_only',
-                                      optimization={'symbolic_field': src})
+    expectation = does_not_raise()
+    skip = False
+    if force_model in ['guo', 'buick'] and method != 'srt':
+        expectation = pytest.raises(AssertionError)
+        skip = True
+    with expectation:
+        collision = create_lb_update_rule(method=method,
+                                          stencil=stencil,
+                                          relaxation_rate=omega, 
+                                          compressible=True,
+                                          force_model=force_model, 
+                                          force=F,
+                                          kernel_type='collide_only',
+                                          optimization={'symbolic_field': src})
+    if skip:
+        return
 
     stream = create_stream_pull_with_output_kernel(collision.method, src, dst,
                                                    {'density': ρ, 'velocity': u})
