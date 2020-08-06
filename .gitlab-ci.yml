@@ -23,6 +23,7 @@ tests-and-coverage:
     - docker
     - cuda
     - AVX
+    - i10swarm4
   artifacts:
     when: always
     paths:
@@ -80,6 +81,7 @@ ubuntu:
   tags:
     - docker
     - cuda
+    - i10swarm4
 
 minimal-conda:
   stage: test
