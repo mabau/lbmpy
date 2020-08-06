@@ -21,6 +21,12 @@ from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
 SCRIPT_FOLDER = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.abspath('lbmpy'))
 
+# the Ubuntu pipeline uses an older version of pytest which uses deprecated functionality.
+# This leads to many warinings in the test and coverage pipeline.
+pytest_numeric_version = [int(x, 10) for x in pytest.__version__.split('.')]
+pytest_numeric_version.reverse()
+pytest_version = sum(x * (100 ** i) for i, x in enumerate(pytest_numeric_version))
+
 
 def add_path_to_ignore(path):
     if not os.path.exists(path):
@@ -121,7 +127,10 @@ class IPyNbFile(pytest.File):
             warnings.filterwarnings("ignore", "IPython.core.inputsplitter is deprecated")
             notebook = nbformat.read(notebook_contents, 4)
             code, _ = exporter.from_notebook_node(notebook)
-            yield IPyNbTest(self.name, self, code)
+            if pytest_version >= 50403:
+                yield IPyNbTest.from_parent(name=self.name, parent=self, code=code)
+            else:
+                yield IPyNbTest(self.name, self, code)
 
     def teardown(self):
         pass
@@ -130,4 +139,7 @@ class IPyNbFile(pytest.File):
 def pytest_collect_file(path, parent):
     glob_exprs = ["*demo*.ipynb", "*tutorial*.ipynb", "test_*.ipynb"]
     if any(path.fnmatch(g) for g in glob_exprs):
-        return IPyNbFile(path, parent)
+        if pytest_version >= 50403:
+            return IPyNbFile.from_parent(fspath=path, parent=parent)
+        else:
+            return IPyNbFile(path, parent)
