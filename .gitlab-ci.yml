@@ -21,9 +21,8 @@ tests-and-coverage:
     - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=. -m "not longrun"
   tags:
     - docker
-    - cuda
+    - cuda11
     - AVX
-    - i10swarm4
   artifacts:
     when: always
     paths:
@@ -44,7 +43,7 @@ test-longrun:
     - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=.
   tags:
     - docker
-    - cuda
+    - cuda11
     - AVX
   artifacts:
     paths:
@@ -80,8 +79,7 @@ ubuntu:
     - pytest-3 -v -m "not longrun"
   tags:
     - docker
-    - cuda
-    - i10swarm4
+    - cuda11
 
 minimal-conda:
   stage: test
@@ -126,7 +124,7 @@ pycodegen-integration:
     - make -j $NUM_CORES
   tags:
     - docker
-    - cuda
+    - cuda11
     - AVX
 
 # -------------------- Linter & Documentation --------------------------------------------------------------------------
@@ -142,7 +140,7 @@ flake8-lint:
     - flake8 lbmpy
   tags:
     - docker
-    - cuda
+    - cuda11
 
 
 build-documentation:
@@ -155,7 +153,7 @@ build-documentation:
     - sphinx-build -W -b html doc  html_doc
   tags:
     - docker
-    - cuda
+    - cuda11
   artifacts:
     paths:
       - html_doc
