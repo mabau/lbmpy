@@ -2,9 +2,9 @@ lbmpy
 =====
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/mabau/lbmpy/master?filepath=doc%2Fnotebooks)
-[![Docs](https://img.shields.io/badge/read-the_docs-brightgreen.svg)](http://pycodegen.pages.walberla.net/lbmpy)
+[![Docs](https://img.shields.io/badge/read-the_docs-brightgreen.svg)](http://pycodegen.pages.i10git.cs.fau.de/lbmpy)
 [![pipeline status](https://i10git.cs.fau.de/pycodegen/lbmpy/badges/master/pipeline.svg)](https://i10git.cs.fau.de/pycodegen/lbmpy/commits/master)
-[![coverage report](https://i10git.cs.fau.de/pycodegen/lbmpy/badges/master/coverage.svg)](http://pycodegen.pages.walberla.net/lbmpy/coverage_report)
+[![coverage report](https://i10git.cs.fau.de/pycodegen/lbmpy/badges/master/coverage.svg)](http://pycodegen.pages.i10git.cs.fau.de/lbmpy/coverage_report)
 
 
 Run fast fluid simulations based on the lattice Boltzmann method in Python on CPUs and GPUs.
@@ -39,7 +39,7 @@ pip install lbmpy[interactive]
 Without `[interactive]` you get a minimal version with very little dependencies.
 
 All options:
-- `gpu`: use this if nVidia GPU is available and CUDA is installed
+- `gpu`: use this if a NVIDIA GPU is available and CUDA is installed
 - `opencl`: use this to enable the target `opencl` (execution using OpenCL)
 - `alltrafos`: pulls in additional dependencies for loop simplification e.g. libisl
 - `interactive`: installs dependencies to work in Jupyter including image I/O, plotting etc.
@@ -53,5 +53,5 @@ pip install lbmpy[interactive,gpu,doc]
 Documentation
 -------------
 
-Read the docs [here](http://pycodegen.pages.walberla.net/lbmpy) and
+Read the docs [here](http://pycodegen.pages.i10git.cs.fau.de/lbmpy) and
 check out the Jupyter notebooks in `doc/notebooks`. 

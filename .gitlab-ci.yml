@@ -21,7 +21,7 @@ tests-and-coverage:
     - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=. -m "not longrun"
   tags:
     - docker
-    - cuda
+    - cuda11
     - AVX
   artifacts:
     when: always
@@ -43,7 +43,7 @@ test-longrun:
     - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=.
   tags:
     - docker
-    - cuda
+    - cuda11
     - AVX
   artifacts:
     paths:
@@ -79,7 +79,7 @@ ubuntu:
     - pytest-3 -v -m "not longrun"
   tags:
     - docker
-    - cuda
+    - cuda11
 
 minimal-conda:
   stage: test
@@ -93,6 +93,39 @@ minimal-conda:
   tags:
     - docker
 
+pycodegen-integration:
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
+  stage: test
+  when: manual
+  script:
+    # run lbmpy long test pipeline
+    - export NUM_CORES=$(nproc --all)
+    - mkdir -p ~/.config/matplotlib
+    - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
+    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
+    - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=.
+    # change path to outside of lbmpy and call pip to set the environment variable right
+    - cd ..
+    - pip install -e lbmpy
+    # fetch pycodegen repository with waLberla as submodule and install waLBerla to run the integration tests
+    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pycodegen.git
+    - cd pycodegen
+    - git submodule sync --recursive
+    - git submodule update --init --recursive
+    - git submodule foreach git fetch origin   # compare the latest master version!
+    - git submodule foreach git reset --hard origin/master
+    - ./install_walberla.sh
+    # build all integration tests
+    - cd walberla/build/
+    - make -j $NUM_CORES CodegenJacobiCPU CodegenJacobiGPU CodegenPoisson MicroBenchmarkGpuLbm LbCodeGenerationExample
+    - cd apps/benchmarks/UniformGridGPU
+    - make -j $NUM_CORES
+    - cd ../UniformGridGenerated
+    - make -j $NUM_CORES
+  tags:
+    - docker
+    - cuda11
+    - AVX
 
 # -------------------- Linter & Documentation --------------------------------------------------------------------------
 
@@ -107,7 +140,7 @@ flake8-lint:
     - flake8 lbmpy
   tags:
     - docker
-    - cuda
+    - cuda11
 
 
 build-documentation:
@@ -120,7 +153,7 @@ build-documentation:
     - sphinx-build -W -b html doc  html_doc
   tags:
     - docker
-    - cuda
+    - cuda11
   artifacts:
     paths:
       - html_doc

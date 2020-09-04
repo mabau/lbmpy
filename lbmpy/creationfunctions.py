@@ -322,20 +322,6 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     else:
         collision_rule = lb_method.get_collision_rule(keep_rrs_symbolic=keep_rrs_symbolic)
 
-    if params['output'] and params['kernel_type'] == 'stream_pull_collide':
-        cqc = lb_method.conserved_quantity_computation
-        output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, params['output'])
-        collision_rule = collision_rule.new_merged(output_eqs)
-
-    if opt_params['simplification'] == 'auto':
-        simplification = create_simplification_strategy(lb_method, split_inner_loop=split_inner_loop)
-    else:
-        simplification = opt_params['simplification']
-    collision_rule = simplification(collision_rule)
-
-    if params['fluctuating']:
-        add_fluctuations_to_collision_rule(collision_rule, **params['fluctuating'])
-
     if params['entropic']:
         if params['smagorinsky']:
             raise ValueError("Choose either entropic or smagorinsky")
@@ -354,6 +340,20 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
                                                omega_output_field=params['omega_output_field'])
         if 'split_groups' in collision_rule.simplification_hints:
             collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
+
+    if params['output'] and params['kernel_type'] == 'stream_pull_collide':
+        cqc = lb_method.conserved_quantity_computation
+        output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, params['output'])
+        collision_rule = collision_rule.new_merged(output_eqs)
+
+    if opt_params['simplification'] == 'auto':
+        simplification = create_simplification_strategy(lb_method, split_inner_loop=split_inner_loop)
+    else:
+        simplification = opt_params['simplification']
+    collision_rule = simplification(collision_rule)
+
+    if params['fluctuating']:
+        add_fluctuations_to_collision_rule(collision_rule, **params['fluctuating'])
 
     cse_pdfs = False if 'cse_pdfs' not in opt_params else opt_params['cse_pdfs']
     cse_global = False if 'cse_global' not in opt_params else opt_params['cse_global']

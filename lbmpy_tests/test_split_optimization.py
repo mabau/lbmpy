@@ -4,6 +4,7 @@ import pytest
 from lbmpy.creationfunctions import create_lb_ast
 from lbmpy.scenarios import create_lid_driven_cavity
 from pystencils.sympyextensions import count_operations_in_ast
+from sympy.core.cache import clear_cache
 
 
 def test_split_number_of_operations():
@@ -36,6 +37,7 @@ def test_equivalence():
         for compressible in (True, False):
             for method in ('srt', 'mrt'):
                 for force in ((0, 0, 0), (1e-6, 1e-7, 2e-6)):
+                    clear_cache()
                     common_params = {'domain_size': (20, 30) if stencil.startswith('D2') else (10, 13, 7),
                                      'stencil': stencil,
                                      'method': method,

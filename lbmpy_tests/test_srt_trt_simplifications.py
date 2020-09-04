@@ -38,7 +38,7 @@ def test_simplifications_srt_d2q9_incompressible():
 def test_simplifications_srt_d2q9_compressible():
     omega = sp.symbols('omega')
     method = create_srt(get_stencil("D2Q9"), omega, compressible=True, equilibrium_order=2)
-    check_method(method, [53, 57, 1], [53, 41, 1])
+    check_method(method, [53, 58, 1], [53, 42, 1])
 
 
 def test_simplifications_trt_d2q9_incompressible():
@@ -50,7 +50,7 @@ def test_simplifications_trt_d2q9_incompressible():
 def test_simplifications_trt_d2q9_compressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
     method = create_trt(get_stencil("D2Q9"), o1, o2, compressible=True)
-    check_method(method, [77, 105, 1], [65, 55, 1])
+    check_method(method, [77, 106, 1], [65, 56, 1])
 
 
 def test_simplifications_trt_d3q19_force_incompressible():
@@ -64,4 +64,4 @@ def test_simplifications_trt_d3q19_force_compressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
     force_model = Luo([sp.Rational(1, 3), sp.Rational(1, 2), sp.Rational(1, 5)])
     method = create_trt_with_magic_number(get_stencil("D3Q19"), o1, compressible=False, force_model=force_model)
-    check_method(method, [270, 283, 1], [243, 177, 1])
+    check_method(method, [270, 284, 1], [243, 178, 1])

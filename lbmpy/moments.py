@@ -456,7 +456,7 @@ def extract_monomials(sequence_of_polynomials, dim=3):
     >>> extract_monomials([x**2 + y**2 + y, y + y**2])
     {(0, 2, 0), (0, 1, 0), (2, 0, 0)}
     >>> extract_monomials([x**2 + y**2 + y, y + y**2], dim=2)
-    {(0, 1), (2, 0), (0, 2)}
+    {(0, 1), (0, 2), (2, 0)}
     """
     monomials = set()
     for polynomial in sequence_of_polynomials:
@@ -479,8 +479,8 @@ def monomial_to_polynomial_transformation_matrix(monomials, polynomials):
     >>> mons = list(extract_monomials(polys, dim=2))
     >>> monomial_to_polynomial_transformation_matrix(mons, polys)
     Matrix([
-    [7,  3, 2],
-    [9, -5, 0]])
+    [ 3, 2, 7],
+    [-5, 0, 9]])
     """
     dim = len(monomials[0])
 
