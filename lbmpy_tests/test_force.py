@@ -2,6 +2,7 @@ from pystencils.session import *
 from lbmpy.session import *
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
 import lbmpy.forcemodels
+from lbmpy.moments import is_bulk_moment
 
 import pytest
 from contextlib import ExitStack as does_not_raise
@@ -103,7 +104,7 @@ def test_stress(stencil):
     force_moments = sp.simplify(method.moment_matrix * sp.Matrix(method.force_model(method)))
     
     # The momentum modes should contain the force
-    assert force_moments[1:dim+1] == F
+    assert list(force_moments[1:dim+1]) == F
     
     # The stress modes should match eq. 47 from https://doi.org/10.1023/A:1010414013942
     u = method.first_order_equilibrium_moment_symbols
@@ -121,4 +122,7 @@ def test_stress(stencil):
                                     method.moments[dim+1:dim+1+num_stresses]):
         ref = moment.subs(subs)
         diff = sp.simplify(ref - force_moment)
-        assert diff == 0 or isinstance(diff, sp.Rational) # difference should be zero or a constant
+        if is_bulk_moment(moment, dim):
+            assert diff == 0 or isinstance(diff, sp.Rational) # difference should be zero or a constant
+        else:
+            assert diff == 0 # difference should be zero

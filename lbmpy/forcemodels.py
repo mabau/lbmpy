@@ -174,7 +174,7 @@ class Schiller:
         uf = u.dot(force) * sp.eye(len(force))
         omega = get_shear_relaxation_rate(lb_method)
         omega_bulk = get_bulk_relaxation_rate(lb_method)
-        G = (u * force.transpose() + force * u.transpose() - uf * sp.Rational(2, 3)) * sp.Rational(1, 2) * \
+        G = (u * force.transpose() + force * u.transpose() - uf * sp.Rational(2, lb_method.dim)) * sp.Rational(1, 2) * \
             (2 + omega) + uf * sp.Rational(1, 3) * (2 + omega_bulk)
 
         result = []
