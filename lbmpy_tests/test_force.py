@@ -78,3 +78,47 @@ def test_total_momentum(method, force_model, omega):
     time_loop(t)
     total = np.sum(dh.gather_array(u.name), axis=(0,1))
     assert np.allclose(total/np.prod(L)/F/t, 1)
+
+
+@pytest.mark.parametrize("stencil", ["D2Q9", "D3Q15", "D3Q19", "D3Q27"])
+def test_stress(stencil):
+    """check Schiller's force term in mode space"""
+    stencil = get_stencil(stencil)
+    dim = len(stencil[0])
+    
+    omega_s = sp.Symbol("omega_s")
+    omega_b = sp.Symbol("omega_b")
+    omega_o = sp.Symbol("omega_o")
+    omega_e = sp.Symbol("omega_e")
+    
+    F = [sp.Symbol(f"F_{i}") for i in range(dim)]
+    
+    method = create_lb_method(method="mrt", weighted=True,
+                              stencil=stencil,
+                              relaxation_rates=[omega_s, omega_b, omega_o, omega_e, omega_o, omega_e], 
+                              compressible=True,
+                              force_model="schiller", 
+                              force=F)
+    
+    force_moments = sp.simplify(method.moment_matrix * sp.Matrix(method.force_model(method)))
+    
+    # The momentum modes should contain the force
+    assert force_moments[1:dim+1] == F
+    
+    # The stress modes should match eq. 47 from https://doi.org/10.1023/A:1010414013942
+    u = method.first_order_equilibrium_moment_symbols
+    def traceless(m):
+        tr = sp.simplify(sp.Trace(m))
+        return m - tr/m.shape[0]*sp.eye(m.shape[0])
+    C = sp.Rational(1,2) * (2 + omega_s) * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) + \
+                                            traceless(sp.Matrix(F) * sp.Matrix(u).transpose())) + \
+        sp.Rational(1,3) * (2 + omega_b) * sp.Matrix(u).dot(F) * sp.eye(method.dim)
+    
+    num_stresses = (dim*dim-dim)//2+dim
+    subs = {sp.Symbol(chr(ord("x")+i)) * sp.Symbol(chr(ord("x")+j)) : C[i,j]
+            for i in range(dim) for j in range(dim)}
+    for force_moment, moment in zip(force_moments[dim+1:dim+1+num_stresses],
+                                    method.moments[dim+1:dim+1+num_stresses]):
+        ref = moment.subs(subs)
+        diff = sp.simplify(ref - force_moment)
+        assert diff == 0 or isinstance(diff, sp.Rational) # difference should be zero or a constant

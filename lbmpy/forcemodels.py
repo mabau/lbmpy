@@ -7,7 +7,7 @@ Get started:
 ------------
 
 This module offers different models to introduce a body force in the lattice Boltzmann scheme.
-If you don't know which model to choose, use :class:`lbmpy.forcemodels.Guo`.
+If you don't know which model to choose, use :class:`lbmpy.forcemodels.Schiller`.
 For incompressible collision models the :class:`lbmpy.forcemodels.Buick` model can be better.
 
 
@@ -161,7 +161,7 @@ class Guo:
 
 class Schiller:
     r"""
-    Force model by Schiller  :cite:`schiller2008thermal`
+    Force model by Schiller  :cite:`schiller2008thermal`, equation 4.67
     Equivalent to Guo but not restricted to SRT.
     """
     def __init__(self, force):

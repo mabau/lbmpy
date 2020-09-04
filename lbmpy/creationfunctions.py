@@ -41,8 +41,8 @@ General:
   compressible.
 - ``equilibrium_order=2``: order in velocity, at which the equilibrium moment/cumulant approximation is
   truncated. Order 2 is sufficient to approximate Navier-Stokes
-- ``force_model=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'`` ``'buick'``, or an instance of a
-  class implementing the same methods as the classes in :mod:`lbmpy.forcemodels`. For details, see
+- ``force_model=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'``, ``'buick'``, ``'schiller'``, or
+  an instance of a class implementing the same methods as the classes in :mod:`lbmpy.forcemodels`. For details, see
   :mod:`lbmpy.forcemodels`
 - ``force=(0,0,0)``: either constant force or a symbolic expression depending on field value
 - ``maxwellian_moments=True``: way to compute equilibrium moments/cumulants, if False the standard
@@ -387,7 +387,7 @@ def create_lb_method(**params):
 
     no_force_model = 'force_model' not in params or params['force_model'] == 'none' or params['force_model'] is None
     if not force_is_zero and no_force_model:
-        params['force_model'] = 'guo'
+        params['force_model'] = 'schiller'
 
     if 'force_model' in params:
         force_model = force_model_from_string(params['force_model'], params['force'][:dim])
