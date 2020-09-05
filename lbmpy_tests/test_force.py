@@ -120,7 +120,7 @@ def test_modes(stencil, force_model):
             return m - tr/m.shape[0]*sp.eye(m.shape[0])
         C = sp.Rational(1,2) * (2 + omega_s) * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) + \
                                                 traceless(sp.Matrix(F) * sp.Matrix(u).transpose())) + \
-            sp.Rational(1,3) * (2 + omega_b) * sp.Matrix(u).dot(F) * sp.eye(method.dim)
+            sp.Rational(1,method.dim) * (2 + omega_b) * sp.Matrix(u).dot(F) * sp.eye(method.dim)
 
         subs = {sp.Symbol(chr(ord("x")+i)) * sp.Symbol(chr(ord("x")+j)) : C[i,j]
                 for i in range(dim) for j in range(dim)}
@@ -132,6 +132,22 @@ def test_modes(stencil, force_model):
                 assert diff == 0 or isinstance(diff, sp.Rational) # difference should be zero or a constant
             else:
                 assert diff == 0 # difference should be zero
+
+        ff = sp.Matrix(method.force_model(method))
+        # Check eq. 4.53a from schiller2008thermal
+        assert sp.simplify(sum(ff)) == 0
+        # Check eq. 4.53b from schiller2008thermal
+        assert [sp.simplify(sum(ff[i] * stencil[i][j] for i in range(len(stencil)))) for j in range(dim)] == F
+        # Check eq. 4.61a from schiller2008thermal
+        ref = (2 + omega_s)/2 * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) + \
+                                 traceless(sp.Matrix(F) * sp.Matrix(u).transpose()))
+        s = sp.zeros(dim)
+        for i in range(0, len(stencil)):
+            s += ff[i] * traceless(sp.Matrix(stencil[i]) * sp.Matrix(stencil[i]).transpose())
+        assert sp.simplify(s-ref) == sp.zeros(dim)
+        # Check eq. 4.61b from schiller2008thermal
+        assert sp.simplify(sum(ff[i] * stencil[i][a]**2 for i in range(len(stencil)) for a in range(dim))
+                           - (2+omega_b)*sp.Matrix(u).dot(F)) == 0
 
         # All other moments should be zero
         assert list(force_moments[dim+1+num_stresses:]) == [0] * (len(stencil)-(dim+1+num_stresses))
