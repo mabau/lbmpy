@@ -112,15 +112,16 @@ def test_modes(stencil, force_model):
     
     if force_model == "schiller":
         num_stresses = (dim*dim-dim)//2+dim
+        lambda_s, lambda_b = -omega_s, -omega_b
 
         # The stress moments should match eq. 47 from https://doi.org/10.1023/A:1010414013942
         u = method.first_order_equilibrium_moment_symbols
         def traceless(m):
             tr = sp.simplify(sp.Trace(m))
             return m - tr/m.shape[0]*sp.eye(m.shape[0])
-        C = sp.Rational(1,2) * (2 + omega_s) * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) + \
+        C = sp.Rational(1,2) * (2 + lambda_s) * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) + \
                                                 traceless(sp.Matrix(F) * sp.Matrix(u).transpose())) + \
-            sp.Rational(1,method.dim) * (2 + omega_b) * sp.Matrix(u).dot(F) * sp.eye(method.dim)
+            sp.Rational(1,method.dim) * (2 + lambda_b) * sp.Matrix(u).dot(F) * sp.eye(method.dim)
 
         subs = {sp.Symbol(chr(ord("x")+i)) * sp.Symbol(chr(ord("x")+j)) : C[i,j]
                 for i in range(dim) for j in range(dim)}
@@ -139,7 +140,7 @@ def test_modes(stencil, force_model):
         # Check eq. 4.53b from schiller2008thermal
         assert [sp.simplify(sum(ff[i] * stencil[i][j] for i in range(len(stencil)))) for j in range(dim)] == F
         # Check eq. 4.61a from schiller2008thermal
-        ref = (2 + omega_s)/2 * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) + \
+        ref = (2 + lambda_s)/2 * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) + \
                                  traceless(sp.Matrix(F) * sp.Matrix(u).transpose()))
         s = sp.zeros(dim)
         for i in range(0, len(stencil)):
@@ -147,7 +148,7 @@ def test_modes(stencil, force_model):
         assert sp.simplify(s-ref) == sp.zeros(dim)
         # Check eq. 4.61b from schiller2008thermal
         assert sp.simplify(sum(ff[i] * stencil[i][a]**2 for i in range(len(stencil)) for a in range(dim))
-                           - (2+omega_b)*sp.Matrix(u).dot(F)) == 0
+                           - (2+lambda_b)*sp.Matrix(u).dot(F)) == 0
 
         # All other moments should be zero
         assert list(force_moments[dim+1+num_stresses:]) == [0] * (len(stencil)-(dim+1+num_stresses))

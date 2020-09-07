@@ -175,7 +175,7 @@ class Schiller:
         omega = get_shear_relaxation_rate(lb_method)
         omega_bulk = get_bulk_relaxation_rate(lb_method)
         G = (u * force.transpose() + force * u.transpose() - uf * sp.Rational(2, lb_method.dim)) * sp.Rational(1, 2) * \
-            (2 + omega) + uf * sp.Rational(1, lb_method.dim) * (2 + omega_bulk)
+            (2 - omega) + uf * sp.Rational(1, lb_method.dim) * (2 - omega_bulk)
 
         result = []
         for direction, w_i in zip(lb_method.stencil, lb_method.weights):
