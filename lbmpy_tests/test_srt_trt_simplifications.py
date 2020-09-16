@@ -4,7 +4,7 @@ known acceptable values.
 """
 import sympy as sp
 
-from lbmpy.forcemodels import Guo
+from lbmpy.forcemodels import Luo
 from lbmpy.methods import create_srt, create_trt, create_trt_with_magic_number
 from lbmpy.methods.momentbasedsimplifications import cse_in_opposing_directions
 from lbmpy.simplificationfactory import create_simplification_strategy
@@ -55,13 +55,13 @@ def test_simplifications_trt_d2q9_compressible():
 
 def test_simplifications_trt_d3q19_force_incompressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
-    force_model = Guo([sp.Rational(1, 3), sp.Rational(1, 2), sp.Rational(1, 5)])
+    force_model = Luo([sp.Rational(1, 3), sp.Rational(1, 2), sp.Rational(1, 5)])
     method = create_trt(get_stencil("D3Q19"), o1, o2, compressible=False, force_model=force_model)
     check_method(method, [268, 281, 0], [241, 175, 1])
 
 
 def test_simplifications_trt_d3q19_force_compressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
-    force_model = Guo([sp.Rational(1, 3), sp.Rational(1, 2), sp.Rational(1, 5)])
+    force_model = Luo([sp.Rational(1, 3), sp.Rational(1, 2), sp.Rational(1, 5)])
     method = create_trt_with_magic_number(get_stencil("D3Q19"), o1, compressible=False, force_model=force_model)
     check_method(method, [270, 284, 1], [243, 178, 1])

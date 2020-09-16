@@ -1,6 +1,6 @@
 import sympy as sp
 
-from lbmpy.moments import is_shear_moment
+from lbmpy.moments import is_bulk_moment, is_shear_moment
 
 
 def relaxation_rate_from_lattice_viscosity(nu):
@@ -44,6 +44,18 @@ def get_shear_relaxation_rate(method):
                 return list(all_relaxation_rates)[0]
             raise NotImplementedError("Shear moments seem to be not relaxed separately - "
                                       "Can not determine their relaxation rate automatically")
+
+
+def get_bulk_relaxation_rate(method):
+    """
+    The bulk moment is x^2 + y^2 + z^2, plus a constant for orthogonalization.
+    If this moment does not exist, the bulk relaxation is part of the shear relaxation.
+    The bulk relaxation rate determines the bulk viscosity in hydrodynamic LBM schemes.
+    """
+    for moment, relax_info in method.relaxation_info_dict.items():
+        if is_bulk_moment(moment, method.dim):
+            return relax_info.relaxation_rate
+    return get_shear_relaxation_rate(method)
 
 
 def relaxation_rate_scaling(omega, level_scale_factor):
