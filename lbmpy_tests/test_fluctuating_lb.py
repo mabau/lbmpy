@@ -115,6 +115,9 @@ def get_fluctuating_lb(size=None, kT=None, omega_shear=None, omega_bulk=None, om
     dh.fill(rho.name, rho_0)
     dh.fill(u.name, np.nan, ghost_layers=True, inner_ghost_layers=True)
     dh.fill(u.name, 0)
+    dh.fill(force_field.name, np.nan,
+            ghost_layers=True, inner_ghost_layers=True)
+    dh.fill(force_field.name, 0)
     dh.run_kernel(init_kernel)
 
     # time loop
@@ -133,11 +136,11 @@ def get_fluctuating_lb(size=None, kT=None, omega_shear=None, omega_bulk=None, om
     return dh, time_loop
 
 
-def test_resting_fluid():
+def test_resting_fluid(target="cpu"):
     rho_0 = 0.86
     kT = 4E-4
     L = [60]*3
-    dh, time_loop = get_fluctuating_lb(size=L[0], target="cpu",
+    dh, time_loop = get_fluctuating_lb(size=L[0], target=target,
                                        rho_0=rho_0, kT=kT,
                                        omega_shear=0.8, omega_bulk=0.5, omega_even=.04, omega_odd=0.3)
 
@@ -200,3 +203,42 @@ def test_resting_fluid():
         p_av_expected = np.diag([rho_0*c_s**2 + kT]*3)
         np.testing.assert_allclose(
             np.mean(res_pressure, axis=0), p_av_expected, atol=c_s**2/2000)
+
+
+def test_point_force(target="cpu"):
+    """Test momentum balance for thermalized fluid with applied poitn forces"""
+    rho_0 = 0.86
+    kT = 4E-4
+    L = [8]*3
+    dh, time_loop = get_fluctuating_lb(size=L[0], target=target,
+                                       rho_0=rho_0, kT=kT,
+                                       omega_shear=0.8, omega_bulk=0.5, omega_even=.04, omega_odd=0.3)
+
+    # Test
+    t = 0
+    # warm up
+    t = time_loop(t, 100)
+
+    introduced_momentum = np.zeros(3)
+    for i in range(100):
+        point_force = 1E-5*(np.random.random(3) - .5)
+        introduced_momentum += point_force
+
+        # Note that ghost layers are included in the indexing
+        force_pos = np.random.randint(1, L[0]-2, size=3)
+
+        dh.cpu_arrays["force"][force_pos[0],
+                               force_pos[1], force_pos[2]] = point_force
+        t = time_loop(t, 1)
+        res_u = dh.gather_array("u").reshape((-1, 3))
+        res_rho = dh.gather_array("rho").reshape((-1,))
+
+        # mass conservation
+        np.testing.assert_allclose(np.mean(res_rho), rho_0, atol=3E-12)
+
+        # momentum conservation
+        momentum = np.dot(res_rho, res_u)
+        np.testing.assert_allclose(
+            momentum, introduced_momentum + 0.5 * point_force, atol=1E-10)
+        dh.cpu_arrays["force"][force_pos[0],
+                               force_pos[1], force_pos[2]] = np.zeros(3)
