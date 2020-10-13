@@ -15,7 +15,9 @@ def single_component_maxwell(x1, x2, kT, mass):
 
 
 def rr_getter(moment_group):
-    """Mapos moments to 4 relaxation rates for shear, bulk, odd, even modes"""
+    """Maps a group of moments to a relaxation rate (shear, bulk, even, odd)
+    in the 4 relaxation time thermalized LB model
+    """
     is_shear = [is_shear_moment(m, 3) for m in moment_group]
     is_bulk = [is_bulk_moment(m, 3) for m in moment_group]
     order = [get_order(m) for m in moment_group]
@@ -52,21 +54,14 @@ def add_pressure_output_to_collision_rule(collision_rule, pressure_field):
     collision_rule.main_assignments = collision_rule.main_assignments + pressure_ouput
 
 
-def test():
+def get_fluctuating_lb(size=None, kT=None, omega_shear=None, omega_bulk=None, omega_odd=None, omega_even=None, rho_0=None, target=None):
 
     # Parameters
     stencil = get_stencil('D3Q19')
-    L = [60]*3
-    kT = 4E-4
-    rho_0 = 0.8
-    omega_shear = 0.8
-    omega_bulk = 0.3
-    omega_even = 0.5
-    omega_odd = 0.4
-    target = 'cpu'
 
     # Setup data handling
-    dh = ps.create_data_handling(L, periodicity=True, default_target=target)
+    dh = ps.create_data_handling(
+        [size]*3, periodicity=True, default_target=target)
     src = dh.add_array('src', values_per_cell=len(stencil), layout='f')
     dst = dh.add_array_like('dst', 'src')
     rho = dh.add_array('rho', layout='f', latex_name='\\rho')
@@ -82,7 +77,7 @@ def test():
         compressible=True,
         weighted=True,
         relaxation_rate_getter=rr_getter,
-        force_model=force_model_from_string('luo', force_field.center_vector))
+        force_model=force_model_from_string('schiller', force_field.center_vector))
     collision_rule = create_lb_collision_rule(
         method,
         fluctuating={
@@ -134,6 +129,17 @@ def test():
 
             dh.swap(src.name, dst.name)
         return start+steps
+
+    return dh, time_loop
+
+
+def test_resting_fluid():
+    rho_0 = 0.86
+    kT = 4E-4
+    L = [60]*3
+    dh, time_loop = get_fluctuating_lb(size=L[0], target="cpu",
+                                       rho_0=rho_0, kT=kT,
+                                       omega_shear=0.8, omega_bulk=0.5, omega_even=.04, omega_odd=0.3)
 
     # Test
     t = 0
