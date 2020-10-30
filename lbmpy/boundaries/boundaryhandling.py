@@ -97,11 +97,11 @@ class LbmWeightInfo(CustomCodeNode):
 
 
 def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, boundary_functor,
-                                             target='cpu', openmp=True):
+                                             target='cpu', openmp=True, **kernel_creation_args):
     elements = [BoundaryOffsetInfo(lb_method.stencil), LbmWeightInfo(lb_method)]
     index_arr_dtype = index_field.dtype.numpy_dtype
     dir_symbol = TypedSymbol("dir", index_arr_dtype.fields['dir'][0])
     elements += [Assignment(dir_symbol, index_field[0]('dir'))]
     elements += boundary_functor(pdf_field=pdf_field, direction_symbol=dir_symbol,
                                  lb_method=lb_method, index_field=index_field)
-    return create_indexed_kernel(elements, [index_field], target=target, cpu_openmp=openmp)
+    return create_indexed_kernel(elements, [index_field], target=target, cpu_openmp=openmp, **kernel_creation_args)
