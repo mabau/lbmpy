@@ -118,11 +118,12 @@ pycodegen-integration:
     - ./install_walberla.sh
     # build all integration tests
     - cd walberla/build/
-    - make -j $NUM_CORES CodegenJacobiCPU CodegenJacobiGPU CodegenPoisson MicroBenchmarkGpuLbm LbCodeGenerationExample
+    - make CodegenJacobiCPU CodegenJacobiGPU CodegenPoissonCPU CodegenPoissonGPU MicroBenchmarkGpuLbm LbCodeGenerationExample UniformGridBenchmarkGPU_trt UniformGridBenchmarkGPU_entropic_kbc_n4
     - cd apps/benchmarks/UniformGridGPU
     - make -j $NUM_CORES
     - cd ../UniformGridGenerated
     - make -j $NUM_CORES
+
   tags:
     - docker
     - cuda11
