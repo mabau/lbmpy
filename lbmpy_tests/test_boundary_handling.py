@@ -19,8 +19,14 @@ def test_simple(target):
         pytest.importorskip('pyopencl')
         import pystencils.opencl.autoinit
 
-    dh = create_data_handling((10, 5), parallel=False, default_target=target)
-    dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=target!='cpu')
+    dh = create_data_handling((4, 4), parallel=False, default_target=target)
+    dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=target != 'cpu')
+    for i in range(9):
+        dh.fill("pdfs", i, value_idx=i, ghost_layers=True)
+
+    if target == 'gpu' or target == 'opencl':
+        dh.all_to_gpu()
+
     lb_func = create_lb_function(stencil='D2Q9',
                                  compressible=False,
                                  relaxation_rate=1.8,
@@ -29,7 +35,7 @@ def test_simple(target):
     bh = LatticeBoltzmannBoundaryHandling(lb_func.method, dh, 'pdfs', target=target)
 
     wall = NoSlip()
-    moving_wall = UBB((0.001, 0))
+    moving_wall = UBB((1, 0))
     bh.set_boundary(wall, make_slice[0, :])
     bh.set_boundary(wall, make_slice[-1, :])
     bh.set_boundary(wall, make_slice[:, 0])
@@ -37,6 +43,64 @@ def test_simple(target):
 
     bh.prepare()
     bh()
+
+    if target == 'gpu' or target == 'opencl':
+        dh.all_to_cpu()
+    # left lower corner
+    assert (dh.cpu_arrays['pdfs'][0, 0, 6] == 7)
+
+    assert (dh.cpu_arrays['pdfs'][0, 1, 4] == 3)
+    assert (dh.cpu_arrays['pdfs'][0, 1, 6] == 7)
+
+    assert (dh.cpu_arrays['pdfs'][1, 0, 1] == 2)
+    assert (dh.cpu_arrays['pdfs'][1, 0, 6] == 7)
+
+    # left side
+    assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 4] == 3))
+    assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 6] == 7))
+    assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 5] == 5))
+
+    # left upper corner
+    assert (dh.cpu_arrays['pdfs'][0, 4, 4] == 3)
+    assert (dh.cpu_arrays['pdfs'][0, 4, 8] == 5)
+
+    assert (dh.cpu_arrays['pdfs'][0, 5, 8] == 5 + 6 / 36)
+
+    assert (dh.cpu_arrays['pdfs'][1, 5, 8] == 5 + 6 / 36)
+    assert (dh.cpu_arrays['pdfs'][1, 5, 2] == 1)
+
+    # top side
+    assert (all(dh.cpu_arrays['pdfs'][2:4, 5, 2] == 1))
+    assert (all(dh.cpu_arrays['pdfs'][2:4, 5, 7] == 6 - 6 / 36))
+    assert (all(dh.cpu_arrays['pdfs'][2:4, 5, 8] == 5 + 6 / 36))
+
+    # right upper corner
+    assert (dh.cpu_arrays['pdfs'][4, 5, 2] == 1)
+    assert (dh.cpu_arrays['pdfs'][4, 5, 7] == 6 - 6 / 36)
+
+    assert (dh.cpu_arrays['pdfs'][5, 5, 7] == 6 - 6 / 36)
+
+    assert (dh.cpu_arrays['pdfs'][5, 4, 3] == 4)
+    assert (dh.cpu_arrays['pdfs'][5, 4, 7] == 6)
+
+    # right side
+    assert (all(dh.cpu_arrays['pdfs'][5, 2:4, 3] == 4))
+    assert (all(dh.cpu_arrays['pdfs'][5, 2:4, 5] == 8))
+    assert (all(dh.cpu_arrays['pdfs'][5, 2:4, 7] == 6))
+
+    # right lower corner
+    assert (dh.cpu_arrays['pdfs'][5, 1, 3] == 4)
+    assert (dh.cpu_arrays['pdfs'][5, 1, 5] == 8)
+
+    assert (dh.cpu_arrays['pdfs'][5, 0, 5] == 8)
+
+    assert (dh.cpu_arrays['pdfs'][4, 0, 1] == 2)
+    assert (dh.cpu_arrays['pdfs'][4, 0, 5] == 8)
+
+    # lower side
+    assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 4] == 3))
+    assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 6] == 7))
+    assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 8] == 5))
 
 
 def test_exotic_boundaries():

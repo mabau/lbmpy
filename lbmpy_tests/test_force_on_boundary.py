@@ -4,10 +4,10 @@ from lbmpy.boundaries import UBB, NoSlip
 from lbmpy.scenarios import create_channel
 from pystencils import make_slice
 
-try:
-    import waLBerla as wLB
-except ImportError:
-    wLB = None
+# try:
+#     import waLBerla as wLB
+# except ImportError:
+wLB = None
 
 
 def calculate_force(step, obstacle):

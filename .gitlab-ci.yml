@@ -113,13 +113,9 @@ pycodegen-integration:
     - pip install -e pystencils/
     - pip install -e lbmpy/
     - ./install_walberla.sh
-    - export NUM_CORES=$(nproc --all)
-    - mkdir -p ~/.config/matplotlib
-    - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
-    - cd ../lbmpy
-    - py.test -v -n $NUM_CORES .
-    - cd ../walberla/build/
-    - make CodegenJacobiCPU CodegenJacobiGPU CodegenPoissonCPU CodegenPoissonGPU MicroBenchmarkGpuLbm LbCodeGenerationExample UniformGridBenchmarkGPU_trt UniformGridBenchmarkGPU_entropic_kbc_n4
+    # build all integration tests
+    - cd walberla/build/
+    - make -j $NUM_CORES MicroBenchmarkGpuLbm LbCodeGenerationExample
     - cd apps/benchmarks/UniformGridGPU
     - make -j $NUM_CORES
     - cd ../UniformGridGenerated

@@ -1,8 +1,8 @@
-from lbmpy.creationfunctions import update_with_default_parameters
-from lbmpy.fieldaccess import StreamPushTwoFieldsAccessor, CollideOnlyInplaceAccessor
 from pystencils.fd.derivation import FiniteDifferenceStencilDerivation
-from lbmpy.maxwellian_equilibrium import get_weights
 from pystencils import Assignment, AssignmentCollection
+
+from lbmpy.maxwellian_equilibrium import get_weights
+from lbmpy.fieldaccess import StreamPushTwoFieldsAccessor, CollideOnlyInplaceAccessor
 
 import sympy as sp
 import numpy as np
@@ -320,29 +320,26 @@ def get_update_rules_velocity(src_field, u_in, lb_method, force, density, sub_it
     return update_u
 
 
-def get_collision_assignments_hydro(density=1, optimization=None, sub_iterations=2, **kwargs):
+def get_collision_assignments_hydro(lb_method, density, velocity_input, force, sub_iterations, symbolic_fields,
+                                    kernel_type):
     r"""
      Get collision assignments for the hydrodynamic lattice Boltzmann step. Here the force gets applied in the moment
      space. Afterwards the transformation back to the pdf space happens.
      Args:
+         lb_method: moment based lattice Boltzmann method
          density: the interpolated density of the simulation
-         optimization: for details see createfunctions.py
+         velocity_input: velocity field for the hydrodynamic and Allen-Chan LB step
+         force: force vector containing a summation of the surface tension-, pressure-, viscous- and bodyforce vector
          sub_iterations: number of updates of the velocity field
+         symbolic_fields: PDF fields for source and destination
+         kernel_type: collide_stream_push or collide_only
      """
-    if optimization is None:
-        optimization = {}
-    params, opt_params = update_with_default_parameters(kwargs, optimization)
-
-    lb_method = params['lb_method']
 
     stencil = lb_method.stencil
     dimensions = len(stencil[0])
 
-    u_in = params['velocity_input']
-    force = params['force']
-
-    src_field = opt_params['symbolic_field']
-    dst_field = opt_params['symbolic_temporary_field']
+    src_field = symbolic_fields['symbolic_field']
+    dst_field = symbolic_fields['symbolic_temporary_field']
 
     moment_matrix = lb_method.moment_matrix
     rel = lb_method.relaxation_rates
@@ -364,7 +361,8 @@ def get_collision_assignments_hydro(density=1, optimization=None, sub_iterations
 
     m = sp.symbols("m_:{}".format(len(stencil)))
 
-    update_m = get_update_rules_velocity(src_field, u_in, lb_method, force, density, sub_iterations=sub_iterations)
+    update_m = get_update_rules_velocity(src_field, velocity_input, lb_method, force,
+                                         density, sub_iterations=sub_iterations)
     u_symp = sp.symbols("u_:{}".format(dimensions))
 
     for i in range(0, len(stencil)):
@@ -372,7 +370,7 @@ def get_collision_assignments_hydro(density=1, optimization=None, sub_iterations
 
     update_g = list()
     var = np.dot(moment_matrix.inv().tolist(), m)
-    if params['kernel_type'] == 'collide_stream_push':
+    if kernel_type == 'collide_stream_push':
         push_accessor = StreamPushTwoFieldsAccessor()
         post_collision_accesses = push_accessor.write(dst_field, stencil)
     else:
@@ -383,7 +381,7 @@ def get_collision_assignments_hydro(density=1, optimization=None, sub_iterations
         update_g.append(Assignment(post_collision_accesses[i], var[i]))
 
     for i in range(dimensions):
-        update_g.append(Assignment(u_in.center_vector[i], u_symp[i]))
+        update_g.append(Assignment(velocity_input.center_vector[i], u_symp[i]))
 
     hydro_lb_update_rule = AssignmentCollection(main_assignments=update_g,
                                                 subexpressions=update_m)

@@ -1,21 +1,41 @@
 import functools
 from copy import deepcopy
-
 from lbmpy.simplificationfactory import create_simplification_strategy
 from pystencils.field import Field, get_layout_of_array
 
+from lbmpy.advanced_streaming.utility import get_accessor, Timestep
 
-def pdf_initialization_assignments(lb_method, density, velocity, pdfs):
+
+def pdf_initialization_assignments(lb_method, density, velocity, pdfs,
+                                   streaming_pattern='pull', previous_timestep=Timestep.BOTH):
     """Assignments to initialize the pdf field with equilibrium"""
+    if isinstance(pdfs, Field):
+        previous_step_accessor = get_accessor(streaming_pattern, previous_timestep)
+        field_accesses = previous_step_accessor.write(pdfs, lb_method.stencil)
+    elif streaming_pattern == 'pull':
+        field_accesses = pdfs
+    else:
+        raise ValueError("Invalid value of pdfs: A PDF field reference is required to derive "
+                         + f"initialization assignments for streaming pattern {streaming_pattern}.")
+
     cqc = lb_method.conserved_quantity_computation
     inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity)
     setter_eqs = lb_method.get_equilibrium(conserved_quantity_equations=inp_eqs)
-    setter_eqs = setter_eqs.new_with_substitutions({sym: pdfs[i]
+    setter_eqs = setter_eqs.new_with_substitutions({sym: field_accesses[i]
                                                     for i, sym in enumerate(lb_method.post_collision_pdf_symbols)})
     return setter_eqs
 
 
-def macroscopic_values_getter(lb_method, density, velocity, pdfs):
+def macroscopic_values_getter(lb_method, density, velocity, pdfs,
+                              streaming_pattern='pull', previous_timestep=Timestep.BOTH):
+    if isinstance(pdfs, Field):
+        previous_step_accessor = get_accessor(streaming_pattern, previous_timestep)
+        field_accesses = previous_step_accessor.write(pdfs, lb_method.stencil)
+    elif streaming_pattern == 'pull':
+        field_accesses = pdfs
+    else:
+        raise ValueError("Invalid value of pdfs: A PDF field reference is required to derive "
+                         + f"getter assignments for streaming pattern {streaming_pattern}.")
     cqc = lb_method.conserved_quantity_computation
     assert not (velocity is None and density is None)
     output_spec = {}
@@ -23,13 +43,16 @@ def macroscopic_values_getter(lb_method, density, velocity, pdfs):
         output_spec['velocity'] = velocity
     if density is not None:
         output_spec['density'] = density
-    return cqc.output_equations_from_pdfs(pdfs, output_spec)
+    return cqc.output_equations_from_pdfs(field_accesses, output_spec)
 
 
 macroscopic_values_setter = pdf_initialization_assignments
 
 
-def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None, field_layout='numpy', target='cpu'):
+def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None,
+                                      ghost_layers=1, iteration_slice=None,
+                                      field_layout='numpy', target='cpu',
+                                      streaming_pattern='pull', previous_timestep=Timestep.BOTH):
     """
     Create kernel to compute macroscopic value(s) from a pdf field (e.g. density or velocity)
 
@@ -37,8 +60,13 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
         lb_method: instance of :class:`lbmpy.methods.AbstractLbMethod`
         output_quantities: sequence of quantities to compute e.g. ['density', 'velocity']
         pdf_arr: optional numpy array for pdf field - used to get optimal loop structure for kernel
+        ghost_layers: a sequence of pairs for each coordinate with lower and upper nr of ghost layers
+                      that should be excluded from the iteration. If None, the number of ghost layers 
+                      is determined automatically and assumed to be equal for all dimensions.        
+        iteration_slice: if not None, iteration is done only over this slice of the field
         field_layout: layout for output field, also used for pdf field if pdf_arr is not given
         target: 'cpu' or 'gpu'
+        previous_step_accessor: The accessor used by the streaming pattern of the previous timestep
 
     Returns:
         a function to compute macroscopic values:
@@ -83,15 +111,19 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
             output_mapping[output_quantity] = output_mapping[output_quantity][0]
 
     stencil = lb_method.stencil
-    pdf_symbols = [pdf_field(i) for i in range(len(stencil))]
+    previous_step_accessor = get_accessor(streaming_pattern, previous_timestep)
+    pdf_symbols = previous_step_accessor.write(pdf_field, stencil)
+
     eqs = cqc.output_equations_from_pdfs(pdf_symbols, output_mapping).all_assignments
 
     if target == 'cpu':
         import pystencils.cpu as cpu
-        kernel = cpu.make_python_function(cpu.create_kernel(eqs))
+        kernel = cpu.make_python_function(cpu.create_kernel(
+            eqs, ghost_layers=ghost_layers, iteration_slice=iteration_slice))
     elif target == 'gpu':
         import pystencils.gpucuda as gpu
-        kernel = gpu.make_python_function(gpu.create_cuda_kernel(eqs))
+        kernel = gpu.make_python_function(gpu.create_cuda_kernel(
+            eqs, ghost_layers=ghost_layers, iteration_slice=iteration_slice))
     else:
         raise ValueError("Unknown target '%s'. Possible targets are 'cpu' and 'gpu'" % (target,))
 
@@ -107,7 +139,10 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
     return getter
 
 
-def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None, field_layout='numpy', target='cpu'):
+def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None,
+                                      ghost_layers=1, iteration_slice=None,
+                                      field_layout='numpy', target='cpu',
+                                      streaming_pattern='pull', previous_timestep=Timestep.BOTH):
     """
     Creates a function that sets a pdf field to specified macroscopic quantities
     The returned function can be called with the pdf field to set as single argument
@@ -116,8 +151,13 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
         lb_method: instance of :class:`lbmpy.methods.AbstractLbMethod`
         quantities_to_set: map from conserved quantity name to fixed value or numpy array
         pdf_arr: optional numpy array for pdf field - used to get optimal loop structure for kernel
+        ghost_layers: a sequence of pairs for each coordinate with lower and upper nr of ghost layers
+                      that should be excluded from the iteration. If None, the number of ghost layers 
+                      is determined automatically and assumed to be equal for all dimensions.        
+        iteration_slice: if not None, iteration is done only over this slice of the field
         field_layout: layout of the pdf field if pdf_arr was not given
         target: 'cpu' or 'gpu'
+        previous_step_accessor: The accessor used by the streaming pattern of the previous timestep
 
     Returns:
         function taking pdf array as single argument and which sets the field to the given values
@@ -155,7 +195,10 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
     else:
         eq = eq.new_without_subexpressions()
 
-    substitutions = {sym: pdf_field(i) for i, sym in enumerate(lb_method.post_collision_pdf_symbols)}
+    previous_step_accessor = get_accessor(streaming_pattern, previous_timestep)
+    write_accesses = previous_step_accessor.write(pdf_field, lb_method.stencil)
+
+    substitutions = {sym: write_accesses[i] for i, sym in enumerate(lb_method.post_collision_pdf_symbols)}
     eq = eq.new_with_substitutions(substitutions).all_assignments
 
     if target == 'cpu':

@@ -57,8 +57,15 @@ General:
 - ``velocity_input``: symbolic field where the velocities are read from (for advection diffusion LBM)
 - ``density_input``: symbolic field or field access where to read density from. When passing this parameter,
   ``velocity_input`` has to be passed as well
-- ``kernel_type``: supported values: 'stream_pull_collide' (default), 'collide_only', stream_pull_only,
-  collide_stream_push, esotwist_even, esotwist_odd, aa_even, aa_odd
+- ``kernel_type``: supported values: 'default_stream_collide' (default), 'collide_only', 'stream_pull_only'. 
+  With 'default_stream_collide', streaming pattern and even/odd time-step (for in-place patterns) can be specified
+  by the ``streaming_pattern`` and ``timestep`` arguments. For backwards compatibility, ``kernel_type`` also accepts
+  'stream_pull_collide', 'collide_stream_push', 'esotwist_even', 'esotwist_odd', 'aa_even' and 'aa_odd' for selection 
+  of the streaming pattern. 
+- ``streaming_pattern``: The streaming pattern to be used with a 'default_stream_collide' kernel. Accepted values are
+  'pull', 'push', 'aa' and 'esotwist'.
+- ``timestep``: Timestep modulus for the streaming pattern. For two-fields patterns, this argument is irrelevant and
+  by default set to ``Timestep.BOTH``. For in-place patterns, ``Timestep.EVEN`` or ``Timestep.ODD`` must be speficied.
 
 Entropic methods:
 
@@ -176,10 +183,7 @@ from copy import copy
 import sympy as sp
 
 import lbmpy.forcemodels as forcemodels
-from lbmpy.fieldaccess import (
-    AAEvenTimeStepAccessor, AAOddTimeStepAccessor, CollideOnlyInplaceAccessor,
-    EsoTwistEvenTimeStepAccessor, EsoTwistOddTimeStepAccessor, PdfFieldAccessor,
-    PeriodicTwoFieldsAccessor, StreamPullTwoFieldsAccessor, StreamPushTwoFieldsAccessor)
+from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
 from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.creationfunctions import create_generic_mrt
@@ -192,6 +196,7 @@ from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
 from lbmpy.turbulence_models import add_smagorinsky_model
 from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
+from lbmpy.advanced_streaming.utility import Timestep, get_accessor
 from pystencils import Assignment, AssignmentCollection, create_kernel
 from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
@@ -264,28 +269,19 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
         dst_field = src_field.new_field_with_different_name(params['temporary_field_name'])
 
     kernel_type = params['kernel_type']
-    if isinstance(kernel_type, PdfFieldAccessor):
-        accessor = kernel_type
-        return create_lbm_kernel(collision_rule, src_field, dst_field, accessor)
-    elif params['kernel_type'] == 'stream_pull_collide':
-        accessor = StreamPullTwoFieldsAccessor
-        if any(opt_params['builtin_periodicity']):
-            accessor = PeriodicTwoFieldsAccessor(opt_params['builtin_periodicity'], ghost_layers=1)
-        return create_lbm_kernel(collision_rule, src_field, dst_field, accessor)
-    elif params['kernel_type'] == 'stream_pull_only':
+    if kernel_type == 'stream_pull_only':
         return create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, params['output'])
     else:
-        kernel_type_to_accessor = {
-            'collide_only': CollideOnlyInplaceAccessor,
-            'collide_stream_push': StreamPushTwoFieldsAccessor,
-            'esotwist_even': EsoTwistEvenTimeStepAccessor,
-            'esotwist_odd': EsoTwistOddTimeStepAccessor,
-            'aa_even': AAEvenTimeStepAccessor,
-            'aa_odd': AAOddTimeStepAccessor,
-        }
-        try:
-            accessor = kernel_type_to_accessor[kernel_type]()
-        except KeyError:
+        if kernel_type == 'default_stream_collide':
+            if params['streaming_pattern'] == 'pull' and any(opt_params['builtin_periodicity']):
+                accessor = PeriodicTwoFieldsAccessor(opt_params['builtin_periodicity'], ghost_layers=1)
+            else:
+                accessor = get_accessor(params['streaming_pattern'], params['timestep'])
+        elif kernel_type == 'collide_only':
+            accessor = CollideOnlyInplaceAccessor
+        elif isinstance(kernel_type, PdfFieldAccessor):
+            accessor = kernel_type
+        else:
             raise ValueError("Invalid value of parameter 'kernel_type'", params['kernel_type'])
         return create_lbm_kernel(collision_rule, src_field, dst_field, accessor)
 
@@ -341,7 +337,7 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
         if 'split_groups' in collision_rule.simplification_hints:
             collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
 
-    if params['output'] and params['kernel_type'] == 'stream_pull_collide':
+    if params['output'] and params['kernel_type'] == 'default_stream_collide' and params['streaming_pattern'] == 'pull':
         cqc = lb_method.conserved_quantity_computation
         output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, params['output'])
         collision_rule = collision_rule.new_merged(output_eqs)
@@ -540,7 +536,9 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'velocity_input': None,
         'density_input': None,
 
-        'kernel_type': 'stream_pull_collide',
+        'kernel_type': 'default_stream_collide',
+        'streaming_pattern': 'pull',
+        'timestep': Timestep.BOTH,
 
         'field_name': 'src',
         'temporary_field_name': 'dst',
@@ -583,6 +581,22 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
                                               relaxation_rate_from_magic_number(params['relaxation_rate'])]
 
             del params['relaxation_rate']
+
+    #   for backwards compatibility
+    if 'kernel_type' in params:
+        kernel_type_to_streaming_pattern = {
+            'stream_pull_collide': ('pull', Timestep.BOTH),
+            'collide_stream_push': ('push', Timestep.BOTH),
+            'aa_even': ('aa', Timestep.EVEN),
+            'aa_odd': ('aa', Timestep.ODD),
+            'esotwist_even': ('esotwist', Timestep.EVEN),
+            'esotwist_odd': ('esotwist', Timestep.ODD)
+        }
+
+        kernel_type = params['kernel_type']
+        if kernel_type in kernel_type_to_streaming_pattern.keys():
+            params['kernel_type'] = 'default_stream_collide'
+            params['streaming_pattern'], params['timestep'] = kernel_type_to_streaming_pattern[kernel_type]
 
     if 'pdf_arr' in opt_params:
         arr = opt_params['pdf_arr']
