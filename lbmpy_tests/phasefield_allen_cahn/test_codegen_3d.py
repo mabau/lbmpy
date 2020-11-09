@@ -118,14 +118,16 @@ def test_codegen_3d():
                                                                   density=density,
                                                                   velocity_input=u,
                                                                   force=force_g,
-                                                                  optimization={"symbolic_field": g,
-                                                                                "symbolic_temporary_field": g_tmp},
+                                                                  sub_iterations=2,
+                                                                  symbolic_fields={"symbolic_field": g,
+                                                                                   "symbolic_temporary_field": g_tmp},
                                                                   kernel_type='collide_only')
 
     hydro_lb_update_rule_push = get_collision_assignments_hydro(lb_method=method_hydro,
                                                                 density=density,
                                                                 velocity_input=u,
                                                                 force=force_g,
-                                                                optimization={"symbolic_field": g,
-                                                                              "symbolic_temporary_field": g_tmp},
+                                                                sub_iterations=2,
+                                                                symbolic_fields={"symbolic_field": g,
+                                                                                 "symbolic_temporary_field": g_tmp},
                                                                 kernel_type='collide_stream_push')

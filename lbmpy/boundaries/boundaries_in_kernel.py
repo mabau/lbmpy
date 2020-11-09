@@ -1,10 +1,12 @@
 import sympy as sp
 
-from lbmpy.boundaries.boundaryhandling import BoundaryOffsetInfo, LbmWeightInfo
+from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
+from lbmpy.advanced_streaming.indexing import BetweenTimestepsIndexing
+from lbmpy.advanced_streaming.utility import Timestep, get_accessor
+from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 from pystencils.assignment import Assignment
 from pystencils.astnodes import Block, Conditional, LoopOverCoordinate, SympyAssignment
 from pystencils.data_types import type_all_numbers
-from pystencils.field import Field
 from pystencils.simp.assignment_collection import AssignmentCollection
 from pystencils.simp.simplifications import sympy_cse_on_assignment_list
 from pystencils.stencil import inverse_direction
@@ -56,52 +58,24 @@ def border_conditions(direction, field, ghost_layers=1):
         return type_all_numbers(result, loop_ctr.dtype)
 
 
-def transformed_boundary_rule(boundary, accessor_func, field, direction_symbol, lb_method, **kwargs):
-    tmp_field = field.new_field_with_different_name("t")
-    rule = boundary(tmp_field, direction_symbol, lb_method, **kwargs)
-    bsubs = boundary_substitutions(lb_method)
-    rule = [a.subs(bsubs) for a in rule]
-    accessor_writes = accessor_func(tmp_field, lb_method.stencil)
-    to_replace = set()
-    for assignment in rule:
-        to_replace.update({fa for fa in assignment.rhs.atoms(Field.Access) if fa.field == tmp_field})
-
-    def compute_replacement(fa):
-        f = fa.index[0]
-        shift = accessor_writes[f].offsets
-        new_index = tuple(a + b for a, b in zip(fa.offsets, shift))
-        return field[new_index](accessor_writes[f].index[0])
-
-    substitutions = {fa: compute_replacement(fa) for fa in to_replace}
-    all_assignments = [assignment.subs(substitutions) for assignment in rule]
-    main_assignments = [a for a in all_assignments if isinstance(a.lhs, Field.Access)]
-    sub_expressions = [a for a in all_assignments if not isinstance(a.lhs, Field.Access)]
-    assert len(main_assignments) == 1
-    ac = AssignmentCollection(main_assignments, sub_expressions).new_without_subexpressions()
-    return ac.main_assignments[0].rhs
-
-
-def boundary_conditional(boundary, direction, read_of_next_accessor, lb_method, output_field, cse=False):
+def boundary_conditional(boundary, direction, streaming_pattern, prev_timestep, lb_method, output_field, cse=False):
     stencil = lb_method.stencil
-    tmp_field = output_field.new_field_with_different_name("t")
 
     dir_indices = direction_indices_in_direction(direction, stencil)
+    indexing = BetweenTimestepsIndexing(output_field, lb_method.stencil, prev_timestep, streaming_pattern)
+    f_out, f_in = indexing.proxy_fields
+    inv_dir = indexing.inverse_dir_symbol
 
     assignments = []
     for direction_idx in dir_indices:
-        rule = boundary(tmp_field, direction_idx, lb_method, index_field=None)
-        boundary_subs = boundary_substitutions(lb_method)
-        rule = [a.subs(boundary_subs) for a in rule]
+        rule = boundary(f_out, f_in, direction_idx, inv_dir, lb_method, index_field=None)
 
-        rhs_substitutions = {tmp_field(i): sym for i, sym in enumerate(lb_method.post_collision_pdf_symbols)}
-        offset = stencil[direction_idx]
-        inv_offset = inverse_direction(offset)
-        inv_idx = stencil.index(inv_offset)
+        #   rhs: replace f_out by post collision symbols.
+        rhs_substitutions = {f_out(i): sym for i, sym in enumerate(lb_method.post_collision_pdf_symbols)}
+        rule = AssignmentCollection([rule]).new_with_substitutions(rhs_substitutions)
+        rule = indexing.substitute_proxies(rule)
 
-        lhs_substitutions = {
-            tmp_field[offset](inv_idx): read_of_next_accessor(output_field, stencil)[inv_idx]}
-        rule = [Assignment(a.lhs.subs(lhs_substitutions), a.rhs.subs(rhs_substitutions)) for a in rule]
-        ac = AssignmentCollection([rule[-1]], rule[:-1]).new_without_subexpressions()
+        ac = rule.new_without_subexpressions()
         assignments += ac.main_assignments
 
     border_cond = border_conditions(direction, output_field, ghost_layers=1)
@@ -111,8 +85,10 @@ def boundary_conditional(boundary, direction, read_of_next_accessor, lb_method, 
     return Conditional(border_cond, Block(assignments))
 
 
-def update_rule_with_push_boundaries(collision_rule, field, boundary_spec, accessor, read_of_next_accessor):
+def update_rule_with_push_boundaries(collision_rule, field, boundary_spec, 
+                                     streaming_pattern='pull', timestep=Timestep.BOTH):
     method = collision_rule.method
+    accessor = get_accessor(streaming_pattern, timestep)
     loads = [Assignment(a, b) for a, b in zip(method.pre_collision_pdf_symbols, accessor.read(field, method.stencil))]
     stores = [Assignment(a, b) for a, b in
               zip(accessor.write(field, method.stencil), method.post_collision_pdf_symbols)]
@@ -121,7 +97,7 @@ def update_rule_with_push_boundaries(collision_rule, field, boundary_spec, acces
     result.subexpressions = loads + result.subexpressions
     result.main_assignments += stores
     for direction, boundary in boundary_spec.items():
-        cond = boundary_conditional(boundary, direction, read_of_next_accessor, method, field)
+        cond = boundary_conditional(boundary, direction, streaming_pattern, timestep, method, field)
         result.main_assignments.append(cond)
 
     if 'split_groups' in result.simplification_hints:

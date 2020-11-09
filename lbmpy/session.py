@@ -3,6 +3,7 @@ import sympy as sp
 
 import lbmpy.plot as plt
 import pystencils as ps
+from lbmpy.advanced_streaming import *
 from lbmpy.boundaries import *
 from lbmpy.creationfunctions import *
 from lbmpy.geometry import *
