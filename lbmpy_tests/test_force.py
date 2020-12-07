@@ -117,7 +117,7 @@ def test_modes(stencil, force_model):
         # The stress moments should match eq. 47 from https://doi.org/10.1023/A:1010414013942
         u = method.first_order_equilibrium_moment_symbols
         def traceless(m):
-            tr = sp.simplify(sp.Trace(m))
+            tr = sp.simplify(sum([m[i,i] for i in range(dim)]))
             return m - tr/m.shape[0]*sp.eye(m.shape[0])
         C = sp.Rational(1,2) * (2 + lambda_s) * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) + \
                                                 traceless(sp.Matrix(F) * sp.Matrix(u).transpose())) + \

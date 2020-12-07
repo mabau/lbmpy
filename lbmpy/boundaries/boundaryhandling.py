@@ -65,7 +65,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
         return create_lattice_boltzmann_boundary_kernel(
             symbolic_field, symbolic_index_field, self._lb_method, boundary_obj,
             prev_timestep=prev_timestep, streaming_pattern=self._streaming_pattern,
-            target=self._target, openmp=self._openmp)
+            target=self._target, cpu_openmp=self._openmp)
 
     class InplaceStreamingBoundaryInfo(object):
 
@@ -175,11 +175,7 @@ class LbmWeightInfo(CustomCodeNode):
 
 def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, boundary_functor,
                                              prev_timestep=Timestep.BOTH, streaming_pattern='pull',
-                                             target='cpu', openmp=True, **kernel_creation_args):
-    from lbmpy.boundaries.boundaryconditions import Boundary as OldBoundary
-    if isinstance(boundary_functor, OldBoundary):
-        return create_lattice_boltzmann_boundary_kernel_old(pdf_field, index_field, lb_method, boundary_functor,
-                                                            target=target, openmp=openmp, **kernel_creation_args)
+                                             target='cpu', **kernel_creation_args):
 
     index_dtype = index_field.dtype.numpy_dtype.fields['dir'][0]
     offsets_dtype = index_field.dtype.numpy_dtype.fields['x'][0]
@@ -197,7 +193,7 @@ def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, 
     elements = [Assignment(dir_symbol, index_field[0]('dir'))]
     elements += boundary_assignments.all_assignments
 
-    kernel = create_indexed_kernel(elements, [index_field], target=target, cpu_openmp=openmp, **kernel_creation_args)
+    kernel = create_indexed_kernel(elements, [index_field], target=target, **kernel_creation_args)
 
     #   Code Elements ahead of the loop
     index_arrs_node = indexing.create_code_node()
@@ -205,28 +201,3 @@ def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, 
         kernel.body.insert_front(node)
     kernel.body.insert_front(index_arrs_node)
     return kernel
-
-
-#   ----------------------------- Old, Deprecated Implementation -----------------------
-
-def deprecation_message():
-    import warnings
-    deprecation_message = "The old code generation scheme for LB boundaries has been deprecated. " \
-                          + "Please update your boundary implementation to derive from ``LbBoundary`` " \
-                          + "and use the new implementation scheme based on `BetweenTimestepsIndexing`."
-    warnings.simplefilter('always', DeprecationWarning)
-    warnings.warn(deprecation_message, DeprecationWarning, stacklevel=2)
-    warnings.simplefilter('default', DeprecationWarning)
-
-
-def create_lattice_boltzmann_boundary_kernel_old(pdf_field, index_field, lb_method, boundary_functor,
-                                                 target='cpu', openmp=True, **kernel_creation_args):
-    deprecation_message()
-    from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
-    elements = [BoundaryOffsetInfo(lb_method.stencil), LbmWeightInfo(lb_method)]
-    index_arr_dtype = index_field.dtype.numpy_dtype
-    dir_symbol = TypedSymbol("dir", index_arr_dtype.fields['dir'][0])
-    elements += [Assignment(dir_symbol, index_field[0]('dir'))]
-    elements += boundary_functor(pdf_field=pdf_field, direction_symbol=dir_symbol,
-                                 lb_method=lb_method, index_field=index_field)
-    return create_indexed_kernel(elements, [index_field], target=target, cpu_openmp=openmp, **kernel_creation_args)

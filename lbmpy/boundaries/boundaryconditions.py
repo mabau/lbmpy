@@ -260,16 +260,3 @@ class StreamInConstant(LbBoundary):
     def __eq__(self, other):
         return type(other) == StreamInConstant
 # end class StreamInConstant
-
-
-#   ------------------------- Old, Deprecated Implementation -------------------------
-
-class Boundary(LbBoundary):
-
-    def __init__(self, name=None):
-        from lbmpy.boundaries.boundaryhandling import deprecation_message
-        deprecation_message()
-        self._name = name
-
-    def __call__(self, pdf_field, direction_symbol, lb_method, index_field):
-        raise NotImplementedError("Boundary class has to overwrite __call__")
