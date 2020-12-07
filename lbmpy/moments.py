@@ -453,10 +453,10 @@ def extract_monomials(sequence_of_polynomials, dim=3):
         dim: length of returned exponent tuples
 
     >>> x, y, z = MOMENT_SYMBOLS
-    >>> extract_monomials([x**2 + y**2 + y, y + y**2])
-    {(0, 2, 0), (0, 1, 0), (2, 0, 0)}
-    >>> extract_monomials([x**2 + y**2 + y, y + y**2], dim=2)
-    {(0, 1), (0, 2), (2, 0)}
+    >>> extract_monomials([x**2 + y**2 + y, y + y**2]) == {(0, 1, 0),(0, 2, 0),(2, 0, 0)}
+    True
+    >>> extract_monomials([x**2 + y**2 + y, y + y**2], dim=2) == {(0, 1), (0, 2), (2, 0)}
+    True
     """
     monomials = set()
     for polynomial in sequence_of_polynomials:
@@ -477,10 +477,11 @@ def monomial_to_polynomial_transformation_matrix(monomials, polynomials):
     >>> polys = [7 * x**2 + 3 * x + 2 * y **2, \
                  9 * x**2 - 5 * x]
     >>> mons = list(extract_monomials(polys, dim=2))
+    >>> mons.sort()
     >>> monomial_to_polynomial_transformation_matrix(mons, polys)
     Matrix([
-    [ 3, 2, 7],
-    [-5, 0, 9]])
+    [2,  3, 7],
+    [0, -5, 9]])
     """
     dim = len(monomials[0])
 
