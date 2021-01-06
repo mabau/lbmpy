@@ -1,3 +1,5 @@
+from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
+from pystencils.simp.assignment_collection import AssignmentCollection
 import sympy as sp
 from pystencils import Assignment, Field
 from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
@@ -5,10 +7,15 @@ from pystencils.data_types import create_type
 from pystencils.sympyextensions import get_symmetric_part
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.advanced_streaming.indexing import NeighbourOffsetArrays
+from pystencils.stencil import offset_to_direction_string, direction_string_to_offset
 
 
 class LbBoundary:
-    """Base class that all boundaries should derive from"""
+    """Base class that all boundaries should derive from.
+
+    Args:
+        name: optional name of the boundary.
+    """
 
     inner_or_boundary = True
     single_link = False
@@ -52,7 +59,11 @@ class LbBoundary:
         return None
 
     def get_additional_code_nodes(self, lb_method):
-        """Return a list of code nodes that will be added in the generated code before the index field loop."""
+        """Return a list of code nodes that will be added in the generated code before the index field loop.
+
+        Args:
+            lb_method: lattice Boltzmann method. See :func:`lbmpy.creationfunctions.create_lb_method`
+        """
         return []
 
     @property
@@ -70,15 +81,17 @@ class LbBoundary:
 
 
 class NoSlip(LbBoundary):
+    """
+        No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle.
+        Extended for use with any streaming pattern.
+
+    Args:
+        name: optional name of the boundary.
+    """
 
     def __init__(self, name=None):
         """Set an optional name here, to mark boundaries, for example for force evaluations"""
         super(NoSlip, self).__init__(name)
-
-    """
-        No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle.
-        Extended for use with any streaming pattern.
-    """
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         return Assignment(f_in(inv_dir[dir_symbol]), f_out(dir_symbol))
@@ -95,16 +108,20 @@ class NoSlip(LbBoundary):
 
 
 class UBB(LbBoundary):
-    """Velocity bounce back boundary condition, enforcing specified velocity at obstacle"""
+    """Velocity bounce back boundary condition, enforcing specified velocity at obstacle
+
+    Args:
+        velocity: can either be a constant, an access into a field, or a callback function.
+                  The callback functions gets a numpy record array with members, 'x','y','z', 'dir' (direction)
+                  and 'velocity' which has to be set to the desired velocity of the corresponding link
+        adapt_velocity_to_force: adapts the velocity to the correct equilibrium when the lattice Boltzmann method holds
+                                 a forcing term. If no forcing term is set and adapt_velocity_to_force is set to True
+                                 it has no effect.
+        dim: number of spatial dimensions
+        name: optional name of the boundary.
+    """
 
     def __init__(self, velocity, adapt_velocity_to_force=False, dim=None, name=None):
-        """
-        Args:
-            velocity: can either be a constant, an access into a field, or a callback function.
-                      The callback functions gets a numpy record array with members, 'x','y','z', 'dir' (direction)
-                      and 'velocity' which has to be set to the desired velocity of the corresponding link
-            adapt_velocity_to_force:
-        """
         super(UBB, self).__init__(name)
         self._velocity = velocity
         self._adaptVelocityToForce = adapt_velocity_to_force
@@ -116,6 +133,8 @@ class UBB(LbBoundary):
 
     @property
     def additional_data(self):
+        """ In case of the UBB boundary additional data is a velocity vector. This vector is added to each cell to
+            realize velocity profiles for the inlet."""
         if callable(self._velocity):
             return [('vel_%d' % (i,), create_type("double")) for i in range(self.dim)]
         else:
@@ -123,10 +142,22 @@ class UBB(LbBoundary):
 
     @property
     def additional_data_init_callback(self):
+        """Initialise additional data of the boundary. For an example see
+            `tutorial 02 <https://pycodegen.pages.i10git.cs.fau.de/lbmpy/notebooks/02_tutorial_boundary_setup.html>`_
+            or lbmpy.geometry.add_pipe_inflow_boundary"""
         if callable(self._velocity):
             return self._velocity
 
     def get_additional_code_nodes(self, lb_method):
+        """Return a list of code nodes that will be added in the generated code before the index field loop.
+
+        Args:
+            lb_method: Lattice Boltzmann method. See :func:`lbmpy.creationfunctions.create_lb_method`
+
+        Returns:
+            list containing LbmWeightInfo and NeighbourOffsetArrays
+
+        """
         return [LbmWeightInfo(lb_method), NeighbourOffsetArrays(lb_method.stencil)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
@@ -174,7 +205,197 @@ class UBB(LbBoundary):
 # end class UBB
 
 
+class SimpleExtrapolationOutflow(LbBoundary):
+    r"""
+       Simple Outflow boundary condition :cite:`geier2015`, equation F.1 (listed below).
+       This boundary condition extrapolates missing populations from the last layer of
+       fluid cells onto the boundary by copying them in the normal direction.
+
+    .. math ::
+        f_{\overline{1}jkxyzt} = f_{\overline{1}jk(x - \Delta x)yzt}
+
+
+    Args:
+        normal_direction: direction vector normal to the outflow
+        stencil: stencil used for the lattice Boltzmann method
+        name: optional name of the boundary.
+    """
+
+    #   We need each fluid cell only once, the direction of the outflow is given
+    #   in the constructor.
+    single_link = True
+
+    def __init__(self, normal_direction, stencil, name=None):
+        if isinstance(normal_direction, str):
+            normal_direction = direction_string_to_offset(normal_direction, dim=len(stencil[0]))
+
+        if name is None:
+            name = f"Simple Outflow: {offset_to_direction_string(normal_direction)}"
+
+        self.normal_direction = normal_direction
+        super(SimpleExtrapolationOutflow, self).__init__(name)
+
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        stencil = lb_method.stencil
+
+        boundary_assignments = []
+        for i, stencil_dir in enumerate(stencil):
+            if all(n == 0 or n == -s for s, n in zip(stencil_dir, self.normal_direction)):
+                asm = Assignment(f_out[self.normal_direction](i), f_out.center(i))
+                boundary_assignments.append(asm)
+
+        print(boundary_assignments)
+        return boundary_assignments
+# end class SimpleExtrapolationOutflow
+
+
+class ExtrapolationOutflow(LbBoundary):
+    r"""
+        Outflow boundary condition :cite:`geier2015`, equation F.2, with u neglected (listed below).
+        This boundary condition interpolates missing on the boundary in normal direction. For this interpolation, the
+        PDF values of the last time step are used. They are interpolated between fluid cell and boundary cell.
+        To get the PDF values from the last time step an index array is used which stores them.
+
+    .. math ::
+        f_{\overline{1}jkxyzt} = f_{\overline{1}jk(x - \Delta x)yz(t - \Delta t)} c \theta^{\frac{1}{2}}
+        \frac{\Delta t}{\Delta x} + \left(1 - c \theta^{\frac{1}{2}} \frac{\Delta t}{\Delta x} \right)
+         f_{\overline{1}jk(x - \Delta x)yzt}
+
+
+    Args:
+        normal_direction: direction vector normal to the outflow
+        lb_method: the lattice boltzman method to be used in the simulation
+        dt: lattice time step size
+        dx: lattice spacing distance
+        name: optional name of the boundary.
+        streaming_pattern: Streaming pattern to be used in the simulation
+        zeroth_timestep: for in-place patterns, whether the initial setup corresponds to an even or odd time step
+        initial_density: floating point constant or callback taking spatial coordinates (x, y [,z]) as
+                         positional arguments, specifying the initial density on boundary nodes
+        initial_velocity: tuple of floating point constants or callback taking spatial coordinates (x, y [,z]) as
+                          positional arguments, specifying the initial velocity on boundary nodes
+    """
+
+    #   We need each fluid cell only once, the direction of the outflow is given
+    #   in the constructor.
+    single_link = True
+
+    def __init__(self, normal_direction, lb_method, dt=1, dx=1, name=None,
+                 streaming_pattern='pull', zeroth_timestep=Timestep.BOTH,
+                 initial_density=None, initial_velocity=None):
+
+        self.lb_method = lb_method
+        self.stencil = lb_method.stencil
+        self.dim = len(self.stencil[0])
+        if isinstance(normal_direction, str):
+            normal_direction = direction_string_to_offset(normal_direction, dim=self.dim)
+
+        if name is None:
+            name = f"Outflow: {offset_to_direction_string(normal_direction)}"
+
+        self.normal_direction = normal_direction
+        self.streaming_pattern = streaming_pattern
+        self.zeroth_timestep = zeroth_timestep
+        self.dx = sp.Number(dx)
+        self.dt = sp.Number(dt)
+        self.c = sp.sqrt(sp.Rational(1, 3)) * (self.dx / self.dt)
+
+        self.initial_density = initial_density
+        self.initial_velocity = initial_velocity
+        self.equilibrium_calculation = None
+
+        if initial_density and initial_velocity:
+            equilibrium = lb_method.get_equilibrium(conserved_quantity_equations=AssignmentCollection([]))
+            rho = lb_method.zeroth_order_equilibrium_moment_symbol
+            u_vec = lb_method.first_order_equilibrium_moment_symbols
+            eq_lambda = equilibrium.lambdify((rho,) + u_vec)
+            post_pdf_symbols = lb_method.post_collision_pdf_symbols
+
+            def calc_eq_pdfs(density, velocity, j):
+                return eq_lambda(density, *velocity)[post_pdf_symbols[j]]
+
+            self.equilibrium_calculation = calc_eq_pdfs
+
+        super(ExtrapolationOutflow, self).__init__(name)
+
+    def init_callback(self, boundary_data, **_):
+        dim = boundary_data.dim
+        coord_names = ['x', 'y', 'z'][:dim]
+        pdf_acc = AccessPdfValues(self.stencil, streaming_pattern=self.streaming_pattern,
+                                  timestep=self.zeroth_timestep, streaming_dir='out')
+
+        def get_boundary_cell_pdfs(fluid_cell, boundary_cell, j):
+            if self.equilibrium_calculation is not None:
+                density = self.initial_density(
+                    *boundary_cell) if callable(self.initial_density) else self.initial_density
+                velocity = self.initial_velocity(
+                    *boundary_cell) if callable(self.initial_velocity) else self.initial_velocity
+                return self.equilibrium_calculation(density, velocity, j)
+            else:
+                return pdf_acc.read_pdf(boundary_data.pdf_array, fluid_cell, j)
+
+        for entry in boundary_data.index_array:
+            fluid_cell = tuple(entry[c] for c in coord_names)
+            boundary_cell = tuple(f + o for f, o in zip(fluid_cell, self.normal_direction))
+
+            #   Initial fluid cell PDF values
+            for j, stencil_dir in enumerate(self.stencil):
+                if all(n == 0 or n == -s for s, n in zip(stencil_dir, self.normal_direction)):
+                    entry[f'pdf_{j}'] = pdf_acc.read_pdf(boundary_data.pdf_array, fluid_cell, j)
+                    entry[f'pdf_nd_{j}'] = get_boundary_cell_pdfs(fluid_cell, boundary_cell, j)
+
+    @property
+    def additional_data(self):
+        """Used internally only. For the ExtrapolationOutflow information of the precious PDF values is needed. This
+        information is added to the boundary"""
+        data = []
+        for i, stencil_dir in enumerate(self.stencil):
+            if all(n == 0 or n == -s for s, n in zip(stencil_dir, self.normal_direction)):
+                data.append((f'pdf_{i}', create_type("double")))
+                data.append((f'pdf_nd_{i}', create_type("double")))
+        return data
+
+    @property
+    def additional_data_init_callback(self):
+        """The initialisation of the additional data is implemented internally for this class.
+        Thus no callback can be provided"""
+        if callable(self.init_callback):
+            return self.init_callback
+
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        subexpressions = []
+        boundary_assignments = []
+        dtdx = sp.Rational(self.dt, self.dx)
+
+        for i, stencil_dir in enumerate(self.stencil):
+            if all(n == 0 or n == -s for s, n in zip(stencil_dir, self.normal_direction)):
+
+                interpolated_pdf_sym = sp.Symbol(f'pdf_inter_{i}')
+                interpolated_pdf_asm = Assignment(interpolated_pdf_sym, (index_field[0](f'pdf_{i}') * (self.c * dtdx))
+                                                  + ((sp.Number(1) - self.c * dtdx) * index_field[0](f'pdf_nd_{i}')))
+                subexpressions.append(interpolated_pdf_asm)
+
+                asm = Assignment(f_out[self.normal_direction](i), interpolated_pdf_sym)
+                boundary_assignments.append(asm)
+
+                asm = Assignment(index_field[0](f'pdf_{i}'), f_out.center(i))
+                boundary_assignments.append(asm)
+
+                asm = Assignment(index_field[0](f'pdf_nd_{i}'), interpolated_pdf_sym)
+                boundary_assignments.append(asm)
+
+        return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
+# end class ExtrapolationOutflow
+
+
 class FixedDensity(LbBoundary):
+    """Boundary condition that fixes the density/pressure at the obstacle.
+
+    Args:
+        density: value of the density which should be set.
+        name: optional name of the boundary.
+
+    """
 
     def __init__(self, density, name=None):
         if name is None:
@@ -183,7 +404,6 @@ class FixedDensity(LbBoundary):
         self._density = density
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
-        """Boundary condition that fixes the density/pressure at the obstacle"""
 
         def remove_asymmetric_part_of_main_assignments(assignment_collection, degrees_of_freedom):
             new_main_assignments = [Assignment(a.lhs, get_symmetric_part(a.rhs, degrees_of_freedom))
@@ -222,8 +442,18 @@ class FixedDensity(LbBoundary):
 
 
 class NeumannByCopy(LbBoundary):
+    """Neumann boundary condition which is implemented by coping the PDF values to achieve similar values at the fluid
+       and the boundary node"""
 
     def get_additional_code_nodes(self, lb_method):
+        """Return a list of code nodes that will be added in the generated code before the index field loop.
+
+        Args:
+            lb_method: Lattice Boltzmann method. See :func:`lbmpy.creationfunctions.create_lb_method`
+
+        Returns:
+            list containing NeighbourOffsetArrays
+        """
         return [NeighbourOffsetArrays(lb_method.stencil)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
@@ -241,11 +471,27 @@ class NeumannByCopy(LbBoundary):
 
 
 class StreamInConstant(LbBoundary):
+    """Boundary condition that takes a constant and overrides the boundary PDFs with this value. This is used for
+    debugging mainly.
+
+    Args:
+        constant: value which should be set for the PDFs at the boundary cell.
+        name: optional name of the boundary.
+
+    """
     def __init__(self, constant, name=None):
         super(StreamInConstant, self).__init__(name)
         self._constant = constant
 
     def get_additional_code_nodes(self, lb_method):
+        """Return a list of code nodes that will be added in the generated code before the index field loop.
+
+        Args:
+            lb_method: Lattice Boltzmann method. See :func:`lbmpy.creationfunctions.create_lb_method`
+
+        Returns:
+            list containing NeighbourOffsetArrays
+        """
         return [NeighbourOffsetArrays(lb_method.stencil)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):

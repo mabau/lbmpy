@@ -31,8 +31,8 @@ def test_advanced_streaming_noslip_single_cell(stencil, streaming_pattern, prev_
     dim = len(stencil[0])
     pdf_field = ps.fields(f'pdfs({q}): [{dim}D]')
 
-    prev_pdf_access = AccessPdfValues(pdf_field, stencil, streaming_pattern, prev_timestep, 'out')
-    next_pdf_access = AccessPdfValues(pdf_field, stencil, streaming_pattern, prev_timestep.next(), 'in')
+    prev_pdf_access = AccessPdfValues(stencil, streaming_pattern, prev_timestep, 'out')
+    next_pdf_access = AccessPdfValues(stencil, streaming_pattern, prev_timestep.next(), 'in')
 
     pdfs = np.zeros((3,) * dim + (q,))
     pos = (1,) * dim

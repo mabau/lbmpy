@@ -13,5 +13,6 @@ API Reference
    continuous_distribution_measures.rst
    moments.rst
    cumulants.rst
+   boundary_conditions.rst
    forcemodels.rst
    zbibliography.rst

@@ -80,11 +80,13 @@ class AccessPdfValues:
     """Allows to access values from a PDF array correctly depending on 
     the streaming pattern."""
 
-    def __init__(self, pdf_field, stencil,
+    def __init__(self, stencil,
                  streaming_pattern='pull', timestep=Timestep.BOTH, streaming_dir='out',
                  accessor=None):
         if streaming_dir not in ['in', 'out']:
             raise ValueError('Invalid streaming direction.', streaming_dir)
+
+        pdf_field = ps.Field.create_generic('pdfs', len(stencil[0]), index_shape=(len(stencil),))
 
         if accessor is None:
             accessor = get_accessor(streaming_pattern, timestep)

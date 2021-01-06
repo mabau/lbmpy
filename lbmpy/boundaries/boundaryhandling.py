@@ -107,7 +107,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
             pdf_array = b[self._field_name]
             if boundary_obj in obj_to_ind_list:
                 ind_arr = obj_to_ind_list[boundary_obj]
-                acc = AccessPdfValues(dh.fields[self._field_name], self._lb_method.stencil,
+                acc = AccessPdfValues(self._lb_method.stencil,
                                       streaming_pattern=self._streaming_pattern, timestep=prev_timestep,
                                       streaming_dir='out')
                 values = 2 * acc.collect_from_index_list(pdf_array, ind_arr)
@@ -131,10 +131,10 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
                 ind_arr = obj_to_ind_list[boundary_obj]
                 inverse_ind_arr = ind_arr.copy()
                 inverse_ind_arr['dir'] = inv_direction[inverse_ind_arr['dir']]
-                acc_out = AccessPdfValues(dh.fields[self._field_name], self._lb_method.stencil,
+                acc_out = AccessPdfValues(self._lb_method.stencil,
                                           streaming_pattern=self._streaming_pattern, timestep=prev_timestep,
                                           streaming_dir='out')
-                acc_in = AccessPdfValues(dh.fields[self._field_name], self._lb_method.stencil,
+                acc_in = AccessPdfValues(self._lb_method.stencil,
                                          streaming_pattern=self._streaming_pattern, timestep=prev_timestep.next(),
                                          streaming_dir='in')
                 acc_fluid = acc_out if boundary_obj.inner_or_boundary else acc_in
