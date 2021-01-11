@@ -11,5 +11,6 @@ _build
 /.idea
 _local_tmp
 **/.vscode
+/lbmpy_tests/db
 doc/bibtex.json
 /html_doc
