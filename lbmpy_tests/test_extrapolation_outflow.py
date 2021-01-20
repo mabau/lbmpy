@@ -1,14 +1,17 @@
+from pystencils.stencil import inverse_direction
+
 from lbmpy.stencils import get_stencil
 from lbmpy.advanced_streaming.utility import AccessPdfValues, get_timesteps
 import pytest
 import numpy as np
-import sympy as sp
 
 from pystencils.datahandling import create_data_handling
 from lbmpy.boundaries import LatticeBoltzmannBoundaryHandling, SimpleExtrapolationOutflow, ExtrapolationOutflow
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.advanced_streaming.utility import streaming_patterns
 from pystencils.slicing import get_ghost_region_slice
+
+from itertools import product
 
 
 @pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q27'])
@@ -19,7 +22,7 @@ def test_pdf_simple_extrapolation(stencil, streaming_pattern):
     values_per_cell = len(stencil)
 
     #   Field contains exactly one fluid cell
-    domain_size = (1,) * dim
+    domain_size = (3,) * dim
     for timestep in get_timesteps(streaming_pattern):
         dh = create_data_handling(domain_size, default_target='cpu')
         lb_method = create_lb_method(stencil=stencil)
@@ -36,30 +39,23 @@ def test_pdf_simple_extrapolation(stencil, streaming_pattern):
         pdf_arr = dh.cpu_arrays[pdf_field.name]
 
         #   Set up the domain with artificial PDF values
-        center = (1,) * dim
+        # center = (1,) * dim
         out_access = AccessPdfValues(stencil, streaming_pattern, timestep, 'out')
-        for q in range(values_per_cell):
-            out_access.write_pdf(pdf_arr, center, q, q)
+        for cell in product(*(range(1, 4) for _ in range(dim))):
+            for q in range(values_per_cell):
+                out_access.write_pdf(pdf_arr, cell, q, q)
 
         #   Do boundary handling
         bh(prev_timestep=timestep)
 
-        center = np.array(center)
         #   Check PDF values
         in_access = AccessPdfValues(stencil, streaming_pattern, timestep.next(), 'in')
 
         #   Inbound in center cell
-        for q, streaming_dir in enumerate(stencil):
-            f = in_access.read_pdf(pdf_arr, center, q)
-            assert f == q
-
-        #   Outbound in neighbors
-        for normal_dir in stencil[1:]:
-            for q, streaming_dir in enumerate(stencil):
-                neighbor = center + np.array(normal_dir)
-                if all(n == 0 or n == -s for s, n in zip(streaming_dir, normal_dir)):
-                    f = out_access.read_pdf(pdf_arr, neighbor, q)
-                    assert f == q
+        for cell in product(*(range(1, 4) for _ in range(dim))):
+            for q in range(values_per_cell):
+                f = in_access.read_pdf(pdf_arr, cell, q)
+                assert f == q
 
 
 def test_extrapolation_outflow_initialization_by_copy():
@@ -94,12 +90,12 @@ def test_extrapolation_outflow_initialization_by_copy():
 
     blocks = list(dh.iterate())
     index_list = blocks[0][bh._index_array_name].boundary_object_to_index_list[outflow]
-    assert len(index_list) == 5
+    assert len(index_list) == 13
     for entry in index_list:
-        for j, stencil_dir in enumerate(stencil):
-            if all(n == 0 or n == -s for s, n in zip(stencil_dir, normal_dir)):
-                assert entry[f'pdf_{j}'] == j
-                assert entry[f'pdf_nd_{j}'] == j
+        direction = stencil[entry["dir"]]
+        inv_dir = stencil.index(inverse_direction(direction))
+        assert entry[f'pdf'] == inv_dir
+        assert entry[f'pdf_nd'] == inv_dir
 
 
 def test_extrapolation_outflow_initialization_by_callback():
@@ -120,7 +116,7 @@ def test_extrapolation_outflow_initialization_by_callback():
     normal_dir = (1, 0)
     density_callback = lambda x, y: 1
     velocity_callback = lambda x, y: (0, 0)
-    outflow = ExtrapolationOutflow(normal_dir, lb_method, 
+    outflow = ExtrapolationOutflow(normal_dir, lb_method,
                                    streaming_pattern=streaming_pattern,
                                    zeroth_timestep=zeroth_timestep,
                                    initial_density=density_callback,
@@ -133,8 +129,8 @@ def test_extrapolation_outflow_initialization_by_callback():
 
     blocks = list(dh.iterate())
     index_list = blocks[0][bh._index_array_name].boundary_object_to_index_list[outflow]
-    assert len(index_list) == 5
+    assert len(index_list) == 13
     for entry in index_list:
-        for j, stencil_dir in enumerate(stencil):
-            if all(n == 0 or n == -s for s, n in zip(stencil_dir, normal_dir)):
-                assert entry[f'pdf_nd_{j}'] == weights[j]
+        direction = stencil[entry["dir"]]
+        inv_dir = stencil.index(inverse_direction(direction))
+        assert entry[f'pdf_nd'] == weights[inv_dir]

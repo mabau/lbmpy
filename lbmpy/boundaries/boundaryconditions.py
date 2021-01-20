@@ -7,7 +7,7 @@ from pystencils.data_types import create_type
 from pystencils.sympyextensions import get_symmetric_part
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.advanced_streaming.indexing import NeighbourOffsetArrays
-from pystencils.stencil import offset_to_direction_string, direction_string_to_offset
+from pystencils.stencil import offset_to_direction_string, direction_string_to_offset, inverse_direction
 
 
 class LbBoundary:
@@ -28,20 +28,21 @@ class LbBoundary:
         This function defines the boundary behavior and must therefore be implemented by all boundaries.
         The boundary is defined through a list of sympy equations from which a boundary kernel is generated.
 
+        Args:
+        f_out:          a pystencils field acting as a proxy to access the populations streaming out of the current
+                        cell, i.e. the post-collision PDFs of the previous LBM step
+        f_in:           a pystencils field acting as a proxy to access the populations streaming into the current
+                        cell, i.e. the pre-collision PDFs for the next LBM step
+        dir_symbol:     a sympy symbol that can be used as an index to f_out and f_in. It describes the direction
+                        pointing from the fluid to the boundary cell.
+        inv_dir:        an indexed sympy symbol which describes the inversion of a direction index. It can be used in
+                        the indices of f_out and f_in for retrieving the PDF of the inverse direction.
+        lb_method:      an instance of the LB method used. Use this to adapt the boundary to the method
+                        (e.g. compressibility)
+        index_field:    the boundary index field that can be used to retrieve and update boundary data
 
-        :param f_out: a pystencils field acting as a proxy to access the populations streaming out of the current
-                cell, i.e. the post-collision PDFs of the previous LBM step
-        :param f_in: a pystencils field acting as a proxy to access the populations streaming into the current
-                cell, i.e. the pre-collision PDFs for the next LBM step
-        :param dir_symbol: a sympy symbol that can be used as an index to f_out and f_in. It describes the direction
-                    pointing from the fluid to the boundary cell.
-        :param inv_dir: an indexed sympy symbol which describes the inversion of a direction index. It can be used in
-                the indices of f_out and f_in for retrieving the PDF of the inverse direction.
-        :param lb_method: an instance of the LB method used. Use this to adapt the boundary to the method
-                    (e.g. compressibility)
-        :param index_field: the boundary index field that can be used to retrieve and update boundary data
-
-        :return: list of pystencils assignments, or pystencils.AssignmentCollection
+        Returns:
+            list of pystencils assignments, or pystencils.AssignmentCollection
         """
         raise NotImplementedError("Boundary class has to overwrite __call__")
 
@@ -77,6 +78,7 @@ class LbBoundary:
     def name(self, new_value):
         self._name = new_value
 
+
 # end class Boundary
 
 
@@ -103,6 +105,7 @@ class NoSlip(LbBoundary):
         if not isinstance(other, NoSlip):
             return False
         return self.name == other.name
+
 
 # end class NoSlip
 
@@ -182,9 +185,8 @@ class UBB(LbBoundary):
 
         c_s_sq = sp.Rational(1, 3)
         weight_of_direction = LbmWeightInfo.weight_of_direction
-        vel_term = 2 / c_s_sq \
-            * sum([d_i * v_i for d_i, v_i in zip(neighbor_offset, velocity)]) \
-            * weight_of_direction(direction, lb_method)
+        vel_term = 2 / c_s_sq * sum([d_i * v_i for d_i, v_i in zip(neighbor_offset, velocity)]) * weight_of_direction(
+            direction, lb_method)
 
         # Better alternative: in conserved value computation
         # rename what is currently called density to "virtual_density"
@@ -202,6 +204,8 @@ class UBB(LbBoundary):
         else:
             return [Assignment(f_in(inv_dir[direction]),
                                f_out(direction) - vel_term)]
+
+
 # end class UBB
 
 
@@ -217,13 +221,9 @@ class SimpleExtrapolationOutflow(LbBoundary):
 
     Args:
         normal_direction: direction vector normal to the outflow
-        stencil: stencil used for the lattice Boltzmann method
+        stencil: stencil used by the lattice boltzmann method
         name: optional name of the boundary.
     """
-
-    #   We need each fluid cell only once, the direction of the outflow is given
-    #   in the constructor.
-    single_link = True
 
     def __init__(self, normal_direction, stencil, name=None):
         if isinstance(normal_direction, str):
@@ -235,26 +235,35 @@ class SimpleExtrapolationOutflow(LbBoundary):
         self.normal_direction = normal_direction
         super(SimpleExtrapolationOutflow, self).__init__(name)
 
+    def get_additional_code_nodes(self, lb_method):
+        """Return a list of code nodes that will be added in the generated code before the index field loop.
+
+        Args:
+            lb_method: Lattice Boltzmann method. See :func:`lbmpy.creationfunctions.create_lb_method`
+
+        Returns:
+            list containing NeighbourOffsetArrays
+
+        """
+        return [NeighbourOffsetArrays(lb_method.stencil)]
+
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
-        stencil = lb_method.stencil
+        neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+        tangential_offset = tuple(offset - normal for offset, normal in zip(neighbor_offset, self.normal_direction))
 
-        boundary_assignments = []
-        for i, stencil_dir in enumerate(stencil):
-            if all(n == 0 or n == -s for s, n in zip(stencil_dir, self.normal_direction)):
-                asm = Assignment(f_out[self.normal_direction](i), f_out.center(i))
-                boundary_assignments.append(asm)
+        return Assignment(f_in.center(inv_dir[dir_symbol]), f_out[tangential_offset](inv_dir[dir_symbol]))
 
-        print(boundary_assignments)
-        return boundary_assignments
+
 # end class SimpleExtrapolationOutflow
 
 
 class ExtrapolationOutflow(LbBoundary):
     r"""
         Outflow boundary condition :cite:`geier2015`, equation F.2, with u neglected (listed below).
-        This boundary condition interpolates missing on the boundary in normal direction. For this interpolation, the
-        PDF values of the last time step are used. They are interpolated between fluid cell and boundary cell.
-        To get the PDF values from the last time step an index array is used which stores them.
+        This boundary condition interpolates populations missing on the boundary in normal direction. 
+        For this interpolation, the PDF values of the last time step are used. They are interpolated 
+        between fluid cell and boundary cell. To get the PDF values from the last time step an index 
+        array is used which stores them.
 
     .. math ::
         f_{\overline{1}jkxyzt} = f_{\overline{1}jk(x - \Delta x)yz(t - \Delta t)} c \theta^{\frac{1}{2}}
@@ -275,10 +284,6 @@ class ExtrapolationOutflow(LbBoundary):
         initial_velocity: tuple of floating point constants or callback taking spatial coordinates (x, y [,z]) as
                           positional arguments, specifying the initial velocity on boundary nodes
     """
-
-    #   We need each fluid cell only once, the direction of the outflow is given
-    #   in the constructor.
-    single_link = True
 
     def __init__(self, normal_direction, lb_method, dt=1, dx=1, name=None,
                  streaming_pattern='pull', zeroth_timestep=Timestep.BOTH,
@@ -335,56 +340,65 @@ class ExtrapolationOutflow(LbBoundary):
                 return pdf_acc.read_pdf(boundary_data.pdf_array, fluid_cell, j)
 
         for entry in boundary_data.index_array:
-            fluid_cell = tuple(entry[c] for c in coord_names)
-            boundary_cell = tuple(f + o for f, o in zip(fluid_cell, self.normal_direction))
+            center = tuple(entry[c] for c in coord_names)
+            direction = self.stencil[entry["dir"]]
+            inv_dir = self.stencil.index(inverse_direction(direction))
+            tangential_offset = tuple(offset - normal for offset, normal in zip(direction, self.normal_direction))
+            domain_cell = tuple(f + o for f, o in zip(center, tangential_offset))
+            outflow_cell = tuple(f + o for f, o in zip(center, direction))
 
             #   Initial fluid cell PDF values
-            for j, stencil_dir in enumerate(self.stencil):
-                if all(n == 0 or n == -s for s, n in zip(stencil_dir, self.normal_direction)):
-                    entry[f'pdf_{j}'] = pdf_acc.read_pdf(boundary_data.pdf_array, fluid_cell, j)
-                    entry[f'pdf_nd_{j}'] = get_boundary_cell_pdfs(fluid_cell, boundary_cell, j)
+            entry['pdf'] = pdf_acc.read_pdf(boundary_data.pdf_array, domain_cell, inv_dir)
+            entry['pdf_nd'] = get_boundary_cell_pdfs(domain_cell, outflow_cell, inv_dir)
 
     @property
     def additional_data(self):
-        """Used internally only. For the ExtrapolationOutflow information of the precious PDF values is needed. This
-        information is added to the boundary"""
-        data = []
-        for i, stencil_dir in enumerate(self.stencil):
-            if all(n == 0 or n == -s for s, n in zip(stencil_dir, self.normal_direction)):
-                data.append((f'pdf_{i}', create_type("double")))
-                data.append((f'pdf_nd_{i}', create_type("double")))
+        """Used internally only. For the ExtrapolationOutflow information of the previous PDF values is needed. This
+        information is stored in the index vector."""
+        data = [('pdf', create_type("double")), ('pdf_nd', create_type("double"))]
         return data
 
     @property
     def additional_data_init_callback(self):
-        """The initialisation of the additional data is implemented internally for this class.
-        Thus no callback can be provided"""
-        if callable(self.init_callback):
-            return self.init_callback
+        return self.init_callback
+
+    def get_additional_code_nodes(self, lb_method):
+        """Return a list of code nodes that will be added in the generated code before the index field loop.
+
+        Args:
+            lb_method: Lattice Boltzmann method. See :func:`lbmpy.creationfunctions.create_lb_method`
+
+        Returns:
+            list containing NeighbourOffsetArrays
+
+        """
+        return [NeighbourOffsetArrays(lb_method.stencil)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         subexpressions = []
         boundary_assignments = []
         dtdx = sp.Rational(self.dt, self.dx)
 
-        for i, stencil_dir in enumerate(self.stencil):
-            if all(n == 0 or n == -s for s, n in zip(stencil_dir, self.normal_direction)):
+        neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+        tangential_offset = tuple(offset - normal for offset, normal in zip(neighbor_offset, self.normal_direction))
 
-                interpolated_pdf_sym = sp.Symbol(f'pdf_inter_{i}')
-                interpolated_pdf_asm = Assignment(interpolated_pdf_sym, (index_field[0](f'pdf_{i}') * (self.c * dtdx))
-                                                  + ((sp.Number(1) - self.c * dtdx) * index_field[0](f'pdf_nd_{i}')))
-                subexpressions.append(interpolated_pdf_asm)
+        interpolated_pdf_sym = sp.Symbol('pdf_inter')
+        interpolated_pdf_asm = Assignment(interpolated_pdf_sym, (index_field[0]('pdf') * (self.c * dtdx))
+                                          + ((sp.Number(1) - self.c * dtdx) * index_field[0]('pdf_nd')))
+        subexpressions.append(interpolated_pdf_asm)
 
-                asm = Assignment(f_out[self.normal_direction](i), interpolated_pdf_sym)
-                boundary_assignments.append(asm)
+        asm = Assignment(f_in.center(inv_dir[dir_symbol]), interpolated_pdf_sym)
+        boundary_assignments.append(asm)
 
-                asm = Assignment(index_field[0](f'pdf_{i}'), f_out.center(i))
-                boundary_assignments.append(asm)
+        asm = Assignment(index_field[0]('pdf'), f_out[tangential_offset](inv_dir[dir_symbol]))
+        boundary_assignments.append(asm)
 
-                asm = Assignment(index_field[0](f'pdf_nd_{i}'), interpolated_pdf_sym)
-                boundary_assignments.append(asm)
+        asm = Assignment(index_field[0]('pdf_nd'), interpolated_pdf_sym)
+        boundary_assignments.append(asm)
 
         return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
+
+
 # end class ExtrapolationOutflow
 
 
@@ -404,7 +418,6 @@ class FixedDensity(LbBoundary):
         self._density = density
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
-
         def remove_asymmetric_part_of_main_assignments(assignment_collection, degrees_of_freedom):
             new_main_assignments = [Assignment(a.lhs, get_symmetric_part(a.rhs, degrees_of_freedom))
                                     for a in assignment_collection.main_assignments]
@@ -438,6 +451,8 @@ class FixedDensity(LbBoundary):
 
         return subexpressions + [Assignment(f_in(inv_dir[dir_symbol]),
                                             2 * eq_component - f_out(dir_symbol))]
+
+
 # end class FixedDensity
 
 
@@ -467,6 +482,8 @@ class NeumannByCopy(LbBoundary):
 
     def __eq__(self, other):
         return type(other) == NeumannByCopy
+
+
 # end class NeumannByCopy
 
 
@@ -479,6 +496,7 @@ class StreamInConstant(LbBoundary):
         name: optional name of the boundary.
 
     """
+
     def __init__(self, constant, name=None):
         super(StreamInConstant, self).__init__(name)
         self._constant = constant

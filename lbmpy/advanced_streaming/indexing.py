@@ -133,10 +133,10 @@ class BetweenTimestepsIndexing:
                 inv = True
 
             if isinstance(sp.sympify(idx), sp.Integer):
-                accessor_subs[fa] = accesses[f_dir][idx].get_shifted(*(fa.offsets))
+                accessor_subs[fa] = accesses[f_dir][idx].get_shifted(*fa.offsets)
             else:
                 arr = self._array_symbols(f_dir, inv, idx)
-                accessor_subs[fa] = self._pdf_field[arr['offsets']](arr['index']).get_shifted(*(fa.offsets))
+                accessor_subs[fa] = self._pdf_field[arr['offsets']](arr['index']).get_shifted(*fa.offsets)
 
         return assignments.new_with_substitutions(accessor_subs)
 
