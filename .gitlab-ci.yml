@@ -13,6 +13,8 @@ tests-and-coverage:
       - $ENABLE_NIGHTLY_BUILDS
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
+    - env
+    - pip list
     - export NUM_CORES=$(nproc --all)
     - mkdir -p ~/.config/matplotlib
     - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
@@ -38,6 +40,8 @@ test-longrun:
       - $ENABLE_NIGHTLY_BUILDS
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
+    - env 
+    - pip list
     - export NUM_CORES=$(nproc --all)
     - mkdir -p ~/.config/matplotlib
     - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
@@ -103,6 +107,8 @@ pycodegen-integration:
   when: manual
   allow_failure: true
   script:
+    - env
+    - pip list
     - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pycodegen.git
     - cd pycodegen
     - git submodule sync --recursive
