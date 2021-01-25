@@ -1,3 +1,4 @@
+import itertools
 from pystencils import Field, Assignment
 from pystencils.slicing import shift_slice, get_slice_before_ghost_layer, normalize_slice
 from lbmpy.advanced_streaming.utility import is_inplace, get_accessor, numeric_index, \
@@ -59,14 +60,17 @@ def get_communication_slices(
     Return the source and destination slices for periodicity handling or communication between blocks.
 
     :param stencil: The stencil used by the LB method.
-    :param comm_stencil: The stencil defining the communication directions. If None, it will be set to stencil.
+    :param comm_stencil: The stencil defining the communication directions. If None, it will be set to the 
+                         full stencil (D2Q9 in 2D, D3Q27 in 3D, etc.).
     :param streaming_pattern: The streaming pattern.
     :param prev_timestep: Timestep after which communication is run.
     :param ghost_layers: Number of ghost layers in each direction.
 
     """
+
+    dim = len(stencil[0])
     if comm_stencil is None:
-        comm_stencil = stencil
+        comm_stencil = itertools.product(*([-1, 0, 1] for _ in range(dim)))
 
     pdfs = Field.create_generic('pdfs', spatial_dimensions=len(stencil[0]), index_shape=(len(stencil),))
     write_accesses = get_accessor(streaming_pattern, prev_timestep).write(pdfs, stencil)
@@ -168,8 +172,9 @@ class LBMPeriodicityHandling:
             stencil = get_stencil(stencil)
 
         self.stencil = stencil
+        self.dim = len(stencil[0])
         self.dh = data_handling
-        
+
         target = data_handling.default_target
         assert target in ['cpu', 'gpu', 'opencl']
 
@@ -184,13 +189,16 @@ class LBMPeriodicityHandling:
         self.pycuda_direct_copy = target == 'gpu' and pycuda_direct_copy
 
         def is_copy_direction(direction):
+            s = 0
             for d, p in zip(direction, periodicity):
+                s += abs(d)
                 if d != 0 and not p:
                     return False
 
-            return True
+            return s != 0
 
-        copy_directions = tuple(filter(is_copy_direction, stencil[1:]))
+        full_stencil = itertools.product(*([-1, 0, 1] for _ in range(self.dim)))
+        copy_directions = tuple(filter(is_copy_direction, full_stencil))
         self.comm_slices = []
         timesteps = get_timesteps(streaming_pattern)
         for timestep in timesteps:
@@ -224,7 +232,7 @@ class LBMPeriodicityHandling:
         for src, dst in self.comm_slices[timestep.idx]:
             kernels.append(
                 periodic_pdf_copy_kernel(
-                    pdf_field, src, dst, target=self.target, 
+                    pdf_field, src, dst, target=self.target,
                     opencl_queue=self.opencl_queue, opencl_ctx=self.opencl_ctx))
         return kernels
 
