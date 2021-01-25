@@ -22,7 +22,8 @@ tests-and-coverage:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - env
     - pip list
-    - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=. -m "not longrun"
+    - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=. -m "not longrun" --junitxml=report.xml
+    - python3 -m coverage xml
   tags:
     - docker
     - cuda11
@@ -31,6 +32,9 @@ tests-and-coverage:
     when: always
     paths:
       - coverage_report
+    reports:
+      cobertura: coverage.xml
+      junit: report.xml
 
 # Nightly test  - runs "long run" jobs only
 test-longrun:
@@ -46,14 +50,17 @@ test-longrun:
     - mkdir -p ~/.config/matplotlib
     - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
-    - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=.
+    - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=. --junitxml=report.xml
   tags:
     - docker
     - cuda11
     - AVX
   artifacts:
+    when: always
     paths:
       - coverage_report
+    reports:
+      junit: report.xml
 
 # Minimal tests in windows environment
 minimal-windows:
@@ -84,10 +91,14 @@ ubuntu:
     - pip3 install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - env
     - pip3 list
-    - pytest-3 -v -m "not longrun"
+    - pytest-3 -v -m "not longrun" --junitxml=report.xml
   tags:
     - docker
     - cuda11
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
 
 minimal-conda:
   stage: test
