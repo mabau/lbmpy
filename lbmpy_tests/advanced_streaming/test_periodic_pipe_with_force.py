@@ -185,6 +185,7 @@ class PeriodicPipeFlow:
 @pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q19', 'D3Q27'])
 @pytest.mark.parametrize('streaming_pattern', streaming_patterns)
 @pytest.mark.parametrize('target', targets)
+@pytest.mark.longrun
 def test_periodic_pipe(stencil, streaming_pattern, target):
     stencil = get_stencil(stencil)
     pipeflow = PeriodicPipeFlow(stencil, streaming_pattern, target=target)

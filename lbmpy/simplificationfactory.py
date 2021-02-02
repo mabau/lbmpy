@@ -1,9 +1,8 @@
 import sympy as sp
 
 from lbmpy.innerloopsplit import create_lbm_split_groups
-from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
-from lbmpy.methods.momentbased import MomentBasedLbMethod
-from lbmpy.methods.momentbasedsimplifications import (
+from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
+from lbmpy.methods.momentbased.momentbasedsimplifications import (
     factor_density_after_factoring_relaxation_times, factor_relaxation_rates,
     replace_common_quadratic_and_constant_term, replace_density_and_velocity, replace_second_order_velocity_products)
 from pystencils.simp import (
@@ -32,9 +31,4 @@ def create_simplification_strategy(lb_method, split_inner_loop=False):
             s.add(subexpression_substitution_in_main_assignments)
             if split_inner_loop:
                 s.add(create_lbm_split_groups)
-    elif isinstance(lb_method, CumulantBasedLbMethod):
-        s.add(expand)
-        s.add(factor_relaxation_rates)
-        s.add(add_subexpressions_for_divisions)
-
     return s

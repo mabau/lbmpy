@@ -7,9 +7,10 @@ from copy import copy
 import pytest
 import sympy as sp
 
-from lbmpy.methods.creationfunctions import RelaxationInfo, create_srt, create_trt, create_trt_kbc
-from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
-from lbmpy.methods.momentbased import MomentBasedLbMethod
+from lbmpy.methods.creationfunctions import RelaxationInfo, create_srt, create_trt, create_trt_kbc, \
+    create_with_default_polynomial_cumulants
+from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
+from lbmpy.methods.centeredcumulant.centeredcumulantmethod import CenteredCumulantBasedLbMethod
 from lbmpy.moments import MOMENT_SYMBOLS
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
@@ -26,9 +27,9 @@ def __change_relaxation_rate_of_conserved_moments(method, new_relaxation_rate=sp
     if isinstance(method, MomentBasedLbMethod):
         changed_method = MomentBasedLbMethod(method.stencil, rr_dict, method.conserved_quantity_computation,
                                              force_model=method.force_model)
-    elif isinstance(method, CumulantBasedLbMethod):
-        changed_method = CumulantBasedLbMethod(method.stencil, rr_dict, method.conserved_quantity_computation,
-                                               force_model=method.force_model)
+    elif isinstance(method, CenteredCumulantBasedLbMethod):
+        changed_method = CenteredCumulantBasedLbMethod(method.stencil, rr_dict, method.conserved_quantity_computation,
+                                                       force_model=method.force_model)
     else:
         raise ValueError("Not a moment or cumulant-based method")
 
@@ -53,16 +54,26 @@ def check_method_equivalence(m1, m2, do_simplifications):
 
 
 @pytest.mark.longrun
+def test_cumulant():
+    for stencil_name in ('D2Q9',):
+        stencil = get_stencil(stencil_name)
+        original_method = create_with_default_polynomial_cumulants(stencil, [sp.Symbol("omega")])
+        changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
+
+        check_method_equivalence(original_method, changed_method, True)
+        check_method_equivalence(original_method, changed_method, False)
+
+
+@pytest.mark.longrun
 def test_srt():
     for stencil_name in ('D2Q9',):
-        for cumulant in (False, True):
-            stencil = get_stencil(stencil_name)
-            original_method = create_srt(stencil, sp.Symbol("omega"), cumulant=cumulant, compressible=True,
-                                         maxwellian_moments=True)
-            changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
+        stencil = get_stencil(stencil_name)
+        original_method = create_srt(stencil, sp.Symbol("omega"), compressible=True,
+                                     maxwellian_moments=True)
+        changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
-            check_method_equivalence(original_method, changed_method, True)
-            check_method_equivalence(original_method, changed_method, False)
+        check_method_equivalence(original_method, changed_method, True)
+        check_method_equivalence(original_method, changed_method, False)
 
 
 def test_srt_short():

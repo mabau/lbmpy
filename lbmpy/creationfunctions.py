@@ -32,23 +32,28 @@ General:
     - ``trt-kbc-n<N>`` where <N> is 1,2,3 or 4. Special two-relaxation rate method. This is not the entropic method
       yet, only the relaxation pattern. To get the entropic method, see parameters below!
       (:func:`lbmpy.methods.create_trt_kbc`)
+    - ``cumulant``: cumulant-based lb method (:func:`lbmpy.methods.create_with_default_polynomial_cumulants`) which 
+      relaxes groups of polynomial cumulants chosen to optimize rotational invariance.
+    - ``monomial_cumulant``: cumulant-based lb method (:func:`lbmpy.methods.create_with_monomial_cumulants`) which
+      relaxes monomial cumulants.
 
 - ``relaxation_rates``: sequence of relaxation rates, number depends on selected method. If you specify more rates than
-  method needs, the additional rates are ignored. For SRT and TRT models it is possible ot define a single
-  ``relaxation_rate`` instead of a list, the second rate for TRT is then determined via magic number.
+  method needs, the additional rates are ignored. For SRT, TRT and polynomial cumulant models it is possible ot define 
+  a single ``relaxation_rate`` instead of a list. The second rate for TRT is then determined via magic number. For the
+  cumulant model, it sets only the relaxation rate corresponding to shear viscosity, setting all others to unity.
 - ``compressible=False``: affects the selection of equilibrium moments. Both options approximate the *incompressible*
   Navier Stokes Equations. However when chosen as False, the approximation is better, the standard LBM derivation is
   compressible.
 - ``equilibrium_order=2``: order in velocity, at which the equilibrium moment/cumulant approximation is
   truncated. Order 2 is sufficient to approximate Navier-Stokes
-- ``force_model=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'``, ``'buick'``, ``'schiller'``, or
-  an instance of a class implementing the same methods as the classes in :mod:`lbmpy.forcemodels`. For details, see
-  :mod:`lbmpy.forcemodels`
+- ``force_model=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'``, ``'buick'``, ``'schiller'``, 
+  ``'cumulant'`` or an instance of a class implementing the same methods as the classes in :mod:`lbmpy.forcemodels`. 
+  For details, see :mod:`lbmpy.forcemodels`
 - ``force=(0,0,0)``: either constant force or a symbolic expression depending on field value
 - ``maxwellian_moments=True``: way to compute equilibrium moments/cumulants, if False the standard
   discretized LBM equilibrium is used, otherwise the equilibrium moments are computed from the continuous Maxwellian.
   This makes only a difference if sparse stencils are used e.g. D2Q9 and D3Q27 are not affected, D319 and DQ15 are
-- ``cumulant=False``: use cumulants instead of moments
+- ``cumulant=False``: use cumulants instead of moments (deprecated: use method=cumulant directly)
 - ``initial_velocity=None``: initial velocity in domain, can either be a tuple (x,y,z) velocity to set a constant
   velocity everywhere, or a numpy array with the same size of the domain, with a last coordinate of shape dim to set
   velocities on cell level
@@ -71,12 +76,19 @@ Entropic methods:
 
 - ``entropic=False``: In case there are two distinct relaxation rate in a method, one of them (usually the one, not
   determining the viscosity) can be automatically chosen w.r.t an entropy condition. For details see
-  :mod:`lbmpy.methods.entropic`
+  :mod:`lbmpy.methods.momentbased.entropic`
 - ``entropic_newton_iterations=None``: For moment methods the entropy optimum can be calculated in closed form.
   For cumulant methods this is not possible, in that case it is computed using Newton iterations. This parameter can be
   used to force Newton iterations and specify how many should be done
 - ``omega_output_field=None``: you can pass a pystencils Field here, where the calculated free relaxation rate of
   an entropic or Smagorinsky method is written to
+
+Cumulant methods:
+
+- ``galilean_correction=False``: Special correction for D3Q27 cumulant LBMs. For Details see
+  :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
+- ``pre_simplification=True``: Simplifications applied during the derivaton of the collision rule for cumulant LBMs
+  For details see :mod:`lbmpy.methods.momentbased.moment_transforms`.
 
 LES methods:
 
@@ -183,13 +195,18 @@ from copy import copy
 import sympy as sp
 
 import lbmpy.forcemodels as forcemodels
+import lbmpy.methods.centeredcumulant.force_model as cumulant_force_model
 from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
 from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
+from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
+from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
+from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
+from lbmpy.methods.creationfunctions import (
+    create_with_monomial_cumulants, create_with_polynomial_cumulants, create_with_default_polynomial_cumulants)
 from lbmpy.methods.creationfunctions import create_generic_mrt
-from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
-from lbmpy.methods.entropic import add_entropy_condition, add_iterative_entropy_condition
-from lbmpy.methods.entropic_eq_srt import create_srt_entropic
+from lbmpy.methods.momentbased.entropic import add_entropy_condition, add_iterative_entropy_condition
+from lbmpy.methods.momentbased.entropic_eq_srt import create_srt_entropic
 from lbmpy.moments import get_order
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.simplificationfactory import create_simplification_strategy
@@ -205,7 +222,7 @@ from pystencils.simp import sympy_cse
 from pystencils.stencil import have_same_entries
 
 
-def create_lb_function(ast=None, optimization={}, **kwargs):
+def create_lb_function(ast=None, optimization=None, **kwargs):
     """Creates a Python function for the LB method"""
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
@@ -221,7 +238,7 @@ def create_lb_function(ast=None, optimization={}, **kwargs):
     return res
 
 
-def create_lb_ast(update_rule=None, optimization={}, **kwargs):
+def create_lb_ast(update_rule=None, optimization=None, **kwargs):
     """Creates a pystencils AST for the LB method"""
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
@@ -241,7 +258,7 @@ def create_lb_ast(update_rule=None, optimization={}, **kwargs):
 
 
 @disk_cache_no_fallback
-def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
+def create_lb_update_rule(collision_rule=None, optimization=None, **kwargs):
     """Creates an update rule (list of Assignments) for a LB method that describe a full sweep"""
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
@@ -287,7 +304,7 @@ def create_lb_update_rule(collision_rule=None, optimization={}, **kwargs):
 
 
 @disk_cache_no_fallback
-def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
+def create_lb_collision_rule(lb_method=None, optimization=None, **kwargs):
     """Creates a collision rule (list of Assignments) for a LB method describing the collision operator (no stream)"""
     params, opt_params = update_with_default_parameters(kwargs, optimization)
 
@@ -305,18 +322,19 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     if rho_in is not None and isinstance(rho_in, Field):
         rho_in = rho_in.center
 
-    keep_rrs_symbolic = opt_params['keep_rrs_symbolic']
+    pre_simplification = opt_params['pre_simplification']
     if u_in is not None:
         density_rhs = sum(lb_method.pre_collision_pdf_symbols) if rho_in is None else rho_in
         eqs = [Assignment(cqc.zeroth_order_moment_symbol, density_rhs)]
         eqs += [Assignment(u_sym, u_in[i]) for i, u_sym in enumerate(cqc.first_order_moment_symbols)]
         eqs = AssignmentCollection(eqs, [])
         collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=eqs,
-                                                      keep_rrs_symbolic=keep_rrs_symbolic)
+                                                      pre_simplification=pre_simplification)
+
     elif u_in is None and rho_in is not None:
         raise ValueError("When setting 'density_input' parameter, 'velocity_input' has to be specified as well.")
     else:
-        collision_rule = lb_method.get_collision_rule(keep_rrs_symbolic=keep_rrs_symbolic)
+        collision_rule = lb_method.get_collision_rule(pre_simplification=pre_simplification)
 
     if params['entropic']:
         if params['smagorinsky']:
@@ -337,7 +355,7 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
         if 'split_groups' in collision_rule.simplification_hints:
             collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
 
-    if params['output'] and params['kernel_type'] == 'default_stream_collide' and params['streaming_pattern'] == 'pull':
+    if params['output']:
         cqc = lb_method.conserved_quantity_computation
         output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, params['output'])
         collision_rule = collision_rule.new_merged(output_eqs)
@@ -354,7 +372,7 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
     cse_pdfs = False if 'cse_pdfs' not in opt_params else opt_params['cse_pdfs']
     cse_global = False if 'cse_global' not in opt_params else opt_params['cse_global']
     if cse_pdfs:
-        from lbmpy.methods.momentbasedsimplifications import cse_in_opposing_directions
+        from lbmpy.methods.momentbased.momentbasedsimplifications import cse_in_opposing_directions
         collision_rule = cse_in_opposing_directions(collision_rule)
     if cse_global:
         collision_rule = sympy_cse(collision_rule)
@@ -365,6 +383,9 @@ def create_lb_collision_rule(lb_method=None, optimization={}, **kwargs):
 def create_lb_method(**params):
     """Creates a LB method, defined by moments/cumulants for collision space, equilibrium and relaxation rates."""
     params, _ = update_with_default_parameters(params, {}, fail_on_unknown_parameter=False)
+
+    method_name = params['method']
+    relaxation_rates = params['relaxation_rates']
 
     if isinstance(params['stencil'], tuple) or isinstance(params['stencil'], list):
         stencil_entries = params['stencil']
@@ -383,7 +404,7 @@ def create_lb_method(**params):
 
     no_force_model = 'force_model' not in params or params['force_model'] == 'none' or params['force_model'] is None
     if not force_is_zero and no_force_model:
-        params['force_model'] = 'schiller'
+        params['force_model'] = 'cumulant' if method_name.lower().endswith('cumulant') else 'schiller'
 
     if 'force_model' in params:
         force_model = force_model_from_string(params['force_model'], params['force'][:dim])
@@ -398,8 +419,15 @@ def create_lb_method(**params):
         'cumulant': params['cumulant'],
         'c_s_sq': params['c_s_sq'],
     }
-    method_name = params['method']
-    relaxation_rates = params['relaxation_rates']
+
+    cumulant_params = {
+        'equilibrium_order': params['equilibrium_order'],
+        'force_model': force_model,
+        'c_s_sq': params['c_s_sq'],
+        'galilean_correction': params['galilean_correction'],
+        'central_moment_transform_class': params['central_moment_transform_class'],
+        'cumulant_transform_class': params['cumulant_transform_class'],
+    }
 
     if method_name.lower() == 'srt':
         assert len(relaxation_rates) >= 1, "Not enough relaxation rates"
@@ -415,6 +443,10 @@ def create_lb_method(**params):
                 if all(get_order(m) < 2 for m in moments):
                     if params['entropic']:
                         return relaxation_rates[0]
+                    elif params['cumulant']:
+                        result = relaxation_rates[next_relaxation_rate[0]]
+                        next_relaxation_rate[0] += 1
+                        return result
                     else:
                         return 0
                 res = relaxation_rates[next_relaxation_rate[0]]
@@ -439,6 +471,15 @@ def create_lb_method(**params):
         method = create_trt_kbc(dim, relaxation_rates[0], relaxation_rates[1], 'KBC-N' + method_nr, **common_params)
     elif method_name.lower() == 'entropic-srt':
         method = create_srt_entropic(stencil_entries, relaxation_rates[0], force_model, params['compressible'])
+    elif method_name.lower() == 'cumulant':
+        nested_moments = params['nested_moments'] if 'nested_moments' in params else None
+        if nested_moments is not None:
+            method = create_with_polynomial_cumulants(
+                stencil_entries, relaxation_rates, nested_moments, **cumulant_params)
+        else:
+            method = create_with_default_polynomial_cumulants(stencil_entries, relaxation_rates, **cumulant_params)
+    elif method_name.lower() == 'monomial_cumulant':
+        method = create_with_monomial_cumulants(stencil_entries, relaxation_rates, **cumulant_params)
     else:
         raise ValueError("Unknown method %s" % (method_name,))
 
@@ -456,7 +497,7 @@ def create_lb_method_from_existing(method, modification_function):
     relaxation_table = (modification_function(m, eq, rr)
                         for m, eq, rr in zip(method.moments, method.moment_equilibrium_values, method.relaxation_rates))
     compressible = method.conserved_quantity_computation.compressible
-    cumulant = isinstance(method, CumulantBasedLbMethod)
+    cumulant = isinstance(method, CenteredCumulantBasedLbMethod)
     return create_generic_mrt(method.stencil, relaxation_table, compressible, method.force_model, cumulant)
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -476,6 +517,7 @@ def force_model_from_string(force_model_name, force_values):
         'silva': forcemodels.Buick,
         'edm': forcemodels.EDM,
         'schiller': forcemodels.Schiller,
+        'cumulant': cumulant_force_model.CenteredCumulantForceModel
     }
     if force_model_name.lower() not in force_model_dict:
         raise ValueError("Unknown force model %s" % (force_model_name,))
@@ -511,7 +553,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
 
     default_method_description = {
         'stencil': 'D2Q9',
-        'method': 'srt',  # can be srt, trt or mrt
+        'method': 'srt',  # can be srt, trt, mrt or cumulant
         'relaxation_rates': None,
         'compressible': False,
         'equilibrium_order': 2,
@@ -522,8 +564,12 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'force_model': 'none',
         'force': (0, 0, 0),
         'maxwellian_moments': True,
-        'cumulant': False,
+        'cumulant': False,  # Depricated usage. Cumulant is now an own method
         'initial_velocity': None,
+
+        'galilean_correction': False,  # only available for D3Q27 cumulant methods
+        'central_moment_transform_class': PdfsToCentralMomentsByShiftMatrix,
+        'cumulant_transform_class': CentralMomentsToCumulantsByGeneratingFunc,
 
         'entropic': False,
         'entropic_newton_iterations': None,
@@ -553,7 +599,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'cse_pdfs': False,
         'cse_global': False,
         'simplification': 'auto',
-        'keep_rrs_symbolic': True,
+        'pre_simplification': True,
         'split': False,
 
         'field_size': None,
@@ -575,6 +621,8 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
     if 'relaxation_rate' in params:
         if 'relaxation_rates' not in params:
             if 'entropic' in params and params['entropic']:
+                params['relaxation_rates'] = [params['relaxation_rate']]
+            elif 'method' in params and params['method'].endswith('cumulant'):
                 params['relaxation_rates'] = [params['relaxation_rate']]
             else:
                 params['relaxation_rates'] = [params['relaxation_rate'],

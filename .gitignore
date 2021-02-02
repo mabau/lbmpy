@@ -4,6 +4,7 @@ __pycache__
 *.pyc
 *.vti
 /build
+/html_doc
 /dist
 /*.egg-info
 .cache
@@ -13,5 +14,4 @@ _local_tmp
 **/.vscode
 /lbmpy_tests/db
 doc/bibtex.json
-/html_doc
 RELEASE-VERSION

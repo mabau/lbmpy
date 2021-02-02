@@ -6,9 +6,11 @@ simplification hints, which are set by the MomentBasedLbMethod.
 import sympy as sp
 
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
-from pystencils import Assignment
-from pystencils.sympyextensions import (
-    extract_most_common_factor, replace_second_order_products, subs_additive)
+from pystencils import Assignment, AssignmentCollection
+from pystencils.stencil import inverse_direction
+from pystencils.sympyextensions import extract_most_common_factor, replace_second_order_products, subs_additive
+
+from collections import defaultdict
 
 
 def replace_second_order_velocity_products(cr: LbmCollisionRule):
@@ -216,7 +218,106 @@ def cse_in_opposing_directions(cr: LbmCollisionRule):
     return res
 
 
+def substitute_moments_in_conserved_quantity_equations(ac: AssignmentCollection):
+    """
+    Applied on an assignment collection containing both equations for raw moments
+    and conserved quantities, this simplification attempts to express the conserved
+    quantities in terms of the zeroth- and first-order moments.
+
+    For example, :math:`rho =  f_0 + f_1 + ... + f_8` will be replaced by the zeroth-
+    order moment: :math:`rho = m_{00}`
+
+    Required simplification hints:
+        - cq_symbols_to_moments: A dictionary mapping the conserved quantity symbols
+          to their corresponding moment symbols (like `{rho : m_00, u_0 : m_10, u_1 : m_01}`).
+    """
+    sh = ac.simplification_hints
+    if 'cq_symbols_to_moments' not in sh:
+        raise ValueError("Simplification hint 'cq_symbols_to_moments' missing.")
+
+    cq_symbols_to_moments = sh['cq_symbols_to_moments']
+    if len(cq_symbols_to_moments) == 0:
+        return ac
+
+    required_symbols = list(cq_symbols_to_moments.keys()) + list(cq_symbols_to_moments.values())
+    reduced_ac = ac.new_filtered(required_symbols).new_without_subexpressions()
+    main_asm_dict = ac.main_assignments_dict
+    subexp_dict = ac.subexpressions_dict
+    reduced_assignments = reduced_ac.main_assignments_dict
+
+    for cq_sym, moment_sym in cq_symbols_to_moments.items():
+        moment_eq = reduced_assignments[moment_sym]
+        assert moment_eq.count(cq_sym) == 0, "Expressing conserved quantity " \
+            f"{cq_sym} using moment {moment_sym} would introduce a circular dependency."
+        cq_eq = subs_additive(reduced_assignments[cq_sym], moment_sym, moment_eq)
+        if cq_sym in main_asm_dict:
+            main_asm_dict[cq_sym] = cq_eq
+        else:
+            assert moment_sym in subexp_dict, f"Cannot express subexpression {cq_sym}" \
+                f" using main assignment {moment_sym}!"
+            subexp_dict[cq_sym] = cq_eq
+
+    main_assignments = [Assignment(lhs, rhs) for lhs, rhs in main_asm_dict.items()]
+    subexpressions = [Assignment(lhs, rhs) for lhs, rhs in subexp_dict.items()]
+    ac = ac.copy(main_assignments=main_assignments, subexpressions=subexpressions)
+    ac.topological_sort()
+    return ac.new_without_unused_subexpressions()
+
+
+def split_pdf_main_assignments_by_symmetry(ac: AssignmentCollection):
+    """
+    Splits assignments to post-collision PDFs streaming in opposite directions
+    into their symmetric and asymetric parts, which are extracted as subexpressions.
+    Useful especially when computing PDF values from post-collision raw moments, where
+    symmetric splitting can reduce the number of required additions by one half.
+
+    Required simplification hints:
+        - stencil: Velocity set of the LB method as a nested tuple of directions
+        - post_collision_pdf_symbols: Sequence of symbols corresponding to the stencil velocities
+    """
+    sh = ac.simplification_hints
+    if 'stencil' not in sh:
+        raise ValueError("Symmetric splitting requires the stencil as a simplification hint.")
+    if 'post_collision_pdf_symbols' not in sh:
+        raise ValueError("Symmetric splitting requires the post-collision pdf symbols as a simplification hint.")
+
+    stencil = sh['stencil']
+    pdf_symbols = sh['post_collision_pdf_symbols']
+
+    asm_dict = ac.main_assignments_dict
+    subexpressions = ac.subexpressions
+    done = set()
+    subexp_to_symbol_dict = defaultdict(lambda: next(ac.subexpression_symbol_generator))
+    half = sp.Rational(1, 2)
+    for i, f in enumerate(pdf_symbols):
+        if i in done:
+            continue
+        c = stencil[i]
+        if all(cj == 0 for cj in c):
+            continue
+        c_inv = inverse_direction(c)
+        i_inv = stencil.index(c_inv)
+        f_inv = pdf_symbols[i_inv]
+        done |= {i, i_inv}
+
+        f_eq = asm_dict[f]
+        f_inv_eq = asm_dict[f_inv]
+
+        symmetric_part = half * (f_eq + f_inv_eq)
+        asymmetric_part = half * (f_eq - f_inv_eq)
+
+        symmetric_symb = subexp_to_symbol_dict[symmetric_part]
+        asymmetric_symb = subexp_to_symbol_dict[asymmetric_part]
+
+        asm_dict[f] = symmetric_symb + asymmetric_symb
+        asm_dict[f_inv] = symmetric_symb - asymmetric_symb
+    for subexp, sym in subexp_to_symbol_dict.items():
+        subexpressions.append(Assignment(sym, subexp))
+    main_assignments = [Assignment(lhs, rhs) for lhs, rhs in asm_dict.items()]
+    return ac.copy(main_assignments=main_assignments, subexpressions=subexpressions)
+
 # -------------------------------------- Helper Functions --------------------------------------------------------------
+
 
 def __get_common_quadratic_and_constant_terms(cr: LbmCollisionRule):
     """Determines a common subexpression useful for most LBM model often called f_eq_common.

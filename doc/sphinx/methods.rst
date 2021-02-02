@@ -46,6 +46,9 @@ Creation Functions
 Class
 -----
 
-.. autoclass:: lbmpy.methods.MomentBasedLbMethod
+.. autoclass:: lbmpy.methods.momentbased.MomentBasedLbMethod
+    :members:
+
+.. autoclass:: lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod
     :members:
 

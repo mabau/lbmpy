@@ -8,17 +8,24 @@ import sympy as sp
 
 from lbmpy.maxwellian_equilibrium import (
     compressible_to_incompressible_moment_value, get_cumulants_of_continuous_maxwellian_equilibrium,
-    get_cumulants_of_discrete_maxwellian_equilibrium,
     get_moments_of_continuous_maxwellian_equilibrium,
     get_moments_of_discrete_maxwellian_equilibrium, get_weights)
+
+from lbmpy.methods.centeredcumulant.centered_cumulants import get_default_polynomial_cumulants_for_stencil
+from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
+from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
+
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
-from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
-from lbmpy.methods.momentbased import MomentBasedLbMethod
+from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
+from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
+
 from lbmpy.moments import (
     MOMENT_SYMBOLS, discrete_moment, exponents_to_polynomial_representations,
     get_default_moment_set_for_stencil, gram_schmidt, is_even, moments_of_order,
-    moments_up_to_component_order, sort_moments_into_groups_of_same_order, is_bulk_moment, is_shear_moment)
+    moments_up_to_component_order, sort_moments_into_groups_of_same_order,
+    is_bulk_moment, is_shear_moment, get_order)
+
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.stencils import get_stencil
 from pystencils.stencil import have_same_entries
@@ -47,7 +54,7 @@ def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rat
         c_s_sq: Speed of sound squared
 
     Returns:
-        `lbmpy.methods.MomentBasedLbMethod` instance
+        `lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
@@ -58,10 +65,7 @@ def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rat
     density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
 
     if cumulant:
-        warn("Cumulant methods should be created with maxwellian_moments=True")
-        eq_values = get_cumulants_of_discrete_maxwellian_equilibrium(stencil, tuple(mom_to_rr_dict.keys()),
-                                                                     c_s_sq=c_s_sq, compressible=compressible,
-                                                                     order=equilibrium_order)
+        raise ValueError("Cumulant methods should be created with maxwellian_moments=True")
     else:
         eq_values = get_moments_of_discrete_maxwellian_equilibrium(stencil, tuple(mom_to_rr_dict.keys()),
                                                                    c_s_sq=c_s_sq, compressible=compressible,
@@ -69,10 +73,8 @@ def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rat
 
     rr_dict = OrderedDict([(mom, RelaxationInfo(eq_mom, rr))
                            for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
-    if cumulant:
-        return CumulantBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
-    else:
-        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+
+    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
 
 
 def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,
@@ -106,9 +108,11 @@ def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_r
         eq_values = [compressible_to_incompressible_moment_value(em, rho, u) for em in eq_values]
 
     rr_dict = OrderedDict([(mom, RelaxationInfo(eq_mom, rr))
-                          for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
+                           for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
     if cumulant:
-        return CumulantBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+        warn("Please use method=cumulant directly to create a cumulant method", DeprecationWarning)
+        return create_with_default_polynomial_cumulants(stencil, mom_to_rr_dict.values(),
+                                                        force_model=force_model)
     else:
         return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
 
@@ -123,7 +127,7 @@ def create_generic_mrt(stencil, moment_eq_value_relaxation_rate_tuples, compress
         moment_eq_value_relaxation_rate_tuples: sequence of tuples containing (moment, equilibrium value, relax. rate)
         compressible: compressibility, determines calculation of velocity for force models
         force_model: see create_with_discrete_maxwellian_eq_moments
-        cumulant: true for cumulant methods, False for moment-based methods
+        cumulant: true for cumulant methods, False for moment-based methods. Depricated parameter.
     """
     density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
 
@@ -132,7 +136,8 @@ def create_generic_mrt(stencil, moment_eq_value_relaxation_rate_tuples, compress
         moment = sp.sympify(moment)
         rr_dict[moment] = RelaxationInfo(eq_value, rr)
     if cumulant:
-        return CumulantBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+        warn("Please use method=cumulant directly to create a cumulant method", DeprecationWarning)
+        return CenteredCumulantBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
     else:
         return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
 
@@ -160,7 +165,7 @@ def create_from_equilibrium(stencil, equilibrium, moment_to_relaxation_rate_dict
     density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
 
     rr_dict = OrderedDict([(mom, RelaxationInfo(discrete_moment(equilibrium, mom, stencil).expand(), rr))
-                          for mom, rr in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values())])
+                           for mom, rr in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values())])
     return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
 
 
@@ -178,7 +183,7 @@ def create_srt(stencil, relaxation_rate, maxwellian_moments=False, **kwargs):
                         used to compute the equilibrium moments
 
     Returns:
-        :class:`lbmpy.methods.MomentBasedLbMethod` instance
+        :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
@@ -366,7 +371,7 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter, maxwellian_moments=Fa
         return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, **kwargs)
 
 
-def mrt_orthogonal_modes_literature(stencil, is_weighted, is_cumulant):
+def mrt_orthogonal_modes_literature(stencil, is_weighted, is_cumulant=False):
     """
     Returns a list of lists of modes, grouped by common relaxation times.
     This is for commonly used MRT models found in literature.
@@ -381,60 +386,38 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted, is_cumulant):
     x, y, z = MOMENT_SYMBOLS
     one = sp.Rational(1, 1)
 
-    if have_same_entries(stencil, get_stencil("D2Q9")) and is_weighted:
-        # Reference:
-        # Duenweg, B., Schiller, U. D., & Ladd, A. J. (2007). Statistical mechanics of the fluctuating
-        # lattice Boltzmann equation. Physical Review E, 76(3)
-        sq = x ** 2 + y ** 2
-        all_moments = [one, x, y, 3 * sq - 2, 2 * x ** 2 - sq, x * y,
-                       (3 * sq - 4) * x, (3 * sq - 4) * y, 9 * sq ** 2 - 15 * sq + 2]
-        nested_moments = list(sort_moments_into_groups_of_same_order(all_moments).values())
-        return nested_moments
-    elif have_same_entries(stencil, get_stencil("D3Q15")) and is_weighted:
-        sq = x ** 2 + y ** 2 + z ** 2
-        nested_moments = [
-            [one, x, y, z],  # [0, 3, 5, 7]
-            [sq - 1],  # [1]
-            [3 * sq ** 2 - 9 * sq + 4],  # [2]
-            [(3 * sq - 5) * x, (3 * sq - 5) * y, (3 * sq - 5) * z],  # [4, 6, 8]
-            [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 10, 11, 12, 13]
-            [x * y * z]
-        ]
-    elif have_same_entries(stencil, get_stencil("D3Q19")) and is_weighted:
-        # This MRT variant mentioned in the dissertation of Ulf Schiller 
-        # "Thermal fluctuations and boundary conditions in the lattice Boltzmann method" (2008), p. 24ff
-        # There are some typos in the moment matrix on p.27
-        # The here implemented ordering of the moments is however different from that reference (Eq. 2.61-2.63)
-        # The moments are weighted-orthogonal (Eq. 2.58)
-        
-        # Further references:
-        # Duenweg, B., Schiller, U. D., & Ladd, A. J. (2007). Statistical mechanics of the fluctuating
-        # lattice Boltzmann equation. Physical Review E, 76(3)
-        # Chun, B., & Ladd, A. J. (2007). Interpolated boundary condition for lattice Boltzmann simulations of
-        # flows in narrow gaps. Physical review E, 75(6)
-        if is_cumulant:
+    if not is_cumulant:
+        if have_same_entries(stencil, get_stencil("D2Q9")) and is_weighted:
+            # Reference:
+            # Duenweg, B., Schiller, U. D., & Ladd, A. J. (2007). Statistical mechanics of the fluctuating
+            # lattice Boltzmann equation. Physical Review E, 76(3)
+            sq = x ** 2 + y ** 2
+            all_moments = [one, x, y, 3 * sq - 2, 2 * x ** 2 - sq, x * y,
+                           (3 * sq - 4) * x, (3 * sq - 4) * y, 9 * sq ** 2 - 15 * sq + 2]
+            nested_moments = list(sort_moments_into_groups_of_same_order(all_moments).values())
+            return nested_moments
+        elif have_same_entries(stencil, get_stencil("D3Q15")) and is_weighted:
+            sq = x ** 2 + y ** 2 + z ** 2
             nested_moments = [
-                [sp.sympify(1), x, y, z],  # conserved
-                [x * y,
-                 x * z,
-                 y * z,
-                 x ** 2 - y ** 2,
-                 x ** 2 - z ** 2],  # shear
-
-                [x ** 2 + y ** 2 + z ** 2],  # bulk
-
-                [x * y ** 2 + x * z ** 2,
-                 x ** 2 * y + y * z ** 2,
-                 x ** 2 * z + y ** 2 * z],
-                [x * y ** 2 - x * z ** 2,
-                 x ** 2 * y - y * z ** 2,
-                 x ** 2 * z - y ** 2 * z],
-
-                [x ** 2 * y ** 2 - 2 * x ** 2 * z ** 2 + y ** 2 * z ** 2,
-                 x ** 2 * y ** 2 + x ** 2 * z ** 2 - 2 * y ** 2 * z ** 2],
-                [x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2],
+                [one, x, y, z],  # [0, 3, 5, 7]
+                [sq - 1],  # [1]
+                [3 * sq ** 2 - 9 * sq + 4],  # [2]
+                [(3 * sq - 5) * x, (3 * sq - 5) * y, (3 * sq - 5) * z],  # [4, 6, 8]
+                [3 * x ** 2 - sq, y ** 2 - z ** 2, x * y, y * z, x * z],  # [9, 10, 11, 12, 13]
+                [x * y * z]
             ]
-        else:
+        elif have_same_entries(stencil, get_stencil("D3Q19")) and is_weighted:
+            # This MRT variant mentioned in the dissertation of Ulf Schiller
+            # "Thermal fluctuations and boundary conditions in the lattice Boltzmann method" (2008), p. 24ff
+            # There are some typos in the moment matrix on p.27
+            # The here implemented ordering of the moments is however different from that reference (Eq. 2.61-2.63)
+            # The moments are weighted-orthogonal (Eq. 2.58)
+
+            # Further references:
+            # Duenweg, B., Schiller, U. D., & Ladd, A. J. (2007). Statistical mechanics of the fluctuating
+            # lattice Boltzmann equation. Physical Review E, 76(3)
+            # Chun, B., & Ladd, A. J. (2007). Interpolated boundary condition for lattice Boltzmann simulations of
+            # flows in narrow gaps. Physical review E, 75(6)
             sq = x ** 2 + y ** 2 + z ** 2
             nested_moments = [
                 [one, x, y, z],  # [0, 3, 5, 7]
@@ -445,41 +428,7 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted, is_cumulant):
                 [(2 * sq - 3) * (3 * x ** 2 - sq), (2 * sq - 3) * (y ** 2 - z ** 2)],  # [10, 12]
                 [(y ** 2 - z ** 2) * x, (z ** 2 - x ** 2) * y, (x ** 2 - y ** 2) * z]  # [16, 17, 18]
             ]
-    elif have_same_entries(stencil, get_stencil("D3Q27")) and not is_weighted:
-        if is_cumulant:
-            nested_moments = [
-                [sp.sympify(1), x, y, z],  # conserved
-                [x * y,
-                 x * z,
-                 y * z,
-                 x ** 2 - y ** 2,
-                 x ** 2 - z ** 2],  # shear
-
-                [x ** 2 + y ** 2 + z ** 2],  # bulk
-
-                [x * y ** 2 + x * z ** 2,
-                 x ** 2 * y + y * z ** 2,
-                 x ** 2 * z + y ** 2 * z],
-                [x * y ** 2 - x * z ** 2,
-                 x ** 2 * y - y * z ** 2,
-                 x ** 2 * z - y ** 2 * z],
-                [x * y * z],
-
-                [x ** 2 * y ** 2 - 2 * x ** 2 * z ** 2 + y ** 2 * z ** 2,
-                 x ** 2 * y ** 2 + x ** 2 * z ** 2 - 2 * y ** 2 * z ** 2],
-                [x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2],
-
-                [x ** 2 * y * z,
-                 x * y ** 2 * z,
-                 x * y * z ** 2],
-
-                [x ** 2 * y ** 2 * z,
-                 x ** 2 * y * z ** 2,
-                 x * y ** 2 * z ** 2],
-
-                [x ** 2 * y ** 2 * z ** 2],
-            ]
-        else:
+        elif have_same_entries(stencil, get_stencil("D3Q27")) and not is_weighted:
             xsq, ysq, zsq = x ** 2, y ** 2, z ** 2
             all_moments = [
                 sp.Rational(1, 1),  # 0
@@ -507,11 +456,187 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted, is_cumulant):
                 27 * (xsq * ysq * zsq) - 18 * (xsq * ysq + xsq * zsq + ysq * zsq) + 12 * (xsq + ysq + zsq) - 8,  # 26
             ]
             nested_moments = list(sort_moments_into_groups_of_same_order(all_moments).values())
+        else:
+            raise NotImplementedError("No MRT model is available (yet) for this stencil. "
+                                      "Create a custom MRT using 'create_with_discrete_maxwellian_eq_moments'")
     else:
-        raise NotImplementedError("No MRT model is available (yet) for this stencil. "
-                                  "Create a custom MRT using 'create_with_discrete_maxwellian_eq_moments'")
+        nested_moments = get_default_polynomial_cumulants_for_stencil(stencil)
 
     return nested_moments
+
+# ----------------------------------------- Cumulant method creators ---------------------------------------------------
+
+
+def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=None,
+                                   equilibrium_order=None, c_s_sq=sp.Rational(1, 3),
+                                   galilean_correction=False,
+                                   central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix,
+                                   cumulant_transform_class=CentralMomentsToCumulantsByGeneratingFunc):
+    r"""Creates a cumulant lattice Boltzmann model.
+
+    Args:
+        stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.get_stencil`
+        cumulant_to_rr_dict: dict that has as many entries as the stencil. Each cumulant, which can be
+                             represented by an exponent tuple or in polynomial form
+                             (see `lbmpy.methods.centeredcumulant.get_default_centered_cumulants_for_stencil`),
+                             is mapped to a relaxation rate.
+        force_model: force model used for the collision. For cumulant LB method a good choice is
+                     `lbmpy.methods.centeredcumulant.force_model`
+        equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
+        c_s_sq: Speed of sound squared
+        galilean_correction: special correction for D3Q27 cumulant collisions. See Appendix H in
+                             :cite:`geier2015`. Implemented in :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
+        central_moment_transform_class: Class which defines the transformation to the central moment space
+                                        (see :mod:`lbmpy.methods.momentbased.moment_transforms`)
+        cumulant_transform_class: Class which defines the transformation from the central moment space to the
+                                  cumulant space (see :mod:`lbmpy.methods.centeredcumulant.cumulant_transform`)
+
+    Returns:
+        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+    """
+
+    one = sp.Integer(1)
+    if isinstance(stencil, str):
+        stencil = get_stencil(stencil)
+
+    assert len(cumulant_to_rr_dict) == len(
+        stencil), "The number of moments has to be equal to the number of stencil entries"
+    dim = len(stencil[0])
+
+    # CQC
+    cqc = DensityVelocityComputation(stencil, True, force_model=force_model)
+    density_symbol = cqc.zeroth_order_moment_symbol
+    velocity_symbols = cqc.first_order_moment_symbols
+
+    #   Equilibrium Values
+    higher_order_polynomials = list(filter(lambda x: get_order(x) > 1, cumulant_to_rr_dict.keys()))
+
+    #   Lower Order Equilibria
+    cumulants_to_relaxation_info_dict = {one: RelaxationInfo(density_symbol, cumulant_to_rr_dict[one])}
+    for d in MOMENT_SYMBOLS[:dim]:
+        cumulants_to_relaxation_info_dict[d] = RelaxationInfo(0, cumulant_to_rr_dict[d])
+
+    #   Polynomial Cumulant Equilibria
+    polynomial_equilibria = get_cumulants_of_continuous_maxwellian_equilibrium(
+        higher_order_polynomials, dim, rho=density_symbol, u=velocity_symbols, c_s_sq=c_s_sq, order=equilibrium_order)
+    polynomial_equilibria = [density_symbol * v for v in polynomial_equilibria]
+
+    for i, c in enumerate(higher_order_polynomials):
+        cumulants_to_relaxation_info_dict[c] = RelaxationInfo(polynomial_equilibria[i], cumulant_to_rr_dict[c])
+
+    return CenteredCumulantBasedLbMethod(stencil, cumulants_to_relaxation_info_dict, cqc, force_model,
+                                         galilean_correction=galilean_correction,
+                                         central_moment_transform_class=central_moment_transform_class,
+                                         cumulant_transform_class=cumulant_transform_class)
+
+
+def create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups, **kwargs):
+    r"""Creates a cumulant lattice Boltzmann model based on a default polynomial set.
+
+    Args:
+        stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.get_stencil`
+        relaxation_rates: relaxation rates for each cumulant group. If None are provided a list of symbolic relaxation
+                          rates is created and used. If only a list with one entry is provided this relaxation rate is
+                          used for determine the viscosity of the simulation. All other cumulants are relaxed with one.
+                          If a cumulant force model is provided the first order cumulants are relaxed with two to ensure
+                          that the force is applied correctly to the momentum groups
+        cumulant_groups: Nested sequence of polynomial expressions defining the cumulants to be relaxed. All cumulants 
+                         within one group are relaxed with the same relaxation rate.
+        kwargs: See :func:`create_centered_cumulant_model`
+
+    Returns:
+        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+    """
+    if isinstance(stencil, str):
+        stencil = get_stencil(stencil)
+
+    cumulant_to_rr_dict = OrderedDict()
+    rr_iter = iter(relaxation_rates)
+    for group in cumulant_groups:
+        if all(get_order(c) <= 1 for c in group):
+            for cumulant in group:
+                cumulant_to_rr_dict[cumulant] = 0
+        else:
+            try:
+                rr = next(rr_iter)
+                for cumulant in group:
+                    cumulant_to_rr_dict[cumulant] = rr
+            except StopIteration:
+                raise ValueError('Not enough relaxation rates specified.')
+
+    return create_centered_cumulant_model(stencil, cumulant_to_rr_dict, **kwargs)
+
+
+def create_with_monomial_cumulants(stencil, relaxation_rates, **kwargs):
+    r"""Creates a cumulant lattice Boltzmann model based on a default polinomial set.
+
+    Args:
+        stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.get_stencil`
+        relaxation_rates: relaxation rates for each cumulant group. If None are provided a list of symbolic relaxation
+                          rates is created and used. If only a list with one entry is provided this relaxation rate is
+                          used for determine the viscosity of the simulation. All other cumulants are relaxed with one.
+                          If a cumulant force model is provided the first order cumulants are relaxed with two to ensure
+                          that the force is applied correctly to the momentum groups
+        kwargs: See :func:`create_centered_cumulant_model`
+
+    Returns:
+        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+    """
+
+    if isinstance(stencil, str):
+        stencil = get_stencil(stencil)
+
+    dim = len(stencil[0])
+
+    # Get monomial moments
+    cumulants = get_default_moment_set_for_stencil(stencil)
+
+    if len(relaxation_rates) == 1:
+        r_rates = []
+        for c in cumulants:
+            order = get_order(c)
+            if order <= 1:
+                #   Conserved moments
+                continue
+            elif is_shear_moment(c, dim):
+                #   Viscosity-governing moments
+                r_rates.append(relaxation_rates[0])
+            else:
+                #   The rest
+                r_rates.append(1)
+    else:
+        r_rates = relaxation_rates
+
+    cumulant_groups = [(c,) for c in cumulants]
+
+    return create_with_polynomial_cumulants(stencil, r_rates, cumulant_groups, **kwargs)
+
+
+def create_with_default_polynomial_cumulants(stencil, relaxation_rates, **kwargs):
+    r"""Creates a cumulant lattice Boltzmann model based on a default polynomial set.
+
+    Args: See :func:`create_with_polynomial_cumulants`.
+
+    Returns:
+        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+    """
+
+    if isinstance(stencil, str):
+        stencil = get_stencil(stencil)
+
+    # Get polynomial groups
+    cumulant_groups = get_default_polynomial_cumulants_for_stencil(stencil)
+
+    if len(relaxation_rates) == 1:
+        r_rates = [relaxation_rates[0]]     # For correct viscosity
+        r_rates += [1] * (len(cumulant_groups) - 3)
+    else:
+        assert len(relaxation_rates) >= len(cumulant_groups) - 2, \
+            f"Number of relaxation rates must at least match the number of non-conserved cumulant groups. " \
+            f"For this stencil we have {len(cumulant_groups) - 2} such cumulant groups"
+        r_rates = relaxation_rates
+
+    return create_with_polynomial_cumulants(stencil, r_rates, cumulant_groups, **kwargs)
 
 
 # ----------------------------------------- Comparison view for notebooks ----------------------------------------------

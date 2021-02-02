@@ -41,6 +41,7 @@ from copy import copy
 from typing import Iterable, List, Optional, Sequence, Tuple, TypeVar
 
 import sympy as sp
+import numpy as np
 
 from pystencils.cache import memorycache
 from pystencils.sympyextensions import remove_higher_order_terms
@@ -108,6 +109,14 @@ def extend_moments_with_permutations(exponent_tuples):
     for i in exponent_tuples:
         all_moments += list(moment_permutations(i))
     return __unique(all_moments)
+
+
+def contained_moments(exponent_tuple, min_order=0, exclude_original=True):
+    """Returns all moments contained in exponent_tuple, in the sense that their exponents are less than or
+    equal to the corresponding exponents in exponent_tuple."""
+    return [t for t
+            in itertools.product(*(range(i + 1) for i in exponent_tuple))
+            if sum(t) >= min_order and (not exclude_original or t != exponent_tuple)]
 
 
 # ------------------------------ Representation Conversions ------------------------------------------------------------
@@ -209,7 +218,7 @@ def is_even(moment):
 
 def get_moment_indices(moment_exponent_tuple):
     """Returns indices for a given exponent tuple:
-    
+
     Example:
         >>> get_moment_indices((2,1,0))
         [0, 0, 1]
@@ -366,6 +375,62 @@ def moment_matrix(moments, stencil, shift_velocity=None):
             return evaluated
 
     return sp.Matrix(len(moments), len(stencil), generator)
+
+
+def set_up_shift_matrix(moments, stencil, velocity_symbols=None):
+    """
+    Sets up a shift matrix to shift raw moments to central moment space.
+
+    Args:
+        - moments: Sequence of polynomials or sequence of exponent tuples, sorted
+                   ascendingly by moment order.
+        - stencil: Nested tuple of lattice velocities
+        - velocity_symbols: Sequence of symbols corresponding to the shift velocity
+    """
+    x, y, z = MOMENT_SYMBOLS
+    dim = len(stencil[0])
+    nr_directions = len(stencil)
+
+    directions = np.asarray(stencil)
+
+    u = velocity_symbols if velocity_symbols is not None else sp.symbols(f"u_:{dim}")
+    f = sp.symbols(f"f_:{nr_directions}")
+    m = sp.symbols(f"m_:{nr_directions}")
+
+    Mf = moment_matrix(moments, stencil=stencil) * sp.Matrix(f)
+
+    shift_matrix_list = []
+    for nr_moment in range(len(moments)):
+        if not isinstance(moments[nr_moment], tuple):
+            exponent_central_moment = moments[nr_moment].as_powers_dict()
+            exponent = [exponent_central_moment[x], exponent_central_moment[y], exponent_central_moment[z]]
+        else:
+            exponent = moments[nr_moment]
+
+        shift_equation = 1
+        for i in range(dim):
+            shift_equation *= (directions[:, i] - u[i]) ** exponent[i]
+        shift_equation = sum(shift_equation * f)
+
+        collected_expr = sp.Poly(shift_equation, u).as_expr()
+        terms_of_collected_expr = collected_expr.args
+
+        constants = set()
+        for i in range(len(terms_of_collected_expr)):
+            constants.add(sp.Abs(sp.LC(terms_of_collected_expr[i])))
+
+        for i in range(len(stencil)):
+            for c in constants:
+                collected_expr = collected_expr.subs(c * Mf[i], c * m[i])
+
+        collected_expr = sp.collect(collected_expr.expand(), m)
+
+        inner_list = []
+        for i in range(len(stencil)):
+            inner_list.append(collected_expr.coeff(m[i], 1))
+
+        shift_matrix_list.append(inner_list)
+    return sp.Matrix(shift_matrix_list)
 
 
 def gram_schmidt(moments, stencil, weights=None):

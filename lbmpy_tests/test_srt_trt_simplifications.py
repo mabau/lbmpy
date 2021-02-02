@@ -6,7 +6,7 @@ import sympy as sp
 
 from lbmpy.forcemodels import Luo
 from lbmpy.methods import create_srt, create_trt, create_trt_with_magic_number
-from lbmpy.methods.momentbasedsimplifications import cse_in_opposing_directions
+from lbmpy.methods.momentbased.momentbasedsimplifications import cse_in_opposing_directions
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import get_stencil
 
