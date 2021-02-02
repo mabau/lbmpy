@@ -65,29 +65,6 @@ def test_central_moment_to_cumulant_transformation():
             assert backward[idx] == moment_symbols[idx]
 
 
-def test_collision_rule():
-    cumulant_method = create_lb_method(stencil='D2Q9', compressible=True, cumulant=True, relaxation_rate=1.5)
-    cumulant_method.set_first_moment_relaxation_rate(1.5)
-    assert cumulant_method.force_model is None
-    assert cumulant_method.zeroth_order_equilibrium_moment_symbol == sp.symbols("rho")
-    assert cumulant_method.first_order_equilibrium_moment_symbols == sp.symbols("u_:2")
-    assert all(e.relaxation_rate == 1.5 for e in cumulant_method.relaxation_info_dict.values())
-    cumulant_method.get_equilibrium_terms()
-
-    cr1 = cumulant_method.get_collision_rule(moment_subexpressions=True, post_collision_subexpressions=True,
-                                             pre_collision_subexpressions=True)
-    cr2 = cumulant_method.get_collision_rule(moment_subexpressions=False, post_collision_subexpressions=False,
-                                             pre_collision_subexpressions=False)
-    cr1_inserted = cr1.new_without_subexpressions()
-    cr2_inserted = cr2.new_without_subexpressions()
-
-    t = cr1_inserted.main_assignments[8].rhs - cr2_inserted.main_assignments[8].rhs
-    assert t == 0
-
-    html = cumulant_method._repr_html_()
-    assert 'Cumulant' in html
-
-
 def test_cumulants_from_pdf():
     res = cumulants_from_pdfs(get_stencil("D2Q9"))
     assert res[(0, 0)] == sp.log(sum(sp.symbols("f_:9")))

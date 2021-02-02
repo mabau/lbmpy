@@ -37,6 +37,7 @@ except Exception:
 @pytest.mark.parametrize('target', targets)
 @pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q19', 'D3Q27'])
 @pytest.mark.parametrize('streaming_pattern', streaming_patterns)
+@pytest.mark.longrun
 def test_fully_periodic_flow(target, stencil, streaming_pattern):
 
     if target == 'opencl':

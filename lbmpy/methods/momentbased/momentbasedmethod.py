@@ -21,11 +21,11 @@ class MomentBasedLbMethod(AbstractLbMethod):
         Args:
             stencil: see :func:`lbmpy.stencils.get_stencil`
             moment_to_relaxation_info_dict: a dictionary mapping moments in either tuple or polynomial formulation
-                                        to a RelaxationInfo, which consists of the corresponding equilibrium moment
-                                        and a relaxation rate
+                                            to a RelaxationInfo, which consists of the corresponding equilibrium moment
+                                            and a relaxation rate
             conserved_quantity_computation: instance of :class:`lbmpy.methods.AbstractConservedQuantityComputation`.
-                                          This determines how conserved quantities are computed, and defines
-                                          the symbols used in the equilibrium moments like e.g. density and velocity
+                                            This determines how conserved quantities are computed, and defines
+                                            the symbols used in the equilibrium moments like e.g. density and velocity
             force_model: force model instance, or None if no forcing terms are required
         """
         assert isinstance(conserved_quantity_computation, AbstractConservedQuantityComputation)
@@ -88,9 +88,9 @@ class MomentBasedLbMethod(AbstractLbMethod):
         equilibrium = self.get_equilibrium()
         return sp.Matrix([eq.rhs for eq in equilibrium.main_assignments])
 
-    def get_collision_rule(self, conserved_quantity_equations=None, keep_rrs_symbolic=True):
+    def get_collision_rule(self, conserved_quantity_equations=None, pre_simplification=True):
         d = self.relaxation_matrix
-        relaxation_rate_sub_expressions, d = self._generate_relaxation_matrix(d, keep_rrs_symbolic)
+        relaxation_rate_sub_expressions, d = self._generate_relaxation_matrix(d, pre_simplification)
         ac = self._collision_rule_with_relaxation_matrix(d, relaxation_rate_sub_expressions,
                                                          True, conserved_quantity_equations)
         return ac

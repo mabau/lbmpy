@@ -24,6 +24,14 @@ class Timestep(IntEnum):
         """To use this timestep as an array index"""
         return self % 2
 
+    def __str__(self):
+        if self == Timestep.EVEN:
+            return 'Even'
+        elif self == Timestep.ODD:
+            return 'Odd'
+        else:
+            return 'Both'
+
 
 streaming_patterns = ['push', 'pull', 'aa', 'esotwist']
 

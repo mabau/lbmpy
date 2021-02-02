@@ -1,6 +1,5 @@
 from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
 from pystencils.simp.assignment_collection import AssignmentCollection
-import sympy as sp
 from pystencils import Assignment, Field
 from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
 from pystencils.data_types import create_type
@@ -8,6 +7,8 @@ from pystencils.sympyextensions import get_symmetric_part
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.advanced_streaming.indexing import NeighbourOffsetArrays
 from pystencils.stencil import offset_to_direction_string, direction_string_to_offset, inverse_direction
+
+import sympy as sp
 
 
 class LbBoundary:
@@ -138,7 +139,7 @@ class UBB(LbBoundary):
     def additional_data(self):
         """ In case of the UBB boundary additional data is a velocity vector. This vector is added to each cell to
             realize velocity profiles for the inlet."""
-        if callable(self._velocity):
+        if self.velocity_is_callable:
             return [('vel_%d' % (i,), create_type("double")) for i in range(self.dim)]
         else:
             return []
@@ -159,9 +160,14 @@ class UBB(LbBoundary):
 
         Returns:
             list containing LbmWeightInfo and NeighbourOffsetArrays
-
         """
         return [LbmWeightInfo(lb_method), NeighbourOffsetArrays(lb_method.stencil)]
+
+    @property
+    def velocity_is_callable(self):
+        """Returns True is velocity is callable. This means the velocity should be initialised via a callback function.
+        This is useful if the inflow velocity should have a certain profile for instance"""
+        return callable(self._velocity)
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         vel_from_idx_field = callable(self._velocity)
@@ -252,8 +258,6 @@ class SimpleExtrapolationOutflow(LbBoundary):
         tangential_offset = tuple(offset - normal for offset, normal in zip(neighbor_offset, self.normal_direction))
 
         return Assignment(f_in.center(inv_dir[dir_symbol]), f_out[tangential_offset](inv_dir[dir_symbol]))
-
-
 # end class SimpleExtrapolationOutflow
 
 
@@ -329,15 +333,15 @@ class ExtrapolationOutflow(LbBoundary):
         pdf_acc = AccessPdfValues(self.stencil, streaming_pattern=self.streaming_pattern,
                                   timestep=self.zeroth_timestep, streaming_dir='out')
 
-        def get_boundary_cell_pdfs(fluid_cell, boundary_cell, j):
+        def get_boundary_cell_pdfs(f_cell, b_cell, direction):
             if self.equilibrium_calculation is not None:
                 density = self.initial_density(
-                    *boundary_cell) if callable(self.initial_density) else self.initial_density
+                    *b_cell) if callable(self.initial_density) else self.initial_density
                 velocity = self.initial_velocity(
-                    *boundary_cell) if callable(self.initial_velocity) else self.initial_velocity
-                return self.equilibrium_calculation(density, velocity, j)
+                    *b_cell) if callable(self.initial_velocity) else self.initial_velocity
+                return self.equilibrium_calculation(density, velocity, direction)
             else:
-                return pdf_acc.read_pdf(boundary_data.pdf_array, fluid_cell, j)
+                return pdf_acc.read_pdf(boundary_data.pdf_array, f_cell, direction)
 
         for entry in boundary_data.index_array:
             center = tuple(entry[c] for c in coord_names)
@@ -408,7 +412,6 @@ class FixedDensity(LbBoundary):
     Args:
         density: value of the density which should be set.
         name: optional name of the boundary.
-
     """
 
     def __init__(self, density, name=None):
@@ -494,7 +497,6 @@ class StreamInConstant(LbBoundary):
     Args:
         constant: value which should be set for the PDFs at the boundary cell.
         name: optional name of the boundary.
-
     """
 
     def __init__(self, constant, name=None):

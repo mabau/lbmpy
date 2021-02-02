@@ -77,7 +77,7 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
         cr.simplification_hints['relaxation_rates'] = []
         return cr
 
-    def get_collision_rule(self, conserved_quantity_equations=None, keep_rrs_symbolic=None):
+    def get_collision_rule(self, conserved_quantity_equations=None, pre_simplification=None):
         return self._get_collision_rule_with_relaxation_rate(self._relaxationRate,
                                                              conserved_quantity_equations=conserved_quantity_equations)
 

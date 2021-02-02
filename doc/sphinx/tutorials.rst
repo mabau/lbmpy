@@ -11,11 +11,12 @@ You can open the notebooks directly to play around with the code examples.
     /notebooks/01_tutorial_predefinedScenarios.ipynb
     /notebooks/02_tutorial_boundary_setup.ipynb
     /notebooks/03_tutorial_lbm_formulation.ipynb
-    /notebooks/04_tutorial_nondimensionalization_and_scaling.ipynb
-    /notebooks/05_tutorial_modifying_method_smagorinsky.ipynb
-    /notebooks/06_tutorial_thermal_lbm.ipynb
-    /notebooks/07_tutorial_shanchen_twophase.ipynb
-    /notebooks/08_tutorial_shanchen_twocomponent.ipynb
+    /notebooks/04_tutorial_cumulant_LBM.ipynb
+    /notebooks/05_tutorial_nondimensionalization_and_scaling.ipynb
+    /notebooks/06_tutorial_modifying_method_smagorinsky.ipynb
+    /notebooks/07_tutorial_thermal_lbm.ipynb
+    /notebooks/08_tutorial_shanchen_twophase.ipynb
+    /notebooks/09_tutorial_shanchen_twocomponent.ipynb
     /notebooks/demo_stencils.ipynb
     /notebooks/demo_create_method_from_scratch.ipynb
     /notebooks/demo_moments_cumulants_and_maxwellian_equilibrium.ipynb
