@@ -29,8 +29,6 @@ from lbmpy.methods.momentbased.moment_transforms import (
     PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT,
     FastCentralMomentTransform)
 
-from lbmpy.methods.centeredcumulant.simplification import insert_aliases, insert_zeros
-
 from lbmpy.methods.centeredcumulant.force_model import CenteredCumulantForceModel
 from lbmpy.methods.centeredcumulant.galilean_correction import (
     contains_corrected_polynomials,
@@ -413,12 +411,5 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
             main_assignments = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
                                 for eq, force_term_symbol in zip(main_assignments, force_term_symbols)]
 
-        #   9) Clean up the subexpression tree
-        ac = AssignmentCollection(main_assignments, subexpressions)
-
-        if pre_simplification and pre_simplification != 'none':
-            ac = insert_aliases(insert_zeros(ac))
-            ac = ac.new_without_unused_subexpressions()
-
         #   Aaaaaand we're done.
-        return LbmCollisionRule(self, ac.main_assignments, ac.subexpressions)
+        return LbmCollisionRule(self, main_assignments, subexpressions)

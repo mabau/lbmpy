@@ -20,6 +20,8 @@ def frobenius_norm(matrix, factor=1):
 def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_field=None):
     method = collision_rule.method
     omega_s = get_shear_relaxation_rate(method)
+    if isinstance(omega_s, float) or isinstance(omega_s, int):
+        raise ValueError("For the smagorinsky model the shear relaxation rate has to be a symbol")
     f_neq = sp.Matrix(method.pre_collision_pdf_symbols) - method.get_equilibrium_terms()
 
     tau_0 = sp.Symbol("tau_0_")

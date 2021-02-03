@@ -11,7 +11,7 @@ corrected_polynomials = [x**2 - y**2, x**2 - z**2, x**2 + y**2 + z**2]
 
 
 def contains_corrected_polynomials(polynomials):
-    return all(polynomials.containts(p) for p in corrected_polynomials)
+    return all(cp in polynomials for cp in corrected_polynomials)
 
 
 def add_galilean_correction(poly_relaxation_eqs, polynomials, correction_terms):
