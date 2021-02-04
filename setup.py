@@ -70,7 +70,7 @@ setup(name='lbmpy',
       author_email='martin.bauer@fau.de',
       url='https://i10git.cs.fau.de/pycodegen/lbmpy/',
       packages=['lbmpy'] + ['lbmpy.' + s for s in find_packages('lbmpy')],
-      install_requires=['pystencils', 'sympy>=1.1', 'numpy'],
+      install_requires=['pystencils', 'sympy>=1.2', 'numpy>=1.11.0'],
       classifiers=[
           'Development Status :: 4 - Beta',
           'Framework :: Jupyter',
