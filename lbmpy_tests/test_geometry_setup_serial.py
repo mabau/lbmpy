@@ -63,6 +63,6 @@ def test_slice_mask_combination():
         print("x", coordinates[0][:, 0])
         print("y", coordinates[1][0, :])
         print(x.shape)
-        return np.ones_like(x, dtype=np.bool)
+        return np.ones_like(x, dtype=bool)
 
     sc.boundary_handling.set_boundary(NoSlip(), make_slice[6:7, -1], callback)
