@@ -231,17 +231,17 @@ def add_black_and_white_image(boundary_handling, image_file, target_slice=None, 
     # binarize
     zoomed_image[zoomed_image <= 254] = 0
     zoomed_image[zoomed_image > 254] = 1
-    zoomed_image = np.logical_not(zoomed_image.astype(np.bool))
+    zoomed_image = np.logical_not(zoomed_image.astype(bool))
 
     # resize necessary if aspect ratio should be constant
     if zoomed_image.shape != target_size:
-        resized_image = np.zeros(target_size, dtype=np.bool)
+        resized_image = np.zeros(target_size, dtype=bool)
         mid = [(ts - s) // 2 for ts, s in zip(target_size, zoomed_image.shape)]
         resized_image[mid[0]:zoomed_image.shape[0] + mid[0], mid[1]:zoomed_image.shape[1] + mid[1]] = zoomed_image
         zoomed_image = resized_image
 
     def callback(*coordinates):
-        result = np.zeros_like(coordinates[0], dtype=np.bool)
+        result = np.zeros_like(coordinates[0], dtype=bool)
         mask_start = [int(coordinates[i][(0,) * dim] - 0.5) for i in range(dim)]
         mask_end = [int(coordinates[i][(-1,) * dim] + 1 - 0.5) for i in range(dim)]
 
