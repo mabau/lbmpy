@@ -12,16 +12,10 @@ from lbmpy.stencils import get_stencil
 from pystencils import create_kernel, create_data_handling, Assignment
 from pystencils.slicing import slice_from_direction, get_slice_before_ghost_layer
 
-
-@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q19', 'D3Q27'])
-@pytest.mark.parametrize('galilean_correction', [False, True])
-@pytest.mark.longrun
-def test_flow_around_sphere(stencil, galilean_correction):
+def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
 
     if galilean_correction and stencil != 'D3Q27':
         return True
-
-    pytest.importorskip('pycuda')
 
     stencil = get_stencil(stencil)
     dim = len(stencil[0])
@@ -31,16 +25,15 @@ def test_flow_around_sphere(stencil, galilean_correction):
     streaming_pattern = 'aa'
     timesteps = get_timesteps(streaming_pattern)
 
-    L_LU = 20
     u_max = 0.05
-    Re = 5000
+    Re = 500000
 
     kinematic_viscosity = (L_LU * u_max) / Re
     initial_velocity = (u_max, ) + (0, ) * (dim - 1)
 
     omega_v = relaxation_rate_from_lattice_viscosity(kinematic_viscosity)
 
-    channel_size = (30 * L_LU, ) + (100,) * (dim - 1)
+    channel_size = (10 * L_LU, ) + (5 * L_LU,) * (dim - 1)
     sphere_position = (channel_size[0] // 3,) + (channel_size[1] // 2,) * (dim - 1)
     sphere_radius = L_LU // 2
 
@@ -130,7 +123,6 @@ def test_flow_around_sphere(stencil, galilean_correction):
 
     dh.run_kernel(init_kernel)
 
-    total_steps = 5000
     stability_check_frequency = 1000
 
     for i in range(total_steps):
@@ -142,3 +134,17 @@ def test_flow_around_sphere(stencil, galilean_correction):
         if i % stability_check_frequency == 0:
             dh.to_cpu(u_field.name)
             assert np.isfinite(dh.cpu_arrays[u_field.name]).all()
+
+
+@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q19', 'D3Q27'])
+@pytest.mark.parametrize('galilean_correction', [False, True])
+def test_flow_around_sphere_short(stencil, galilean_correction):
+    pytest.importorskip('pycuda')
+    flow_around_sphere(stencil, galilean_correction, 5, 200)
+
+@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q19', 'D3Q27'])
+@pytest.mark.parametrize('galilean_correction', [False, True])
+@pytest.mark.longrun
+def test_flow_around_sphere_long(stencil, galilean_correction):
+    pytest.importorskip('pycuda')
+    flow_around_sphere(stencil, galilean_correction, 20, 3000)
