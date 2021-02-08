@@ -97,9 +97,7 @@ minimal-windows:
     - win
   script:
     - source /cygdrive/c/Users/build/Miniconda3/Scripts/activate
-    - source /cygdrive/c/Users/build/Miniconda3/Scripts/activate
-    - conda create --name pystencils_env_tmp
-    - source activate pystencils_env_tmp
+    - source activate pystencils
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - pip list
     - python -c "import numpy"
