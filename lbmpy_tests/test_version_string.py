@@ -1,4 +1,4 @@
-import pystencils as ps
+import lbmpy
 from pathlib import Path
 
 def test_version_string():
@@ -7,6 +7,6 @@ def test_version_string():
     if release_version.exists ():
         with open(release_version, "r") as f:
             version = f.read()
-        assert ps.__version__ == version
+        assert lbmpy.__version__ == version
     else:
-        assert ps.__version__ == "development"
+        assert lbmpy.__version__ == "development"

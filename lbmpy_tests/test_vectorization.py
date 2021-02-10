@@ -23,18 +23,18 @@ def test_lbm_vectorization_short():
     ldc1.run(10)
 
 
+@pytest.mark.parametrize('instruction_set', ['sse', 'avx'])
+@pytest.mark.parametrize('aligned_and_padding', [[False, False], [True, False], [True, True]])
+@pytest.mark.parametrize('nontemporal', [False, True])
+@pytest.mark.parametrize('double_precision', [False, True])
+@pytest.mark.parametrize('fixed_loop_sizes', [False, True])
 @pytest.mark.longrun
-def test_lbm_vectorization():
-    vectorization_options = [{'instruction_set': instruction_set,
-                              'assume_aligned': aa,
-                              'nontemporal': nt,
+def test_lbm_vectorization(instruction_set, aligned_and_padding, nontemporal, double_precision, fixed_loop_sizes):
+    vectorization_options = {'instruction_set': instruction_set,
+                              'assume_aligned': aligned_and_padding[0],
+                              'nontemporal': nontemporal,
                               'assume_inner_stride_one': True,
-                              'assume_sufficient_line_padding': lp,
-                              }
-                             for instruction_set in ('sse', 'avx')
-                             for aa, lp in ([False, False], [True, False], [True, True],)
-                             for nt in (False, True)
-                             ]
+                              'assume_sufficient_line_padding': aligned_and_padding[1]}
     time_steps = 100
     size1 = (64, 32)
     size2 = (666, 34)
@@ -46,25 +46,22 @@ def test_lbm_vectorization():
     ldc2_ref = create_lid_driven_cavity(size2, relaxation_rate=relaxation_rate)
     ldc2_ref.run(time_steps)
 
-    for double_precision in (False, True):
-        for vec_opt in vectorization_options:
-            for fixed_loop_sizes in (True, False):
-                optimization = {'double_precision': double_precision,
-                                'vectorization': vec_opt,
-                                'cse_global': True,
-                                }
-                print("Vectorization test, double precision {}, vectorization {}, fixed loop sizes {}".format(
-                    double_precision, vec_opt, fixed_loop_sizes))
-                ldc1 = create_lid_driven_cavity(size1, relaxation_rate=relaxation_rate, optimization=optimization,
-                                                fixed_loop_sizes=fixed_loop_sizes)
-                ldc1.run(time_steps)
-                np.testing.assert_almost_equal(ldc1_ref.velocity[:, :], ldc1.velocity[:, :])
+    optimization = {'double_precision': double_precision,
+                    'vectorization': vectorization_options,
+                    'cse_global': True,
+                    }
+    print("Vectorization test, double precision {}, vectorization {}, fixed loop sizes {}".format(
+        double_precision, vectorization_options, fixed_loop_sizes))
+    ldc1 = create_lid_driven_cavity(size1, relaxation_rate=relaxation_rate, optimization=optimization,
+                                    fixed_loop_sizes=fixed_loop_sizes)
+    ldc1.run(time_steps)
+    np.testing.assert_almost_equal(ldc1_ref.velocity[:, :], ldc1.velocity[:, :])
 
-                optimization['split'] = True
-                ldc2 = create_lid_driven_cavity(size2, relaxation_rate=relaxation_rate, optimization=optimization,
-                                                fixed_loop_sizes=fixed_loop_sizes)
-                ldc2.run(time_steps)
-                np.testing.assert_almost_equal(ldc2_ref.velocity[:, :], ldc2.velocity[:, :])
+    optimization['split'] = True
+    ldc2 = create_lid_driven_cavity(size2, relaxation_rate=relaxation_rate, optimization=optimization,
+                                    fixed_loop_sizes=fixed_loop_sizes)
+    ldc2.run(time_steps)
+    np.testing.assert_almost_equal(ldc2_ref.velocity[:, :], ldc2.velocity[:, :])
 
 
 if __name__ == '__main__':

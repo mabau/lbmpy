@@ -6,6 +6,7 @@ from copy import copy
 
 import pytest
 import sympy as sp
+import math
 
 from lbmpy.methods.creationfunctions import RelaxationInfo, create_srt, create_trt, create_trt_kbc, \
     create_with_default_polynomial_cumulants
@@ -36,21 +37,38 @@ def __change_relaxation_rate_of_conserved_moments(method, new_relaxation_rate=sp
     return changed_method
 
 
-def check_for_collision_rule_equivalence(collision_rule1, collision_rule2):
+def check_for_collision_rule_equivalence(collision_rule1, collision_rule2, use_numeric_subs=False):
     collision_rule1 = collision_rule1.new_without_subexpressions()
     collision_rule2 = collision_rule2.new_without_subexpressions()
+
+    if use_numeric_subs:
+        free_symbols = collision_rule1.free_symbols
+        free_symbols.update(collision_rule2.free_symbols)
+
+        subs_dict = dict()
+        value = 10.0
+        for symbol in free_symbols:
+            subs_dict.update({symbol: value})
+            value += 1.1
+
+        collision_rule1 = collision_rule1.subs(subs_dict)
+        collision_rule2 = collision_rule2.subs(subs_dict)
+
     for eq1, eq2 in zip(collision_rule1.main_assignments, collision_rule2.main_assignments):
         diff = sp.cancel(sp.expand(eq1.rhs - eq2.rhs))
-        assert diff == 0
+        if use_numeric_subs:
+            assert math.isclose(diff, 0, rel_tol=0.0, abs_tol=1e-12)
+        else:
+            assert diff == 0
 
 
-def check_method_equivalence(m1, m2, do_simplifications):
+def check_method_equivalence(m1, m2, do_simplifications, use_numeric_subs=False):
     cr1 = m1.get_collision_rule()
     cr2 = m2.get_collision_rule()
     if do_simplifications:
         cr1 = create_simplification_strategy(m1)(cr1)
         cr2 = create_simplification_strategy(m2)(cr2)
-    check_for_collision_rule_equivalence(cr1, cr2)
+    check_for_collision_rule_equivalence(cr1, cr2, use_numeric_subs)
 
 
 @pytest.mark.longrun
@@ -60,8 +78,8 @@ def test_cumulant():
         original_method = create_with_default_polynomial_cumulants(stencil, [sp.Symbol("omega")])
         changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
-        check_method_equivalence(original_method, changed_method, True)
-        check_method_equivalence(original_method, changed_method, False)
+        check_method_equivalence(original_method, changed_method, True, True)
+        check_method_equivalence(original_method, changed_method, False, True)
 
 
 @pytest.mark.longrun

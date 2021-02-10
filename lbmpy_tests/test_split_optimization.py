@@ -30,27 +30,28 @@ def test_split_number_of_operations():
                 assert op_without_splitting['divs'] == op_with_splitting['divs']
 
 
+@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q15', 'D3Q19', 'D3Q27'])
+@pytest.mark.parametrize('compressible', [True, False])
+@pytest.mark.parametrize('method', ['srt', 'mrt'])
+@pytest.mark.parametrize('force', [(0, 0, 0), (1e-6, 1e-7, 2e-6)])
 @pytest.mark.longrun
-def test_equivalence():
+def test_equivalence(stencil, compressible, method, force):
     relaxation_rates = [1.8, 1.7, 1.0, 1.0, 1.0, 1.0]
-    for stencil in ['D2Q9', 'D3Q15', 'D3Q19', 'D3Q27']:
-        for compressible in (True, False):
-            for method in ('srt', 'mrt'):
-                for force in ((0, 0, 0), (1e-6, 1e-7, 2e-6)):
-                    clear_cache()
-                    common_params = {'domain_size': (20, 30) if stencil.startswith('D2') else (10, 13, 7),
-                                     'stencil': stencil,
-                                     'method': method,
-                                     'weighted': True,
-                                     'compressible': compressible,
-                                     'force': force,
-                                     'relaxation_rates': relaxation_rates}
-                    print("Running Scenario", common_params)
-                    with_split = create_lid_driven_cavity(optimization={'split': True}, **common_params)
-                    without_split = create_lid_driven_cavity(optimization={'split': False}, **common_params)
-                    with_split.run(100)
-                    without_split.run(100)
-                    np.testing.assert_almost_equal(with_split.velocity_slice(), without_split.velocity_slice())
+    clear_cache()
+    common_params = {'domain_size': (10, 20) if stencil.startswith('D2') else (5, 10, 7),
+                     'stencil': stencil,
+                     'method': method,
+                     'weighted': True,
+                     'compressible': compressible,
+                     'force': force,
+                     'force_model': 'schiller',
+                     'relaxation_rates': relaxation_rates}
+    print("Running Scenario", common_params)
+    with_split = create_lid_driven_cavity(optimization={'split': True}, **common_params)
+    without_split = create_lid_driven_cavity(optimization={'split': False}, **common_params)
+    with_split.run(100)
+    without_split.run(100)
+    np.testing.assert_almost_equal(with_split.velocity_slice(), without_split.velocity_slice())
 
 
 def test_equivalence_short():
