@@ -28,7 +28,7 @@ def add_fluctuations_to_collision_rule(collision_rule, temperature=None, amplitu
     if not method.is_weighted_orthogonal:
         raise ValueError("Fluctuations can only be added to weighted-orthogonal methods")
 
-    rng_symbol_gen = random_symbol(collision_rule.subexpressions, seed,
+    rng_symbol_gen = random_symbol(collision_rule.subexpressions, seed=seed,
                                    rng_node=rng_node, dim=method.dim, offsets=block_offsets)
     correction = fluctuation_correction(method, rng_symbol_gen, amplitudes)
 
