@@ -96,12 +96,15 @@ minimal-windows:
   tags:
     - win
   script:
+    - export NUM_CORES=$(nproc --all)
+    - export MPLBACKEND=Agg
     - source /cygdrive/c/Users/build/Miniconda3/Scripts/activate
     - source activate pystencils
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
+    - env
     - pip list
     - python -c "import numpy"
-    - python setup.py quicktest
+    - py.test -v -n $NUM_CORES -m "not (notebook or longrun)"
 
 ubuntu:
   stage: test
