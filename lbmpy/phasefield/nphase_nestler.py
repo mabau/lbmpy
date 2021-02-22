@@ -1,17 +1,24 @@
-import pyximport
+try:
+    import pyximport
+
+    pyximport.install(language_level=3)
+    from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
+except ImportError:
+    try:
+        from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
+    except ImportError:
+        raise ImportError("neither pyximport nor binary module simplex_projection_2d available.")
+
 import sympy as sp
 
 from lbmpy.creationfunctions import create_lb_update_rule
 from lbmpy.macroscopic_value_kernels import pdf_initialization_assignments
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, force_from_phi_and_mu
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
-from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
 from lbmpy.stencils import get_stencil
 from pystencils import Assignment, create_data_handling, create_kernel
 from pystencils.fd import Diff, discretize_spatial, expand_diff_full
 from pystencils.fd.derivation import FiniteDifferenceStencilDerivation
-
-pyximport.install(language_level=3)
 
 
 def forth_order_isotropic_discretize(field):

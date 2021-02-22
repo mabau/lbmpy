@@ -16,3 +16,5 @@ _local_tmp
 doc/bibtex.json
 RELEASE-VERSION
 /db
+/lbmpy/phasefield/simplex_projection.*.so
+/lbmpy/phasefield/simplex_projection.c
