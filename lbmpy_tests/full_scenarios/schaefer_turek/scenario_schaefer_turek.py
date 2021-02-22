@@ -8,7 +8,9 @@ a cylinder. In Flow simulation with high-performance computers II (pp. 547-566).
 import warnings
 
 import numpy as np
+import pytest
 
+from pystencils.backends.simd_instruction_sets import get_supported_instruction_sets
 from lbmpy.boundaries.boundaryconditions import NoSlip
 from lbmpy.geometry import get_pipe_velocity_field
 from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity
@@ -146,8 +148,9 @@ def long_run(steady=True, **kwargs):
     plt.show()
 
 
+@pytest.mark.skipif(not get_supported_instruction_sets(), reason='cannot detect CPU instruction set')
 def test_schaefer_turek():
-    opt = {'vectorization': {'instruction_set': 'avx', 'assume_aligned': True}, 'openmp': 2}
+    opt = {'vectorization': {'instruction_set': get_supported_instruction_sets()[-1], 'assume_aligned': True}, 'openmp': 2}
     sc_2d_1 = schaefer_turek_2d(30, max_lattice_velocity=0.08, optimization=opt)
     sc_2d_1.run(30000)
     result = evaluate_static_quantities(sc_2d_1)

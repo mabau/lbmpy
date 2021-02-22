@@ -50,7 +50,7 @@ def test_equilibrium_pdfs(stencil_name, cm_transform):
     if ref_equilibrium is None:
         raw_moments = list(extract_monomials(c_lb_method.cumulants, dim=dim))
         ref_equilibrium = generate_equilibrium_by_matching_moments(
-            stencil, raw_moments, rho=rho, u=u, c_s_sq=sp.Rational(1, 3), order=2*dim)
+            stencil, tuple(raw_moments), rho=rho, u=u, c_s_sq=sp.Rational(1, 3), order=2*dim)
         reference_equilibria[stencil_name] = ref_equilibrium
 
     for i in range(q):
