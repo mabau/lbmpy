@@ -368,8 +368,8 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         lower_order_equilibrium = [info.equilibrium_value for info in lower_order_relaxation_infos]
 
         lower_order_moment_collision_eqs = relax_lower_order_central_moments(
-            lower_order_moments, lower_order_moment_symbols,
-            lower_order_relaxation_rates, lower_order_equilibrium)
+            lower_order_moments, tuple(lower_order_moment_symbols),
+            tuple(lower_order_relaxation_rates), tuple(lower_order_equilibrium))
 
         #   5) Add relaxation rules for higher-order, polynomial cumulants
         poly_relaxation_infos = [cumulant_to_relaxation_info_dict[c] for c in higher_order_polynomials]
@@ -383,8 +383,8 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
             galilean_correction_terms = None
 
         cumulant_collision_eqs = relax_polynomial_cumulants(
-            monomial_cumulants, higher_order_polynomials,
-            poly_relaxation_rates, poly_equilibrium,
+            tuple(monomial_cumulants), tuple(higher_order_polynomials),
+            tuple(poly_relaxation_rates), tuple(poly_equilibrium),
             pre_simplification,
             galilean_correction_terms=galilean_correction_terms)
 

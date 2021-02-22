@@ -1,9 +1,11 @@
 import numpy as np
 import pytest
 
+from pystencils.backends.simd_instruction_sets import get_supported_instruction_sets
 from lbmpy.scenarios import create_lid_driven_cavity
 
 
+@pytest.mark.skipif(not get_supported_instruction_sets(), reason='cannot detect CPU instruction set')
 def test_lbm_vectorization_short():
     print("Computing reference solutions")
     size1 = (64, 32)
@@ -13,7 +15,7 @@ def test_lbm_vectorization_short():
     ldc1_ref.run(10)
 
     ldc1 = create_lid_driven_cavity(size1, relaxation_rate=relaxation_rate,
-                                    optimization={'vectorization': {'instruction_set': 'avx',
+                                    optimization={'vectorization': {'instruction_set': get_supported_instruction_sets()[-1],
                                                                     'assume_aligned': True,
                                                                     'nontemporal': True,
                                                                     'assume_inner_stride_one': True,
@@ -23,7 +25,7 @@ def test_lbm_vectorization_short():
     ldc1.run(10)
 
 
-@pytest.mark.parametrize('instruction_set', ['sse', 'avx'])
+@pytest.mark.parametrize('instruction_set', get_supported_instruction_sets())
 @pytest.mark.parametrize('aligned_and_padding', [[False, False], [True, False], [True, True]])
 @pytest.mark.parametrize('nontemporal', [False, True])
 @pytest.mark.parametrize('double_precision', [False, True])

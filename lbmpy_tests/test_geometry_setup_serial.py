@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pytest
 
 from lbmpy.boundaries import NoSlip
 from lbmpy.geometry import add_black_and_white_image, add_pipe_walls
@@ -49,6 +50,7 @@ def get_test_image_path():
 
 
 def test_image():
+    pytest.importorskip('scipy.ndimage')
     sc = LatticeBoltzmannStep(domain_size=(50, 40), method='srt', relaxation_rate=1.9,
                               optimization={})
     add_black_and_white_image(sc.boundary_handling, get_test_image_path(), keep_aspect_ratio=True)
