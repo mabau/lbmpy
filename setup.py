@@ -8,11 +8,16 @@ from importlib import import_module
 
 sys.path.insert(0, os.path.abspath('doc'))
 
+try:
+    import cython  # noqa
+    USE_CYTHON = True
+except ImportError:
+    USE_CYTHON = False
+
 quick_tests = [
-    # 'test_serial_scenarios.test_ldc_mrt',
+    'test_serial_scenarios.test_ldc_mrt',
     'test_serial_scenarios.test_channel_srt',
 ]
-
 
 class SimpleTestRunner(distutils.cmd.Command):
     """A custom command to run selected tests"""
@@ -43,7 +48,6 @@ class SimpleTestRunner(distutils.cmd.Command):
         for test in quick_tests:
             self._run_tests_in_module(test)
 
-
 try:
     sys.path.insert(0, os.path.abspath('doc'))
     from version_from_git import version_number_from_git
@@ -54,6 +58,14 @@ try:
 except ImportError:
     version = open('RELEASE-VERSION', 'r').read()
 
+def cython_extensions(*extensions):
+    from distutils.extension import Extension
+    ext = '.pyx' if USE_CYTHON else '.c'
+    result = [Extension(e, [e.replace('.', '/') + ext]) for e in extensions]
+    if USE_CYTHON:
+        from Cython.Build import cythonize
+        result = cythonize(result, language_level=3)
+    return result
 
 def readme():
     with open('README.md') as f:
@@ -71,6 +83,9 @@ setup(name='lbmpy',
       url='https://i10git.cs.fau.de/pycodegen/lbmpy/',
       packages=['lbmpy'] + ['lbmpy.' + s for s in find_packages('lbmpy')],
       install_requires=['pystencils', 'sympy>=1.2', 'numpy>=1.11.0'],
+      package_data={'lbmpy': ['phasefield/simplex_projection.pyx',
+                              'phasefield/simplex_projection.c']},
+      ext_modules=cython_extensions("lbmpy.phasefield.simplex_projection"),
       classifiers=[
           'Development Status :: 4 - Beta',
           'Framework :: Jupyter',
@@ -89,6 +104,7 @@ setup(name='lbmpy',
                           'ipy_table', 'imageio', 'jupyter', 'pyevtk'],
           'doc': ['sphinx', 'sphinx_rtd_theme', 'nbsphinx',
                   'sphinxcontrib-bibtex', 'sphinx_autodoc_typehints', 'pandoc'],
+          'phasefield': ['Cython']
       },
       cmdclass={
           'quicktest': SimpleTestRunner
