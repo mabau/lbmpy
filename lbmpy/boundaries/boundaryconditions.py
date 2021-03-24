@@ -125,7 +125,7 @@ class UBB(LbBoundary):
         name: optional name of the boundary.
     """
 
-    def __init__(self, velocity, adapt_velocity_to_force=False, dim=None, name=None):
+    def __init__(self, velocity, adapt_velocity_to_force=False, dim=None, name=None, data_type='double'):
         super(UBB, self).__init__(name)
         self._velocity = velocity
         self._adaptVelocityToForce = adapt_velocity_to_force
@@ -134,13 +134,14 @@ class UBB(LbBoundary):
         elif not callable(self._velocity):
             dim = len(velocity)
         self.dim = dim
+        self.data_type = data_type
 
     @property
     def additional_data(self):
         """ In case of the UBB boundary additional data is a velocity vector. This vector is added to each cell to
             realize velocity profiles for the inlet."""
         if self.velocity_is_callable:
-            return [('vel_%d' % (i,), create_type("double")) for i in range(self.dim)]
+            return [('vel_%d' % (i,), create_type(self.data_type)) for i in range(self.dim)]
         else:
             return []
 
@@ -291,7 +292,9 @@ class ExtrapolationOutflow(LbBoundary):
 
     def __init__(self, normal_direction, lb_method, dt=1, dx=1, name=None,
                  streaming_pattern='pull', zeroth_timestep=Timestep.BOTH,
-                 initial_density=None, initial_velocity=None):
+                 initial_density=None, initial_velocity=None, data_type='double'):
+
+        self.data_type = data_type
 
         self.lb_method = lb_method
         self.stencil = lb_method.stencil
@@ -359,7 +362,7 @@ class ExtrapolationOutflow(LbBoundary):
     def additional_data(self):
         """Used internally only. For the ExtrapolationOutflow information of the previous PDF values is needed. This
         information is stored in the index vector."""
-        data = [('pdf', create_type("double")), ('pdf_nd', create_type("double"))]
+        data = [('pdf', create_type(self.data_type)), ('pdf_nd', create_type(self.data_type))]
         return data
 
     @property
