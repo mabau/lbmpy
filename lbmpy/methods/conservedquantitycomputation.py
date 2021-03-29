@@ -207,8 +207,8 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             mom_density_eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
                                                                                   self._symbolOrder0,
                                                                                   self._symbolsOrder1)
-            mom_density_eq_coll = apply_force_model_shift('macroscopic_velocity_shift', dim, mom_density_eq_coll,
-                                                          self._forceModel, self._compressible)
+            mom_density_eq_coll = apply_force_model_shift('macroscopic_momentum_density_shift', dim, 
+                                                          mom_density_eq_coll, self._forceModel, self._compressible)
             for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.main_assignments[1:]):
                 main_assignments.append(Assignment(sym, val.rhs))
         if 'moment0' in output_quantity_names_to_symbols:

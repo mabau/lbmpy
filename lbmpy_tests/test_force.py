@@ -155,3 +155,40 @@ def test_modes(stencil, force_model):
     elif force_model == "simple":
         # All other moments should be zero
         assert list(force_moments[dim+1:]) == [0] * (len(stencil)-(dim+1))
+
+
+@pytest.mark.parametrize("force_model", force_models)
+def test_momentum_density_shift(force_model):
+    target = 'cpu'
+
+    stencil = get_stencil('D2Q9')
+    domain_size = (4, 4)
+    dh = ps.create_data_handling(domain_size=domain_size, default_target=target)
+
+    rho = dh.add_array('rho', values_per_cell=1)
+    dh.fill('rho', 0.0, ghost_layers=True)
+
+    velField = dh.add_array('velField', values_per_cell=dh.dim)
+    dh.fill('velField', 0.0, ghost_layers=True)
+
+    momentum_density = dh.add_array('momentum_density', values_per_cell=dh.dim)
+    dh.fill('momentum_density', 0.0, ghost_layers=True)
+
+    src = dh.add_array('src', values_per_cell=len(stencil))
+    dh.fill('src', 0.0, ghost_layers=True)
+
+    method = create_lb_method(method="srt", compressible=True, force_model=force_model, force=[1, 2])
+
+    momentum_density_symbols = sp.symbols("md_:2")
+    cqc = method.conserved_quantity_computation
+
+    momentum_density_getter = cqc.output_equations_from_pdfs(src.center_vector,
+                                                             {'density': rho.center,
+                                                              'momentum_density': momentum_density.center_vector})
+
+    momentum_density_ast = ps.create_kernel(momentum_density_getter, target=dh.default_target)
+    momentum_density_kernel = momentum_density_ast.compile()
+
+    dh.run_kernel(momentum_density_kernel)
+    assert np.sum(dh.gather_array(momentum_density.name)[:, :, 0]) == np.prod(domain_size) / 2
+    assert np.sum(dh.gather_array(momentum_density.name)[:, :, 1]) == np.prod(domain_size)
