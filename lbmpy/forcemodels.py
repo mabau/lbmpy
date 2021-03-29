@@ -113,6 +113,9 @@ class Simple:
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
 
+    def macroscopic_momentum_density_shift(self, density):
+        return default_momentum_density_shift(self._force)
+
 
 class Luo:
     r"""Force model by Luo :cite:`luo1993lattice`.
@@ -135,6 +138,9 @@ class Luo:
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
 
+    def macroscopic_momentum_density_shift(self, density):
+        return default_momentum_density_shift(self._force)
+
 
 class Guo:
     r"""
@@ -154,6 +160,9 @@ class Guo:
 
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
+
+    def macroscopic_momentum_density_shift(self, density):
+        return default_momentum_density_shift(self._force)
 
     def equilibrium_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
@@ -187,6 +196,9 @@ class Schiller:
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
 
+    def macroscopic_momentum_density_shift(self, density):
+        return default_momentum_density_shift(self._force)
+
 
 class Buick:
     r"""
@@ -207,6 +219,9 @@ class Buick:
 
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
+
+    def macroscopic_momentum_density_shift(self, density):
+        return default_momentum_density_shift(self._force)
 
     def equilibrium_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
@@ -231,9 +246,16 @@ class EDM:
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
 
+    def macroscopic_momentum_density_shift(self, density):
+        return default_momentum_density_shift(self._force)
+
 
 # --------------------------------  Helper functions  ------------------------------------------------------------------
 
 
 def default_velocity_shift(density, force):
     return [f_i / (2 * density) for f_i in force]
+
+
+def default_momentum_density_shift(force):
+    return [f_i / 2 for f_i in force]
