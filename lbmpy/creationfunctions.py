@@ -53,7 +53,6 @@ General:
 - ``maxwellian_moments=True``: way to compute equilibrium moments/cumulants, if False the standard
   discretized LBM equilibrium is used, otherwise the equilibrium moments are computed from the continuous Maxwellian.
   This makes only a difference if sparse stencils are used e.g. D2Q9 and D3Q27 are not affected, D319 and DQ15 are
-- ``cumulant=False``: use cumulants instead of moments (deprecated: use method=cumulant directly)
 - ``initial_velocity=None``: initial velocity in domain, can either be a tuple (x,y,z) velocity to set a constant
   velocity everywhere, or a numpy array with the same size of the domain, with a last coordinate of shape dim to set
   velocities on cell level
@@ -87,8 +86,6 @@ Cumulant methods:
 
 - ``galilean_correction=False``: Special correction for D3Q27 cumulant LBMs. For Details see
   :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
-- ``pre_simplification=True``: Simplifications applied during the derivaton of the collision rule for cumulant LBMs
-  For details see :mod:`lbmpy.methods.momentbased.moment_transforms`.
 
 LES methods:
 
@@ -112,7 +109,9 @@ Simplifications / Transformations:
   load/store streams and thus speeds up the kernel on most architectures
 - ``builtin_periodicity=(False,False,False)``: instead of handling periodicity by copying ghost layers, the periodicity
   is built into the kernel. This parameters specifies if the domain is periodic in (x,y,z) direction. Even if the
-  periodicity is built into the kernel, the fields have one ghost layer to be consistent with other functions. 
+  periodicity is built into the kernel, the fields have one ghost layer to be consistent with other functions.
+- ``pre_simplification=True``: Simplifications applied during the derivaton of the collision rule for cumulant LBMs
+  For details see :mod:`lbmpy.methods.momentbased.moment_transforms`.
     
 
 Field size information:
@@ -190,6 +189,7 @@ For example, to modify the AST one can run::
     func = create_lb_function(ast=ast, ...)
 
 """
+from collections import OrderedDict
 from copy import copy
 
 import sympy as sp
@@ -199,8 +199,9 @@ import lbmpy.methods.centeredcumulant.force_model as cumulant_force_model
 from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
 from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
+from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
-from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
+from lbmpy.methods.momentbased.moment_transforms import FastCentralMomentTransform
 from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
 from lbmpy.methods.creationfunctions import (
     create_with_monomial_cumulants, create_with_polynomial_cumulants, create_with_default_polynomial_cumulants)
@@ -416,7 +417,6 @@ def create_lb_method(**params):
         'equilibrium_order': params['equilibrium_order'],
         'force_model': force_model,
         'maxwellian_moments': params['maxwellian_moments'],
-        'cumulant': params['cumulant'],
         'c_s_sq': params['c_s_sq'],
     }
 
@@ -443,10 +443,6 @@ def create_lb_method(**params):
                 if all(get_order(m) < 2 for m in moments):
                     if params['entropic']:
                         return relaxation_rates[0]
-                    elif params['cumulant']:
-                        result = relaxation_rates[next_relaxation_rate[0]]
-                        next_relaxation_rate[0] += 1
-                        return result
                     else:
                         return 0
                 res = relaxation_rates[next_relaxation_rate[0]]
@@ -494,11 +490,27 @@ def create_lb_method_from_existing(method, modification_function):
         modification_function: function receiving (moment, equilibrium_value, relaxation_rate) as arguments,
                                i.e. one row of the relaxation table, returning a modified version
     """
-    relaxation_table = (modification_function(m, eq, rr)
-                        for m, eq, rr in zip(method.moments, method.moment_equilibrium_values, method.relaxation_rates))
     compressible = method.conserved_quantity_computation.compressible
-    cumulant = isinstance(method, CenteredCumulantBasedLbMethod)
-    return create_generic_mrt(method.stencil, relaxation_table, compressible, method.force_model, cumulant)
+    if isinstance(method, CenteredCumulantBasedLbMethod):
+        rr_dict = OrderedDict()
+        relaxation_table = (modification_function(m, eq, rr)
+                            for m, eq, rr in
+                            zip(method.cumulants, method.cumulant_equilibrium_values, method.relaxation_rates))
+
+        for cumulant, eq_value, rr in relaxation_table:
+            cumulant = sp.sympify(cumulant)
+            rr_dict[cumulant] = RelaxationInfo(eq_value, rr)
+
+        return CenteredCumulantBasedLbMethod(method.stencil, rr_dict, method.conserved_quantity_computation,
+                                             method.force_model,
+                                             galilean_correction=method.galilean_correction,
+                                             central_moment_transform_class=method.central_moment_transform_class,
+                                             cumulant_transform_class=method.cumulant_transform_class)
+    else:
+        relaxation_table = (modification_function(m, eq, rr)
+                            for m, eq, rr in
+                            zip(method.moments, method.moment_equilibrium_values, method.relaxation_rates))
+        return create_generic_mrt(method.stencil, relaxation_table, compressible, method.force_model)
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -564,11 +576,10 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'force_model': 'none',
         'force': (0, 0, 0),
         'maxwellian_moments': True,
-        'cumulant': False,  # Depricated usage. Cumulant is now an own method
         'initial_velocity': None,
 
         'galilean_correction': False,  # only available for D3Q27 cumulant methods
-        'central_moment_transform_class': PdfsToCentralMomentsByShiftMatrix,
+        'central_moment_transform_class': FastCentralMomentTransform,
         'cumulant_transform_class': CentralMomentsToCumulantsByGeneratingFunc,
 
         'entropic': False,

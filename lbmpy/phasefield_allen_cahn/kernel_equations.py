@@ -152,17 +152,7 @@ def viscous_force(lb_velocity_field, phi_field, mrt_method, tau, density_heavy, 
 
     iso_grad = isotropic_gradient_symbolic(phi_field, fd_stencil)
 
-    moment_matrix = mrt_method.moment_matrix
-    rel = mrt_method.relaxation_rates
-    eq = mrt_method.moment_equilibrium_values
-    eq = np.array(eq)
-
-    g_vals = [lb_velocity_field.center(i) for i, _ in enumerate(stencil)]
-    m0 = np.dot(moment_matrix.tolist(), g_vals)
-
-    m = m0 - eq
-    m = m * rel
-    non_equilibrium = np.dot(moment_matrix.inv().tolist(), m)
+    non_equilibrium = lb_velocity_field.center_vector - mrt_method.get_equilibrium_terms()
 
     stress_tensor = [0] * 6
     # Calculate Stress Tensor MRT
