@@ -142,7 +142,7 @@ class PdfsToCentralMomentsByMatrix(AbstractMomentTransform):
         central_moments = self.forward_matrix * f_vec
         main_assignments = [Assignment(sq_sym(moment_symbol_base, e), eq)
                             for e, eq in zip(self.moment_exponents, central_moments)]
-        symbol_gen = SymbolGen(subexpression_base, dtype=float)
+        symbol_gen = SymbolGen(subexpression_base)
 
         ac = AssignmentCollection(main_assignments, subexpression_symbol_generator=symbol_gen)
         if simplification:
@@ -157,7 +157,7 @@ class PdfsToCentralMomentsByMatrix(AbstractMomentTransform):
         moment_vec = sp.Matrix(moments)
         pdfs_from_moments = self.backward_matrix * moment_vec
         main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, pdfs_from_moments)]
-        symbol_gen = SymbolGen(subexpression_base, dtype=float)
+        symbol_gen = SymbolGen(subexpression_base)
 
         ac = AssignmentCollection(main_assignments, subexpression_symbol_generator=symbol_gen)
         if simplification:
@@ -228,7 +228,7 @@ class FastCentralMomentTransform(AbstractMomentTransform):
             collect_partial_sums(e)
 
         subexpressions = [Assignment(lhs, rhs) for lhs, rhs in subexpressions_dict.items()]
-        symbol_gen = SymbolGen(subexpression_base, dtype=float)
+        symbol_gen = SymbolGen(subexpression_base)
         ac = AssignmentCollection(main_assignments, subexpressions=subexpressions,
                                   subexpression_symbol_generator=symbol_gen)
         if simplification:
@@ -244,7 +244,7 @@ class FastCentralMomentTransform(AbstractMomentTransform):
             pdf_symbols, moment_symbol_base=POST_COLLISION_CENTRAL_MOMENT, simplification=False)
         raw_equations = raw_equations.new_without_subexpressions()
 
-        symbol_gen = SymbolGen(subexpression_base, dtype=float)
+        symbol_gen = SymbolGen(subexpression_base)
 
         ac = self._split_backward_equations(raw_equations, symbol_gen)
         if simplification:
@@ -441,7 +441,7 @@ class PdfsToRawMomentsTransform(AbstractMomentTransform):
             collect_partial_sums(e)
 
         subexpressions += [Assignment(lhs, rhs) for lhs, rhs in partial_sums_dict.items()]
-        symbol_gen = SymbolGen(subexpression_base, dtype=float)
+        symbol_gen = SymbolGen(subexpression_base)
         ac = AssignmentCollection(main_assignments, subexpressions=subexpressions,
                                   subexpression_symbol_generator=symbol_gen)
         ac.add_simplification_hint('cq_symbols_to_moments', self.get_cq_to_moment_symbols_dict(moment_symbol_base))
@@ -457,7 +457,7 @@ class PdfsToRawMomentsTransform(AbstractMomentTransform):
         post_collision_moments = [sq_sym(moment_symbol_base, e) for e in self.moment_exponents]
         rm_to_f_vec = self.inv_moment_matrix * sp.Matrix(post_collision_moments)
         main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, rm_to_f_vec)]
-        symbol_gen = SymbolGen(subexpression_base, dtype=float)
+        symbol_gen = SymbolGen(subexpression_base)
 
         ac = AssignmentCollection(main_assignments, subexpression_symbol_generator=symbol_gen)
         ac.add_simplification_hint('stencil', self.stencil)

@@ -61,22 +61,22 @@ def test_relaxation_rate_setter():
 def test_mrt_orthogonal():
     m_ref = {}
 
-    moments = mrt_orthogonal_modes_literature(get_stencil("D2Q9"), True, False)
+    moments = mrt_orthogonal_modes_literature(get_stencil("D2Q9"), True)
     m = create_lb_method(stencil=get_stencil("D2Q9"), method='mrt', maxwellian_moments=True, nested_moments=moments)
     assert m.is_weighted_orthogonal
     m_ref[("D2Q9", True)] = m
 
-    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q15"), True, False)
+    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q15"), True)
     m = create_lb_method(stencil=get_stencil("D3Q15"), method='mrt', maxwellian_moments=True, nested_moments=moments)
     assert m.is_weighted_orthogonal
     m_ref[("D3Q15", True)] = m
 
-    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q19"), True, False)
+    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q19"), True)
     m = create_lb_method(stencil=get_stencil("D3Q19"), method='mrt', maxwellian_moments=True, nested_moments=moments)
     assert m.is_weighted_orthogonal
     m_ref[("D3Q19", True)] = m
 
-    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q27"), False, False)
+    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q27"), False)
     m = create_lb_method(stencil=get_stencil("D3Q27"), method='mrt', maxwellian_moments=True, nested_moments=moments)
     assert m.is_orthogonal
     m_ref[("D3Q27", False)] = m

@@ -160,20 +160,44 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
             self.force_model_rr_override = True
 
     @property
+    def central_moment_transform_class(self):
+        self._central_moment_transform_class
+
+    @property
+    def cumulants(self):
+        return tuple(self._cumulant_to_relaxation_info_dict.keys())
+
+    @property
+    def cumulant_equilibrium_values(self):
+        return tuple([e.equilibrium_value for e in self._cumulant_to_relaxation_info_dict.values()])
+
+    @property
+    def cumulant_transform_class(self):
+        self._cumulant_transform_class
+
+    @property
+    def first_order_equilibrium_moment_symbols(self, ):
+        return self._conserved_quantity_computation.first_order_moment_symbols
+
+    @property
     def force_model(self):
         return self._force_model
+
+    @property
+    def galilean_correction(self):
+        return self._galilean_correction
 
     @property
     def relaxation_info_dict(self):
         return self._cumulant_to_relaxation_info_dict
 
     @property
-    def zeroth_order_equilibrium_moment_symbol(self, ):
-        return self._conserved_quantity_computation.zeroth_order_moment_symbol
+    def relaxation_rates(self):
+        return tuple([e.relaxation_rate for e in self._cumulant_to_relaxation_info_dict.values()])
 
     @property
-    def first_order_equilibrium_moment_symbols(self, ):
-        return self._conserved_quantity_computation.first_order_moment_symbols
+    def zeroth_order_equilibrium_moment_symbol(self, ):
+        return self._conserved_quantity_computation.zeroth_order_moment_symbol
 
     def set_zeroth_moment_relaxation_rate(self, relaxation_rate):
         e = sp.Rational(1, 1)
@@ -199,18 +223,6 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
 
     def set_force_model(self, force_model):
         self._force_model = force_model
-
-    @property
-    def cumulants(self):
-        return sorted(self._cumulant_to_relaxation_info_dict.keys(), key=moment_sort_key)
-
-    @property
-    def cumulant_equilibrium_values(self):
-        return tuple([e.equilibrium_value for e in self._cumulant_to_relaxation_info_dict.values()])
-
-    @property
-    def relaxation_rates(self):
-        return tuple([e.relaxation_rate for e in self._cumulant_to_relaxation_info_dict.values()])
 
     def _repr_html_(self):
         table = """

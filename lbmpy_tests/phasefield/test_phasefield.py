@@ -1,4 +1,6 @@
+import pytest
 import sympy as sp
+import numpy as np
 
 from lbmpy.phasefield.analytical import (
     analytic_interface_profile, chemical_potentials_from_free_energy, cosh_integral,
@@ -7,6 +9,9 @@ from lbmpy.phasefield.analytical import (
     symmetric_symbolic_surface_tension)
 from pystencils.fd import evaluate_diffs, expand_diff_full
 
+from lbmpy.phasefield.experiments2D import liquid_lens_setup
+from lbmpy.phasefield.contact_angle_circle_fitting import liquid_lens_neumann_angles
+from lbmpy.phasefield.post_processing import analytic_neumann_angles
 
 def test_analytic_interface_solution():
     """Ensures that the tanh is an analytical solution for the prescribed free energy / chemical potential
@@ -67,3 +72,27 @@ def test_pressure_tensor():
 
     for f1_i, f2_i in zip(force_chem_pot, force_pressure_tensor):
         assert sp.expand(f1_i - f2_i) == 0
+
+
+def test_neumann_angle():
+    pytest.importorskip('skimage')
+    kappa3 = 0.03
+    alpha = 1
+
+    sc = liquid_lens_setup(domain_size=(150, 60), optimization={'target': 'cpu'},
+                           kappas=(0.01, 0.02, kappa3),
+                           cahn_hilliard_relaxation_rates=[np.nan, 1, 3 / 2],
+                           cahn_hilliard_gammas=[1, 1, 1 / 3],
+                           alpha=alpha)
+
+    sc.run(10000)
+
+    angles = liquid_lens_neumann_angles(sc.concentration[:, :, :])
+    assert sum(angles) == 360
+
+    analytic_angles = analytic_neumann_angles([0.01, 0.02, kappa3])
+    for ref, simulated in zip(analytic_angles, angles):
+        assert np.abs(ref - simulated) < 8
+
+    # to show the phasefield use:
+    # plt.phase_plot_for_step(sc)
