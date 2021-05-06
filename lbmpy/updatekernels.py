@@ -1,5 +1,6 @@
 import numpy as np
 import sympy as sp
+import warnings
 
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
@@ -54,13 +55,24 @@ def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
     return result
 
 
-def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst_field_name="dst",
-                                   generic_layout='numpy', generic_field_type=np.float64):
-    """Creates a stream-pull kernel, without collision.
+def create_stream_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst_field_name="dst",
+                              generic_layout='numpy', generic_field_type=np.float64,
+                              accessor=StreamPullTwoFieldsAccessor()):
+    """Creates a stream kernel, without collision.
 
-    For parameters see function ``create_stream_pull_collide_kernel``
+    Args:
+        stencil: lattice Boltzmann stencil which is used
+        numpy_arr: numpy array which containes the pdf field data. If no numpy array is provided the symbolic field
+                   accesses are created with 'Field.create_generic'. Otherwise 'Field.create_from_numpy_array' is used.
+        src_field_name: name of the source field.
+        dst_field_name: name of the destination field.
+        generic_layout: data layout. for example 'fzyx' of 'zyxf'.
+        generic_field_type: field data type.
+        accessor: Field accessor which is used to create the update rule. See 'fieldaccess.PdfFieldAccessor'
+
+    Returns:
+        AssignmentCollection of the stream only update rule
     """
-
     dim = len(stencil[0])
     if numpy_arr is None:
         src = Field.create_generic(src_field_name, dim, index_shape=(len(stencil),),
@@ -71,15 +83,27 @@ def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src"
         src = Field.create_from_numpy_array(src_field_name, numpy_arr, index_dimensions=1)
         dst = Field.create_from_numpy_array(dst_field_name, numpy_arr, index_dimensions=1)
 
-    accessor = StreamPullTwoFieldsAccessor()
     eqs = [Assignment(a, b) for a, b in zip(accessor.write(dst, stencil), accessor.read(src, stencil))]
     return AssignmentCollection(eqs, [])
+
+
+def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst_field_name="dst",
+                                   generic_layout='numpy', generic_field_type=np.float64):
+    """Creates a stream kernel with the pull scheme, without collision.
+
+    For parameters see function ``create_stream_pull_collide_kernel``
+    """
+    warnings.warn("This function is depricated. Please use create_stream_only_kernel. If no PdfFieldAccessor is "
+                  "provided to this function a standard StreamPullTwoFieldsAccessor is used ", DeprecationWarning)
+    return create_stream_only_kernel(stencil, numpy_arr=numpy_arr, src_field_name=src_field_name,
+                                     dst_field_name=dst_field_name, generic_layout=generic_layout,
+                                     generic_field_type=generic_field_type, accessor=StreamPullTwoFieldsAccessor())
 
 
 def create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, output):
     stencil = lb_method.stencil
     cqc = lb_method.conserved_quantity_computation
-    streamed = sp.symbols("streamed_:%d" % (len(stencil),))
+    streamed = sp.symbols(f"streamed_:{len(stencil)}")
     accessor = StreamPullTwoFieldsAccessor()
     stream_assignments = [Assignment(a, b) for a, b in zip(streamed, accessor.read(src_field, stencil))]
     output_eq_collection = cqc.output_equations_from_pdfs(streamed, output)
