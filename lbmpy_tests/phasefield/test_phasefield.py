@@ -88,7 +88,7 @@ def test_neumann_angle():
     sc.run(10000)
 
     angles = liquid_lens_neumann_angles(sc.concentration[:, :, :])
-    assert sum(angles) == 360
+    np.testing.assert_almost_equal(sum(angles), 360)
 
     analytic_angles = analytic_neumann_angles([0.01, 0.02, kappa3])
     for ref, simulated in zip(analytic_angles, angles):
