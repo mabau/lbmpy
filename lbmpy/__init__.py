@@ -1,10 +1,27 @@
-def _get_release_file():
-    import os.path
-    file_path = os.path.abspath(os.path.dirname(__file__))
-    return os.path.join(file_path, '..', 'RELEASE-VERSION')
+from .creationfunctions import create_lb_ast, create_lb_collision_rule, create_lb_function,\
+    create_lb_method, create_lb_method_from_existing, create_lb_update_rule
+from .lbstep import LatticeBoltzmannStep
+from .macroscopic_value_kernels import pdf_initialization_assignments, macroscopic_values_getter,\
+    compile_macroscopic_values_getter, compile_macroscopic_values_setter, create_advanced_velocity_setter_collision_rule
+from .maxwellian_equilibrium import get_weights
+from .relaxationrates import relaxation_rate_from_lattice_viscosity, lattice_viscosity_from_relaxation_rate,\
+    relaxation_rate_from_magic_number
+from .scenarios import create_lid_driven_cavity, create_fully_periodic_flow
+from .stencils import get_stencil
 
 
-try:
-    __version__ = open(_get_release_file(), 'r').read()
-except IOError:
-    __version__ = 'development'
+__all__ = ['create_lb_ast', 'create_lb_collision_rule', 'create_lb_function', 'create_lb_method',
+           'create_lb_method_from_existing', 'create_lb_update_rule',
+           'LatticeBoltzmannStep',
+           'pdf_initialization_assignments', 'macroscopic_values_getter', 'compile_macroscopic_values_getter',
+           'compile_macroscopic_values_setter', 'create_advanced_velocity_setter_collision_rule',
+           'get_weights',
+           'relaxation_rate_from_lattice_viscosity', 'lattice_viscosity_from_relaxation_rate',
+           'relaxation_rate_from_magic_number',
+           'create_lid_driven_cavity', 'create_fully_periodic_flow',
+           'get_stencil']
+
+
+from ._version import get_versions
+__version__ = get_versions()['version']
+del get_versions

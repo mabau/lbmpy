@@ -6,7 +6,7 @@ import distutils
 from contextlib import redirect_stdout
 from importlib import import_module
 
-sys.path.insert(0, os.path.abspath('doc'))
+import versioneer
 
 try:
     import cython  # noqa
@@ -48,15 +48,10 @@ class SimpleTestRunner(distutils.cmd.Command):
         for test in quick_tests:
             self._run_tests_in_module(test)
 
-try:
-    sys.path.insert(0, os.path.abspath('doc'))
-    from version_from_git import version_number_from_git
 
-    version = version_number_from_git()
-    with open("RELEASE-VERSION", "w") as f:
-        f.write(version)
-except ImportError:
-    version = open('RELEASE-VERSION', 'r').read()
+def readme():
+    with open('README.md') as f:
+        return f.read()
 
 
 def cython_extensions(*extensions):
@@ -74,14 +69,14 @@ def cython_extensions(*extensions):
     else:
         return None
 
-
-def readme():
-    with open('README.md') as f:
-        return f.read()
+def get_cmdclass():
+    cmdclass={"quicktest": SimpleTestRunner}
+    cmdclass.update(versioneer.get_cmdclass())
+    return cmdclass
 
 
 setup(name='lbmpy',
-      version=version,
+      version=versioneer.get_version(),
       description='Code Generation for Lattice Boltzmann Methods',
       long_description=readme(),
       long_description_content_type="text/markdown",
@@ -114,7 +109,5 @@ setup(name='lbmpy',
                   'sphinxcontrib-bibtex', 'sphinx_autodoc_typehints', 'pandoc'],
           'phasefield': ['Cython']
       },
-      cmdclass={
-          'quicktest': SimpleTestRunner
-      }
+      cmdclass=get_cmdclass()
       )
