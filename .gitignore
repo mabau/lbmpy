@@ -14,7 +14,6 @@ _local_tmp
 **/.vscode
 /lbmpy_tests/db
 doc/bibtex.json
-RELEASE-VERSION
 /db
 /lbmpy/phasefield/simplex_projection.*.so
 /lbmpy/phasefield/simplex_projection.c
