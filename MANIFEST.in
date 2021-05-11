@@ -1,5 +1,7 @@
 include README.md
 include COPYING.txt
 include RELEASE-VERSION
+global-include *.pyx
+global-exclude phasefield/simplex_projection.c
 include versioneer.py
 include lbmpy/_version.py
