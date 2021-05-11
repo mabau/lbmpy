@@ -1,5 +1,6 @@
 include README.md
 include COPYING.txt
 include RELEASE-VERSION
+global-include *.pyx
 include versioneer.py
 include lbmpy/_version.py
