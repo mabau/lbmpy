@@ -18,11 +18,15 @@ def get_default_polynomial_cumulants_for_stencil(stencil):
     """
     Returns default groups of cumulants to be relaxed with common relaxation rates as stated in literature.
     Groups are ordered like this:
-     - First group is density
-     - Second group are the momentum modes
-     - Third group are the shear modes
-     - Fourth group is the bulk mode
-     - Remaining groups do not govern hydrodynamic properties
+
+    - First group is density
+    - Second group are the momentum modes
+    - Third group are the shear modes
+    - Fourth group is the bulk mode
+    - Remaining groups do not govern hydrodynamic properties
+
+    Args:
+        stencil: can be D2Q9, D2Q19 or D3Q27
     """
     x, y, z = MOMENT_SYMBOLS
     if have_same_entries(stencil, get_stencil("D2Q9")):

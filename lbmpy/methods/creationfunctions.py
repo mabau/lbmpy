@@ -10,14 +10,16 @@ from lbmpy.maxwellian_equilibrium import (
     get_moments_of_continuous_maxwellian_equilibrium,
     get_moments_of_discrete_maxwellian_equilibrium, get_weights)
 
+from lbmpy.methods.abstractlbmethod import RelaxationInfo
+
+from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
 from lbmpy.methods.centeredcumulant.centered_cumulants import get_default_polynomial_cumulants_for_stencil
-from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
 from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
 
-from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
-from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
+
 from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
+from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
 
 from lbmpy.moments import (
     MOMENT_SYMBOLS, discrete_moment, exponents_to_polynomial_representations,
@@ -215,6 +217,7 @@ def create_trt_with_magic_number(stencil, relaxation_rate, magic_number=sp.Ratio
     Creates a two relaxation time (TRT) lattice Boltzmann method, where the relaxation time for odd moments is
     determines from the even moment relaxation time and a "magic number".
     For possible parameters see :func:`lbmpy.methods.create_trt`
+
     Args:
         stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.get_stencil`
         relaxation_rate: relaxation rate (inverse of the relaxation time)
@@ -232,6 +235,7 @@ def create_trt_with_magic_number(stencil, relaxation_rate, magic_number=sp.Ratio
 def create_mrt_raw(stencil, relaxation_rates, maxwellian_moments=False, **kwargs):
     r"""
     Creates a MRT method using non-orthogonalized moments.
+
     Args:
         stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.get_stencil`
         relaxation_rates: relaxation rates (inverse of the relaxation times) for each moment
@@ -483,11 +487,10 @@ def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=Non
     Args:
         stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.get_stencil`
         cumulant_to_rr_dict: dict that has as many entries as the stencil. Each cumulant, which can be
-                             represented by an exponent tuple or in polynomial form
-                             (see `lbmpy.methods.centeredcumulant.get_default_centered_cumulants_for_stencil`),
-                             is mapped to a relaxation rate.
+                             represented by an exponent tuple or in polynomial form is mapped to a relaxation rate.
+                             See `get_default_polynomial_cumulants_for_stencil`
         force_model: force model used for the collision. For cumulant LB method a good choice is
-                     `lbmpy.methods.centeredcumulant.force_model`
+                     `lbmpy.methods.centeredcumulant.CenteredCumulantForceModel`
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
         c_s_sq: Speed of sound squared
         galilean_correction: special correction for D3Q27 cumulant collisions. See Appendix H in

@@ -107,21 +107,34 @@ def relax_polynomial_cumulants(monomial_exponents, polynomials, relaxation_rates
 
 class CenteredCumulantBasedLbMethod(AbstractLbMethod):
     """
-        This class implements cumulant-based lattice boltzmann methods which relax all the non-conserved quantities
-        as either monomial or polynomial cumulants. It is mostly inspired by the work presented in :cite:`geier2015`.
+    This class implements cumulant-based lattice boltzmann methods which relax all the non-conserved quantities
+    as either monomial or polynomial cumulants. It is mostly inspired by the work presented in :cite:`geier2015`.
 
-        Conserved quantities are relaxed in central moment space. This method supports an implicit forcing scheme
-        through :class:`lbmpy.methods.centeredcumulant.CenteredCumulantForceModel` where forces are applied by
-        shifting the central-moment frame of reference by :math:`F/2` and then relaxing the first-order central
-        moments with a relaxation rate of two. This corresponds to the change-of-sign described in the paper.
-        Classical forcing schemes can still be applied.
+    Conserved quantities are relaxed in central moment space. This method supports an implicit forcing scheme
+    through :class:`lbmpy.methods.centeredcumulant.CenteredCumulantForceModel` where forces are applied by
+    shifting the central-moment frame of reference by :math:`F/2` and then relaxing the first-order central
+    moments with a relaxation rate of two. This corresponds to the change-of-sign described in the paper.
+    Classical forcing schemes can still be applied.
 
-        The galilean correction described in :cite:`geier2015` is also available for the D3Q27 lattice.
+    The galilean correction described in :cite:`geier2015` is also available for the D3Q27 lattice.
 
-        This method is implemented modularily as the transformation from populations to central moments to cumulants
-        is governed by subclasses of :class:`lbmpy.methods.momentbased.moment_transforms.AbstractMomentTransform`
-        which can be specified by constructor argument. This allows the selection of the most efficient transformation
-        for a given setup.
+    This method is implemented modularily as the transformation from populations to central moments to cumulants
+    is governed by subclasses of :class:`lbmpy.methods.momentbased.moment_transforms.AbstractMomentTransform`
+    which can be specified by constructor argument. This allows the selection of the most efficient transformation
+    for a given setup.
+
+    Args:
+        stencil: see :func:`lbmpy.stencils.get_stencil`
+        cumulant_to_relaxation_info_dict: a dictionary mapping cumulants in either tuple or polynomial formulation
+                                          to a RelaxationInfo, which consists of the corresponding equilibrium cumulant
+                                          and a relaxation rate
+        conserved_quantity_computation: instance of :class:`lbmpy.methods.AbstractConservedQuantityComputation`.
+                                    This determines how conserved quantities are computed, and defines
+                                    the symbols used in the equilibrium moments like e.g. density and velocity
+        force_model: force model instance, or None if no forcing terms are required
+        galilean_correction: if set to True the galilean_correction is applied to a D3Q27 cumulant method
+        central_moment_transform_class: transform class to get from PDF space to the central moment space
+        cumulant_transform_class: transform class to get from the central moment space to the cumulant space
     """
 
     def __init__(self, stencil, cumulant_to_relaxation_info_dict, conserved_quantity_computation, force_model=None,
