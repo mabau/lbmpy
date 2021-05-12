@@ -6,11 +6,13 @@ from lbmpy.forcemodels import default_velocity_shift
 
 class CenteredCumulantForceModel:
     """
-        A force model to be used with the centered cumulant-based LB Method.
-        It only shifts the macroscopic and equilibrium velocities and does not 
-        introduce a forcing term to the collision process. Forcing is then applied 
-        through relaxation of the first central moments in the shifted frame of 
-        reference (cf. https://doi.org/10.1016/j.camwa.2015.05.001).
+    A force model to be used with the centered cumulant-based LB Method.
+    It only shifts the macroscopic and equilibrium velocities and does not introduce a forcing term to the
+    collision process. Forcing is then applied through relaxation of the first central moments in the shifted frame of
+    reference (cf. https://doi.org/10.1016/j.camwa.2015.05.001).
+
+    Args:
+        force: force vector which should be applied to the fluid
     """
 
     def __init__(self, force):

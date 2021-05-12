@@ -49,6 +49,33 @@ Class
 .. autoclass:: lbmpy.methods.momentbased.MomentBasedLbMethod
     :members:
 
+
+Cumulant-based methods
+======================
+
+Creation Functions
+------------------
+
+.. autofunction:: lbmpy.methods.create_with_polynomial_cumulants
+
+.. autofunction:: lbmpy.methods.create_with_monomial_cumulants
+
+.. autofunction:: lbmpy.methods.create_with_default_polynomial_cumulants
+
+.. autofunction:: lbmpy.methods.create_centered_cumulant_model
+
+
+Utility
+-------
+
+.. autofunction:: lbmpy.methods.centeredcumulant.get_default_polynomial_cumulants_for_stencil
+
+.. autoclass:: lbmpy.methods.centeredcumulant.CenteredCumulantForceModel
+    :members:
+
+Class
+-----
+
 .. autoclass:: lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod
     :members:
 

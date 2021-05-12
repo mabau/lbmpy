@@ -85,8 +85,8 @@ class LbBoundary:
 
 class NoSlip(LbBoundary):
     """
-        No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle.
-        Extended for use with any streaming pattern.
+    No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle.
+    Extended for use with any streaming pattern.
 
     Args:
         name: optional name of the boundary.
@@ -218,9 +218,9 @@ class UBB(LbBoundary):
 
 class SimpleExtrapolationOutflow(LbBoundary):
     r"""
-       Simple Outflow boundary condition :cite:`geier2015`, equation F.1 (listed below).
-       This boundary condition extrapolates missing populations from the last layer of
-       fluid cells onto the boundary by copying them in the normal direction.
+    Simple Outflow boundary condition :cite:`geier2015`, equation F.1 (listed below).
+    This boundary condition extrapolates missing populations from the last layer of
+    fluid cells onto the boundary by copying them in the normal direction.
 
     .. math ::
         f_{\overline{1}jkxyzt} = f_{\overline{1}jk(x - \Delta x)yzt}
@@ -264,11 +264,11 @@ class SimpleExtrapolationOutflow(LbBoundary):
 
 class ExtrapolationOutflow(LbBoundary):
     r"""
-        Outflow boundary condition :cite:`geier2015`, equation F.2, with u neglected (listed below).
-        This boundary condition interpolates populations missing on the boundary in normal direction. 
-        For this interpolation, the PDF values of the last time step are used. They are interpolated 
-        between fluid cell and boundary cell. To get the PDF values from the last time step an index 
-        array is used which stores them.
+    Outflow boundary condition :cite:`geier2015`, equation F.2, with u neglected (listed below).
+    This boundary condition interpolates populations missing on the boundary in normal direction.
+    For this interpolation, the PDF values of the last time step are used. They are interpolated
+    between fluid cell and boundary cell. To get the PDF values from the last time step an index
+    array is used which stores them.
 
     .. math ::
         f_{\overline{1}jkxyzt} = f_{\overline{1}jk(x - \Delta x)yz(t - \Delta t)} c \theta^{\frac{1}{2}}
