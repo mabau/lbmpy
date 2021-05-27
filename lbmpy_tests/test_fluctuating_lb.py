@@ -6,6 +6,11 @@ from lbmpy.creationfunctions import *
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
 import numpy as np
 from lbmpy.moments import is_bulk_moment, is_shear_moment, get_order
+from pystencils.rng import PhiloxTwoDoubles
+
+import pytest
+from pystencils.backends.simd_instruction_sets import get_supported_instruction_sets, get_vector_instruction_set
+from pystencils.cpu.cpujit import get_compiler_config
 
 
 def single_component_maxwell(x1, x2, kT, mass):
@@ -242,3 +247,59 @@ def test_point_force(target="cpu"):
             momentum, introduced_momentum + 0.5 * point_force, atol=1E-10)
         dh.cpu_arrays["force"][force_pos[0],
                                force_pos[1], force_pos[2]] = np.zeros(3)
+
+
+@pytest.mark.skipif(not get_supported_instruction_sets(), reason="No vector instruction sets supported")
+@pytest.mark.parametrize('assume_aligned', (True, False))
+@pytest.mark.parametrize('assume_inner_stride_one', (True, False))
+@pytest.mark.parametrize('assume_sufficient_line_padding', (True, False))
+def test_vectorization(assume_aligned, assume_inner_stride_one, assume_sufficient_line_padding):
+    method = create_mrt_orthogonal(
+        stencil=get_stencil('D2Q9'),
+        compressible=True,
+        weighted=True,
+        relaxation_rate_getter=rr_getter)
+    collision_rule = create_lb_collision_rule(
+        method,
+        fluctuating={
+            'temperature': sp.Symbol("kT"),
+            'rng_node': PhiloxTwoDoubles,
+            'block_offsets': (0, 0),
+        },
+        optimization={'cse_global': True}
+    )
+
+    collision = create_lb_update_rule(collision_rule=collision_rule,
+                                      stencil=method.stencil,
+                                      method=method,
+                                      compressible=True,
+                                      kernel_type='collide_only')
+
+    instruction_sets = get_supported_instruction_sets()
+    if get_compiler_config()['os'] == 'windows':
+        # skip instruction sets supported by the CPU but not by the compiler
+        if 'avx' in instruction_sets and ('/arch:avx2' not in get_compiler_config()['flags'].lower()
+                                          and '/arch:avx512' not in get_compiler_config()['flags'].lower()):
+            instruction_sets.remove('avx')
+        if 'avx512' in instruction_sets and '/arch:avx512' not in get_compiler_config()['flags'].lower():
+            instruction_sets.remove('avx512')
+    instruction_set = instruction_sets[-1]
+
+    opts = {'cpu_openmp': False,
+            'cpu_vectorize_info': {
+                'instruction_set': instruction_set,
+                'assume_aligned': assume_aligned,
+                'assume_inner_stride_one': assume_inner_stride_one,
+                'assume_sufficient_line_padding': assume_sufficient_line_padding,
+            },
+            'target': 'cpu'}
+
+    if not assume_inner_stride_one and 'storeS' not in get_vector_instruction_set('double', instruction_set):
+        with pytest.warns(UserWarning) as warn:
+            code = ps.create_kernel(collision, **opts)
+            assert 'Could not vectorize loop' in warn[0].message.args[0]
+    else:
+        with pytest.warns(None) as warn:
+            code = ps.create_kernel(collision, **opts)
+            assert len(warn) == 0
+    code.compile()
