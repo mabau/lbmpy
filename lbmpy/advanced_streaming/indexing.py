@@ -40,7 +40,7 @@ class BetweenTimestepsIndexing:
     #   =============================
 
     def __init__(self, pdf_field, stencil, prev_timestep=Timestep.BOTH, streaming_pattern='pull',
-                 index_dtype=np.int32, offsets_dtype=np.int32):
+                 index_dtype=np.int64, offsets_dtype=np.int64):
         if prev_timestep == Timestep.BOTH and is_inplace(streaming_pattern):
             raise ValueError('Cannot create index arrays for both kinds of timesteps for inplace streaming pattern '
                              + streaming_pattern)
@@ -219,7 +219,7 @@ class NeighbourOffsetArrays(CustomCodeNode):
     def _offset_symbols(dim):
         return [TypedSymbol(f"neighbour_offset_{d}", create_type(np.int64)) for d in ['x', 'y', 'z'][:dim]]
 
-    def __init__(self, stencil, offsets_dtype=np.int32):
+    def __init__(self, stencil, offsets_dtype=np.int64):
         offsets_dtype = create_type(offsets_dtype)
         dim = len(stencil[0])
 

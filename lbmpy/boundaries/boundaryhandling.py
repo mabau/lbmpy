@@ -177,10 +177,8 @@ def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, 
                                              prev_timestep=Timestep.BOTH, streaming_pattern='pull',
                                              target='cpu', **kernel_creation_args):
 
-    index_dtype = index_field.dtype.numpy_dtype.fields['dir'][0]
-    offsets_dtype = index_field.dtype.numpy_dtype.fields['x'][0]
     indexing = BetweenTimestepsIndexing(
-        pdf_field, lb_method.stencil, prev_timestep, streaming_pattern, index_dtype, offsets_dtype)
+        pdf_field, lb_method.stencil, prev_timestep, streaming_pattern, np.int64, np.int64)
 
     f_out, f_in = indexing.proxy_fields
     dir_symbol = indexing.dir_symbol
