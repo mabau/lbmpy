@@ -55,10 +55,27 @@ def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
     return result
 
 
-def create_stream_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst_field_name="dst",
-                              generic_layout='numpy', generic_field_type=np.float64,
-                              accessor=StreamPullTwoFieldsAccessor()):
+def create_stream_only_kernel(stencil, src_field, dst_field, accessor=StreamPullTwoFieldsAccessor()):
     """Creates a stream kernel, without collision.
+
+    Args:
+        stencil: lattice Boltzmann stencil which is used
+        src_field: Field the pre-streaming values are read from
+        dst_field: Field the post-streaming values are written to
+        accessor: Field accessor which is used to create the update rule. See 'fieldaccess.PdfFieldAccessor'
+
+    Returns:
+        AssignmentCollection of the stream only update rule
+    """
+    temporary_symbols = sp.symbols(f'tmp_:{len(stencil)}')
+    subexpressions = [Assignment(tmp, acc) for tmp, acc in zip(temporary_symbols, accessor.read(src_field, stencil))]
+    main_assignments = [Assignment(acc, tmp) for acc, tmp in zip(accessor.write(dst_field, stencil), temporary_symbols)]
+    return AssignmentCollection(main_assignments, subexpressions=subexpressions)
+
+
+def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst_field_name="dst",
+                                   generic_layout='numpy', generic_field_type=np.float64):
+    """Creates a stream kernel with the pull scheme, without collision.
 
     Args:
         stencil: lattice Boltzmann stencil which is used
@@ -68,11 +85,12 @@ def create_stream_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst
         dst_field_name: name of the destination field.
         generic_layout: data layout. for example 'fzyx' of 'zyxf'.
         generic_field_type: field data type.
-        accessor: Field accessor which is used to create the update rule. See 'fieldaccess.PdfFieldAccessor'
 
     Returns:
         AssignmentCollection of the stream only update rule
     """
+    warnings.warn("This function is depricated. Please use create_stream_only_kernel. If no PdfFieldAccessor is "
+                  "provided to this function a standard StreamPullTwoFieldsAccessor is used ", DeprecationWarning)
     dim = len(stencil[0])
     if numpy_arr is None:
         src = Field.create_generic(src_field_name, dim, index_shape=(len(stencil),),
@@ -82,22 +100,7 @@ def create_stream_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst
     else:
         src = Field.create_from_numpy_array(src_field_name, numpy_arr, index_dimensions=1)
         dst = Field.create_from_numpy_array(dst_field_name, numpy_arr, index_dimensions=1)
-
-    eqs = [Assignment(a, b) for a, b in zip(accessor.write(dst, stencil), accessor.read(src, stencil))]
-    return AssignmentCollection(eqs, [])
-
-
-def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst_field_name="dst",
-                                   generic_layout='numpy', generic_field_type=np.float64):
-    """Creates a stream kernel with the pull scheme, without collision.
-
-    For parameters see function ``create_stream_pull_collide_kernel``
-    """
-    warnings.warn("This function is depricated. Please use create_stream_only_kernel. If no PdfFieldAccessor is "
-                  "provided to this function a standard StreamPullTwoFieldsAccessor is used ", DeprecationWarning)
-    return create_stream_only_kernel(stencil, numpy_arr=numpy_arr, src_field_name=src_field_name,
-                                     dst_field_name=dst_field_name, generic_layout=generic_layout,
-                                     generic_field_type=generic_field_type, accessor=StreamPullTwoFieldsAccessor())
+    return create_stream_only_kernel(stencil, src, dst, accessor=StreamPullTwoFieldsAccessor())
 
 
 def create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, output):
@@ -113,6 +116,7 @@ def create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, outpu
     main_eqs = output_eq_collection.main_assignments + write_eqs
     return LbmCollisionRule(lb_method, main_eqs, subexpressions,
                             simplification_hints=output_eq_collection.simplification_hints)
+
 
 # ---------------------------------- Pdf array creation for various layouts --------------------------------------------
 
