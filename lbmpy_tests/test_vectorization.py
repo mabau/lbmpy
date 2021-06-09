@@ -15,12 +15,13 @@ def test_lbm_vectorization_short():
     ldc1_ref.run(10)
 
     ldc1 = create_lid_driven_cavity(size1, relaxation_rate=relaxation_rate,
-                                    optimization={'vectorization': {'instruction_set': get_supported_instruction_sets()[-1],
-                                                                    'assume_aligned': True,
-                                                                    'nontemporal': True,
-                                                                    'assume_inner_stride_one': True,
-                                                                    'assume_sufficient_line_padding': False,
-                                                                    }},
+                                    optimization={
+                                        'vectorization': {'instruction_set': get_supported_instruction_sets()[-1],
+                                                          'assume_aligned': True,
+                                                          'nontemporal': True,
+                                                          'assume_inner_stride_one': True,
+                                                          'assume_sufficient_line_padding': False,
+                                                          }},
                                     fixed_loop_sizes=False)
     ldc1.run(10)
 
@@ -33,10 +34,10 @@ def test_lbm_vectorization_short():
 @pytest.mark.longrun
 def test_lbm_vectorization(instruction_set, aligned_and_padding, nontemporal, double_precision, fixed_loop_sizes):
     vectorization_options = {'instruction_set': instruction_set,
-                              'assume_aligned': aligned_and_padding[0],
-                              'nontemporal': nontemporal,
-                              'assume_inner_stride_one': True,
-                              'assume_sufficient_line_padding': aligned_and_padding[1]}
+                             'assume_aligned': aligned_and_padding[0],
+                             'nontemporal': nontemporal,
+                             'assume_inner_stride_one': True,
+                             'assume_sufficient_line_padding': aligned_and_padding[1]}
     time_steps = 100
     size1 = (64, 32)
     size2 = (666, 34)

@@ -105,7 +105,7 @@ class NoSlip(LbBoundary):
     def __eq__(self, other):
         if not isinstance(other, NoSlip):
             return False
-        return self.name == other.name
+        return self.__dict__ == other.__dict__
 
 
 # end class NoSlip
@@ -126,7 +126,6 @@ class UBB(LbBoundary):
     """
 
     def __init__(self, velocity, adapt_velocity_to_force=False, dim=None, name=None, data_type='double'):
-        super(UBB, self).__init__(name)
         self._velocity = velocity
         self._adaptVelocityToForce = adapt_velocity_to_force
         if callable(self._velocity) and not dim:
@@ -136,12 +135,14 @@ class UBB(LbBoundary):
         self.dim = dim
         self.data_type = data_type
 
+        super(UBB, self).__init__(name)
+
     @property
     def additional_data(self):
         """ In case of the UBB boundary additional data is a velocity vector. This vector is added to each cell to
             realize velocity profiles for the inlet."""
         if self.velocity_is_callable:
-            return [('vel_%d' % (i,), create_type(self.data_type)) for i in range(self.dim)]
+            return [(f'vel_{i}', create_type(self.data_type)) for i in range(self.dim)]
         else:
             return []
 
@@ -212,6 +213,14 @@ class UBB(LbBoundary):
             return [Assignment(f_in(inv_dir[direction]),
                                f_out(direction) - vel_term)]
 
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, UBB):
+            return False
+        return self.__dict__ == other.__dict__
+
 
 # end class UBB
 
@@ -259,6 +268,16 @@ class SimpleExtrapolationOutflow(LbBoundary):
         tangential_offset = tuple(offset - normal for offset, normal in zip(neighbor_offset, self.normal_direction))
 
         return Assignment(f_in.center(inv_dir[dir_symbol]), f_out[tangential_offset](inv_dir[dir_symbol]))
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, SimpleExtrapolationOutflow):
+            return False
+        return self.__dict__ == other.__dict__
+
+
 # end class SimpleExtrapolationOutflow
 
 
@@ -294,11 +313,10 @@ class ExtrapolationOutflow(LbBoundary):
                  streaming_pattern='pull', zeroth_timestep=Timestep.BOTH,
                  initial_density=None, initial_velocity=None, data_type='double'):
 
-        self.data_type = data_type
-
         self.lb_method = lb_method
         self.stencil = lb_method.stencil
         self.dim = len(self.stencil[0])
+
         if isinstance(normal_direction, str):
             normal_direction = direction_string_to_offset(normal_direction, dim=self.dim)
 
@@ -315,6 +333,8 @@ class ExtrapolationOutflow(LbBoundary):
         self.initial_density = initial_density
         self.initial_velocity = initial_velocity
         self.equilibrium_calculation = None
+
+        self.data_type = data_type
 
         if initial_density and initial_velocity:
             equilibrium = lb_method.get_equilibrium(conserved_quantity_equations=AssignmentCollection([]))
@@ -405,6 +425,14 @@ class ExtrapolationOutflow(LbBoundary):
 
         return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
 
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, ExtrapolationOutflow):
+            return False
+        return self.__dict__ == other.__dict__
+
 
 # end class ExtrapolationOutflow
 
@@ -420,8 +448,9 @@ class FixedDensity(LbBoundary):
     def __init__(self, density, name=None):
         if name is None:
             name = "Fixed Density " + str(density)
+        self.density = density
+
         super(FixedDensity, self).__init__(name)
-        self._density = density
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         def remove_asymmetric_part_of_main_assignments(assignment_collection, degrees_of_freedom):
@@ -441,7 +470,7 @@ class FixedDensity(LbBoundary):
 
         density_symbol = cqc.defined_symbols()['density']
 
-        density = self._density
+        density = self.density
         equilibrium_input = cqc.equilibrium_input_equations_from_init_values(density=density)
         equilibrium_input = equilibrium_input.new_without_subexpressions()
         density_eq = equilibrium_input.main_assignments[0]
@@ -458,8 +487,59 @@ class FixedDensity(LbBoundary):
         return subexpressions + [Assignment(f_in(inv_dir[dir_symbol]),
                                             2 * eq_component - f_out(dir_symbol))]
 
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, FixedDensity):
+            return False
+        return self.__dict__ == other.__dict__
+
 
 # end class FixedDensity
+
+
+class DiffusionDirichlet(LbBoundary):
+    """Boundary condition for advection-diffusion problems that fixes the concentration at the obstacle.
+
+    Args:
+        concentration: value of the concentration which should be set.
+        name: optional name of the boundary.
+    """
+
+    def __init__(self, concentration, name=None):
+        if name is None:
+            name = "Diffusion Dirichlet " + str(concentration)
+        self.concentration = concentration
+
+        super(DiffusionDirichlet, self).__init__(name)
+
+    def get_additional_code_nodes(self, lb_method):
+        """Return a list of code nodes that will be added in the generated code before the index field loop.
+
+        Args:
+            lb_method: Lattice Boltzmann method. See :func:`lbmpy.creationfunctions.create_lb_method`
+
+        Returns:
+            list containing LbmWeightInfo
+        """
+        return [LbmWeightInfo(lb_method)]
+
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        w_dir = LbmWeightInfo.weight_of_direction(dir_symbol, lb_method)
+        return [Assignment(f_in(inv_dir[dir_symbol]),
+                           2 * w_dir * self.concentration - f_out(dir_symbol))]
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, DiffusionDirichlet):
+            return False
+        return self.__dict__ == other.__dict__
+
+
+# end class DiffusionDirichlet
 
 
 class NeumannByCopy(LbBoundary):
@@ -483,11 +563,12 @@ class NeumannByCopy(LbBoundary):
                 Assignment(f_out[neighbour_offset](dir_symbol), f_out(dir_symbol))]
 
     def __hash__(self):
-        # All boundaries of these class behave equal -> should also be equal
-        return hash("NeumannByCopy")
+        return hash(self.name)
 
     def __eq__(self, other):
-        return type(other) == NeumannByCopy
+        if not isinstance(other, NeumannByCopy):
+            return False
+        return self.__dict__ == other.__dict__
 
 
 # end class NeumannByCopy
@@ -504,7 +585,7 @@ class StreamInConstant(LbBoundary):
 
     def __init__(self, constant, name=None):
         super(StreamInConstant, self).__init__(name)
-        self._constant = constant
+        self.constant = constant
 
     def get_additional_code_nodes(self, lb_method):
         """Return a list of code nodes that will be added in the generated code before the index field loop.
@@ -519,13 +600,15 @@ class StreamInConstant(LbBoundary):
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         neighbour_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
-        return [Assignment(f_in(inv_dir[dir_symbol]), self._constant),
-                Assignment(f_out[neighbour_offset](dir_symbol), self._constant)]
+        return [Assignment(f_in(inv_dir[dir_symbol]), self.constant),
+                Assignment(f_out[neighbour_offset](dir_symbol), self.constant)]
 
     def __hash__(self):
-        # All boundaries of these class behave equal -> should also be equal
-        return hash("StreamInConstant")
+        return hash(self.name)
 
     def __eq__(self, other):
-        return type(other) == StreamInConstant
+        if not isinstance(other, StreamInConstant):
+            return False
+        return self.__dict__ == other.__dict__
+
 # end class StreamInConstant
