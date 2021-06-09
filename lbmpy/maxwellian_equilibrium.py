@@ -12,7 +12,7 @@ from sympy import Rational as R
 from pystencils.cache import disk_cache
 
 
-def get_weights(stencil, c_s_sq):
+def get_weights(stencil, c_s_sq=sp.Rational(1, 3)):
     q = len(stencil)
 
     if c_s_sq != sp.Rational(1, 3) and c_s_sq != sp.Symbol("c_s") ** 2:
