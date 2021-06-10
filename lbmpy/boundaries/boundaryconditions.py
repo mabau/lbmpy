@@ -79,6 +79,14 @@ class LbBoundary:
     def name(self, new_value):
         self._name = new_value
 
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        return self.__dict__ == other.__dict__
+
 
 # end class Boundary
 
@@ -98,15 +106,6 @@ class NoSlip(LbBoundary):
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         return Assignment(f_in(inv_dir[dir_symbol]), f_out(dir_symbol))
-
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, NoSlip):
-            return False
-        return self.__dict__ == other.__dict__
-
 
 # end class NoSlip
 
@@ -213,15 +212,6 @@ class UBB(LbBoundary):
             return [Assignment(f_in(inv_dir[direction]),
                                f_out(direction) - vel_term)]
 
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, UBB):
-            return False
-        return self.__dict__ == other.__dict__
-
-
 # end class UBB
 
 
@@ -268,15 +258,6 @@ class SimpleExtrapolationOutflow(LbBoundary):
         tangential_offset = tuple(offset - normal for offset, normal in zip(neighbor_offset, self.normal_direction))
 
         return Assignment(f_in.center(inv_dir[dir_symbol]), f_out[tangential_offset](inv_dir[dir_symbol]))
-
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, SimpleExtrapolationOutflow):
-            return False
-        return self.__dict__ == other.__dict__
-
 
 # end class SimpleExtrapolationOutflow
 
@@ -425,15 +406,6 @@ class ExtrapolationOutflow(LbBoundary):
 
         return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
 
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, ExtrapolationOutflow):
-            return False
-        return self.__dict__ == other.__dict__
-
-
 # end class ExtrapolationOutflow
 
 
@@ -487,15 +459,6 @@ class FixedDensity(LbBoundary):
         return subexpressions + [Assignment(f_in(inv_dir[dir_symbol]),
                                             2 * eq_component - f_out(dir_symbol))]
 
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, FixedDensity):
-            return False
-        return self.__dict__ == other.__dict__
-
-
 # end class FixedDensity
 
 
@@ -530,15 +493,6 @@ class DiffusionDirichlet(LbBoundary):
         return [Assignment(f_in(inv_dir[dir_symbol]),
                            2 * w_dir * self.concentration - f_out(dir_symbol))]
 
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, DiffusionDirichlet):
-            return False
-        return self.__dict__ == other.__dict__
-
-
 # end class DiffusionDirichlet
 
 
@@ -561,15 +515,6 @@ class NeumannByCopy(LbBoundary):
         neighbour_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         return [Assignment(f_in(inv_dir[dir_symbol]), f_out(inv_dir[dir_symbol])),
                 Assignment(f_out[neighbour_offset](dir_symbol), f_out(dir_symbol))]
-
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, NeumannByCopy):
-            return False
-        return self.__dict__ == other.__dict__
-
 
 # end class NeumannByCopy
 
@@ -602,13 +547,5 @@ class StreamInConstant(LbBoundary):
         neighbour_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         return [Assignment(f_in(inv_dir[dir_symbol]), self.constant),
                 Assignment(f_out[neighbour_offset](dir_symbol), self.constant)]
-
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, StreamInConstant):
-            return False
-        return self.__dict__ == other.__dict__
 
 # end class StreamInConstant

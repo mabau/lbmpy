@@ -120,33 +120,45 @@ def test_boundary_utility_functions():
     noslip = NoSlip("noslip")
     assert noslip == NoSlip("noslip")
     assert not noslip == NoSlip("test")
+    assert not noslip == UBB((0, 0), name="ubb")
+
+    assert noslip.name == "noslip"
+    noslip.name = "test name setter"
+    assert noslip.name == "test name setter"
 
     ubb = UBB((0, 0), name="ubb")
     assert ubb == UBB((0, 0), name="ubb")
     assert not noslip == UBB((0, 0), name="test")
+    assert not ubb == NoSlip("noslip")
 
     simple_extrapolation = SimpleExtrapolationOutflow(normal_direction=stencil[4], stencil=stencil, name="simple")
     assert simple_extrapolation == SimpleExtrapolationOutflow(normal_direction=stencil[4],
                                                               stencil=stencil, name="simple")
     assert not simple_extrapolation == SimpleExtrapolationOutflow(normal_direction=stencil[4],
                                                                   stencil=stencil, name="test")
+    assert not simple_extrapolation == NoSlip("noslip")
 
     outflow = ExtrapolationOutflow(normal_direction=stencil[4], lb_method=method, name="outflow")
     assert outflow == ExtrapolationOutflow(normal_direction=stencil[4], lb_method=method, name="outflow")
     assert not outflow == ExtrapolationOutflow(normal_direction=stencil[4], lb_method=method, name="test")
+    assert not outflow == simple_extrapolation
 
     density = FixedDensity(density=1.0, name="fixedDensity")
     assert density == FixedDensity(density=1.0, name="fixedDensity")
     assert not density == FixedDensity(density=1.0, name="test")
+    assert not density == UBB((0, 0), name="ubb")
 
     diffusion = DiffusionDirichlet(concentration=1.0, name="diffusion")
     assert diffusion == DiffusionDirichlet(concentration=1.0, name="diffusion")
     assert not diffusion == DiffusionDirichlet(concentration=1.0, name="test")
+    assert not diffusion == density
 
     neumann = NeumannByCopy(name="Neumann")
     assert neumann == NeumannByCopy(name="Neumann")
     assert not neumann == NeumannByCopy(name="test")
+    assert not neumann == diffusion
 
     stream = StreamInConstant(constant=1.0, name="stream")
     assert stream == StreamInConstant(constant=1.0, name="stream")
     assert not stream == StreamInConstant(constant=1.0, name="test")
+    assert not stream == noslip

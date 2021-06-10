@@ -12,30 +12,32 @@ from pystencils.sympyextensions import fast_subs
 # -------------------------------------------- LBM Kernel Creation -----------------------------------------------------
 
 
-def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
+def create_lbm_kernel(collision_rule, src_field, dst_field=None, accessor=StreamPullTwoFieldsAccessor()):
     """Replaces the pre- and post collision symbols in the collision rule by field accesses.
 
     Args:
         collision_rule:  instance of LbmCollisionRule, defining the collision step
-        input_field: field used for reading pdf values
-        output_field: field used for writing pdf values
-                      if accessor.is_inplace this parameter is ignored
+        src_field: field used for reading pdf values
+        dst_field: field used for writing pdf values if accessor.is_inplace this parameter is ignored
         accessor: instance of PdfFieldAccessor, defining where to read and write values
-                  to create e.g. a fused stream-collide kernel
+                  to create e.g. a fused stream-collide kernel See 'fieldaccess.PdfFieldAccessor'
 
     Returns:
         LbmCollisionRule where pre- and post collision symbols have been replaced
     """
     if accessor.is_inplace:
-        output_field = input_field
+        dst_field = src_field
+
+    if not accessor.is_inplace and dst_field is None:
+        raise ValueError("For two field accessors a destination field has to be provided")
 
     method = collision_rule.method
     pre_collision_symbols = method.pre_collision_pdf_symbols
     post_collision_symbols = method.post_collision_pdf_symbols
     substitutions = {}
 
-    input_accesses = accessor.read(input_field, method.stencil)
-    output_accesses = accessor.write(output_field, method.stencil)
+    input_accesses = accessor.read(src_field, method.stencil)
+    output_accesses = accessor.write(dst_field, method.stencil)
 
     for (idx, offset), input_access, output_access in zip(enumerate(method.stencil), input_accesses, output_accesses):
         substitutions[pre_collision_symbols[idx]] = input_access
@@ -55,19 +57,26 @@ def create_lbm_kernel(collision_rule, input_field, output_field, accessor):
     return result
 
 
-def create_stream_only_kernel(stencil, src_field, dst_field, accessor=StreamPullTwoFieldsAccessor()):
+def create_stream_only_kernel(stencil, src_field, dst_field=None, accessor=StreamPullTwoFieldsAccessor()):
     """Creates a stream kernel, without collision.
 
     Args:
-        stencil: lattice Boltzmann stencil which is used
-        src_field: Field the pre-streaming values are read from
-        dst_field: Field the post-streaming values are written to
-        accessor: Field accessor which is used to create the update rule. See 'fieldaccess.PdfFieldAccessor'
+        stencil: lattice Boltzmann stencil which is used in the form of a tuple of tuples
+        src_field: field used for reading pdf values
+        dst_field: field used for writing pdf values if accessor.is_inplace this parameter is ignored
+        accessor: instance of PdfFieldAccessor, defining where to read and write values
+                  to create e.g. a fused stream-collide kernel See 'fieldaccess.PdfFieldAccessor'
 
     Returns:
         AssignmentCollection of the stream only update rule
     """
-    temporary_symbols = sp.symbols(f'tmp_:{len(stencil)}')
+    if accessor.is_inplace:
+        dst_field = src_field
+
+    if not accessor.is_inplace and dst_field is None:
+        raise ValueError("For two field accessors a destination field has to be provided")
+
+    temporary_symbols = sp.symbols(f'streamed_:{len(stencil)}')
     subexpressions = [Assignment(tmp, acc) for tmp, acc in zip(temporary_symbols, accessor.read(src_field, stencil))]
     main_assignments = [Assignment(acc, tmp) for acc, tmp in zip(accessor.write(dst_field, stencil), temporary_symbols)]
     return AssignmentCollection(main_assignments, subexpressions=subexpressions)
@@ -103,13 +112,34 @@ def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src"
     return create_stream_only_kernel(stencil, src, dst, accessor=StreamPullTwoFieldsAccessor())
 
 
-def create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, output):
+def create_stream_pull_with_output_kernel(lb_method, src_field, dst_field=None, output=None,
+                                          accessor=StreamPullTwoFieldsAccessor()):
+    """Creates a stream kernel, without collision but macroscopic quantaties like density or velocity can be calculated.
+
+    Args:
+        lb_method: lattice Boltzmann method see 'creationfunctions.create_lb_method'
+        src_field: field used for reading pdf values
+        dst_field: field used for writing pdf values if accessor.is_inplace this parameter is ignored
+        output: dictonary which containes macroscopic quantities as keys which should be calculated and fields as
+                values which should be used to write the data e.g.: {'density': density_field}
+        accessor: instance of PdfFieldAccessor, defining where to read and write values
+                  to create e.g. a fused stream-collide kernel See 'fieldaccess.PdfFieldAccessor'
+
+    Returns:
+        AssignmentCollection of the stream only update rule
+    """
+    if accessor.is_inplace:
+        dst_field = src_field
+
+    if not accessor.is_inplace and dst_field is None:
+        raise ValueError("For two field accessors a destination field has to be provided")
+
     stencil = lb_method.stencil
     cqc = lb_method.conserved_quantity_computation
     streamed = sp.symbols(f"streamed_:{len(stencil)}")
-    accessor = StreamPullTwoFieldsAccessor()
     stream_assignments = [Assignment(a, b) for a, b in zip(streamed, accessor.read(src_field, stencil))]
-    output_eq_collection = cqc.output_equations_from_pdfs(streamed, output)
+    output_eq_collection = cqc.output_equations_from_pdfs(streamed, output) if output\
+        else AssignmentCollection(main_assignments=[])
     write_eqs = [Assignment(a, b) for a, b in zip(accessor.write(dst_field, stencil), streamed)]
 
     subexpressions = stream_assignments + output_eq_collection.subexpressions
