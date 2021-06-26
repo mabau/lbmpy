@@ -15,4 +15,3 @@ from lbmpy.scenarios import *
 from lbmpy.stencils import get_stencil
 from pystencils import make_slice, show_code
 from pystencils.jupyter import *
-from pystencils.sympy_gmpy_bug_workaround import *
