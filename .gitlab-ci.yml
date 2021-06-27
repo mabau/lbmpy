@@ -1,13 +1,14 @@
 stages:
+  - pretest
   - test
   - deploy
 
 
-# --------------------------  Tests ------------------------------------------------------------------------------------
+# --------------------------  Pre Tests --------------------------------------------------------------------------------
 
 # Normal test - runs on every commit all but "long run" tests
 tests-and-coverage:
-  stage: test
+  stage: pretest
   except:
     variables:
       - $ENABLE_NIGHTLY_BUILDS
@@ -35,6 +36,33 @@ tests-and-coverage:
     reports:
       cobertura: coverage.xml
       junit: report.xml
+
+minimal-conda:
+  stage: pretest
+  except:
+    variables:
+      - $ENABLE_NIGHTLY_BUILDS
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
+  script:
+    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
+    - python setup.py quicktest
+  tags:
+    - docker
+
+# Linter for code formatting
+flake8-lint:
+  stage: pretest
+  except:
+    variables:
+      - $ENABLE_NIGHTLY_BUILDS
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
+  script:
+    - flake8 lbmpy
+  tags:
+    - docker
+    - cuda11
+
+# -------------------------- Tests -------------------------------------------------------------------------------------
 
 # pipeline with latest python version
 latest-python:
@@ -132,18 +160,6 @@ ubuntu:
     reports:
       junit: report.xml
 
-minimal-conda:
-  stage: test
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
-  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
-  script:
-    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
-    - python setup.py quicktest
-  tags:
-    - docker
-
 pycodegen-integration:
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   stage: test
@@ -179,21 +195,7 @@ pycodegen-integration:
     - cuda11
     - AVX
 
-# -------------------- Linter & Documentation --------------------------------------------------------------------------
-
-
-flake8-lint:
-  stage: test
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
-  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
-  script:
-    - flake8 lbmpy
-  tags:
-    - docker
-    - cuda11
-
+# -------------------- Documentation and deploy ------------------------------------------------------------------------
 
 build-documentation:
   stage: test
