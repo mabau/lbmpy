@@ -5,13 +5,11 @@ from pystencils import Assignment, AssignmentCollection
 from pystencils.simp import SimplificationStrategy, add_subexpressions_for_divisions
 from pystencils.simp.assignment_collection import SymbolGen
 
-from lbmpy.moments import moments_up_to_order, get_order
+from lbmpy.moments import moments_up_to_order, get_order, statistical_quantity_symbol
 
 from itertools import product, chain
 
-from lbmpy.methods.centeredcumulant.centered_cumulants import (
-    statistical_quantity_symbol, exponent_tuple_sort_key
-)
+from lbmpy.methods.centeredcumulant.centered_cumulants import exponent_tuple_sort_key
 from lbmpy.methods.momentbased.moment_transforms import (
     AbstractMomentTransform, PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT
 )

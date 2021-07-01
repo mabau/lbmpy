@@ -1,7 +1,7 @@
 import sympy as sp
-import numpy as np
 
-from lbmpy.forcemodels import Simple
+from pystencils import Assignment
+from lbmpy.forcemodels import Simple, Luo
 
 
 class MultiphaseForceModel:
@@ -12,26 +12,34 @@ class MultiphaseForceModel:
     def __init__(self, force, rho=1):
         self._force = force
         self._rho = rho
+        self.force_symp = sp.symbols(f"F_:{len(force)}")
+        self.subs_terms = [Assignment(rhs, lhs) for rhs, lhs in zip(self.force_symp, force)]
 
     def __call__(self, lb_method):
-        stencil = lb_method.stencil
-
-        force_symp = sp.symbols("force_:{}".format(lb_method.dim))
-        simple = Simple(force_symp)
-        force = [f / self._rho for f in simple(lb_method)]
+        simple = Simple(self.force_symp)
+        force = sp.Matrix(simple(lb_method))
 
         moment_matrix = lb_method.moment_matrix
-        relaxation_rates = sp.Matrix(np.diag(lb_method.relaxation_rates))
-        mrt_collision_op = moment_matrix.inv() * relaxation_rates * moment_matrix
 
-        result = -0.5 * mrt_collision_op * sp.Matrix(force) + sp.Matrix(force)
+        return sp.simplify(moment_matrix * force) / self._rho
 
-        for i in range(0, len(stencil)):
-            result[i] = result[i].simplify()
 
-        subs_dict = dict(zip(force_symp, self._force))
+class CentralMomentMultiphaseForceModel:
+    r"""
+    A simple force model in the central moment space.
+    """
+    def __init__(self, force, rho=1):
+        self._force = force
+        self._rho = rho
+        self.force_symp = sp.symbols(f"F_:{len(force)}")
+        self.subs_terms = [Assignment(rhs, lhs) for rhs, lhs in zip(self.force_symp, force)]
 
-        for i in range(0, len(stencil)):
-            result[i] = result[i].subs(subs_dict)
+    def __call__(self, lb_method, **kwargs):
+        luo = Luo(self.force_symp)
+        force = sp.Matrix(luo(lb_method))
 
-        return result
+        M = lb_method.moment_matrix
+        N = lb_method.shift_matrix
+
+        result = sp.simplify(M * force)
+        return sp.simplify(N * result) / self._rho

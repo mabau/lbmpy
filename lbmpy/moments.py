@@ -191,6 +191,10 @@ def sort_moments_into_groups_of_same_order(moments):
 # -------------------- Common Function working with exponent tuples and polynomial moments -----------------------------
 
 
+def statistical_quantity_symbol(name, exponents):
+    return sp.Symbol(f'{name}_{"".join(str(i) for i in exponents)}')
+
+
 def is_even(moment):
     """
     A moment is considered even when under sign reversal nothing changes i.e. :math:`m(-x,-y,-z) = m(x,y,z)`
@@ -377,7 +381,7 @@ def moment_matrix(moments, stencil, shift_velocity=None):
     return sp.Matrix(len(moments), len(stencil), generator)
 
 
-def set_up_shift_matrix(moments, stencil, velocity_symbols=None):
+def set_up_shift_matrix(moments, stencil, velocity_symbols=sp.symbols("u_:3")):
     """
     Sets up a shift matrix to shift raw moments to central moment space.
 
@@ -387,13 +391,14 @@ def set_up_shift_matrix(moments, stencil, velocity_symbols=None):
         - stencil: Nested tuple of lattice velocities
         - velocity_symbols: Sequence of symbols corresponding to the shift velocity
     """
+    # TODO: this function takes quite some time for D3Q27. Needs to be optimised
     x, y, z = MOMENT_SYMBOLS
     dim = len(stencil[0])
     nr_directions = len(stencil)
 
     directions = np.asarray(stencil)
 
-    u = velocity_symbols if velocity_symbols is not None else sp.symbols(f"u_:{dim}")
+    u = velocity_symbols[:dim]
     f = sp.symbols(f"f_:{nr_directions}")
     m = sp.symbols(f"m_:{nr_directions}")
 

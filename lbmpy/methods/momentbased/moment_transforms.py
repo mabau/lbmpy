@@ -8,11 +8,11 @@ from pystencils.simp.assignment_collection import SymbolGen
 from pystencils.sympyextensions import subs_additive, fast_subs
 
 from lbmpy.moments import moment_matrix, set_up_shift_matrix, contained_moments, moments_up_to_order
+from lbmpy.moments import statistical_quantity_symbol as sq_sym
 
 from lbmpy.methods.momentbased.momentbasedsimplifications import (
     substitute_moments_in_conserved_quantity_equations,
     split_pdf_main_assignments_by_symmetry)
-from lbmpy.methods.centeredcumulant.centered_cumulants import statistical_quantity_symbol as sq_sym
 
 
 #   ============================ PDFs <-> Central Moments ==============================================================

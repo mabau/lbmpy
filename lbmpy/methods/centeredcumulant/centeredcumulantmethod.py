@@ -14,12 +14,12 @@ from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantity
 from lbmpy.moments import (
     moments_up_to_order, get_order,
     monomial_to_polynomial_transformation_matrix,
-    moment_sort_key, exponent_to_polynomial_representation, extract_monomials, MOMENT_SYMBOLS)
+    moment_sort_key, exponent_to_polynomial_representation, extract_monomials, MOMENT_SYMBOLS,
+    statistical_quantity_symbol)
 
 #   Local Imports
 
-from lbmpy.methods.centeredcumulant.centered_cumulants import (
-    statistical_quantity_symbol, exponent_tuple_sort_key)
+from lbmpy.methods.centeredcumulant.centered_cumulants import exponent_tuple_sort_key
 
 from lbmpy.methods.centeredcumulant.cumulant_transform import (
     PRE_COLLISION_CUMULANT, POST_COLLISION_CUMULANT,
@@ -429,7 +429,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         if self._force_model is not None and \
                 not isinstance(self._force_model, CenteredCumulantForceModel) and include_force_terms:
             force_model_terms = self._force_model(self)
-            force_term_symbols = sp.symbols("forceTerm_:%d" % (len(force_model_terms, )))
+            force_term_symbols = sp.symbols(f"forceTerm_:{len(force_model_terms)}")
             force_subexpressions = [Assignment(sym, force_model_term)
                                     for sym, force_model_term in zip(force_term_symbols, force_model_terms)]
             subexpressions += force_subexpressions

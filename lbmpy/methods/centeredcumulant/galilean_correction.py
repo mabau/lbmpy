@@ -2,8 +2,7 @@ from pystencils.simp.assignment_collection import AssignmentCollection
 import sympy as sp
 from pystencils import Assignment
 
-from lbmpy.moments import MOMENT_SYMBOLS
-from lbmpy.methods.centeredcumulant.centered_cumulants import statistical_quantity_symbol
+from lbmpy.moments import MOMENT_SYMBOLS, statistical_quantity_symbol
 from lbmpy.methods.centeredcumulant.cumulant_transform import PRE_COLLISION_CUMULANT
 
 x, y, z = MOMENT_SYMBOLS

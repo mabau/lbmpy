@@ -12,15 +12,17 @@ def test_maxwellian_moments():
     rho = sp.Symbol("rho")
     u = sp.symbols("u_0 u_1 u_2")
     c_s = sp.Symbol("c_s")
-    eq_moments = get_moments_of_continuous_maxwellian_equilibrium(((0, 0, 0), (0, 0, 1)),
-                                                                  dim=3, rho=rho, u=u, c_s_sq=c_s ** 2)
+    eq_moments = get_equilibrium_values_of_maxwell_boltzmann_function(((0, 0, 0), (0, 0, 1)),
+                                                                      dim=3, rho=rho, u=u, c_s_sq=c_s ** 2,
+                                                                      space="moment")
     assert eq_moments[0] == rho
     assert eq_moments[1] == rho * u[2]
 
     x, y, z = MOMENT_SYMBOLS
     one = sp.Rational(1, 1)
-    eq_moments = get_moments_of_continuous_maxwellian_equilibrium((one, x, x ** 2, x * y),
-                                                                  dim=2, rho=rho, u=u[:2], c_s_sq=c_s ** 2)
+    eq_moments = get_equilibrium_values_of_maxwell_boltzmann_function((one, x, x ** 2, x * y),
+                                                                      dim=2, rho=rho, u=u[:2], c_s_sq=c_s ** 2,
+                                                                      space="moment")
     assert eq_moments[0] == rho
     assert eq_moments[1] == rho * u[0]
     assert eq_moments[2] == rho * (c_s ** 2 + u[0] ** 2)
@@ -33,7 +35,8 @@ def test_continuous_discrete_moment_equivalence():
         dim = len(stencil[0])
         c_s_sq = sp.Rational(1, 3)
         moments = tuple(moments_up_to_order(3, dim=dim, include_permutations=False))
-        cm = sp.Matrix(get_moments_of_continuous_maxwellian_equilibrium(moments, order=2, dim=dim, c_s_sq=c_s_sq))
+        cm = sp.Matrix(get_equilibrium_values_of_maxwell_boltzmann_function(moments, order=2, dim=dim, c_s_sq=c_s_sq,
+                                                                            space="moment"))
         dm = sp.Matrix(get_moments_of_discrete_maxwellian_equilibrium(stencil, moments, order=2,
                                                                       compressible=True, c_s_sq=c_s_sq))
 
@@ -55,8 +58,10 @@ def test_moment_cumulant_continuous_equivalence():
         u = sp.symbols("u_:{dim}".format(dim=dim))
         indices = tuple(moments_up_to_component_order(2, dim=dim))
         c_s_sq = sp.Rational(1, 3)
-        eq_moments1 = get_moments_of_continuous_maxwellian_equilibrium(indices, dim=dim, u=u, c_s_sq=c_s_sq)
-        eq_cumulants = get_cumulants_of_continuous_maxwellian_equilibrium(indices, dim=dim, u=u, c_s_sq=c_s_sq)
+        eq_moments1 = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=dim, u=u, c_s_sq=c_s_sq,
+                                                                           space="moment")
+        eq_cumulants = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=dim, u=u, c_s_sq=c_s_sq,
+                                                                            space="cumulant")
         eq_cumulants = {idx: c for idx, c in zip(indices, eq_cumulants)}
         eq_moments2 = [raw_moment_as_function_of_cumulants(idx, eq_cumulants) for idx in indices]
         pdfs_to_moments = moment_matrix(indices, stencil)
@@ -82,8 +87,10 @@ def test_moment_cumulant_continuous_equivalence_polynomial_formulation():
         index_tuples = tuple(moments_up_to_component_order(2, dim=dim))
         indices = exponents_to_polynomial_representations(index_tuples)
         c_s_sq = sp.Rational(1, 3)
-        eq_moments1 = get_moments_of_continuous_maxwellian_equilibrium(indices, dim=dim, u=u, c_s_sq=c_s_sq)
-        eq_cumulants = get_cumulants_of_continuous_maxwellian_equilibrium(indices, dim=dim, u=u, c_s_sq=c_s_sq)
+        eq_moments1 = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=dim, u=u, c_s_sq=c_s_sq,
+                                                                           space="moment")
+        eq_cumulants = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=dim, u=u, c_s_sq=c_s_sq,
+                                                                            space="cumulant")
         eq_cumulants = {idx: c for idx, c in zip(index_tuples, eq_cumulants)}
         eq_moments2 = [raw_moment_as_function_of_cumulants(idx, eq_cumulants) for idx in index_tuples]
         pdfs_to_moments = moment_matrix(indices, stencil)

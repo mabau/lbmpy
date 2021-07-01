@@ -6,8 +6,7 @@ from functools import reduce
 import sympy as sp
 
 from lbmpy.maxwellian_equilibrium import (
-    compressible_to_incompressible_moment_value, get_cumulants_of_continuous_maxwellian_equilibrium,
-    get_moments_of_continuous_maxwellian_equilibrium,
+    compressible_to_incompressible_moment_value, get_equilibrium_values_of_maxwell_boltzmann_function,
     get_moments_of_discrete_maxwellian_equilibrium, get_weights)
 
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
@@ -19,13 +18,14 @@ from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCu
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
 
 from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
-from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
+from lbmpy.methods.momentbased.centralmomentbasedmethod import CentralMomentBasedLbMethod
+from lbmpy.methods.momentbased.moment_transforms import FastCentralMomentTransform
 
 from lbmpy.moments import (
     MOMENT_SYMBOLS, discrete_moment, exponents_to_polynomial_representations,
     get_default_moment_set_for_stencil, gram_schmidt, is_even, moments_of_order,
     moments_up_to_component_order, sort_moments_into_groups_of_same_order,
-    is_bulk_moment, is_shear_moment, get_order)
+    is_bulk_moment, is_shear_moment, get_order, set_up_shift_matrix)
 
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.stencils import get_stencil
@@ -34,7 +34,9 @@ from pystencils.sympyextensions import common_denominator
 
 
 def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,
-                                               force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3)):
+                                               force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3),
+                                               central_moment_space=False,
+                                               central_moment_transform_class=FastCentralMomentTransform):
     r"""Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate.
 
     These moments are relaxed against the moments of the discrete Maxwellian distribution.
@@ -51,6 +53,10 @@ def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rat
         force_model: force model instance, or None if no external forces
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
         c_s_sq: Speed of sound squared
+        central_moment_space: If set to True and instance of
+        `lbmpy.methods.momentbased.centralmomentbasedmethod.CentralMomentBasedLbMethod` is returned.
+        Thus the collision will be performed in the central moment space.
+        central_moment_transform_class: class to transform PDFs to the central moment space.
 
     Returns:
         `lbmpy.methods.momentbased.MomentBasedLbMethod` instance
@@ -62,18 +68,29 @@ def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rat
         "The number of moments has to be the same as the number of stencil entries"
 
     density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
-    eq_values = get_moments_of_discrete_maxwellian_equilibrium(stencil, tuple(mom_to_rr_dict.keys()),
+
+    moments = tuple(mom_to_rr_dict.keys())
+    eq_values = get_moments_of_discrete_maxwellian_equilibrium(stencil, moments,
                                                                c_s_sq=c_s_sq, compressible=compressible,
                                                                order=equilibrium_order)
+    if central_moment_space:
+        N = set_up_shift_matrix(moments, stencil)
+        eq_values = sp.simplify(N * sp.Matrix(eq_values))
 
     rr_dict = OrderedDict([(mom, RelaxationInfo(eq_mom, rr))
                            for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
 
-    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+    if central_moment_space:
+        return CentralMomentBasedLbMethod(stencil, rr_dict, density_velocity_computation,
+                                          force_model, central_moment_transform_class)
+    else:
+        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
 
 
 def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,
-                                                 force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3)):
+                                                 force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3),
+                                                 central_moment_space=False,
+                                                 central_moment_transform_class=FastCentralMomentTransform):
     r"""
     Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
     relaxed against the moments of the continuous Maxwellian distribution.
@@ -92,6 +109,10 @@ def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_r
         force_model: force model instance, or None if no external forces
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
         c_s_sq: Speed of sound squared
+        central_moment_space: If set to True and instance of
+        `lbmpy.methods.momentbased.centralmomentbasedmethod.CentralMomentBasedLbMethod` is returned.
+        Thus the collision will be performend in the central moment space.
+        central_moment_transform_class: class to transform PDFs to the central moment space.
 
     Returns:
         `lbmpy.methods.momentbased.MomentBasedLbMethod` instance
@@ -102,18 +123,32 @@ def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_r
     assert len(mom_to_rr_dict) == len(stencil), "The number of moments has to be equal to the number of stencil entries"
     dim = len(stencil[0])
     density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
-    eq_values = get_moments_of_continuous_maxwellian_equilibrium(tuple(mom_to_rr_dict.keys()), dim, c_s_sq=c_s_sq,
-                                                                 order=equilibrium_order)
+    moments = tuple(mom_to_rr_dict.keys())
+
+    if compressible and central_moment_space:
+        eq_values = get_equilibrium_values_of_maxwell_boltzmann_function(moments, dim, c_s_sq=c_s_sq,
+                                                                         order=equilibrium_order,
+                                                                         space="central moment")
+    else:
+        eq_values = get_equilibrium_values_of_maxwell_boltzmann_function(moments, dim, c_s_sq=c_s_sq,
+                                                                         order=equilibrium_order, space="moment")
 
     if not compressible:
         rho = density_velocity_computation.defined_symbols(order=0)[1]
         u = density_velocity_computation.defined_symbols(order=1)[1]
         eq_values = [compressible_to_incompressible_moment_value(em, rho, u) for em in eq_values]
+        if central_moment_space:
+            N = set_up_shift_matrix(moments, stencil)
+            eq_values = sp.simplify(N * sp.Matrix(eq_values))
 
     rr_dict = OrderedDict([(mom, RelaxationInfo(eq_mom, rr))
                            for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
 
-    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+    if central_moment_space:
+        return CentralMomentBasedLbMethod(stencil, rr_dict, density_velocity_computation,
+                                          force_model, central_moment_transform_class)
+    else:
+        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
 
 
 def create_generic_mrt(stencil, moment_eq_value_relaxation_rate_tuples, compressible=False,
@@ -252,6 +287,45 @@ def create_mrt_raw(stencil, relaxation_rates, maxwellian_moments=False, **kwargs
         return create_with_continuous_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
     else:
         return create_with_discrete_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
+
+
+def create_central_moment(stencil, relaxation_rates, maxwellian_moments=False, **kwargs):
+    r"""
+    Creates moment based LB method where the collision takes place in the central moment space.
+
+    Args:
+        stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.get_stencil`
+        relaxation_rates: relaxation rates (inverse of the relaxation times) for each moment
+        maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
+                        used to compute the equilibrium moments.
+    Returns:
+        :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` instance
+    """
+    if isinstance(stencil, str):
+        stencil = get_stencil(stencil)
+    moments = get_default_moment_set_for_stencil(stencil)
+    sorted_moments = sort_moments_into_groups_of_same_order(moments)
+    if len(relaxation_rates) == len(sorted_moments) - 2:
+        relaxation_rates = [0, 0, *relaxation_rates]
+
+    if len(relaxation_rates) == len(moments):
+        rr_dict = OrderedDict(zip(moments, relaxation_rates))
+    elif len(relaxation_rates) == len(sorted_moments):
+        full_relaxation_rates_list = list()
+        for i in sorted_moments:
+            full_relaxation_rates_list.extend([relaxation_rates[i]] * len(sorted_moments[i]))
+        rr_dict = OrderedDict(zip(moments, full_relaxation_rates_list))
+    else:
+        raise ValueError(f"The number of relaxation rates does not fit to the method. "
+                         f"You can either choose {len(moments)} relaxation rates to relax every central moment with "
+                         f"a specific value or {len(sorted_moments)} relaxation rates to relax each order of "
+                         f"central moments or {len(sorted_moments) - 2} relaxation rates to relax the conserved "
+                         f"moments with zero and the higher order moments with the defined values.")
+
+    if maxwellian_moments:
+        return create_with_continuous_maxwellian_eq_moments(stencil, rr_dict, central_moment_space=True, **kwargs)
+    else:
+        return create_with_discrete_maxwellian_eq_moments(stencil, rr_dict, central_moment_space=True, **kwargs)
 
 
 def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, method_name='KBC-N4',
@@ -480,7 +554,7 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted):
 def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=None,
                                    equilibrium_order=None, c_s_sq=sp.Rational(1, 3),
                                    galilean_correction=False,
-                                   central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix,
+                                   central_moment_transform_class=FastCentralMomentTransform,
                                    cumulant_transform_class=CentralMomentsToCumulantsByGeneratingFunc):
     r"""Creates a cumulant lattice Boltzmann model.
 
@@ -526,8 +600,9 @@ def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=Non
         cumulants_to_relaxation_info_dict[d] = RelaxationInfo(0, cumulant_to_rr_dict[d])
 
     #   Polynomial Cumulant Equilibria
-    polynomial_equilibria = get_cumulants_of_continuous_maxwellian_equilibrium(
-        higher_order_polynomials, dim, rho=density_symbol, u=velocity_symbols, c_s_sq=c_s_sq, order=equilibrium_order)
+    polynomial_equilibria = get_equilibrium_values_of_maxwell_boltzmann_function(
+        higher_order_polynomials, dim, rho=density_symbol, u=velocity_symbols,
+        c_s_sq=c_s_sq, order=equilibrium_order, space="cumulant")
     polynomial_equilibria = [density_symbol * v for v in polynomial_equilibria]
 
     for i, c in enumerate(higher_order_polynomials):

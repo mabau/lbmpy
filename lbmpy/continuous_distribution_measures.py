@@ -6,11 +6,11 @@ import sympy as sp
 
 from lbmpy.moments import polynomial_to_exponent_representation
 from pystencils.cache import disk_cache, memorycache
-from pystencils.sympyextensions import complete_the_squares_in_exp
+from pystencils.sympyextensions import complete_the_squares_in_exp, scalar_product
 
 
 @memorycache()
-def moment_generating_function(generating_function, symbols, symbols_in_result):
+def moment_generating_function(generating_function, symbols, symbols_in_result, velocity=None):
     r"""
     Computes the moment generating function of a probability distribution. It is defined as:
 
@@ -21,6 +21,8 @@ def moment_generating_function(generating_function, symbols, symbols_in_result):
         generating_function: sympy expression
         symbols: a sequence of symbols forming the vector x
         symbols_in_result: a sequence forming the vector t
+        velocity: if the generating function generates central moments, the velocity needs to be substracted. Thus the
+                  velocity symbols need to be passed. All generating functions need to have the same parameters.
 
     Returns:
         transformation result F: an expression that depends now on symbols_in_result
@@ -55,9 +57,27 @@ def moment_generating_function(generating_function, symbols, symbols_in_result):
     return sp.simplify(result)
 
 
-def cumulant_generating_function(func, symbols, symbols_in_result):
+def central_moment_generating_function(func, symbols, symbols_in_result, velocity=sp.symbols("u_:3")):
+    r"""
+    Computes central moment generating func, which is defined as:
+
+    .. math ::
+        K( \vec{\Xi} ) = \exp ( - \vec{\Xi} \cdot \vec{u} ) M( \vec{\Xi}.
+
+    For parameter description see :func:`moment_generating_function`.
     """
-    Computes cumulant generating func, which is the logarithm of the moment generating func.
+    argument = - scalar_product(symbols_in_result, velocity)
+
+    return sp.exp(argument) * moment_generating_function(func, symbols, symbols_in_result)
+
+
+def cumulant_generating_function(func, symbols, symbols_in_result, velocity=None):
+    r"""
+    Computes cumulant generating func, which is the logarithm of the moment generating func:
+
+    .. math ::
+        C(\vec{\Xi}) = \log M(\vec{\Xi})
+
     For parameter description see :func:`moment_generating_function`.
     """
     return sp.ln(moment_generating_function(func, symbols, symbols_in_result))
@@ -93,16 +113,16 @@ def multi_differentiation(generating_function, index, symbols):
 
 
 @memorycache(maxsize=512)
-def __continuous_moment_or_cumulant(func, moment, symbols, generating_function):
+def __continuous_moment_or_cumulant(func, moment, symbols, generating_function, velocity=sp.symbols("u_:3")):
     if type(moment) is tuple and not symbols:
         symbols = sp.symbols("xvar yvar zvar")
 
     dim = len(moment) if type(moment) is tuple else len(symbols)
 
     # not using sp.Dummy here - since it prohibits caching
-    t = tuple([sp.Symbol("tmpvar_%d" % i, ) for i in range(dim)])
+    t = sp.symbols(f"tmpvar_:{dim}")
     symbols = symbols[:dim]
-    generating_function = generating_function(func, symbols, t)
+    generating_function = generating_function(func, symbols, t, velocity=velocity)
 
     if type(moment) is tuple:
         return multi_differentiation(generating_function, moment, t)
@@ -126,6 +146,18 @@ def continuous_moment(func, moment, symbols=None):
         symbols: if moment is given as polynomial, pass the moment symbols, i.e. the dof of the polynomial
     """
     return __continuous_moment_or_cumulant(func, moment, symbols, moment_generating_function)
+
+
+def continuous_central_moment(func, moment, symbols=None, velocity=sp.symbols("u_:3")):
+    """Computes central moment of given function.
+
+    Args:
+        func: function to compute moments of
+        moment: tuple or polynomial describing the moment
+        symbols: if moment is given as polynomial, pass the moment symbols, i.e. the dof of the polynomial
+    """
+    return __continuous_moment_or_cumulant(func, moment, symbols, central_moment_generating_function,
+                                           velocity=velocity)
 
 
 def continuous_cumulant(func, moment, symbols=None):

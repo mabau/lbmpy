@@ -218,7 +218,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
         if self._forceModel is not None and include_force_terms:
             force_model_terms = self._forceModel(self)
-            force_term_symbols = sp.symbols("forceTerm_:%d" % (len(force_model_terms,)))
+            force_term_symbols = sp.symbols(f"forceTerm_:{len(force_model_terms)}")
             force_subexpressions = [Assignment(sym, force_model_term)
                                     for sym, force_model_term in zip(force_term_symbols, force_model_terms)]
             all_subexpressions += force_subexpressions
@@ -243,7 +243,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
             for rt in unique_relaxation_rates:
                 rt = sp.sympify(rt)
                 if not isinstance(rt, sp.Symbol):
-                    rt_symbol = sp.Symbol("rr_%d" % (len(subexpressions),))
+                    rt_symbol = sp.Symbol(f"rr_{len(subexpressions)}")
                     subexpressions[rt] = rt_symbol
 
             new_rr = [subexpressions[sp.sympify(e)] if sp.sympify(e) in subexpressions else e
