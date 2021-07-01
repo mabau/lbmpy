@@ -27,7 +27,7 @@ from lbmpy.methods.centeredcumulant.cumulant_transform import (
 
 from lbmpy.methods.momentbased.moment_transforms import (
     PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT,
-    FastCentralMomentTransform)
+    PdfsToCentralMomentsByShiftMatrix)
 
 from lbmpy.methods.centeredcumulant.force_model import CenteredCumulantForceModel
 from lbmpy.methods.centeredcumulant.galilean_correction import (
@@ -139,7 +139,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
 
     def __init__(self, stencil, cumulant_to_relaxation_info_dict, conserved_quantity_computation, force_model=None,
                  galilean_correction=False,
-                 central_moment_transform_class=FastCentralMomentTransform,
+                 central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix,
                  cumulant_transform_class=CentralMomentsToCumulantsByGeneratingFunc):
         assert isinstance(conserved_quantity_computation,
                           AbstractConservedQuantityComputation)
