@@ -201,7 +201,7 @@ from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
 from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
-from lbmpy.methods.momentbased.moment_transforms import FastCentralMomentTransform
+from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
 from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
 from lbmpy.methods.creationfunctions import (
     create_with_monomial_cumulants, create_with_polynomial_cumulants, create_with_default_polynomial_cumulants)
@@ -579,7 +579,7 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'initial_velocity': None,
 
         'galilean_correction': False,  # only available for D3Q27 cumulant methods
-        'central_moment_transform_class': FastCentralMomentTransform,
+        'central_moment_transform_class': PdfsToCentralMomentsByShiftMatrix,
         'cumulant_transform_class': CentralMomentsToCumulantsByGeneratingFunc,
 
         'entropic': False,
