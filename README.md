@@ -59,7 +59,7 @@ check out the Jupyter notebooks in `doc/notebooks`.
 Authors
 -------
 
-Many thanks go to the [contributors](AUTHORS.txt) of pystencils.
+Many thanks go to the [contributors](AUTHORS.txt) of lbmpy.
 
 ### Please cite us
 
