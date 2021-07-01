@@ -94,12 +94,13 @@ def moment_constraint_equations(stencil, equilibrium, moment_to_value_dict, u=sp
 
 def hydrodynamic_moment_values(up_to_order=3, dim=3, compressible=True):
     """Returns the values of moments that are required to approximate Navier Stokes (if up_to_order=3)"""
-    from lbmpy.maxwellian_equilibrium import get_moments_of_continuous_maxwellian_equilibrium
+    from lbmpy.maxwellian_equilibrium import get_equilibrium_values_of_maxwell_boltzmann_function
     from lbmpy.moments import moments_up_to_order
 
     moms = moments_up_to_order(up_to_order, dim)
     c_s_sq = sp.Symbol("p") / sp.Symbol("rho")
-    moment_values = get_moments_of_continuous_maxwellian_equilibrium(moms, dim=dim, c_s_sq=c_s_sq, order=2)
+    moment_values = get_equilibrium_values_of_maxwell_boltzmann_function(moms, dim=dim, c_s_sq=c_s_sq, order=2,
+                                                                         space="moment")
     if not compressible:
         moment_values = [compressible_to_incompressible_moment_value(m, sp.Symbol("rho"), sp.symbols("u_:3")[:dim])
                          for m in moment_values]

@@ -198,7 +198,8 @@ import lbmpy.forcemodels as forcemodels
 import lbmpy.methods.centeredcumulant.force_model as cumulant_force_model
 from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
-from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_srt, create_trt, create_trt_kbc)
+from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_central_moment,
+                           create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
 from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
@@ -417,7 +418,7 @@ def create_lb_method(**params):
         'equilibrium_order': params['equilibrium_order'],
         'force_model': force_model,
         'maxwellian_moments': params['maxwellian_moments'],
-        'c_s_sq': params['c_s_sq'],
+        'c_s_sq': params['c_s_sq']
     }
 
     cumulant_params = {
@@ -454,6 +455,8 @@ def create_lb_method(**params):
         nested_moments = params['nested_moments'] if 'nested_moments' in params else None
         method = create_mrt_orthogonal(stencil_entries, relaxation_rate_getter, weighted=weighted,
                                        nested_moments=nested_moments, **common_params)
+    elif method_name.lower() == 'central_moment':
+        method = create_central_moment(stencil_entries, relaxation_rates, **common_params)
     elif method_name.lower() == 'mrt_raw':
         method = create_mrt_raw(stencil_entries, relaxation_rates, **common_params)
     elif method_name.lower().startswith('trt-kbc-n'):
@@ -529,7 +532,7 @@ def force_model_from_string(force_model_name, force_values):
         'silva': forcemodels.Buick,
         'edm': forcemodels.EDM,
         'schiller': forcemodels.Schiller,
-        'cumulant': cumulant_force_model.CenteredCumulantForceModel
+        'cumulant': cumulant_force_model.CenteredCumulantForceModel,
     }
     if force_model_name.lower() not in force_model_dict:
         raise ValueError("Unknown force model %s" % (force_model_name,))
@@ -682,6 +685,6 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
             stencil_entries = stencil_param
         else:
             stencil_entries = get_stencil(params_result['stencil'])
-        params_result['relaxation_rates'] = sp.symbols("omega_:%d" % len(stencil_entries))
+        params_result['relaxation_rates'] = sp.symbols(f"omega_:{len(stencil_entries)}")
 
     return params_result, opt_params_result

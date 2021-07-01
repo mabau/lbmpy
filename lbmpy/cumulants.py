@@ -124,7 +124,7 @@ def discrete_cumulant(func, cumulant, stencil):
     assert len(stencil) == len(func)
 
     dim = len(stencil[0])
-    wave_numbers = tuple([sp.Symbol("Xi_%d" % (i,)) for i in range(dim)])
+    wave_numbers = sp.symbols(f"Xi_:{dim}")
 
     generating_function = __get_discrete_cumulant_generating_function(func, stencil, wave_numbers)
     if type(cumulant) is tuple:

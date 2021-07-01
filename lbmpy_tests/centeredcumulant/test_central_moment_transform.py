@@ -1,9 +1,8 @@
 import sympy as sp
-from lbmpy.moments import get_default_moment_set_for_stencil, extract_monomials
+from lbmpy.moments import get_default_moment_set_for_stencil, extract_monomials, statistical_quantity_symbol
 import pytest
 
 from lbmpy.stencils import get_stencil
-from lbmpy.methods.centeredcumulant.centered_cumulants import statistical_quantity_symbol
 from lbmpy.methods.momentbased.moment_transforms import (
     PdfsToCentralMomentsByMatrix, FastCentralMomentTransform, PdfsToCentralMomentsByShiftMatrix,
     PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT

@@ -32,12 +32,12 @@ class AbstractLbMethod(abc.ABC):
     @property
     def pre_collision_pdf_symbols(self):
         """Tuple of symbols representing the pdf values before collision"""
-        return sp.symbols("f_:%d" % (len(self.stencil),))
+        return sp.symbols(f"f_:{len(self.stencil)}")
 
     @property
     def post_collision_pdf_symbols(self):
         """Tuple of symbols representing the pdf values after collision"""
-        return sp.symbols("d_:%d" % (len(self.stencil),))
+        return sp.symbols(f"d_:{len(self.stencil)}")
 
     # ------------------------- Abstract Methods & Properties ----------------------------------------------------------
 

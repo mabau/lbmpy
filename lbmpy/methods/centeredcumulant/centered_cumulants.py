@@ -6,10 +6,6 @@ from pystencils.stencil import have_same_entries
 from lbmpy.moments import MOMENT_SYMBOLS, moment_sort_key, exponent_to_polynomial_representation
 
 
-def statistical_quantity_symbol(name, exponents):
-    return sp.Symbol(f'{name}_{"".join(str(i) for i in exponents)}')
-
-
 def exponent_tuple_sort_key(x):
     return moment_sort_key(exponent_to_polynomial_representation(x))
 
