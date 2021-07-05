@@ -1,0 +1,13 @@
+
+Contributors:
+-------------
+
+  - Martin Bauer <martin.bauer@fau.de>
+  - Markus Holzer <markus.holzer@fau.de>
+  - Michael Kuron <mkuron@icp.uni-stuttgart.de>
+  - Stephan Seitz <stephan.seitz@fau.de>
+  - Frederik Hennig <frederik.hennig@fau.de>
+  - Helen Schottenhamml <helen.schottenhamml@fau.de>
+  - Rudolf Weeber <weeber@icp.uni-stuttgart.de>
+  - Christian Godenschwager <christian.godenschwager@fau.de>
+  - Jan Hönig <jan.hoenig@fau.de>
