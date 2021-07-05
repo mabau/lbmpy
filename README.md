@@ -63,7 +63,7 @@ Many thanks go to the [contributors](AUTHORS.txt) of lbmpy.
 
 ### Please cite us
 
-If you use pystencils in a publication, please cite the following articles:
+If you use lbmpy in a publication, please cite the following articles:
 
 Overview:
   - M. Bauer et al, lbmpy: Automatic code generation for efficient parallel lattice Boltzmann methods. Journal of Computational Science, 2021. https://doi.org/10.1016/j.jocs.2020.101269
