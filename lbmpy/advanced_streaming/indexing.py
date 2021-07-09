@@ -231,3 +231,31 @@ class NeighbourOffsetArrays(CustomCodeNode):
         offset_symbols = NeighbourOffsetArrays._offset_symbols(dim)
         super(NeighbourOffsetArrays, self).__init__(code, symbols_read=set(),
                                                     symbols_defined=set(offset_symbols))
+
+
+class MirroredStencilDirections(CustomCodeNode):
+
+    @staticmethod
+    def mirror_stencil(direction, mirror_axis):
+        assert mirror_axis <= len(direction), f"only {len(direction)} axis available for mirage"
+        direction = list(direction)
+        direction[mirror_axis] = -direction[mirror_axis]
+
+        return tuple(direction)
+
+    @staticmethod
+    def _mirrored_symbol(mirror_axis):
+        axis = ['x', 'y', 'z']
+        return TypedSymbol(f"{axis[mirror_axis]}_axis_mirrored_stencil_dir", create_type(np.int64))
+
+    def __init__(self, stencil, mirror_axis, dtype=np.int64):
+        offsets_dtype = create_type(dtype)
+
+        mirrored_stencil_symbol = MirroredStencilDirections._mirrored_symbol(mirror_axis)
+        mirrored_directions = [stencil.index(MirroredStencilDirections.mirror_stencil(direction, mirror_axis))
+                               for direction in stencil]
+        code = "\n"
+        code += _array_pattern(offsets_dtype, mirrored_stencil_symbol.name, mirrored_directions)
+
+        super(MirroredStencilDirections, self).__init__(code, symbols_read=set(),
+                                                        symbols_defined={mirrored_stencil_symbol})

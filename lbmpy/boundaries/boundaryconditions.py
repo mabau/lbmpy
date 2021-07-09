@@ -1,3 +1,5 @@
+from warnings import warn
+
 from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
 from pystencils.simp.assignment_collection import AssignmentCollection
 from pystencils import Assignment, Field
@@ -5,7 +7,7 @@ from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
 from pystencils.data_types import create_type
 from pystencils.sympyextensions import get_symmetric_part
 from lbmpy.simplificationfactory import create_simplification_strategy
-from lbmpy.advanced_streaming.indexing import NeighbourOffsetArrays
+from lbmpy.advanced_streaming.indexing import NeighbourOffsetArrays, MirroredStencilDirections
 from pystencils.stencil import offset_to_direction_string, direction_string_to_offset, inverse_direction
 
 import sympy as sp
@@ -107,7 +109,125 @@ class NoSlip(LbBoundary):
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         return Assignment(f_in(inv_dir[dir_symbol]), f_out(dir_symbol))
 
+
 # end class NoSlip
+
+class FreeSlip(LbBoundary):
+    """
+    Free-Slip boundary condition, which enforces a zero normal fluid velocity $u_n = 0$ but places no restrictions
+    on the tangential fluid velocity $u_t$.
+
+    Args:
+        stencil: LBM stencil which is used for the simulation
+        normal_direction: optional normal direction. If the Free slip boundary is applied to a certain side in the
+                          domain it is not necessary to calculate the normal direction since it can be stated for all
+                          boundary cells. This reduces the memory space for the index array significantly.
+        name: optional name of the boundary.
+    """
+
+    def __init__(self, stencil, normal_direction=None, name=None):
+        """Set an optional name here, to mark boundaries, for example for force evaluations"""
+        self.stencil = stencil
+
+        if normal_direction and len(normal_direction) - normal_direction.count(0) != 1:
+            raise ValueError("It is only possible to pre specify the normal direction for simple situations."
+                             "This means if the free slip boundary is applied to a straight wall or side in the "
+                             "simulation domain. A possible value for example would be (0, 1, 0) if the "
+                             "free slip boundary is applied to the northern wall. For more complex situations "
+                             "the normal direction has to be calculated for each cell. This is done when "
+                             "the normal direction is not defined for this class")
+
+        if normal_direction:
+            self.mirror_axis = normal_direction.index(*[dir for dir in normal_direction if dir != 0])
+
+        self.normal_direction = normal_direction
+        self.dim = len(stencil[0])
+
+        if name is None and normal_direction:
+            name = f"Free Slip : {offset_to_direction_string([-x for x in normal_direction])}"
+
+        super(FreeSlip, self).__init__(name)
+
+    def init_callback(self, boundary_data, **_):
+        if len(boundary_data.index_array) > 1e6:
+            warn(f"The calculation of the normal direction for each cell might take a long time, because "
+                 f"{len(boundary_data.index_array)} cells are marked as Free Slip boundary cells. Consider specifying "
+                 f" the normal direction beforehand, which is possible if it is equal for all cells (e.g. at a wall)")
+
+        dim = boundary_data.dim
+        coords = [coord for coord, _ in zip(['x', 'y', 'z'], range(dim))]
+
+        boundary_cells = set()
+
+        # get a set containing all boundary cells
+        for cell in boundary_data.index_array:
+            fluid_cell = tuple([cell[coord] for coord in coords])
+            direction = self.stencil[cell['dir']]
+            boundary_cell = tuple([i + d for i, d in zip(fluid_cell, direction)])
+            boundary_cells.add(boundary_cell)
+
+        for cell in boundary_data.index_array:
+            fluid_cell = tuple([cell[coord] for coord in coords])
+            direction = self.stencil[cell['dir']]
+            ref_direction = direction
+            normal_direction = [0] * dim
+
+            for i in range(dim):
+                sub_direction = [0] * dim
+                sub_direction[i] = direction[i]
+                test_cell = tuple([x + y for x, y in zip(fluid_cell, sub_direction)])
+
+                if test_cell in boundary_cells:
+                    normal_direction[i] = direction[i]
+                    ref_direction = MirroredStencilDirections.mirror_stencil(ref_direction, i)
+
+            ref_direction = inverse_direction(ref_direction)
+            for i, cell_name in zip(range(dim), self.additional_data):
+                cell[cell_name[0]] = -normal_direction[i]
+            cell['ref_dir'] = self.stencil.index(ref_direction)
+
+    @property
+    def additional_data(self):
+        """Used internally only. For the FreeSlip boundary the information of the normal direction for each pdf
+        direction is needed. This information is stored in the index vector."""
+        if self.normal_direction:
+            return []
+        else:
+            data_type = create_type('int32')
+            wnz = [] if self.dim == 2 else [('wnz', data_type)]
+            data = [('wnx', data_type), ('wny', data_type)] + wnz
+            return data + [('ref_dir', data_type)]
+
+    @property
+    def additional_data_init_callback(self):
+        if self.normal_direction:
+            return None
+        else:
+            return self.init_callback
+
+    def get_additional_code_nodes(self, lb_method):
+        if self.normal_direction:
+            return [MirroredStencilDirections(self.stencil, self.mirror_axis)]
+        else:
+            return []
+
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        if self.normal_direction:
+            normal_direction = self.normal_direction
+            mirrored_stencil_symbol = MirroredStencilDirections._mirrored_symbol(self.mirror_axis)
+            mirrored_direction = inv_dir[sp.IndexedBase(mirrored_stencil_symbol, shape=(1,))[dir_symbol]]
+        else:
+            normal_direction = list()
+            for i, cell_name in zip(range(self.dim), self.additional_data):
+                normal_direction.append(index_field[0](cell_name[0]))
+            normal_direction = tuple(normal_direction)
+
+            mirrored_direction = index_field[0]('ref_dir')
+
+        return Assignment(f_in(inv_dir[dir_symbol]), f_in[normal_direction](mirrored_direction))
+
+
+# end class FreeSlip
 
 
 class UBB(LbBoundary):
@@ -173,12 +293,11 @@ class UBB(LbBoundary):
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         vel_from_idx_field = callable(self._velocity)
         vel = [index_field(f'vel_{i}') for i in range(self.dim)] if vel_from_idx_field else self._velocity
-        direction = dir_symbol
 
         assert self.dim == lb_method.dim, \
             f"Dimension of UBB ({self.dim}) does not match dimension of method ({lb_method.dim})"
 
-        neighbor_offset = NeighbourOffsetArrays.neighbour_offset(direction, lb_method.stencil)
+        neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
 
         velocity = tuple(v_i.get_shifted(*neighbor_offset)
                          if isinstance(v_i, Field.Access) and not vel_from_idx_field
@@ -193,7 +312,7 @@ class UBB(LbBoundary):
         c_s_sq = sp.Rational(1, 3)
         weight_of_direction = LbmWeightInfo.weight_of_direction
         vel_term = 2 / c_s_sq * sum([d_i * v_i for d_i, v_i in zip(neighbor_offset, velocity)]) * weight_of_direction(
-            direction, lb_method)
+            dir_symbol, lb_method)
 
         # Better alternative: in conserved value computation
         # rename what is currently called density to "virtual_density"
@@ -205,12 +324,13 @@ class UBB(LbBoundary):
             density_equations = cqc.output_equations_from_pdfs(pdf_field_accesses, {'density': density_symbol})
             density_symbol = lb_method.conserved_quantity_computation.defined_symbols()['density']
             result = density_equations.all_assignments
-            result += [Assignment(f_in(inv_dir[direction]),
-                                  f_out(direction) - vel_term * density_symbol)]
+            result += [Assignment(f_in(inv_dir[dir_symbol]),
+                                  f_out(dir_symbol) - vel_term * density_symbol)]
             return result
         else:
-            return [Assignment(f_in(inv_dir[direction]),
-                               f_out(direction) - vel_term)]
+            return [Assignment(f_in(inv_dir[dir_symbol]),
+                               f_out(dir_symbol) - vel_term)]
+
 
 # end class UBB
 
@@ -258,6 +378,7 @@ class SimpleExtrapolationOutflow(LbBoundary):
         tangential_offset = tuple(offset - normal for offset, normal in zip(neighbor_offset, self.normal_direction))
 
         return Assignment(f_in.center(inv_dir[dir_symbol]), f_out[tangential_offset](inv_dir[dir_symbol]))
+
 
 # end class SimpleExtrapolationOutflow
 
@@ -406,6 +527,7 @@ class ExtrapolationOutflow(LbBoundary):
 
         return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
 
+
 # end class ExtrapolationOutflow
 
 
@@ -459,6 +581,7 @@ class FixedDensity(LbBoundary):
         return subexpressions + [Assignment(f_in(inv_dir[dir_symbol]),
                                             2 * eq_component - f_out(dir_symbol))]
 
+
 # end class FixedDensity
 
 
@@ -493,6 +616,7 @@ class DiffusionDirichlet(LbBoundary):
         return [Assignment(f_in(inv_dir[dir_symbol]),
                            2 * w_dir * self.concentration - f_out(dir_symbol))]
 
+
 # end class DiffusionDirichlet
 
 
@@ -515,6 +639,7 @@ class NeumannByCopy(LbBoundary):
         neighbour_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         return [Assignment(f_in(inv_dir[dir_symbol]), f_out(inv_dir[dir_symbol])),
                 Assignment(f_out[neighbour_offset](dir_symbol), f_out(dir_symbol))]
+
 
 # end class NeumannByCopy
 
