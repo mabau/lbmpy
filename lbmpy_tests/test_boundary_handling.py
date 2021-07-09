@@ -2,13 +2,23 @@ import numpy as np
 import pytest
 
 from lbmpy.boundaries import NoSlip, UBB, SimpleExtrapolationOutflow, ExtrapolationOutflow,\
-    FixedDensity, DiffusionDirichlet, NeumannByCopy, StreamInConstant
+    FixedDensity, DiffusionDirichlet, NeumannByCopy, StreamInConstant, FreeSlip
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import create_lb_function, create_lb_method
 from lbmpy.geometry import add_box_boundary
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.stencils import get_stencil
 from pystencils import create_data_handling, make_slice
+from pystencils.slicing import slice_from_direction
+from pystencils.stencil import inverse_direction
+
+
+def mirror_stencil(direction, mirror_axis):
+    for i, n in enumerate(mirror_axis):
+        if n != 0:
+            direction[i] = -direction[i]
+
+    return tuple(direction)
 
 
 @pytest.mark.parametrize("target", ['cpu', 'gpu', 'opencl'])
@@ -103,6 +113,110 @@ def test_simple(target):
     assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 4] == 3))
     assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 6] == 7))
     assert (all(dh.cpu_arrays['pdfs'][0, 2:4, 8] == 5))
+
+
+def test_free_slip_index_list():
+    stencil = get_stencil('D2Q9')
+    dh = create_data_handling(domain_size=(4, 4), periodicity=(False, False))
+    src = dh.add_array('src', values_per_cell=len(stencil), alignment=True)
+    dh.fill('src', 0.0, ghost_layers=True)
+    method = create_lb_method(stencil='D2Q9', method='srt', relaxation_rate=1.8)
+
+    bh = LatticeBoltzmannBoundaryHandling(method, dh, 'src', name="bh")
+
+    free_slip = FreeSlip(stencil=stencil)
+    add_box_boundary(bh, free_slip)
+
+    bh.prepare()
+    for b in dh.iterate():
+        for b_obj, idx_arr in b[bh._index_array_name].boundary_object_to_index_list.items():
+            index_array = idx_arr
+
+    # normal directions
+    normal_west = (1, 0)
+    normal_east = (-1, 0)
+    normal_south = (0, 1)
+    normal_north = (0, -1)
+
+    normal_south_west = (1, 1)
+    normal_north_west = (1, -1)
+    normal_south_east = (-1, 1)
+    normal_north_east = (-1, -1)
+
+    for cell in index_array:
+        direction = stencil[cell[2]]
+        inv_dir = inverse_direction(direction)
+
+        boundary_cell = (cell[0] + direction[0], cell[1] + direction[1])
+        normal = (cell[3], cell[4])
+        # the data is written on the inverse direction of the fluid cell near the boundary
+        # the data is read from the mirrored direction of the inverse direction where the mirror axis is the normal
+        assert cell[5] == stencil.index(mirror_stencil(list(inv_dir), normal))
+
+        if boundary_cell[0] == 0 and 0 < boundary_cell[1] < 5:
+            assert normal == normal_west
+
+        if boundary_cell[0] == 5 and 0 < boundary_cell[1] < 5:
+            assert normal == normal_east
+
+        if 0 < boundary_cell[0] < 5 and boundary_cell[1] == 0:
+            assert normal == normal_south
+
+        if 0 < boundary_cell[0] < 5 and boundary_cell[1] == 5:
+            assert normal == normal_north
+
+        if boundary_cell == (0, 0):
+            assert cell[2] == cell[5]
+            assert normal == normal_south_west
+
+        if boundary_cell == (5, 0):
+            assert cell[2] == cell[5]
+            assert normal == normal_south_east
+
+        if boundary_cell == (0, 5):
+            assert cell[2] == cell[5]
+            assert normal == normal_north_west
+
+        if boundary_cell == (5, 5):
+            assert cell[2] == cell[5]
+            assert normal == normal_north_east
+
+
+def test_free_slip_equivalence():
+    # check if Free slip BC does the same if the normal direction is specified or not
+
+    stencil = get_stencil('D2Q9')
+    dh = create_data_handling(domain_size=(4, 4), periodicity=(False, False))
+    src1 = dh.add_array('src1', values_per_cell=len(stencil), alignment=True)
+    src2 = dh.add_array('src2', values_per_cell=len(stencil), alignment=True)
+    dh.fill('src1', 0.0, ghost_layers=True)
+    dh.fill('src2', 0.0, ghost_layers=True)
+
+    shape = dh.gather_array('src1', ghost_layers=True).shape
+
+    num = 0
+    for x in range(shape[0]):
+        for y in range(shape[1]):
+            for direction in range(shape[2]):
+                dh.cpu_arrays['src1'][x, y, direction] = num
+                dh.cpu_arrays['src2'][x, y, direction] = num
+                num += 1
+
+
+    method = create_lb_method(stencil='D2Q9', method='srt', relaxation_rate=1.8)
+
+    bh1 = LatticeBoltzmannBoundaryHandling(method, dh, 'src1', name="bh1")
+    free_slip1 = FreeSlip(stencil=stencil)
+    bh1.set_boundary(free_slip1, slice_from_direction('N', dh.dim))
+
+    bh2 = LatticeBoltzmannBoundaryHandling(method, dh, 'src2', name="bh2")
+    free_slip2 = FreeSlip(stencil=stencil, normal_direction=(0, -1))
+    bh2.set_boundary(free_slip2, slice_from_direction('N', dh.dim))
+
+    bh1()
+    bh2()
+
+    assert np.array_equal(dh.cpu_arrays['src1'], dh.cpu_arrays['src2'])
 
 
 def test_exotic_boundaries():
