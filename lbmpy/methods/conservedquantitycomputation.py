@@ -84,13 +84,15 @@ class AbstractConservedQuantityComputation(abc.ABC):
 class DensityVelocityComputation(AbstractConservedQuantityComputation):
     def __init__(self, stencil, compressible, force_model=None,
                  zeroth_order_moment_symbol=sp.Symbol("rho"),
-                 first_order_moment_symbols=sp.symbols("u_:3")):
+                 first_order_moment_symbols=sp.symbols("u_:3"),
+                 second_order_moment_symbols=sp.symbols("p_:9")):
         dim = len(stencil[0])
         self._stencil = stencil
         self._compressible = compressible
         self._forceModel = force_model
         self._symbolOrder0 = zeroth_order_moment_symbol
         self._symbolsOrder1 = first_order_moment_symbols[:dim]
+        self._symbolsOrder2 = second_order_moment_symbols[:(dim * dim)]
 
     @property
     def conserved_quantities(self):
@@ -166,7 +168,8 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         dim = len(self._stencil[0])
 
         ac = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
-                                                             self._symbolOrder0, self._symbolsOrder1)
+                                                             self._symbolOrder0, self._symbolsOrder1,
+                                                             self._symbolsOrder2)
 
         if self._compressible:
             ac = divide_first_order_moments_by_rho(ac, dim)
@@ -209,6 +212,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                                                                                   self._symbolsOrder1)
             mom_density_eq_coll = apply_force_model_shift('macroscopic_momentum_density_shift', dim, 
                                                           mom_density_eq_coll, self._forceModel, self._compressible)
+
             for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.main_assignments[1:]):
                 main_assignments.append(Assignment(sym, val.rhs))
         if 'moment0' in output_quantity_names_to_symbols:
@@ -222,6 +226,13 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                 moment1_output_symbol = moment1_output_symbol.center_vector
             main_assignments.extend([Assignment(lhs, sum(d[i] * pdf for d, pdf in zip(self._stencil, pdfs)))
                                      for i, lhs in enumerate(moment1_output_symbol)])
+        if 'moment2' in output_quantity_names_to_symbols:
+            moment2_output_symbol = output_quantity_names_to_symbols['moment2']
+            if isinstance(moment2_output_symbol, Field):
+                moment2_output_symbol = moment2_output_symbol.center_vector
+            for i, p in enumerate(moment2_output_symbol):
+                main_assignments.append(Assignment(p, eqs[self._symbolsOrder2[i]]))
+                del eqs[self._symbolsOrder2[i]]
 
         ac = ac.copy(main_assignments, [Assignment(a, b) for a, b in eqs.items()])
         return ac.new_without_unused_subexpressions()
@@ -233,8 +244,8 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
 # -----------------------------------------  Helper functions ----------------------------------------------------------
 
 
-def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs,
-                                                    symbolic_zeroth_moment, symbolic_first_moments):
+def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs, symbolic_zeroth_moment,
+                                                    symbolic_first_moments, symbolic_second_moments=None):
     r"""
     Returns an equation system that computes the zeroth and first order moments with the least amount of operations
 
@@ -244,12 +255,14 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs,
 
         \rho = \sum_{d \in S} f_d
         u_j = \sum_{d \in S} f_d u_jd
+        p_j = \sum_{d \in S} {d \in S} f_d u_jd
 
     Args:
         stencil: called :math:`S` above
         symbolic_pdfs: called :math:`f` above
         symbolic_zeroth_moment:  called :math:`\rho` above
         symbolic_first_moments: called :math:`u` above
+        symbolic_second_moments: called :math:`p` above
     """
     def filter_out_plus_terms(expr):
         result = 0
@@ -266,6 +279,12 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs,
     for f, offset in zip(symbolic_pdfs, stencil):
         for i in range(dim):
             u[i] += f * int(offset[i])
+
+    p = [0] * dim * dim
+    for f, offset in zip(symbolic_pdfs, stencil):
+        for i in range(dim):
+            for j in range(dim):
+                p[dim * i + j] += f * int(offset[i]) * int(offset[j])
 
     plus_terms = [set(filter_out_plus_terms(u_i).args) for u_i in u]
     for i in range(dim):
@@ -284,6 +303,8 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs,
     equations = []
     equations += [Assignment(symbolic_zeroth_moment, pdf_sum)]
     equations += [Assignment(u_i_sym, u_i) for u_i_sym, u_i in zip(symbolic_first_moments, u)]
+    if symbolic_second_moments:
+        equations += [Assignment(symbolic_second_moments[i], p[i]) for i in range(dim**2)]
 
     return AssignmentCollection(equations, subexpressions)
 
