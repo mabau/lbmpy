@@ -180,6 +180,10 @@ def moment_sort_key(moment):
     return get_order(moment), len(moment.atoms(sp.Symbol)), len(mom_str), mom_str
 
 
+def exponent_tuple_sort_key(x):
+    return moment_sort_key(exponent_to_polynomial_representation(x))
+
+
 def sort_moments_into_groups_of_same_order(moments):
     """Returns a dictionary mapping the order (int) to a list of moments with that order."""
     result = defaultdict(list)
@@ -284,6 +288,59 @@ def non_aliased_moment(moment_tuple: Sequence[int]) -> Tuple[int, ...]:
         else:
             result.append(element)
     return tuple(result)
+
+
+def aliases_from_moment_list(moment_exponents, stencil):
+    """Takes a list of moment exponent tuples and finds aliases within it
+    according the given stencil. Two moments are aliases of each other on a stencil
+    if they produce the same coefficients in the moment sum over all populations.
+
+    Apart from the obvious aliases (e.g. ``(4,0,0)`` to ``(2,0,0)``, etc), there are aliasing
+    effects for example on the D3Q15 stencil, where some third and fourth order moments
+    are the same.
+    """
+    mm = moment_matrix(moment_exponents, stencil)
+    rows_dict = dict()
+    aliases = dict()
+    for r, moment in enumerate(moment_exponents):
+        row = tuple(mm[r, :])
+        if row in rows_dict:
+            aliases[moment] = rows_dict[row]
+        else:
+            rows_dict[row] = moment
+    return aliases
+
+
+def non_aliased_polynomial_moments(polys, stencil, nested=False):
+    """Takes a (potentially nested) list of moment polynomials and rewrites them by eliminating
+    any aliased monomials. 
+
+    All polynomials are expanded and occuring monomials are collected. Using `aliases_from_moment_list`,
+    aliases are eliminated and substituted in the polynomials.
+    """
+    dim = len(stencil[0])
+    if nested:
+        polys_unnested = list(itertools.chain.from_iterable(polys))
+    else:
+        polys_unnested = polys
+    monos = sorted(extract_monomials(polys_unnested, dim=dim), key=exponent_tuple_sort_key)
+    aliases = aliases_from_moment_list(monos, stencil)
+
+    if not aliases:  # Stop early if there are no aliases
+        return polys
+
+    def nonalias_polynomial(poly):
+        exponents = polynomial_to_exponent_representation(poly, dim)
+        exponents_unaliased = [(coeff, aliases.get(m, m)) for coeff, m in exponents]
+        return sum(coeff * exponent_to_polynomial_representation(m) for coeff, m in exponents_unaliased)
+
+    if nested:
+        output_polys = []
+        for group in polys:
+            output_polys.append(list(map(nonalias_polynomial, group)))
+        return output_polys
+    else:
+        return list(map(nonalias_polynomial, polys))
 
 
 def is_bulk_moment(moment, dim):

@@ -7,7 +7,7 @@ import sympy as sp
 from pystencils.simp import AssignmentCollection
 from pystencils import Assignment
 from lbmpy.creationfunctions import create_lb_method
-from lbmpy.methods.momentbased.moment_transforms import (
+from lbmpy.moment_transforms import (
     FastCentralMomentTransform,
     PdfsToCentralMomentsByMatrix,
     PdfsToCentralMomentsByShiftMatrix)

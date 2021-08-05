@@ -14,18 +14,17 @@ from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantity
 from lbmpy.moments import (
     moments_up_to_order, get_order,
     monomial_to_polynomial_transformation_matrix,
-    moment_sort_key, exponent_to_polynomial_representation, extract_monomials, MOMENT_SYMBOLS,
+    moment_sort_key, exponent_tuple_sort_key,
+    exponent_to_polynomial_representation, extract_monomials, MOMENT_SYMBOLS,
     statistical_quantity_symbol)
 
 #   Local Imports
 
-from lbmpy.methods.centeredcumulant.centered_cumulants import exponent_tuple_sort_key
-
-from lbmpy.methods.centeredcumulant.cumulant_transform import (
+from .cumulant_transform import (
     PRE_COLLISION_CUMULANT, POST_COLLISION_CUMULANT,
     CentralMomentsToCumulantsByGeneratingFunc)
 
-from lbmpy.methods.momentbased.moment_transforms import (
+from lbmpy.moment_transforms import (
     PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT,
     PdfsToCentralMomentsByShiftMatrix)
 
@@ -119,7 +118,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
     The galilean correction described in :cite:`geier2015` is also available for the D3Q27 lattice.
 
     This method is implemented modularily as the transformation from populations to central moments to cumulants
-    is governed by subclasses of :class:`lbmpy.methods.momentbased.moment_transforms.AbstractMomentTransform`
+    is governed by subclasses of :class:`lbmpy.moment_transforms.AbstractMomentTransform`
     which can be specified by constructor argument. This allows the selection of the most efficient transformation
     for a given setup.
 

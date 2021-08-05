@@ -111,7 +111,7 @@ Simplifications / Transformations:
   is built into the kernel. This parameters specifies if the domain is periodic in (x,y,z) direction. Even if the
   periodicity is built into the kernel, the fields have one ghost layer to be consistent with other functions.
 - ``pre_simplification=True``: Simplifications applied during the derivaton of the collision rule for cumulant LBMs
-  For details see :mod:`lbmpy.methods.momentbased.moment_transforms`.
+  For details see :mod:`lbmpy.moment_transforms`.
     
 
 Field size information:
@@ -202,7 +202,7 @@ from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_central
                            create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
-from lbmpy.methods.momentbased.moment_transforms import PdfsToCentralMomentsByShiftMatrix
+from lbmpy.moment_transforms import PdfsToMomentsByChimeraTransform, PdfsToCentralMomentsByShiftMatrix
 from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
 from lbmpy.methods.creationfunctions import (
     create_with_monomial_cumulants, create_with_polynomial_cumulants, create_with_default_polynomial_cumulants)
@@ -220,7 +220,7 @@ from pystencils import Assignment, AssignmentCollection, create_kernel
 from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
 from pystencils.field import Field, get_layout_of_array
-from pystencils.simp import sympy_cse
+from pystencils.simp import sympy_cse, SimplificationStrategy
 from pystencils.stencil import have_same_entries
 
 
@@ -364,8 +364,10 @@ def create_lb_collision_rule(lb_method=None, optimization=None, **kwargs):
 
     if opt_params['simplification'] == 'auto':
         simplification = create_simplification_strategy(lb_method, split_inner_loop=split_inner_loop)
-    else:
+    elif callable(opt_params['simplification']):
         simplification = opt_params['simplification']
+    else:
+        simplification = SimplificationStrategy()
     collision_rule = simplification(collision_rule)
 
     if params['fluctuating']:
@@ -418,7 +420,9 @@ def create_lb_method(**params):
         'equilibrium_order': params['equilibrium_order'],
         'force_model': force_model,
         'maxwellian_moments': params['maxwellian_moments'],
-        'c_s_sq': params['c_s_sq']
+        'c_s_sq': params['c_s_sq'],
+        'moment_transform_class': params['moment_transform_class'],
+        'central_moment_transform_class': params['central_moment_transform_class'],
     }
 
     cumulant_params = {
@@ -582,6 +586,8 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         'initial_velocity': None,
 
         'galilean_correction': False,  # only available for D3Q27 cumulant methods
+
+        'moment_transform_class': PdfsToMomentsByChimeraTransform,
         'central_moment_transform_class': PdfsToCentralMomentsByShiftMatrix,
         'cumulant_transform_class': CentralMomentsToCumulantsByGeneratingFunc,
 
@@ -643,6 +649,18 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
                                               relaxation_rate_from_magic_number(params['relaxation_rate'])]
 
             del params['relaxation_rate']
+
+    #   By default, do not derive moment equations for SRT and TRT methods
+    if 'method' not in params or params['method'][:3].lower() in ('srt', 'trt'):
+        if 'moment_transform_class' not in params:
+            params['moment_transform_class'] = None
+
+    #   Workaround until entropic method supports relaxation in subexpressions
+    #   and the problem with RNGs in the assignment collection has been solved
+    if (('entropic' in params and params['entropic'])
+            or ('fluctuating' in params and params['fluctuating'])):
+        if 'moment_transform_class' not in params:
+            params['moment_transform_class'] = None
 
     #   for backwards compatibility
     if 'kernel_type' in params:

@@ -6,12 +6,15 @@ from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, moment_matrix
-from pystencils import Assignment
 from pystencils.sympyextensions import subs_additive
+from pystencils import Assignment, AssignmentCollection
+
+from lbmpy.moment_transforms import PdfsToMomentsByChimeraTransform
 
 
 class MomentBasedLbMethod(AbstractLbMethod):
-    def __init__(self, stencil, moment_to_relaxation_info_dict, conserved_quantity_computation=None, force_model=None):
+    def __init__(self, stencil, moment_to_relaxation_info_dict, conserved_quantity_computation=None, force_model=None,
+                 moment_transform_class=PdfsToMomentsByChimeraTransform):
         """
         Moment based LBM is a class to represent the single (SRT), two (TRT) and multi relaxation time (MRT) methods.
         These methods work by transforming the pdfs into moment space using a linear transformation. In the moment
@@ -35,10 +38,16 @@ class MomentBasedLbMethod(AbstractLbMethod):
         self._momentToRelaxationInfoDict = OrderedDict(moment_to_relaxation_info_dict.items())
         self._conservedQuantityComputation = conserved_quantity_computation
         self._weights = None
+        self._moment_transform_class = moment_transform_class
 
     @property
     def force_model(self):
         return self._forceModel
+
+    @property
+    def moment_space_collision(self):
+        """Returns whether collision is derived in terms of moments or in terms of populations only."""
+        return (self._moment_transform_class is not None)
 
     @property
     def relaxation_info_dict(self):
@@ -78,11 +87,21 @@ class MomentBasedLbMethod(AbstractLbMethod):
         assert len(weights) == len(self.stencil)
         self._weights = weights
 
-    def get_equilibrium(self, conserved_quantity_equations=None, include_force_terms=False):
+    def get_equilibrium(self, conserved_quantity_equations=None, include_force_terms=False,
+                        pre_simplification=False, subexpressions=False, keep_cqc_subexpressions=True):
         relaxation_matrix = sp.eye(len(self.relaxation_rates))
-        return self._collision_rule_with_relaxation_matrix(relaxation_matrix,
-                                                           conserved_quantity_equations=conserved_quantity_equations,
-                                                           include_force_terms=include_force_terms)
+        ac = self._collision_rule_with_relaxation_matrix(relaxation_matrix,
+                                                         conserved_quantity_equations=conserved_quantity_equations,
+                                                         include_force_terms=include_force_terms,
+                                                         pre_simplification=pre_simplification)
+        if not subexpressions:
+            if keep_cqc_subexpressions:
+                bs = self._bound_symbols_cqc(conserved_quantity_equations)
+                return ac.new_without_subexpressions(subexpressions_to_keep=bs)
+            else:
+                return ac.new_without_subexpressions()
+        else:
+            return ac
 
     def get_equilibrium_terms(self):
         equilibrium = self.get_equilibrium()
@@ -90,9 +109,10 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     def get_collision_rule(self, conserved_quantity_equations=None, pre_simplification=True):
         d = self.relaxation_matrix
-        relaxation_rate_sub_expressions, d = self._generate_relaxation_matrix(d, pre_simplification)
+        relaxation_rate_sub_expressions, d = self._generate_relaxation_matrix(d, True)
         ac = self._collision_rule_with_relaxation_matrix(d, relaxation_rate_sub_expressions,
-                                                         True, conserved_quantity_equations)
+                                                         True, conserved_quantity_equations,
+                                                         pre_simplification=pre_simplification)
         return ac
 
     def set_zeroth_moment_relaxation_rate(self, relaxation_rate):
@@ -198,36 +218,89 @@ class MomentBasedLbMethod(AbstractLbMethod):
             weights.append(value)
         return weights
 
+    def _bound_symbols_cqc(self, conserved_quantity_equations=None):
+        f = self.pre_collision_pdf_symbols
+        cqe = conserved_quantity_equations
+
+        if cqe is None:
+            cqe = self._conservedQuantityComputation.equilibrium_input_equations_from_pdfs(f)
+
+        return cqe.bound_symbols
+
     def _collision_rule_with_relaxation_matrix(self, d, additional_subexpressions=(), include_force_terms=True,
-                                               conserved_quantity_equations=None):
+                                               conserved_quantity_equations=None, pre_simplification=False):
         f = sp.Matrix(self.pre_collision_pdf_symbols)
-        pdf_to_moment = self.moment_matrix
+        moment_polynomials = list(self._momentToRelaxationInfoDict.keys())
+
+        cqe = conserved_quantity_equations
+        if cqe is None:
+            cqe = self._conservedQuantityComputation.equilibrium_input_equations_from_pdfs(f)
+
+        if self._forceModel is None:
+            include_force_terms = False
+
+        moment_space_forcing = False
+
+        if include_force_terms and self._moment_transform_class:
+            moment_space_forcing = hasattr(self.force_model, 'moment_space_forcing')
+
+        rho = self.zeroth_order_equilibrium_moment_symbol
+        u = self.first_order_equilibrium_moment_symbols
         m_eq = sp.Matrix(self.moment_equilibrium_values)
 
-        collision_rule = f + pdf_to_moment.inv() * d * (m_eq - pdf_to_moment * f)
-        collision_eqs = [Assignment(lhs, rhs) for lhs, rhs in zip(self.post_collision_pdf_symbols, collision_rule)]
+        if self._moment_transform_class:
+            #   Derive equations in moment space if a transform is given
+            pdf_to_m_transform = self._moment_transform_class(self.stencil, moment_polynomials, rho, u,
+                                                              conserved_quantity_equations=cqe)
 
-        if conserved_quantity_equations is None:
-            conserved_quantity_equations = self._conservedQuantityComputation.equilibrium_input_equations_from_pdfs(f)
+            m_pre = pdf_to_m_transform.pre_collision_moment_symbols
+            m_post = pdf_to_m_transform.post_collision_moment_symbols
 
-        simplification_hints = conserved_quantity_equations.simplification_hints.copy()
+            pdf_to_m_eqs = pdf_to_m_transform.forward_transform(self.pre_collision_pdf_symbols,
+                                                                simplification=pre_simplification)
+            m_post_to_f_post_eqs = pdf_to_m_transform.backward_transform(self.post_collision_pdf_symbols,
+                                                                         simplification=pre_simplification)
+
+            m_pre_vec = sp.Matrix(m_pre)
+            collision_rule = m_pre_vec + d * (m_eq - m_pre_vec)
+
+            if moment_space_forcing:
+                collision_rule += self._forceModel.moment_space_forcing(self)
+
+            collision_eqs = [Assignment(lhs, rhs) for lhs, rhs in zip(m_post, collision_rule)]
+            collision_eqs = AssignmentCollection(collision_eqs)
+
+            all_acs = [] if pdf_to_m_transform.absorbs_conserved_quantity_equations else [cqe]
+            all_acs += [pdf_to_m_eqs, collision_eqs]
+            subexpressions = list(additional_subexpressions) + [ac.all_assignments for ac in all_acs]
+            subexpressions += m_post_to_f_post_eqs.subexpressions
+            main_assignments = m_post_to_f_post_eqs.main_assignments
+        else:
+            #   For SRT, TRT by default, and whenever customly required, derive equations entirely in
+            #   population space
+            pdf_to_moment = self.moment_matrix
+            collision_rule = f + pdf_to_moment.inv() * d * (m_eq - pdf_to_moment * f)
+            collision_eqs = [Assignment(lhs, rhs) for lhs, rhs in zip(self.post_collision_pdf_symbols, collision_rule)]
+            subexpressions = list(additional_subexpressions) + cqe.all_assignments
+            main_assignments = collision_eqs
+
+        simplification_hints = cqe.simplification_hints.copy()
         simplification_hints.update(self._conservedQuantityComputation.defined_symbols())
         simplification_hints['relaxation_rates'] = [d[i, i] for i in range(d.rows)]
 
-        all_subexpressions = list(additional_subexpressions) + conserved_quantity_equations.all_assignments
-
-        if self._forceModel is not None and include_force_terms:
+        if include_force_terms and not moment_space_forcing:
             force_model_terms = self._forceModel(self)
             force_term_symbols = sp.symbols(f"forceTerm_:{len(force_model_terms)}")
             force_subexpressions = [Assignment(sym, force_model_term)
                                     for sym, force_model_term in zip(force_term_symbols, force_model_terms)]
-            all_subexpressions += force_subexpressions
-            collision_eqs = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
-                             for eq, force_term_symbol in zip(collision_eqs, force_term_symbols)]
+            subexpressions += force_subexpressions
+            main_assignments = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
+                                for eq, force_term_symbol in zip(main_assignments, force_term_symbols)]
             simplification_hints['force_terms'] = force_term_symbols
 
-        return LbmCollisionRule(self, collision_eqs, all_subexpressions,
-                                simplification_hints)
+        ac = LbmCollisionRule(self, main_assignments, subexpressions, simplification_hints)
+        ac.topological_sort()
+        return ac
 
     @staticmethod
     def _generate_relaxation_matrix(relaxation_matrix, keep_rr_symbolic):
@@ -237,7 +310,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         the subexpressions, that assign the number to the newly introduced symbol
         """
         rr = [relaxation_matrix[i, i] for i in range(relaxation_matrix.rows)]
-        if keep_rr_symbolic <= 2:
+        if keep_rr_symbolic:
             unique_relaxation_rates = set(rr)
             subexpressions = {}
             for rt in unique_relaxation_rates:

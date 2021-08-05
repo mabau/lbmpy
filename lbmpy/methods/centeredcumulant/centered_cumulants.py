@@ -3,11 +3,7 @@ import sympy as sp
 
 from pystencils.stencil import have_same_entries
 
-from lbmpy.moments import MOMENT_SYMBOLS, moment_sort_key, exponent_to_polynomial_representation
-
-
-def exponent_tuple_sort_key(x):
-    return moment_sort_key(exponent_to_polynomial_representation(x))
+from lbmpy.moments import MOMENT_SYMBOLS
 
 
 def get_default_polynomial_cumulants_for_stencil(stencil):

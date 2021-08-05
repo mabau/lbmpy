@@ -9,6 +9,7 @@ API Reference
    methodcreation.rst
    stencils.rst
    methods.rst
+   moment_transforms.rst
    maxwellian_equilibrium.rst
    continuous_distribution_measures.rst
    moments.rst
