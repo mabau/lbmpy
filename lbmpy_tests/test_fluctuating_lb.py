@@ -95,7 +95,6 @@ def get_fluctuating_lb(size=None, kT=None, omega_shear=None, omega_bulk=None, om
 
     collision = create_lb_update_rule(collision_rule=collision_rule,
                                       stencil=stencil,
-                                      method=method,
                                       compressible=True,
                                       kernel_type='collide_only',
                                       optimization={'symbolic_field': src})
@@ -271,7 +270,6 @@ def test_vectorization(assume_aligned, assume_inner_stride_one, assume_sufficien
 
     collision = create_lb_update_rule(collision_rule=collision_rule,
                                       stencil=method.stencil,
-                                      method=method,
                                       compressible=True,
                                       kernel_type='collide_only')
 

@@ -1,132 +1,35 @@
-from abc import abstractmethod
 import sympy as sp
 
 from pystencils import Assignment, AssignmentCollection
 from pystencils.simp import (
-    SimplificationStrategy, sympy_cse, add_subexpressions_for_divisions, add_subexpressions_for_constants)
+    SimplificationStrategy, add_subexpressions_for_divisions, add_subexpressions_for_constants)
 from pystencils.simp.assignment_collection import SymbolGen
 from pystencils.sympyextensions import subs_additive, fast_subs
 
 from lbmpy.moments import moment_matrix, set_up_shift_matrix, contained_moments, moments_up_to_order
 from lbmpy.moments import statistical_quantity_symbol as sq_sym
 
-from lbmpy.methods.momentbased.momentbasedsimplifications import (
-    substitute_moments_in_conserved_quantity_equations,
-    split_pdf_main_assignments_by_symmetry)
+from .abstractmomenttransform import (
+    AbstractMomentTransform,
+    PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT
+)
 
-
-#   ============================ PDFs <-> Central Moments ==============================================================
-
-PRE_COLLISION_RAW_MOMENT = 'm'
-POST_COLLISION_RAW_MOMENT = 'm_post'
-
-PRE_COLLISION_CENTRAL_MOMENT = 'kappa'
-POST_COLLISION_CENTRAL_MOMENT = 'kappa_post'
-
-
-class AbstractMomentTransform:
-    r"""
-    Abstract Base Class for classes providing transformations between moment spaces. These transformations 
-    are bijective maps between two spaces :math:`\mathcal{S}` and :math:`\mathcal{D}` (i.e. populations
-    and raw moments, or central moments and cumulants). The forward map 
-    :math:`F : \mathcal{S} \mapsto \mathcal{D}`
-    is given by `forward_transform`, and the backward (inverse) map
-    :math:`F^{-1} : \mathcal{D} \mapsto \mathcal{S}`
-    is provided by `backward_transform`. It is intendet to use the transformations in lattice Boltzmann collision
-    operators: The `forward_transform` to map pre-collision populations to the required moment
-    space (possibly by several consecutive transformations), and the `backward_transform` to map post-
-    collision quantities back to populations.
-
-    ### Transformations
-
-    Transformation equations must be returned by implementations of `forward_transform` and
-    `backward_transform` as `AssignmentCollection`s.
-
-    - `forward_transform` returns an AssignmentCollection which depends on quantities of the domain 
-      :math:`\mathcal{S}` and contains the equations to map them to the codomain :math:`\mathcal{D}`.
-
-    - `backward_transform` is the inverse of `forward_transform` and returns an AssignmentCollection 
-      which maps quantities of the codomain :math:`\mathcal{D}` back to the domain :math:`\mathcal{S}`.
-
-    ### Absorption of Conserved Quantity Equations
-
-    Transformations from the population space to any moment space may *absorb* the equations defining
-    the macroscopic quantities entering the equilibrium (typically the density :math:`\rho` and the
-    velocity :math:`\vec{u}`). This means that the `forward_transform` will possibly rewrite the 
-    assignments given in the constructor argument `conserved_quantity_equations` to reduce
-    the total operation count. For example, in the transformation step from populations to
-    raw moments (see `PdfsToRawMomentsTransform`), :math:`\rho` can be aliased as the zeroth-order moment
-    :math:`m_{000}`. Assignments to the conserved quantities will then be part of the AssignmentCollection
-    returned by `forward_transform` and need not be added to the collision rule separately. 
-
-    ### Simplification
-
-    Both `forward_transform` and `backward_transform` expect a keyword argument `simplification`
-    which can be used to direct simplification steps applied during the derivation of the transformation
-    equations. Possible values are:
-     - `False` or `'none'`: No simplification is to be applied
-     - `True` or `'default'`: A default simplification strategy specific to the implementation is applied.
-       The actual simplification steps depend strongly on the nature of the equations. They are defined by
-       the implementation. It is the responsibility of the implementation to select the most effective
-       simplification strategy.
-     - `'default_with_cse'`: Same as `'default'`, but with an additional pass of common subexpression elimination.
-
-
-    """
-
-    def __init__(self, stencil, moment_exponents,
-                 equilibrium_density,
-                 equilibrium_velocity,
-                 conserved_quantity_equations=None,
-                 **kwargs):
-        self.moment_exponents = sorted(list(moment_exponents), key=sum)
-        self.stencil = stencil
-        self.dim = len(stencil[0])
-        self.cqe = conserved_quantity_equations
-        self.equilibrium_density = equilibrium_density
-        self.equilibrium_velocity = equilibrium_velocity
-
-    @abstractmethod
-    def forward_transform(self, *args, **kwargs):
-        raise NotImplementedError("forward_transform must be implemented in a subclass")
-
-    @abstractmethod
-    def backward_transform(self, *args, **kwargs):
-        raise NotImplementedError("backward_transform must be implemented in a subclass")
-
-    @property
-    def absorbs_conserved_quantity_equations(self):
-        """
-        Whether or not the given conserved quantity equations will be included in
-        the assignment collection returned by `forward_transform`, possibly in simplified
-        form.
-        """
-        return False
-
-    @property
-    def _default_simplification(self):
-        return SimplificationStrategy()
-
-    def _get_simp_strategy(self, simplification, direction=None):
-        if isinstance(simplification, bool):
-            simplification = 'default' if simplification else 'none'
-
-        if simplification == 'default' or simplification == 'default_with_cse':
-            simp = self._default_simplification if direction is None else self._default_simplification[direction]
-            if simplification == 'default_with_cse':
-                simp.add(sympy_cse)
-            return simp
-        else:
-            return None
+from .momenttransforms import PdfsToMomentsByChimeraTransform
 
 
 class PdfsToCentralMomentsByMatrix(AbstractMomentTransform):
 
-    def __init__(self, stencil, moment_exponents, equilibrium_density, equilibrium_velocity, **kwargs):
+    def __init__(self, stencil, moment_exponents,
+                 equilibrium_density,
+                 equilibrium_velocity,
+                 pre_collision_central_moment_base=PRE_COLLISION_CENTRAL_MOMENT,
+                 post_collision_central_moment_base=POST_COLLISION_CENTRAL_MOMENT,
+                 **kwargs):
         assert len(moment_exponents) == len(stencil), 'Number of moments must match stencil'
 
         super(PdfsToCentralMomentsByMatrix, self).__init__(
-            stencil, moment_exponents, equilibrium_density, equilibrium_velocity, **kwargs)
+            stencil, equilibrium_density, equilibrium_velocity,
+            moment_exponents=moment_exponents, **kwargs)
 
         moment_matrix_without_shift = moment_matrix(self.moment_exponents, self.stencil)
         shift_matrix = set_up_shift_matrix(self.moment_exponents, self.stencil, equilibrium_velocity)
@@ -134,13 +37,23 @@ class PdfsToCentralMomentsByMatrix(AbstractMomentTransform):
         self.forward_matrix = moment_matrix(self.moment_exponents, self.stencil, equilibrium_velocity)
         self.backward_matrix = moment_matrix_without_shift.inv() * shift_matrix.inv()
 
-    def forward_transform(self, pdf_symbols, moment_symbol_base=PRE_COLLISION_CENTRAL_MOMENT,
-                          simplification=True, subexpression_base='sub_f_to_k'):
+        self.kappa_pre = pre_collision_central_moment_base
+        self.kappa_post = post_collision_central_moment_base
+
+    @property
+    def pre_collision_central_moment_symbols(self):
+        return tuple(sq_sym(self.kappa_pre, e) for e in self.moment_exponents)
+
+    @property
+    def post_collision_central_moment_symbols(self):
+        return tuple(sq_sym(self.kappa_post, e) for e in self.moment_exponents)
+
+    def forward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_f_to_k'):
         simplification = self._get_simp_strategy(simplification)
 
         f_vec = sp.Matrix(pdf_symbols)
         central_moments = self.forward_matrix * f_vec
-        main_assignments = [Assignment(sq_sym(moment_symbol_base, e), eq)
+        main_assignments = [Assignment(sq_sym(self.kappa_pre, e), eq)
                             for e, eq in zip(self.moment_exponents, central_moments)]
         symbol_gen = SymbolGen(subexpression_base)
 
@@ -149,11 +62,10 @@ class PdfsToCentralMomentsByMatrix(AbstractMomentTransform):
             ac = simplification.apply(ac)
         return ac
 
-    def backward_transform(self, pdf_symbols, moment_symbol_base=POST_COLLISION_CENTRAL_MOMENT,
-                           simplification=True, subexpression_base='sub_k_to_f'):
+    def backward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_k_to_f'):
         simplification = self._get_simp_strategy(simplification)
 
-        moments = [sq_sym(moment_symbol_base, exp) for exp in self.moment_exponents]
+        moments = [sq_sym(self.kappa_post, exp) for exp in self.moment_exponents]
         moment_vec = sp.Matrix(moments)
         pdfs_from_moments = self.backward_matrix * moment_vec
         main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, pdfs_from_moments)]
@@ -179,19 +91,37 @@ class FastCentralMomentTransform(AbstractMomentTransform):
                  equilibrium_density,
                  equilibrium_velocity,
                  conserved_quantity_equations=None,
+                 pre_collision_central_moment_base=PRE_COLLISION_CENTRAL_MOMENT,
+                 post_collision_central_moment_base=POST_COLLISION_CENTRAL_MOMENT,
                  **kwargs):
         assert len(moment_exponents) == len(stencil), 'Number of moments must match stencil'
 
         super(FastCentralMomentTransform, self).__init__(
-            stencil, moment_exponents, equilibrium_density, equilibrium_velocity,
-            conserved_quantity_equations=conserved_quantity_equations, **kwargs)
+            stencil, equilibrium_density, equilibrium_velocity,
+            conserved_quantity_equations=conserved_quantity_equations,
+            moment_exponents=moment_exponents, **kwargs)
+
+        self.kappa_pre = pre_collision_central_moment_base
+        self.kappa_post = post_collision_central_moment_base
+
         self.mat_transform = PdfsToCentralMomentsByMatrix(
             stencil, moment_exponents, equilibrium_density, equilibrium_velocity,
-            conserved_quantity_equations=conserved_quantity_equations, **kwargs)
+            conserved_quantity_equations=conserved_quantity_equations,
+            pre_collision_central_moment_base=pre_collision_central_moment_base,
+            post_collision_central_moment_base=post_collision_central_moment_base,
+            **kwargs)
 
-    def forward_transform(self, pdf_symbols, moment_symbol_base=PRE_COLLISION_CENTRAL_MOMENT,
-                          simplification=True, subexpression_base='sub_f_to_k'):
+    @property
+    def pre_collision_central_moment_symbols(self):
+        return tuple(sq_sym(self.kappa_pre, e) for e in self.moment_exponents)
+
+    @property
+    def post_collision_central_moment_symbols(self):
+        return tuple(sq_sym(self.kappa_post, e) for e in self.moment_exponents)
+
+    def forward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_f_to_k'):
         simplification = self._get_simp_strategy(simplification, 'forward')
+        moment_symbol_base = self.kappa_pre
 
         def _partial_kappa_symbol(fixed_directions, remaining_exponents):
             fixed_str = '_'.join(str(direction) for direction in fixed_directions).replace('-', 'm')
@@ -236,12 +166,10 @@ class FastCentralMomentTransform(AbstractMomentTransform):
             ac = simplification.apply(ac)
         return ac
 
-    def backward_transform(self, pdf_symbols, moment_symbol_base=POST_COLLISION_CENTRAL_MOMENT,
-                           simplification=True, subexpression_base='sub_k_to_f'):
+    def backward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_k_to_f'):
         simplification = self._get_simp_strategy(simplification, 'backward')
 
-        raw_equations = self.mat_transform.backward_transform(
-            pdf_symbols, moment_symbol_base=POST_COLLISION_CENTRAL_MOMENT, simplification=False)
+        raw_equations = self.mat_transform.backward_transform(pdf_symbols, simplification=False)
         raw_equations = raw_equations.new_without_subexpressions()
 
         symbol_gen = SymbolGen(subexpression_base)
@@ -366,142 +294,30 @@ class FastCentralMomentTransform(AbstractMomentTransform):
 # end class FastCentralMomentTransform
 
 
-class PdfsToRawMomentsTransform(AbstractMomentTransform):
-
-    def __init__(self, stencil, moment_exponents,
-                 equilibrium_density,
-                 equilibrium_velocity,
-                 conserved_quantity_equations=None,
-                 **kwargs):
-        assert len(moment_exponents) == len(stencil), 'Number of moments must match stencil'
-
-        super(PdfsToRawMomentsTransform, self).__init__(
-            stencil, moment_exponents, equilibrium_density, equilibrium_velocity,
-            conserved_quantity_equations=conserved_quantity_equations,
-            **kwargs)
-
-        self.inv_moment_matrix = moment_matrix(self.moment_exponents, self.stencil).inv()
-
-    @property
-    def absorbs_conserved_quantity_equations(self):
-        return True
-
-    def get_cq_to_moment_symbols_dict(self, moment_symbol_base):
-        if self.cqe is None:
-            return dict()
-
-        rho = self.equilibrium_density
-        u = self.equilibrium_velocity
-        cq_symbols_to_moments = dict()
-        if isinstance(rho, sp.Symbol) and rho in self.cqe.defined_symbols:
-            cq_symbols_to_moments[rho] = sq_sym(moment_symbol_base, (0,) * self.dim)
-        for d, u_sym in enumerate(u):
-            if isinstance(u_sym, sp.Symbol) and u_sym in self.cqe.defined_symbols:
-                cq_symbols_to_moments[u_sym] = sq_sym(moment_symbol_base, tuple(
-                    (1 if i == d else 0) for i in range(self.dim)))
-        return cq_symbols_to_moments
-
-    def forward_transform(self, pdf_symbols, moment_symbol_base=PRE_COLLISION_RAW_MOMENT,
-                          simplification=True, subexpression_base='sub_f_to_m'):
-        simplification = self._get_simp_strategy(simplification, 'forward')
-
-        def _partial_kappa_symbol(fixed_directions, remaining_exponents):
-            fixed_str = '_'.join(str(direction) for direction in fixed_directions).replace('-', 'm')
-            exp_str = '_'.join(str(exp) for exp in remaining_exponents).replace('-', 'm')
-            return sp.Symbol(f"partial_{moment_symbol_base}_{fixed_str}_e_{exp_str}")
-
-        partial_sums_dict = dict()
-        main_assignments = self.cqe.main_assignments.copy() if self.cqe is not None else []
-        subexpressions = self.cqe.subexpressions.copy() if self.cqe is not None else []
-
-        def collect_partial_sums(exponents, dimension=0, fixed_directions=tuple()):
-            if dimension == self.dim:
-                #   Base Case
-                if fixed_directions in self.stencil:
-                    return pdf_symbols[self.stencil.index(fixed_directions)]
-                else:
-                    return 0
-            else:
-                #   Recursive Case
-                summation = sp.sympify(0)
-                for d in [-1, 0, 1]:
-                    next_partial = collect_partial_sums(
-                        exponents, dimension=dimension + 1, fixed_directions=fixed_directions + (d,))
-                    summation += next_partial * d ** exponents[dimension]
-
-                if dimension == 0:
-                    lhs_symbol = sq_sym(moment_symbol_base, exponents)
-                    main_assignments.append(Assignment(lhs_symbol, summation))
-                else:
-                    lhs_symbol = _partial_kappa_symbol(fixed_directions, exponents[dimension:])
-                    partial_sums_dict[lhs_symbol] = summation
-                return lhs_symbol
-
-        for e in self.moment_exponents:
-            collect_partial_sums(e)
-
-        subexpressions += [Assignment(lhs, rhs) for lhs, rhs in partial_sums_dict.items()]
-        symbol_gen = SymbolGen(subexpression_base)
-        ac = AssignmentCollection(main_assignments, subexpressions=subexpressions,
-                                  subexpression_symbol_generator=symbol_gen)
-        ac.add_simplification_hint('cq_symbols_to_moments', self.get_cq_to_moment_symbols_dict(moment_symbol_base))
-
-        if simplification:
-            ac = simplification.apply(ac)
-        return ac
-
-    def backward_transform(self, pdf_symbols, moment_symbol_base=POST_COLLISION_RAW_MOMENT,
-                           simplification=True, subexpression_base='sub_k_to_f'):
-        simplification = self._get_simp_strategy(simplification, 'backward')
-
-        post_collision_moments = [sq_sym(moment_symbol_base, e) for e in self.moment_exponents]
-        rm_to_f_vec = self.inv_moment_matrix * sp.Matrix(post_collision_moments)
-        main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, rm_to_f_vec)]
-        symbol_gen = SymbolGen(subexpression_base)
-
-        ac = AssignmentCollection(main_assignments, subexpression_symbol_generator=symbol_gen)
-        ac.add_simplification_hint('stencil', self.stencil)
-        ac.add_simplification_hint('post_collision_pdf_symbols', pdf_symbols)
-        if simplification:
-            ac = simplification.apply(ac)
-        return ac
-
-    #   ----------------------------- Private Members -----------------------------
-
-    @property
-    def _default_simplification(self):
-        forward_simp = SimplificationStrategy()
-        forward_simp.add(substitute_moments_in_conserved_quantity_equations)
-        forward_simp.add(add_subexpressions_for_divisions)
-
-        backward_simp = SimplificationStrategy()
-        backward_simp.add(split_pdf_main_assignments_by_symmetry)
-        backward_simp.add(add_subexpressions_for_constants)
-
-        return {
-            'forward': forward_simp,
-            'backward': backward_simp
-        }
-
-# end class PdfsToRawMomentsTransform
-
-
 class PdfsToCentralMomentsByShiftMatrix(AbstractMomentTransform):
     def __init__(self, stencil, moment_exponents,
                  equilibrium_density,
                  equilibrium_velocity,
                  conserved_quantity_equations=None,
+                 pre_collision_central_moment_base=PRE_COLLISION_CENTRAL_MOMENT,
+                 post_collision_central_moment_base=POST_COLLISION_CENTRAL_MOMENT,
                  **kwargs):
         assert len(moment_exponents) == len(stencil), 'Number of moments must match stencil'
 
         super(PdfsToCentralMomentsByShiftMatrix, self).__init__(
-            stencil, moment_exponents, equilibrium_density, equilibrium_velocity,
+            stencil, equilibrium_density, equilibrium_velocity,
             conserved_quantity_equations=conserved_quantity_equations,
-            **kwargs)
-        self.raw_moment_transform = PdfsToRawMomentsTransform(
-            stencil, moment_exponents, equilibrium_density, equilibrium_velocity,
+            moment_exponents=moment_exponents, **kwargs)
+
+        self.raw_moment_transform = PdfsToMomentsByChimeraTransform(
+            stencil, None, equilibrium_density, equilibrium_velocity,
             conserved_quantity_equations=conserved_quantity_equations,
+            moment_exponents=moment_exponents,
             **kwargs)
+
+        self.kappa_pre = pre_collision_central_moment_base
+        self.kappa_post = post_collision_central_moment_base
+
         self.shift_matrix = set_up_shift_matrix(self.moment_exponents, self.stencil, self.equilibrium_velocity)
         self.inv_shift_matrix = self.shift_matrix.inv()
 
@@ -509,24 +325,23 @@ class PdfsToCentralMomentsByShiftMatrix(AbstractMomentTransform):
     def absorbs_conserved_quantity_equations(self):
         return True
 
-    def forward_transform(self, pdf_symbols,
-                          moment_symbol_base=PRE_COLLISION_CENTRAL_MOMENT,
-                          simplification=True,
-                          subexpression_base='sub_f_to_k',
-                          raw_moment_base=PRE_COLLISION_RAW_MOMENT):
+    def forward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_f_to_k'):
         simplification = self._get_simp_strategy(simplification, 'forward')
 
-        central_moment_base = moment_symbol_base
+        raw_moment_base = self.raw_moment_transform.rm_pre
+        central_moment_base = self.kappa_pre
 
         symbolic_rms = [sq_sym(raw_moment_base, e) for e in self.moment_exponents]
         symbolic_cms = [sq_sym(central_moment_base, e) for e in self.moment_exponents]
 
-        rm_ac = self.raw_moment_transform.forward_transform(pdf_symbols, raw_moment_base, False, subexpression_base)
+        rm_ac = self.raw_moment_transform.forward_transform(pdf_symbols, simplification=False, return_raw_moments=True)
         cq_symbols_to_moments = self.raw_moment_transform.get_cq_to_moment_symbols_dict(raw_moment_base)
         rm_to_cm_vec = self.shift_matrix * sp.Matrix(symbolic_rms)
 
         cq_subs = dict()
         if simplification:
+            from lbmpy.methods.momentbased.momentbasedsimplifications import ( 
+                substitute_moments_in_conserved_quantity_equations)
             rm_ac = substitute_moments_in_conserved_quantity_equations(rm_ac)
 
             #   Compute replacements for conserved moments in terms of the CQE
@@ -555,14 +370,11 @@ class PdfsToCentralMomentsByShiftMatrix(AbstractMomentTransform):
             ac = simplification.apply(ac)
         return ac
 
-    def backward_transform(self, pdf_symbols,
-                           moment_symbol_base=POST_COLLISION_CENTRAL_MOMENT,
-                           simplification=True,
-                           subexpression_base='sub_k_to_f',
-                           raw_moment_base=POST_COLLISION_RAW_MOMENT):
+    def backward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_k_to_f'):
         simplification = self._get_simp_strategy(simplification, 'backward')
 
-        central_moment_base = moment_symbol_base
+        raw_moment_base = self.raw_moment_transform.rm_post
+        central_moment_base = self.kappa_post
 
         symbolic_rms = [sq_sym(raw_moment_base, e) for e in self.moment_exponents]
         symbolic_cms = [sq_sym(central_moment_base, e) for e in self.moment_exponents]
@@ -573,7 +385,8 @@ class PdfsToCentralMomentsByShiftMatrix(AbstractMomentTransform):
         if simplification:
             cm_to_rm_dict = self._factor_backward_eqs_by_velocities(symbolic_rms, cm_to_rm_dict)
 
-        rm_ac = self.raw_moment_transform.backward_transform(pdf_symbols, raw_moment_base, False, subexpression_base)
+        rm_ac = self.raw_moment_transform.backward_transform(
+            pdf_symbols, simplification=False, start_from_raw_moments=True)
         cm_to_rm_assignments = [Assignment(lhs, rhs) for lhs, rhs in cm_to_rm_dict.items()]
         subexpressions = cm_to_rm_assignments + rm_ac.subexpressions
         ac = rm_ac.copy(subexpressions=subexpressions)
@@ -625,6 +438,8 @@ class PdfsToCentralMomentsByShiftMatrix(AbstractMomentTransform):
     def _default_simplification(self):
         forward_simp = SimplificationStrategy()
         forward_simp.add(add_subexpressions_for_divisions)
+
+        from lbmpy.methods.momentbased.momentbasedsimplifications import split_pdf_main_assignments_by_symmetry
 
         backward_simp = SimplificationStrategy()
         backward_simp.add(split_pdf_main_assignments_by_symmetry)

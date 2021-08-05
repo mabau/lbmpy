@@ -3,7 +3,7 @@ from lbmpy.moments import get_default_moment_set_for_stencil, extract_monomials,
 import pytest
 
 from lbmpy.stencils import get_stencil
-from lbmpy.methods.momentbased.moment_transforms import (
+from lbmpy.moment_transforms import (
     PdfsToCentralMomentsByMatrix, FastCentralMomentTransform, PdfsToCentralMomentsByShiftMatrix,
     PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT
 )
@@ -24,14 +24,13 @@ def test_forward_transform(stencil):
     fast_transform = FastCentralMomentTransform(stencil, moment_exponents, rho, u)
     shift_transform = PdfsToCentralMomentsByShiftMatrix(stencil, moment_exponents, rho, u)
 
-    f_to_k_matrix = matrix_transform.forward_transform(pdfs, moment_symbol_base=PRE_COLLISION_CENTRAL_MOMENT)
+    f_to_k_matrix = matrix_transform.forward_transform(pdfs)
     f_to_k_matrix = f_to_k_matrix.new_without_subexpressions().main_assignments_dict
 
-    f_to_k_fast = fast_transform.forward_transform(pdfs, moment_symbol_base=PRE_COLLISION_CENTRAL_MOMENT)
+    f_to_k_fast = fast_transform.forward_transform(pdfs)
     f_to_k_fast = f_to_k_fast.new_without_subexpressions().main_assignments_dict
 
-    f_to_k_shift = shift_transform.forward_transform(pdfs, moment_symbol_base=PRE_COLLISION_CENTRAL_MOMENT,
-                                                     simplification=False)
+    f_to_k_shift = shift_transform.forward_transform(pdfs, simplification=False)
     f_to_k_shift = f_to_k_shift.new_without_subexpressions().main_assignments_dict
 
     for e in moment_exponents:
@@ -58,13 +57,13 @@ def test_backward_transform(stencil):
     fast_transform = FastCentralMomentTransform(stencil, moment_exponents, rho, u)
     shift_transform = PdfsToCentralMomentsByShiftMatrix(stencil, moment_exponents, rho, u)
 
-    k_to_f_matrix = matrix_transform.backward_transform(pdfs, moment_symbol_base=POST_COLLISION_CENTRAL_MOMENT)
+    k_to_f_matrix = matrix_transform.backward_transform(pdfs)
     k_to_f_matrix = k_to_f_matrix.new_without_subexpressions().main_assignments_dict
 
-    k_to_f_fast = fast_transform.backward_transform(pdfs, moment_symbol_base=POST_COLLISION_CENTRAL_MOMENT)
+    k_to_f_fast = fast_transform.backward_transform(pdfs)
     k_to_f_fast = k_to_f_fast.new_without_subexpressions().main_assignments_dict
 
-    k_to_f_shift = shift_transform.backward_transform(pdfs, moment_symbol_base=POST_COLLISION_CENTRAL_MOMENT)
+    k_to_f_shift = shift_transform.backward_transform(pdfs)
     k_to_f_shift = k_to_f_shift.new_without_subexpressions().main_assignments_dict
 
     for f in pdfs:

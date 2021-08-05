@@ -19,7 +19,7 @@ from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputatio
 
 from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
 from lbmpy.methods.momentbased.centralmomentbasedmethod import CentralMomentBasedLbMethod
-from lbmpy.methods.momentbased.moment_transforms import FastCentralMomentTransform
+from lbmpy.moment_transforms import PdfsToCentralMomentsByShiftMatrix, PdfsToMomentsByChimeraTransform
 
 from lbmpy.moments import (
     MOMENT_SYMBOLS, discrete_moment, exponents_to_polynomial_representations,
@@ -36,7 +36,8 @@ from pystencils.sympyextensions import common_denominator
 def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,
                                                force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3),
                                                central_moment_space=False,
-                                               central_moment_transform_class=FastCentralMomentTransform):
+                                               moment_transform_class=None,
+                                               central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix):
     r"""Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate.
 
     These moments are relaxed against the moments of the discrete Maxwellian distribution.
@@ -53,13 +54,15 @@ def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rat
         force_model: force model instance, or None if no external forces
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
         c_s_sq: Speed of sound squared
-        central_moment_space: If set to True and instance of
-        `lbmpy.methods.momentbased.centralmomentbasedmethod.CentralMomentBasedLbMethod` is returned.
-        Thus the collision will be performed in the central moment space.
-        central_moment_transform_class: class to transform PDFs to the central moment space.
+        central_moment_space: If set to True, an instance of 
+                              :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` is returned, 
+                              and the the collision will be performed in the central moment space.
+        moment_transform_class: Class implementing the transform from populations to moment space.
+        central_moment_transform_class: Class implementing the transform from populations to central moment space.
 
     Returns:
-        `lbmpy.methods.momentbased.MomentBasedLbMethod` instance
+        Instance of either :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` or 
+        :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` 
     """
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
@@ -84,13 +87,14 @@ def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rat
         return CentralMomentBasedLbMethod(stencil, rr_dict, density_velocity_computation,
                                           force_model, central_moment_transform_class)
     else:
-        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model, moment_transform_class)
 
 
 def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,
                                                  force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3),
                                                  central_moment_space=False,
-                                                 central_moment_transform_class=FastCentralMomentTransform):
+                                                 moment_transform_class=None,
+                                                 central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix):
     r"""
     Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
     relaxed against the moments of the continuous Maxwellian distribution.
@@ -109,13 +113,15 @@ def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_r
         force_model: force model instance, or None if no external forces
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
         c_s_sq: Speed of sound squared
-        central_moment_space: If set to True and instance of
-        `lbmpy.methods.momentbased.centralmomentbasedmethod.CentralMomentBasedLbMethod` is returned.
-        Thus the collision will be performend in the central moment space.
-        central_moment_transform_class: class to transform PDFs to the central moment space.
+        central_moment_space: If set to True, an instance of 
+                              :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` is returned, 
+                              and the the collision will be performed in the central moment space.
+        moment_transform_class: Class implementing the transform from populations to moment space.
+        central_moment_transform_class: Class implementing the transform from populations to central moment space.
 
     Returns:
-        `lbmpy.methods.momentbased.MomentBasedLbMethod` instance
+        Instance of either :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` or 
+        :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` 
     """
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
@@ -148,11 +154,11 @@ def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_r
         return CentralMomentBasedLbMethod(stencil, rr_dict, density_velocity_computation,
                                           force_model, central_moment_transform_class)
     else:
-        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model, moment_transform_class)
 
 
 def create_generic_mrt(stencil, moment_eq_value_relaxation_rate_tuples, compressible=False,
-                       force_model=None):
+                       force_model=None, moment_transform_class=PdfsToMomentsByChimeraTransform):
     r"""
     Creates a generic moment-based LB method.
 
@@ -168,11 +174,12 @@ def create_generic_mrt(stencil, moment_eq_value_relaxation_rate_tuples, compress
     for moment, eq_value, rr in moment_eq_value_relaxation_rate_tuples:
         moment = sp.sympify(moment)
         rr_dict[moment] = RelaxationInfo(eq_value, rr)
-    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model, moment_transform_class)
 
 
 def create_from_equilibrium(stencil, equilibrium, moment_to_relaxation_rate_dict,
-                            compressible=False, force_model=None):
+                            compressible=False, force_model=None,
+                            moment_transform_class=PdfsToMomentsByChimeraTransform):
     r"""
     Creates a moment-based LB method using a given equilibrium distribution function
 
@@ -196,7 +203,7 @@ def create_from_equilibrium(stencil, equilibrium, moment_to_relaxation_rate_dict
 
     rr_dict = OrderedDict([(mom, RelaxationInfo(discrete_moment(equilibrium, mom, stencil).expand(), rr))
                            for mom, rr in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values())])
-    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model)
+    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model, moment_transform_class)
 
 
 # ------------------------------------ SRT / TRT/ MRT Creators ---------------------------------------------------------
@@ -554,7 +561,7 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted):
 def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=None,
                                    equilibrium_order=None, c_s_sq=sp.Rational(1, 3),
                                    galilean_correction=False,
-                                   central_moment_transform_class=FastCentralMomentTransform,
+                                   central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix,
                                    cumulant_transform_class=CentralMomentsToCumulantsByGeneratingFunc):
     r"""Creates a cumulant lattice Boltzmann model.
 
@@ -570,7 +577,7 @@ def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=Non
         galilean_correction: special correction for D3Q27 cumulant collisions. See Appendix H in
                              :cite:`geier2015`. Implemented in :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
         central_moment_transform_class: Class which defines the transformation to the central moment space
-                                        (see :mod:`lbmpy.methods.momentbased.moment_transforms`)
+                                        (see :mod:`lbmpy.moment_transforms`)
         cumulant_transform_class: Class which defines the transformation from the central moment space to the
                                   cumulant space (see :mod:`lbmpy.methods.centeredcumulant.cumulant_transform`)
 

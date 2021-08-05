@@ -31,13 +31,15 @@ def check_method(method, limits_default, limits_cse):
 
 def test_simplifications_srt_d2q9_incompressible():
     omega = sp.symbols('omega')
-    method = create_srt(get_stencil("D2Q9"), omega, compressible=False, equilibrium_order=2)
+    method = create_srt(get_stencil("D2Q9"), omega, compressible=False,
+                        equilibrium_order=2, moment_transform_class=None)
     check_method(method, [53, 46, 0], [49, 30, 0])
 
 
 def test_simplifications_srt_d2q9_compressible():
     omega = sp.symbols('omega')
-    method = create_srt(get_stencil("D2Q9"), omega, compressible=True, equilibrium_order=2)
+    method = create_srt(get_stencil("D2Q9"), omega, compressible=True, 
+                        equilibrium_order=2, moment_transform_class=None)
     check_method(method, [53, 58, 1], [53, 42, 1])
 
 

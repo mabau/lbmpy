@@ -5,12 +5,13 @@ from pystencils import Assignment, AssignmentCollection
 from pystencils.simp import SimplificationStrategy, add_subexpressions_for_divisions
 from pystencils.simp.assignment_collection import SymbolGen
 
-from lbmpy.moments import moments_up_to_order, get_order, statistical_quantity_symbol
+from lbmpy.moments import (
+    moments_up_to_order, get_order, statistical_quantity_symbol, exponent_tuple_sort_key
+)
 
 from itertools import product, chain
 
-from lbmpy.methods.centeredcumulant.centered_cumulants import exponent_tuple_sort_key
-from lbmpy.methods.momentbased.moment_transforms import (
+from lbmpy.moment_transforms import (
     AbstractMomentTransform, PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT
 )
 
@@ -43,9 +44,10 @@ def count_derivatives(derivative):
 
 class CentralMomentsToCumulantsByGeneratingFunc(AbstractMomentTransform):
 
-    def __init__(self, stencil, cumulants, equilibrium_density, equilibrium_velocity, **kwargs):
+    def __init__(self, stencil, cumulant_exponents, equilibrium_density, equilibrium_velocity, **kwargs):
         super(CentralMomentsToCumulantsByGeneratingFunc, self).__init__(
-            stencil, cumulants, equilibrium_density, equilibrium_velocity, **kwargs)
+            stencil, equilibrium_density, equilibrium_velocity,  
+            moment_exponents=cumulant_exponents, **kwargs)
 
         self.cumulant_exponents = self.moment_exponents
         self.central_moment_exponents = self.compute_required_central_moments()

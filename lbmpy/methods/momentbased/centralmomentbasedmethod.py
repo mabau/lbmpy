@@ -5,8 +5,8 @@ from pystencils import Assignment, AssignmentCollection
 
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
-from lbmpy.methods.momentbased.moment_transforms import (FastCentralMomentTransform,
-                                                         PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT)
+from lbmpy.moment_transforms import (FastCentralMomentTransform,
+                                     PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT)
 
 from lbmpy.moments import (polynomial_to_exponent_representation, MOMENT_SYMBOLS, moment_matrix, set_up_shift_matrix,
                            statistical_quantity_symbol)

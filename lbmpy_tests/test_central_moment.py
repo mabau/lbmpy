@@ -8,7 +8,7 @@ from lbmpy.moments import get_default_moment_set_for_stencil, moment_matrix, set
 from lbmpy.scenarios import create_lid_driven_cavity
 from lbmpy.stencils import get_stencil
 
-from lbmpy.methods.momentbased.moment_transforms import FastCentralMomentTransform
+from lbmpy.moment_transforms import PdfsToCentralMomentsByShiftMatrix
 
 
 def test_central_moment_ldc():
@@ -45,7 +45,7 @@ def test_central_moment_class():
 
     default_moments = get_default_moment_set_for_stencil(stencil)
 
-    assert method.central_moment_transform_class == FastCentralMomentTransform
+    assert method.central_moment_transform_class == PdfsToCentralMomentsByShiftMatrix
     assert method.conserved_quantity_computation.zeroth_order_moment_symbol == rho
     assert method.conserved_quantity_computation.first_order_moment_symbols == u
     assert method.moment_equilibrium_values == eq

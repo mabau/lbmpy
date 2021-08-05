@@ -98,6 +98,7 @@ class Simple:
     Should only be used with constant forces!
     Shifts the macroscopic velocity by F/2, but does not change the equilibrium velocity.
     """
+
     def __init__(self, force):
         self._force = force
 
@@ -109,6 +110,9 @@ class Simple:
 
         return [3 * w_i * scalar_product(self._force, direction)
                 for direction, w_i in zip(lb_method.stencil, lb_method.weights)]
+
+    def moment_space_forcing(self, lb_method):
+        return (lb_method.moment_matrix * sp.Matrix(self(lb_method))).expand()
 
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
@@ -122,6 +126,7 @@ class Luo:
 
     Shifts the macroscopic velocity by F/2, but does not change the equilibrium velocity.
     """
+
     def __init__(self, force):
         self._force = force
 
@@ -135,6 +140,9 @@ class Luo:
             result.append(3 * w_i * force.dot(direction - u + 3 * direction * direction.dot(u)))
         return result
 
+    def moment_space_forcing(self, lb_method):
+        return (lb_method.moment_matrix * sp.Matrix(self(lb_method))).expand()
+
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
 
@@ -147,6 +155,7 @@ class Guo:
     Force model by Guo  :cite:`guo2002discrete`
     Adapts the calculation of the macroscopic velocity as well as the equilibrium velocity (both shifted by F/2)!
     """
+
     def __init__(self, force):
         self._force = force
 
@@ -154,9 +163,17 @@ class Guo:
         luo = Luo(self._force)
 
         shear_relaxation_rate = get_shear_relaxation_rate(lb_method)
-        assert len(set(lb_method.relaxation_rates)) == 1, "Guo only works for SRT, use Schiller instead"
+        assert len(set(lb_method.relaxation_rates)) == 1, (
+            "In population space, guo only works for SRT, use Schiller instead")
         correction_factor = (1 - sp.Rational(1, 2) * shear_relaxation_rate)
         return [correction_factor * t for t in luo(lb_method)]
+
+    def moment_space_forcing(self, lb_method):
+        luo = Luo(self._force)
+        q = len(lb_method.stencil)
+        correction_factor = sp.eye(q) - sp.Rational(1, 2) * lb_method.relaxation_matrix
+        moments = correction_factor * (lb_method.moment_matrix * sp.Matrix(luo(lb_method)))
+        return moments.expand()
 
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
@@ -173,13 +190,14 @@ class Schiller:
     Force model by Schiller  :cite:`schiller2008thermal`, equation 4.67
     Equivalent to Guo but not restricted to SRT.
     """
+
     def __init__(self, force):
         self._force = force
 
     def __call__(self, lb_method):
         u = sp.Matrix(lb_method.first_order_equilibrium_moment_symbols)
         force = sp.Matrix(self._force)
-        
+
         uf = u.dot(force) * sp.eye(len(force))
         omega = get_shear_relaxation_rate(lb_method)
         omega_bulk = get_bulk_relaxation_rate(lb_method)
@@ -192,7 +210,7 @@ class Schiller:
             tr = sp.trace(G * (direction * direction.transpose() - sp.Rational(1, 3) * sp.eye(len(force))))
             result.append(3 * w_i * (force.dot(direction) + sp.Rational(3, 2) * tr))
         return result
-    
+
     def macroscopic_velocity_shift(self, density):
         return default_velocity_shift(density, self._force)
 
