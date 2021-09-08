@@ -74,7 +74,7 @@ def create_macroscopic_value_setter_sparse(method, pdfs, density, velocity) -> A
         velocity: similar to density parameter
     """
     cqc = method.conserved_quantity_computation
-    inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity)
+    inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity, force_substitution=False)
     result = method.get_equilibrium(conserved_quantity_equations=inp_eqs)
     substitutions = {a: b for a, b in zip(method.post_collision_pdf_symbols, pdfs.center_vector)}
     return result.new_with_substitutions(substitutions).new_without_subexpressions()

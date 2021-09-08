@@ -41,7 +41,6 @@ from copy import copy
 from typing import Iterable, List, Optional, Sequence, Tuple, TypeVar
 
 import sympy as sp
-import numpy as np
 
 from pystencils.cache import memorycache
 from pystencils.sympyextensions import remove_higher_order_terms
@@ -311,12 +310,15 @@ def aliases_from_moment_list(moment_exponents, stencil):
     return aliases
 
 
-def non_aliased_polynomial_moments(polys, stencil, nested=False):
-    """Takes a (potentially nested) list of moment polynomials and rewrites them by eliminating
+def non_aliased_polynomial_raw_moments(polys, stencil, nested=False):
+    """Takes a (potentially nested) list of raw moment polynomials and rewrites them by eliminating
     any aliased monomials. 
 
     All polynomials are expanded and occuring monomials are collected. Using `aliases_from_moment_list`,
-    aliases are eliminated and substituted in the polynomials.
+    aliases are eliminated and substituted in the polynomials. 
+
+    Attention: Only use this method for monomials in raw moment space. It will produce wrong results
+    if used for central moments, since there is no direct aliasing in central moment space!
     """
     dim = len(stencil[0])
     if nested:
@@ -448,51 +450,20 @@ def set_up_shift_matrix(moments, stencil, velocity_symbols=sp.symbols("u_:3")):
         - stencil: Nested tuple of lattice velocities
         - velocity_symbols: Sequence of symbols corresponding to the shift velocity
     """
-    # TODO: this function takes quite some time for D3Q27. Needs to be optimised
-    x, y, z = MOMENT_SYMBOLS
     dim = len(stencil[0])
-    nr_directions = len(stencil)
+    if len(velocity_symbols) > dim:
+        velocity_symbols = velocity_symbols[:dim]
 
-    directions = np.asarray(stencil)
+    M = moment_matrix(moments, stencil, shift_velocity=None)
+    MN = moment_matrix(moments, stencil, shift_velocity=velocity_symbols)
 
-    u = velocity_symbols[:dim]
-    f = sp.symbols(f"f_:{nr_directions}")
-    m = sp.symbols(f"m_:{nr_directions}")
+    N = sp.simplify(MN * M.inv())
 
-    Mf = moment_matrix(moments, stencil=stencil) * sp.Matrix(f)
+    assert N.is_lower, "Calculating the shift matrix gave not a lower diagonal matrix. Thus it failed"
+    assert sum(N[i, i] for i in range(len(stencil))) == len(stencil), "Calculating the shift matrix failed. " \
+        "There are entries on the diagonal which are not equal to one"
 
-    shift_matrix_list = []
-    for nr_moment in range(len(moments)):
-        if not isinstance(moments[nr_moment], tuple):
-            exponent_central_moment = moments[nr_moment].as_powers_dict()
-            exponent = [exponent_central_moment[x], exponent_central_moment[y], exponent_central_moment[z]]
-        else:
-            exponent = moments[nr_moment]
-
-        shift_equation = 1
-        for i in range(dim):
-            shift_equation *= (directions[:, i] - u[i]) ** exponent[i]
-        shift_equation = sum(shift_equation * f)
-
-        collected_expr = sp.Poly(shift_equation, u).as_expr()
-        terms_of_collected_expr = collected_expr.args
-
-        constants = set()
-        for i in range(len(terms_of_collected_expr)):
-            constants.add(sp.Abs(sp.LC(terms_of_collected_expr[i])))
-
-        for i in range(len(stencil)):
-            for c in constants:
-                collected_expr = collected_expr.subs(c * Mf[i], c * m[i])
-
-        collected_expr = sp.collect(collected_expr.expand(), m)
-
-        inner_list = []
-        for i in range(len(stencil)):
-            inner_list.append(collected_expr.coeff(m[i], 1))
-
-        shift_matrix_list.append(inner_list)
-    return sp.Matrix(shift_matrix_list)
+    return N
 
 
 def gram_schmidt(moments, stencil, weights=None):
@@ -618,6 +589,33 @@ def monomial_to_polynomial_transformation_matrix(monomials, polynomials):
             exponent_tuple = exponent_tuple[:dim]
             result[polynomial_idx, monomials.index(exponent_tuple)] = factor
     return result
+
+
+def central_moment_reduced_monomial_to_polynomial_matrix(polynomials, stencil, velocity_symbols=None):
+    r"""
+    Returns a transformation matrix from a reduced set of monomial central moments to a set of polynomial
+    central moments.
+
+    Use for a set of :math:`q` central moment polynomials that reduces to a too-large set of :math:`r > q` 
+    monomials (as given by `extract_monomials`). Reduces the monomials by eliminating aliases in raw moment
+    space, and computes a reduced polynomialization matrix :math:`\mathbf{P}^{r}` that computes the given
+    polynomials from the reduced set of monomials.
+    """
+    dim = len(stencil[0])
+    if velocity_symbols is None:
+        velocity_symbols = sp.symbols(f"u_:{dim}")
+
+    reduced_polynomials = non_aliased_polynomial_raw_moments(polynomials, stencil)
+    reduced_monomials = sorted(extract_monomials(reduced_polynomials), key=exponent_tuple_sort_key)
+
+    assert len(reduced_monomials) == len(stencil), "Could not extract a base set of correct size from the polynomials."
+
+    N = set_up_shift_matrix(reduced_monomials, stencil, velocity_symbols=velocity_symbols)
+    N_P = set_up_shift_matrix(polynomials, stencil, velocity_symbols=velocity_symbols)
+    P_mono = monomial_to_polynomial_transformation_matrix(reduced_monomials, reduced_polynomials)
+
+    P_reduced = (N_P * P_mono * N.inv()).expand()
+    return P_reduced, reduced_monomials
 
 
 # ---------------------------------- Visualization ---------------------------------------------------------------------

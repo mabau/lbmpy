@@ -4,7 +4,8 @@ import sympy as sp
 from lbmpy.creationfunctions import create_lb_method
 from lbmpy.forcemodels import Luo
 from lbmpy.maxwellian_equilibrium import get_weights
-from lbmpy.moments import get_default_moment_set_for_stencil, moment_matrix, set_up_shift_matrix
+from lbmpy.moments import moment_matrix, set_up_shift_matrix
+from lbmpy.methods.creationfunctions import cascaded_moment_sets_literature
 from lbmpy.scenarios import create_lid_driven_cavity
 from lbmpy.stencils import get_stencil
 
@@ -13,11 +14,11 @@ from lbmpy.moment_transforms import PdfsToCentralMomentsByShiftMatrix
 
 def test_central_moment_ldc():
     sc_central_moment = create_lid_driven_cavity((20, 20), method='central_moment',
-                                                 relaxation_rates=[1.8, 1, 1], equilibrium_order=4,
+                                                 relaxation_rate=1.8, equilibrium_order=4,
                                                  compressible=True, force=(-1e-10, 0))
 
     sc_central_mometn_3D = create_lid_driven_cavity((20, 20, 3), method='central_moment',
-                                                    relaxation_rates=[1.8, 1, 1, 1, 1], equilibrium_order=4,
+                                                    relaxation_rate=1.8, equilibrium_order=4,
                                                     compressible=True, force=(-1e-10, 0, 0))
 
     sc_central_moment.run(1000)
@@ -30,7 +31,7 @@ def test_central_moment_class():
     stencil = get_stencil("D2Q9")
 
     method = create_lb_method(stencil=stencil, method='central_moment',
-                              relaxation_rates=[1.2, 1.3, 1.4], equilibrium_order=4, compressible=True)
+                              relaxation_rates=[1.2, 1.3, 1.4, 1.5], equilibrium_order=4, compressible=True)
 
     srt = create_lb_method(stencil=stencil, method='srt',
                            relaxation_rate=1.2, equilibrium_order=4, compressible=True)
@@ -41,9 +42,10 @@ def test_central_moment_class():
 
     force_model = Luo(force=sp.symbols(f"F_:{2}"))
 
-    eq = (rho, 0, 0, rho * cs_sq, rho * cs_sq, 0, 0, 0, rho * cs_sq ** 2)
+    eq = (rho, 0, 0, 0, 0, 2 * rho * cs_sq, 0, 0, rho * cs_sq ** 2)
 
-    default_moments = get_default_moment_set_for_stencil(stencil)
+    default_moments = cascaded_moment_sets_literature(stencil)
+    default_moments = [item for sublist in default_moments for item in sublist]
 
     assert method.central_moment_transform_class == PdfsToCentralMomentsByShiftMatrix
     assert method.conserved_quantity_computation.zeroth_order_moment_symbol == rho
@@ -90,11 +92,11 @@ def test_central_moment_class():
     method = create_lb_method(stencil="D2Q9", method='central_moment',
                               relaxation_rates=[1.7, 1.8, 1.2, 1.3, 1.4], equilibrium_order=4, compressible=True)
 
-    assert method.relaxation_matrix[0, 0] == 1.7
-    assert method.relaxation_matrix[1, 1] == 1.8
-    assert method.relaxation_matrix[2, 2] == 1.8
+    assert method.relaxation_matrix[0, 0] == 0
+    assert method.relaxation_matrix[1, 1] == 0
+    assert method.relaxation_matrix[2, 2] == 0
 
     method = create_lb_method(stencil="D2Q9", method='central_moment',
                               relaxation_rates=[1.3] * 9, equilibrium_order=4, compressible=True)
 
-    assert sum(method.relaxation_rates) == 1.3 * 9
+    np.testing.assert_almost_equal(sum(method.relaxation_rates), 1.3 * 6)

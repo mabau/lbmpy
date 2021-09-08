@@ -1,10 +1,8 @@
-import numpy as np
 import sympy as sp
-import warnings
 
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
-from pystencils import Assignment, AssignmentCollection, Field
+from pystencils import Assignment, AssignmentCollection
 from pystencils.field import create_numpy_array_with_layout, layout_string_to_tuple
 from pystencils.simp import add_subexpressions_for_field_reads
 from pystencils.sympyextensions import fast_subs
@@ -63,14 +61,15 @@ def create_stream_only_kernel(stencil, src_field, dst_field=None, accessor=Strea
     Args:
         stencil: lattice Boltzmann stencil which is used in the form of a tuple of tuples
         src_field: field used for reading pdf values
-        dst_field: field used for writing pdf values if accessor.is_inplace this parameter is ignored
+        dst_field: field used for writing pdf values if accessor.is_inplace this parameter is not necessary but it
+                   is used if provided
         accessor: instance of PdfFieldAccessor, defining where to read and write values
                   to create e.g. a fused stream-collide kernel See 'fieldaccess.PdfFieldAccessor'
 
     Returns:
         AssignmentCollection of the stream only update rule
     """
-    if accessor.is_inplace:
+    if accessor.is_inplace and dst_field is None:
         dst_field = src_field
 
     if not accessor.is_inplace and dst_field is None:
@@ -80,36 +79,6 @@ def create_stream_only_kernel(stencil, src_field, dst_field=None, accessor=Strea
     subexpressions = [Assignment(tmp, acc) for tmp, acc in zip(temporary_symbols, accessor.read(src_field, stencil))]
     main_assignments = [Assignment(acc, tmp) for acc, tmp in zip(accessor.write(dst_field, stencil), temporary_symbols)]
     return AssignmentCollection(main_assignments, subexpressions=subexpressions)
-
-
-def create_stream_pull_only_kernel(stencil, numpy_arr=None, src_field_name="src", dst_field_name="dst",
-                                   generic_layout='numpy', generic_field_type=np.float64):
-    """Creates a stream kernel with the pull scheme, without collision.
-
-    Args:
-        stencil: lattice Boltzmann stencil which is used
-        numpy_arr: numpy array which containes the pdf field data. If no numpy array is provided the symbolic field
-                   accesses are created with 'Field.create_generic'. Otherwise 'Field.create_from_numpy_array' is used.
-        src_field_name: name of the source field.
-        dst_field_name: name of the destination field.
-        generic_layout: data layout. for example 'fzyx' of 'zyxf'.
-        generic_field_type: field data type.
-
-    Returns:
-        AssignmentCollection of the stream only update rule
-    """
-    warnings.warn("This function is depricated. Please use create_stream_only_kernel. If no PdfFieldAccessor is "
-                  "provided to this function a standard StreamPullTwoFieldsAccessor is used ", DeprecationWarning)
-    dim = len(stencil[0])
-    if numpy_arr is None:
-        src = Field.create_generic(src_field_name, dim, index_shape=(len(stencil),),
-                                   layout=generic_layout, dtype=generic_field_type)
-        dst = Field.create_generic(dst_field_name, dim, index_shape=(len(stencil),),
-                                   layout=generic_layout, dtype=generic_field_type)
-    else:
-        src = Field.create_from_numpy_array(src_field_name, numpy_arr, index_dimensions=1)
-        dst = Field.create_from_numpy_array(dst_field_name, numpy_arr, index_dimensions=1)
-    return create_stream_only_kernel(stencil, src, dst, accessor=StreamPullTwoFieldsAccessor())
 
 
 def create_stream_pull_with_output_kernel(lb_method, src_field, dst_field=None, output=None,

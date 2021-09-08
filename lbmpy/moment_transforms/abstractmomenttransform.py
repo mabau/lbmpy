@@ -1,67 +1,29 @@
 from abc import abstractmethod
+import sympy as sp
 
 from pystencils.simp import (SimplificationStrategy, sympy_cse)
 
 from lbmpy.moments import (
     exponents_to_polynomial_representations, extract_monomials, exponent_tuple_sort_key)
 
+from lbmpy.moments import statistical_quantity_symbol as sq_sym
 
-PRE_COLLISION_RAW_MOMENT = 'm'
-POST_COLLISION_RAW_MOMENT = 'm_post'
 
-PRE_COLLISION_MOMENT = 'M'
-POST_COLLISION_MOMENT = 'M_post'
+PRE_COLLISION_MONOMIAL_RAW_MOMENT = 'm'
+POST_COLLISION_MONOMIAL_RAW_MOMENT = 'm_post'
 
-PRE_COLLISION_CENTRAL_MOMENT = 'kappa'
-POST_COLLISION_CENTRAL_MOMENT = 'kappa_post'
+PRE_COLLISION_RAW_MOMENT = 'M'
+POST_COLLISION_RAW_MOMENT = 'M_post'
+
+PRE_COLLISION_MONOMIAL_CENTRAL_MOMENT = 'kappa'
+POST_COLLISION_MONOMIAL_CENTRAL_MOMENT = 'kappa_post'
+
+PRE_COLLISION_CENTRAL_MOMENT = 'K'
+POST_COLLISION_CENTRAL_MOMENT = 'K_post'
 
 
 class AbstractMomentTransform:
-    r"""Abstract Base Class for classes providing transformations between moment spaces. 
-    
-    These transformations are bijective maps between two spaces :math:`\mathcal{S}` 
-    and :math:`\mathcal{D}` (i.e. populations and moments, or central moments and cumulants). 
-    The forward map  :math:`F : \mathcal{S} \mapsto \mathcal{D}` is given by :func:`forward_transform`, 
-    and the backward (inverse) map :math:`F^{-1} : \mathcal{D} \mapsto \mathcal{S}`
-    is provided by :func:`backward_transform`. The transformations are intended for use within lattice 
-    Boltzmann collision operators: The :func:`forward_transform` to map pre-collision populations to the 
-    required collision space (possibly by several consecutive transformations), and the 
-    :func:`backward_transform` to map post-collision quantities back to populations.
-
-    **Transformations**
-
-    Transformation equations must be returned by implementations of :func:`forward_transform` and 
-    :func:`backward_transform` as an :class:`pystencils.AssignmentCollection`.
-
-    - :func:`forward_transform` returns an AssignmentCollection which depends on quantities of the domain 
-      :math:`\mathcal{S}` and contains the equations to map them to the codomain :math:`\mathcal{D}`.
-    - :func:`backward_transform` is the inverse of :func:`forward_transform` and returns an AssignmentCollection 
-      which maps quantities of the codomain :math:`\mathcal{D}` back to the domain :math:`\mathcal{S}`.
-
-    **Absorption of Conserved Quantity Equations**
-
-    Transformations from the population space to any space of observable quantities may *absorb* the equations 
-    defining the macroscopic quantities entering the equilibrium (typically the density :math:`\rho` and the
-    velocity :math:`\mathbf{u}`). This means that the :func:`forward_transform` will possibly rewrite the
-    assignments given in the constructor argument ``conserved_quantity_equations`` to reduce
-    the total operation count. For example, in the transformation step from populations to
-    raw moments (see `PdfsToMomentsByChimeraTransform`), :math:`\rho` can be aliased as the zeroth-order moment
-    :math:`m_{000}`. Assignments to the conserved quantities will then be part of the AssignmentCollection
-    returned by :func:`forward_transform` and need not be added to the collision rule separately. 
-
-    **Simplification**
-
-    Both :func:`forward_transform` and :func:`backward_transform` expect a keyword argument ``simplification``
-    which can be used to direct simplification steps applied during the derivation of the transformation
-    equations. Possible values are:
-    
-    - `False` or ``'none'``: No simplification is to be applied
-    - `True` or ``'default'``: A default simplification strategy specific to the implementation is applied.
-      The actual simplification steps depend strongly on the nature of the equations. They are defined by
-      the implementation. It is the responsibility of the implementation to select the most effective
-      simplification strategy.
-    - ``'default_with_cse'``: Same as ``'default'``, but with an additional pass of common subexpression elimination.
-    """
+    r"""Abstract Base Class for classes providing transformations between moment spaces."""
 
     def __init__(self, stencil,
                  equilibrium_density,
@@ -69,9 +31,12 @@ class AbstractMomentTransform:
                  moment_exponents=None,
                  moment_polynomials=None,
                  conserved_quantity_equations=None,
-                 **kwargs):
+                 pre_collision_symbol_base=None,
+                 post_collision_symbol_base=None,
+                 pre_collision_monomial_symbol_base=None,
+                 post_collision_monomial_symbol_base=None):
         """Abstract Base Class constructor.
-        
+
         Args:
             stencil: Nested tuple defining the velocity set
             equilibrium_density: Symbol of the equilibrium density used in the collision rule
@@ -83,7 +48,7 @@ class AbstractMomentTransform:
         """
         if moment_exponents is not None and moment_polynomials is not None:
             raise ValueError("Both moment_exponents and moment_polynomials were given. Pass only one of them!")
-        
+
         self.stencil = stencil
         self.dim = len(stencil[0])
         self.q = len(stencil)
@@ -101,6 +66,37 @@ class AbstractMomentTransform:
         self.cqe = conserved_quantity_equations
         self.equilibrium_density = equilibrium_density
         self.equilibrium_velocity = equilibrium_velocity
+
+        self.base_pre = pre_collision_symbol_base
+        self.base_post = post_collision_symbol_base
+        self.mono_base_pre = pre_collision_monomial_symbol_base
+        self.mono_base_post = post_collision_monomial_symbol_base
+
+    @property
+    def pre_collision_symbols(self):
+        """List of symbols corresponding to the pre-collision quantities
+        that will be the left-hand sides of assignments returned by :func:`forward_transform`."""
+        return sp.symbols(f'{self.base_pre}_:{self.q}')
+
+    @property
+    def post_collision_symbols(self):
+        """List of symbols corresponding to the post-collision quantities
+        that are input to the right-hand sides of assignments returned by:func:`backward_transform`."""
+        return sp.symbols(f'{self.base_post}_:{self.q}')
+
+    @property
+    def pre_collision_monomial_symbols(self):
+        """List of symbols corresponding to the pre-collision monomial quantities
+        that might exist as left-hand sides of subexpressions in the assignment collection 
+        returned by :func:`forward_transform`."""
+        return tuple(sq_sym(self.mono_base_pre, e) for e in self.moment_exponents)
+
+    @property
+    def post_collision_monomial_symbols(self):
+        """List of symbols corresponding to the post-collision monomial quantities
+        that might exist as left-hand sides of subexpressions in the assignment collection
+        returned by :func:`backward_transform`."""
+        return tuple(sq_sym(self.mono_base_post, e) for e in self.moment_exponents)
 
     @abstractmethod
     def forward_transform(self, *args, **kwargs):

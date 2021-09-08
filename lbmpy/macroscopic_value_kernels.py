@@ -19,7 +19,7 @@ def pdf_initialization_assignments(lb_method, density, velocity, pdfs,
                          + f"initialization assignments for streaming pattern {streaming_pattern}.")
 
     cqc = lb_method.conserved_quantity_computation
-    inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity)
+    inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity, force_substitution=False)
     setter_eqs = lb_method.get_equilibrium(conserved_quantity_equations=inp_eqs)
     setter_eqs = setter_eqs.new_with_substitutions({sym: field_accesses[i]
                                                     for i, sym in enumerate(lb_method.post_collision_pdf_symbols)})
@@ -186,7 +186,7 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
 
         value_map[quantity_name] = value
 
-    cq_equations = cqc.equilibrium_input_equations_from_init_values(**value_map)
+    cq_equations = cqc.equilibrium_input_equations_from_init_values(**value_map, force_substitution=False)
 
     eq = lb_method.get_equilibrium(conserved_quantity_equations=cq_equations)
     if at_least_one_field_input:
@@ -240,11 +240,13 @@ def create_advanced_velocity_setter_collision_rule(method, velocity_field: Field
     velocity_symbols = cqc.defined_symbols(order=1)[1]
 
     # density is computed from pdfs
-    eq_input_from_pdfs = cqc.equilibrium_input_equations_from_pdfs(method.pre_collision_pdf_symbols)
+    eq_input_from_pdfs = cqc.equilibrium_input_equations_from_pdfs(
+        method.pre_collision_pdf_symbols, force_substitution=False)
     eq_input_from_pdfs = eq_input_from_pdfs.new_filtered([density_symbol])
     # velocity is read from input field
     vel_symbols = [velocity_field(i) for i in range(method.dim)]
-    eq_input_from_field = cqc.equilibrium_input_equations_from_init_values(velocity=vel_symbols)
+    eq_input_from_field = cqc.equilibrium_input_equations_from_init_values(
+        velocity=vel_symbols, force_substitution=False)
     eq_input_from_field = eq_input_from_field.new_filtered(velocity_symbols)
     # then both are merged together
     eq_input = eq_input_from_pdfs.new_merged(eq_input_from_field)

@@ -1,10 +1,10 @@
-from lbmpy.forcemodels import default_velocity_shift
+from lbmpy.forcemodels import AbstractForceModel, default_velocity_shift
 
 
 #   =========================== Centered Cumulant Force Model ==========================================================
 
 
-class CenteredCumulantForceModel:
+class CenteredCumulantForceModel(AbstractForceModel):
     """
     A force model to be used with the centered cumulant-based LB Method.
     It only shifts the macroscopic and equilibrium velocities and does not introduce a forcing term to the
@@ -16,14 +16,12 @@ class CenteredCumulantForceModel:
     """
 
     def __init__(self, force):
-        self._force = force
         self.override_momentum_relaxation_rate = 2
 
-    def __call__(self, lb_method, **kwargs):
+        super(CenteredCumulantForceModel, self).__init__(force)
+
+    def __call__(self, lb_method):
         raise Exception('This force model does not provide a forcing term.')
 
-    def macroscopic_velocity_shift(self, density):
-        return default_velocity_shift(density, self._force)
-
     def equilibrium_velocity_shift(self, density):
-        return default_velocity_shift(density, self._force)
+        return default_velocity_shift(density, self.symbolic_force_vector)

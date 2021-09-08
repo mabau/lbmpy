@@ -2,28 +2,26 @@ import sympy as sp
 from collections import OrderedDict
 
 from pystencils import Assignment, AssignmentCollection
+from pystencils.sympyextensions import subs_additive
 
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
-from lbmpy.moment_transforms import (FastCentralMomentTransform,
-                                     PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT)
+from lbmpy.moment_transforms import FastCentralMomentTransform
 
-from lbmpy.moments import (polynomial_to_exponent_representation, MOMENT_SYMBOLS, moment_matrix, set_up_shift_matrix,
-                           statistical_quantity_symbol)
+from lbmpy.moments import MOMENT_SYMBOLS, moment_matrix, set_up_shift_matrix
 
 
-def relax_central_moments(moment_indices, pre_collision_values,
+def relax_central_moments(pre_collision_symbols, post_collision_symbols,
                           relaxation_rates, equilibrium_values,
-                          post_collision_base=POST_COLLISION_CENTRAL_MOMENT):
-
-    post_collision_symbols = [sp.Symbol(f'{post_collision_base}_{"".join(str(i) for i in m)}') for m in moment_indices]
+                          force_terms):
     equilibrium_vec = sp.Matrix(equilibrium_values)
-    moment_vec = sp.Matrix(pre_collision_values)
+    moment_vec = sp.Matrix(pre_collision_symbols)
     relaxation_matrix = sp.diag(*relaxation_rates)
-    moment_vec = moment_vec + relaxation_matrix * (equilibrium_vec - moment_vec)
+    moment_vec = moment_vec + relaxation_matrix * (equilibrium_vec - moment_vec) + force_terms
     main_assignments = [Assignment(s, eq) for s, eq in zip(post_collision_symbols, moment_vec)]
 
     return AssignmentCollection(main_assignments)
+
 
 #   =============================== LB Method Implementation ===========================================================
 
@@ -174,7 +172,7 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
         return self._weights
 
     def get_equilibrium(self, conserved_quantity_equations=None, subexpressions=False, pre_simplification=False,
-                        keep_cqc_subexpressions=True):
+                        keep_cqc_subexpressions=True, include_force_terms=False):
         """Returns equation collection, to compute equilibrium values.
         The equations have the post collision symbols as left hand sides and are
         functions of the conserved quantities
@@ -190,8 +188,9 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
         """
         r_info_dict = {c: RelaxationInfo(info.equilibrium_value, 1)
                        for c, info in self._moment_to_relaxation_info_dict.items()}
-        ac = self._central_moment_collision_rule(
-            r_info_dict, conserved_quantity_equations, pre_simplification)
+        ac = self._central_moment_collision_rule(r_info_dict, conserved_quantity_equations, pre_simplification,
+                                                 include_force_terms=include_force_terms,
+                                                 symbolic_relaxation_rates=False)
         if not subexpressions:
             if keep_cqc_subexpressions:
                 bs = self._bound_symbols_cqc(conserved_quantity_equations)
@@ -208,8 +207,8 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
     def get_collision_rule(self, conserved_quantity_equations=None, pre_simplification=False):
         """Returns an LbmCollisionRule i.e. an equation collection with a reference to the method.
         This collision rule defines the collision operator."""
-        return self._central_moment_collision_rule(
-            self._moment_to_relaxation_info_dict, conserved_quantity_equations, pre_simplification, True)
+        return self._central_moment_collision_rule(self._moment_to_relaxation_info_dict, conserved_quantity_equations,
+                                                   pre_simplification, True, symbolic_relaxation_rates=True)
 
     #   ------------------------------- Internals --------------------------------------------
 
@@ -218,71 +217,96 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
         cqe = conserved_quantity_equations
 
         if cqe is None:
-            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f)
+            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f, False)
 
         return cqe.bound_symbols
 
     def _compute_weights(self):
-        defaults = self._conserved_quantity_computation.default_values
-        cqe = AssignmentCollection([Assignment(s, e) for s, e in defaults.items()])
-        eq_ac = self.get_equilibrium(cqe, subexpressions=False, keep_cqc_subexpressions=False)
+        replacements = self._conserved_quantity_computation.default_values
+        ac = self.get_equilibrium(include_force_terms=False)
+        ac = ac.new_with_substitutions(replacements, substitute_on_lhs=False).new_without_subexpressions()
+
+        new_assignments = [Assignment(e.lhs,
+                                      subs_additive(e.rhs, sp.sympify(1), sum(self.pre_collision_pdf_symbols),
+                                                    required_match_replacement=1.0))
+                           for e in ac.main_assignments]
+        ac = ac.copy(new_assignments)
 
         weights = []
-        for eq in eq_ac.main_assignments:
+        for eq in ac.main_assignments:
             value = eq.rhs.expand()
-            assert len(value.atoms(sp.Symbol)) == 0, "Failed to compute weights"
+            assert len(value.atoms(sp.Symbol)) == 0, "Failed to compute weights " + str(value)
             weights.append(value)
         return weights
 
     def _central_moment_collision_rule(self, moment_to_relaxation_info_dict,
                                        conserved_quantity_equations=None,
                                        pre_simplification=False,
-                                       include_force_terms=False):
+                                       include_force_terms=False,
+                                       symbolic_relaxation_rates=False):
         stencil = self.stencil
-        dim = len(self.stencil[0])
         f = self.pre_collision_pdf_symbols
         density = self.zeroth_order_equilibrium_moment_symbol
         velocity = self.first_order_equilibrium_moment_symbols
         cqe = conserved_quantity_equations
 
-        if cqe is None:
-            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f)
+        relaxation_info_dict = dict()
+        subexpressions_relaxation_rates = []
+        if symbolic_relaxation_rates:
+            subexpressions_relaxation_rates, sd = self._generate_symbolic_relaxation_matrix()
+            for i, moment in enumerate(moment_to_relaxation_info_dict):
+                relaxation_info_dict[moment] = RelaxationInfo(moment_to_relaxation_info_dict[moment][0], sd[i, i])
+        else:
+            relaxation_info_dict = moment_to_relaxation_info_dict
 
-        moments_as_exponents = list()
-        for moment in self.moments:
-            _, exponent_tuple = polynomial_to_exponent_representation(moment)[0]
-            moments_as_exponents.append(exponent_tuple[:dim])
+        if cqe is None:
+            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f, False)
+
+        forcing_subexpressions = AssignmentCollection([])
+        moment_space_forcing = False
+        if self._force_model is not None:
+            if include_force_terms:
+                moment_space_forcing = self.force_model.has_central_moment_space_forcing
+            forcing_subexpressions = AssignmentCollection(self._force_model.subs_dict_force)
+        else:
+            include_force_terms = False
 
         #   1) Get Forward Transformation from PDFs to central moments
-        pdfs_to_k_transform = self._central_moment_transform_class(
-            stencil, moments_as_exponents, density, velocity, conserved_quantity_equations=cqe)
-        pdfs_to_k_eqs = pdfs_to_k_transform.forward_transform(f, simplification=pre_simplification)
+        pdfs_to_c_transform = self.central_moment_transform_class(
+            stencil, self.moments, density, velocity, conserved_quantity_equations=cqe)
+        pdfs_to_c_eqs = pdfs_to_c_transform.forward_transform(f, simplification=pre_simplification)
 
         #   2) Collision
-        moment_symbols = [statistical_quantity_symbol(PRE_COLLISION_CENTRAL_MOMENT, exp)
-                          for exp in moments_as_exponents]
+        k_pre = pdfs_to_c_transform.pre_collision_symbols
+        k_post = pdfs_to_c_transform.post_collision_symbols
 
-        relaxation_infos = [moment_to_relaxation_info_dict[m] for m in self.moments]
+        relaxation_infos = [relaxation_info_dict[m] for m in self.moments]
         relaxation_rates = [info.relaxation_rate for info in relaxation_infos]
         equilibrium_value = [info.equilibrium_value for info in relaxation_infos]
 
-        collision_eqs = relax_central_moments(
-            moments_as_exponents, tuple(moment_symbols),
-            tuple(relaxation_rates), tuple(equilibrium_value))
+        if moment_space_forcing:
+            force_model_terms = self._force_model.central_moment_space_forcing(self)
+        else:
+            force_model_terms = sp.Matrix([0] * len(stencil))
+
+        collision_eqs = relax_central_moments(k_pre, k_post, tuple(relaxation_rates),
+                                              tuple(equilibrium_value), force_terms=force_model_terms)
 
         #   3) Get backward transformation from central moments to PDFs
-        d = self.post_collision_pdf_symbols
-        k_post_to_pdfs_eqs = pdfs_to_k_transform.backward_transform(d, simplification=pre_simplification)
+        post_collision_values = self.post_collision_pdf_symbols
+        c_post_to_pdfs_eqs = pdfs_to_c_transform.backward_transform(post_collision_values,
+                                                                    simplification=pre_simplification)
 
         #   4) Now, put it all together.
-        all_acs = [] if pdfs_to_k_transform.absorbs_conserved_quantity_equations else [cqe]
-        all_acs += [pdfs_to_k_eqs, collision_eqs]
+        all_acs = [] if pdfs_to_c_transform.absorbs_conserved_quantity_equations else [cqe]
+        subexpressions_relaxation_rates = AssignmentCollection(subexpressions_relaxation_rates)
+        all_acs += [subexpressions_relaxation_rates, forcing_subexpressions, pdfs_to_c_eqs, collision_eqs]
         subexpressions = [ac.all_assignments for ac in all_acs]
-        subexpressions += k_post_to_pdfs_eqs.subexpressions
-        main_assignments = k_post_to_pdfs_eqs.main_assignments
+        subexpressions += c_post_to_pdfs_eqs.subexpressions
+        main_assignments = c_post_to_pdfs_eqs.main_assignments
 
         #   5) Maybe add forcing terms.
-        if self._force_model is not None and include_force_terms:
+        if include_force_terms and not moment_space_forcing:
             force_model_terms = self._force_model(self)
             force_term_symbols = sp.symbols(f"forceTerm_:{len(force_model_terms)}")
             force_subexpressions = [Assignment(sym, force_model_term)

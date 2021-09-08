@@ -1,8 +1,11 @@
 import pytest
 import sympy as sp
+from sympy.polys.polytools import monic
 
 from lbmpy.creationfunctions import create_lb_method, create_lb_collision_rule
-from lbmpy.moments import get_default_moment_set_for_stencil
+from lbmpy.moments import (
+    extract_monomials, get_default_moment_set_for_stencil, non_aliased_polynomial_raw_moments,
+    exponent_tuple_sort_key)
 from lbmpy.stencils import get_stencil
 
 from lbmpy.methods.creationfunctions import mrt_orthogonal_modes_literature
@@ -12,33 +15,42 @@ from lbmpy.moment_transforms import (
 )
 
 
-@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q19', 'D3Q27'])
-def test_moment_transforms(stencil):
+@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q15', 'D3Q19', 'D3Q27'])
+@pytest.mark.parametrize('monomials', [False, True])
+def test_moment_transform_equivalences(stencil, monomials):
     stencil = get_stencil(stencil)
     dim = len(stencil[0])
     q = len(stencil)
-    moment_polynomials = get_default_moment_set_for_stencil(stencil)
+
     pdfs = sp.symbols(f"f_:{q}")
     rho = sp.Symbol('rho')
     u = sp.symbols(f"u_:{dim}")
 
-    matrix_transform = PdfsToMomentsByMatrixTransform(stencil, moment_polynomials, rho, u)
-    chimera_transform = PdfsToMomentsByChimeraTransform(stencil, moment_polynomials, rho, u)
+    moment_polynomials = get_default_moment_set_for_stencil(stencil)
+    if monomials:
+        polys_nonaliased = non_aliased_polynomial_raw_moments(moment_polynomials, stencil)
+        moment_exponents = sorted(extract_monomials(polys_nonaliased), key=exponent_tuple_sort_key)
+        moment_polynomials = None
+    else:
+        moment_exponents = None
 
-    f_to_m_matrix = matrix_transform.forward_transform(pdfs)
+    matrix_transform = PdfsToMomentsByMatrixTransform(stencil, moment_polynomials, rho, u, moment_exponents=moment_exponents)
+    chimera_transform = PdfsToMomentsByChimeraTransform(stencil, moment_polynomials, rho, u, moment_exponents=moment_exponents)
+
+    f_to_m_matrix = matrix_transform.forward_transform(pdfs, return_monomials=monomials)
     f_to_m_matrix = f_to_m_matrix.new_without_subexpressions().main_assignments_dict
 
-    f_to_m_chimera = chimera_transform.forward_transform(pdfs)
+    f_to_m_chimera = chimera_transform.forward_transform(pdfs, return_monomials=monomials)
     f_to_m_chimera = f_to_m_chimera.new_without_subexpressions().main_assignments_dict
 
-    m_to_f_matrix = matrix_transform.backward_transform(pdfs)
+    m_to_f_matrix = matrix_transform.backward_transform(pdfs, start_from_monomials=monomials)
     m_to_f_matrix = m_to_f_matrix.new_without_subexpressions().main_assignments_dict
 
-    m_to_f_chimera = chimera_transform.backward_transform(pdfs)
+    m_to_f_chimera = chimera_transform.backward_transform(pdfs, start_from_monomials=monomials)
     m_to_f_chimera = m_to_f_chimera.new_without_subexpressions().main_assignments_dict
 
-    m_pre_matrix = matrix_transform.pre_collision_moment_symbols
-    m_pre_chimera = chimera_transform.pre_collision_moment_symbols
+    m_pre_matrix = matrix_transform.pre_collision_monomial_symbols if monomials else matrix_transform.pre_collision_symbols
+    m_pre_chimera = chimera_transform.pre_collision_monomial_symbols if monomials else chimera_transform.pre_collision_symbols
 
     for m1, m2 in zip(m_pre_matrix, m_pre_chimera):
         rhs_matrix = f_to_m_matrix[m1]
@@ -62,7 +74,7 @@ setups = [
     ('D3Q15', 'mrt', None, 'Simple'),
     ('D3Q15', 'mrt', d3q15_literature, 'Simple'),
     ('D3Q19', 'trt', None, 'Simple'),
-    ('D3Q19', 'mrt', d3q19_literature, 'Schiller'),
+    ('D3Q19', 'mrt', d3q19_literature, 'Guo'),
     ('D3Q27', 'srt', None, 'Guo')
 ]
 

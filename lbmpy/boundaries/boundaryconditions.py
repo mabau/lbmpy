@@ -1,3 +1,4 @@
+import abc
 from warnings import warn
 
 from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
@@ -13,7 +14,7 @@ from pystencils.stencil import offset_to_direction_string, direction_string_to_o
 import sympy as sp
 
 
-class LbBoundary:
+class LbBoundary(abc.ABC):
     """Base class that all boundaries should derive from.
 
     Args:
@@ -307,6 +308,7 @@ class UBB(LbBoundary):
         if self._adaptVelocityToForce:
             cqc = lb_method.conserved_quantity_computation
             shifted_vel_eqs = cqc.equilibrium_input_equations_from_init_values(velocity=velocity)
+            shifted_vel_eqs = shifted_vel_eqs.new_without_subexpressions()
             velocity = [eq.rhs for eq in shifted_vel_eqs.new_filtered(cqc.first_order_moment_symbols).main_assignments]
 
         c_s_sq = sp.Rational(1, 3)

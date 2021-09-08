@@ -44,6 +44,8 @@ def _srt_trt_population_space_simplification(split_inner_loop):
     if split_inner_loop:
         s.add(create_lbm_split_groups)
     s.add(add_subexpressions_for_divisions)
+    s.add(insert_constants)
+    s.add(insert_aliases)
     return s
 
 

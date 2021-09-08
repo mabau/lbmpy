@@ -12,7 +12,6 @@ from lbmpy.maxwellian_equilibrium import (
 from lbmpy.methods.abstractlbmethod import RelaxationInfo
 
 from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
-from lbmpy.methods.centeredcumulant.centered_cumulants import get_default_polynomial_cumulants_for_stencil
 from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
 
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
@@ -296,7 +295,8 @@ def create_mrt_raw(stencil, relaxation_rates, maxwellian_moments=False, **kwargs
         return create_with_discrete_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
 
 
-def create_central_moment(stencil, relaxation_rates, maxwellian_moments=False, **kwargs):
+def create_central_moment(stencil, relaxation_rates, nested_moments=None,
+                          maxwellian_moments=False, **kwargs):
     r"""
     Creates moment based LB method where the collision takes place in the central moment space.
 
@@ -310,24 +310,43 @@ def create_central_moment(stencil, relaxation_rates, maxwellian_moments=False, *
     """
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
-    moments = get_default_moment_set_for_stencil(stencil)
-    sorted_moments = sort_moments_into_groups_of_same_order(moments)
-    if len(relaxation_rates) == len(sorted_moments) - 2:
-        relaxation_rates = [0, 0, *relaxation_rates]
 
-    if len(relaxation_rates) == len(moments):
-        rr_dict = OrderedDict(zip(moments, relaxation_rates))
-    elif len(relaxation_rates) == len(sorted_moments):
-        full_relaxation_rates_list = list()
-        for i in sorted_moments:
-            full_relaxation_rates_list.extend([relaxation_rates[i]] * len(sorted_moments[i]))
-        rr_dict = OrderedDict(zip(moments, full_relaxation_rates_list))
+    dim = len(stencil)
+
+    if nested_moments and not isinstance(nested_moments[0], list):
+        nested_moments = list(sort_moments_into_groups_of_same_order(nested_moments).values())
+        second_order_moments = nested_moments[2]
+        bulk_moment = [m for m in second_order_moments if is_bulk_moment(m, dim)]
+        shear_moments = [m for m in second_order_moments if is_shear_moment(m, dim)]
+        assert len(shear_moments) + len(bulk_moment) == len(second_order_moments)
+        nested_moments[2] = shear_moments
+        nested_moments.insert(3, bulk_moment)
+
+    if not nested_moments:
+        nested_moments = cascaded_moment_sets_literature(stencil)
+
+    if len(relaxation_rates) == 1:
+        r_rates = [relaxation_rates[0]]     # For correct viscosity
+        r_rates += [1] * (len(nested_moments) - 3)
     else:
-        raise ValueError(f"The number of relaxation rates does not fit to the method. "
-                         f"You can either choose {len(moments)} relaxation rates to relax every central moment with "
-                         f"a specific value or {len(sorted_moments)} relaxation rates to relax each order of "
-                         f"central moments or {len(sorted_moments) - 2} relaxation rates to relax the conserved "
-                         f"moments with zero and the higher order moments with the defined values.")
+        assert len(relaxation_rates) >= len(nested_moments) - 2, \
+            f"Number of relaxation rates must at least match the number of non-conserved moment groups. " \
+            f"For this stencil we have {len(nested_moments) - 2} such moment groups"
+        r_rates = relaxation_rates
+
+    rr_dict = OrderedDict()
+    rr_iter = iter(r_rates)
+    for group in nested_moments:
+        if all(get_order(c) <= 1 for c in group):
+            for moment in group:
+                rr_dict[moment] = 0
+        else:
+            try:
+                rr = next(rr_iter)
+                for moment in group:
+                    rr_dict[moment] = rr
+            except StopIteration:
+                raise ValueError('Not enough relaxation rates specified.')
 
     if maxwellian_moments:
         return create_with_continuous_maxwellian_eq_moments(stencil, rr_dict, central_moment_space=True, **kwargs)
@@ -555,6 +574,139 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted):
 
     return nested_moments
 
+
+def cascaded_moment_sets_literature(stencil):
+    """
+    Returns default groups of cumulants to be relaxed with common relaxation rates as stated in literature.
+    Groups are ordered like this:
+
+    - First group is density
+    - Second group are the momentum modes
+    - Third group are the shear modes
+    - Fourth group is the bulk mode
+    - Remaining groups do not govern hydrodynamic properties
+
+    Args:
+        stencil: can be D2Q9, D2Q19 or D3Q27
+    """
+    x, y, z = MOMENT_SYMBOLS
+    if have_same_entries(stencil, get_stencil("D2Q9")):
+        #   Cumulants of the D2Q9 stencil up to third order are equal to
+        #   the central moments; only the fourth-order cumulant x**2 * y**2
+        #   has a more complicated form. They can be arranged into groups
+        #   for the preservation of rotational invariance as described by
+        #   Martin Geier in his dissertation.
+        #
+        #   Reference: Martin Geier. Ab inito derivation of the cascaded Lattice Boltzmann
+        #   Automaton. Dissertation. University of Freiburg. 2006.
+        return [
+            [sp.sympify(1)],        # density is conserved
+            [x, y],                 # momentum is relaxed for cumulant forcing
+
+            [x * y, x**2 - y**2],   # shear
+
+            [x**2 + y**2],          # bulk
+
+            [x**2 * y, x * y**2],
+            [x**2 * y**2]
+        ]
+
+    elif have_same_entries(stencil, get_stencil("D3Q15")):
+        #   D3Q15 central moments by Premnath et al. https://arxiv.org/pdf/1202.6081.pdf.
+        return [
+            [sp.sympify(1)],                # density is conserved
+            [x, y, z],                      # momentum might be affected by forcing
+
+            [x * y,
+             x * z,
+             y * z,
+             x ** 2 - y ** 2,
+             x ** 2 - z ** 2],              # shear
+
+            [x ** 2 + y ** 2 + z ** 2],     # bulk
+
+            [x * (x**2 + y**2 + z**2),
+             y * (x**2 + y**2 + z**2),
+             z * (x**2 + y**2 + z**2)],
+
+            [x * y * z],
+
+            [x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2]
+        ]
+
+    elif have_same_entries(stencil, get_stencil("D3Q19")):
+        #   D3Q19 cumulants are obtained by pruning the D3Q27 cumulant set as
+        #   described by Coreixas, 2019.
+        return [
+            [sp.sympify(1)],                # density is conserved
+            [x, y, z],                      # momentum might be affected by forcing
+
+            [x * y,
+             x * z,
+             y * z,
+             x ** 2 - y ** 2,
+             x ** 2 - z ** 2],              # shear
+
+            [x ** 2 + y ** 2 + z ** 2],     # bulk
+
+            [x * y ** 2 + x * z ** 2,
+             x ** 2 * y + y * z ** 2,
+             x ** 2 * z + y ** 2 * z],
+
+            [x * y ** 2 - x * z ** 2,
+             x ** 2 * y - y * z ** 2,
+             x ** 2 * z - y ** 2 * z],
+
+            [x ** 2 * y ** 2 - 2 * x ** 2 * z ** 2 + y ** 2 * z ** 2,
+             x ** 2 * y ** 2 + x ** 2 * z ** 2 - 2 * y ** 2 * z ** 2],
+
+            [x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2]
+        ]
+
+    elif have_same_entries(stencil, get_stencil("D3Q27")):
+        #   Cumulants grouped to preserve rotational invariance as described by Geier et al, 2015
+        return [
+            [sp.sympify(1)],                # density is conserved
+            [x, y, z],                      # momentum might be affected by forcing
+
+            [x * y,
+             x * z,
+             y * z,
+             x ** 2 - y ** 2,
+             x ** 2 - z ** 2],              # shear
+
+            [x ** 2 + y ** 2 + z ** 2],     # bulk
+
+            [x * y ** 2 + x * z ** 2,
+             x ** 2 * y + y * z ** 2,
+             x ** 2 * z + y ** 2 * z],
+
+            [x * y ** 2 - x * z ** 2,
+             x ** 2 * y - y * z ** 2,
+             x ** 2 * z - y ** 2 * z],
+
+            [x * y * z],
+
+            [x ** 2 * y ** 2 - 2 * x ** 2 * z ** 2 + y ** 2 * z ** 2,
+             x ** 2 * y ** 2 + x ** 2 * z ** 2 - 2 * y ** 2 * z ** 2],
+
+            [x ** 2 * y ** 2 + x ** 2 * z ** 2 + y ** 2 * z ** 2],
+
+            [x ** 2 * y * z,
+             x * y ** 2 * z,
+             x * y * z ** 2],
+
+            [x ** 2 * y ** 2 * z,
+             x ** 2 * y * z ** 2,
+             x * y ** 2 * z ** 2],
+
+            [x ** 2 * y ** 2 * z ** 2]
+        ]
+    else:
+        raise ValueError("No default set of cascaded moments is available for this stencil. "
+                         "Please specify your own set of cascaded moments.")
+
+
 # ----------------------------------------- Cumulant method creators ---------------------------------------------------
 
 
@@ -569,7 +721,7 @@ def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=Non
         stencil: nested tuple defining the discrete velocity space. See :func:`lbmpy.stencils.get_stencil`
         cumulant_to_rr_dict: dict that has as many entries as the stencil. Each cumulant, which can be
                              represented by an exponent tuple or in polynomial form is mapped to a relaxation rate.
-                             See `get_default_polynomial_cumulants_for_stencil`
+                             See `cascaded_moment_sets_literature`
         force_model: force model used for the collision. For cumulant LB method a good choice is
                      `lbmpy.methods.centeredcumulant.CenteredCumulantForceModel`
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
@@ -716,7 +868,7 @@ def create_with_default_polynomial_cumulants(stencil, relaxation_rates, **kwargs
         stencil = get_stencil(stencil)
 
     # Get polynomial groups
-    cumulant_groups = get_default_polynomial_cumulants_for_stencil(stencil)
+    cumulant_groups = cascaded_moment_sets_literature(stencil)
 
     if len(relaxation_rates) == 1:
         r_rates = [relaxation_rates[0]]     # For correct viscosity

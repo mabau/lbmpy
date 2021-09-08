@@ -133,38 +133,45 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             result[s] = 0
         return result
 
-    def equilibrium_input_equations_from_pdfs(self, pdfs):
+    def equilibrium_input_equations_from_pdfs(self, pdfs, force_substitution=True):
         dim = len(self._stencil[0])
         eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs, self._symbolOrder0,
                                                                   self._symbolsOrder1[:dim])
         if self._compressible:
             eq_coll = divide_first_order_moments_by_rho(eq_coll, dim)
 
-        eq_coll = apply_force_model_shift('equilibrium_velocity_shift', dim, eq_coll,
-                                          self._forceModel, self._compressible)
+        if self._forceModel is not None:
+            eq_coll = apply_force_model_shift(self._forceModel.equilibrium_velocity_shift,
+                                              dim, eq_coll, self._compressible)
+            if force_substitution:
+                eq_coll = add_symbolic_force_substitutions(eq_coll, self._forceModel._subs_dict_force)
         return eq_coll
 
-    def equilibrium_input_equations_from_init_values(self, density=1, velocity=(0, 0, 0)):
+    def equilibrium_input_equations_from_init_values(self, density=1, velocity=(0, 0, 0), force_substitution=True):
         dim = len(self._stencil[0])
-        zeroth_order_moment = density
+        zeroth_order_moment = density if self._compressible else density - sp.Rational(1, 1)
         first_order_moments = velocity[:dim]
         vel_offset = [0] * dim
 
         if self._compressible:
-            if self._forceModel and hasattr(self._forceModel, 'macroscopic_velocity_shift'):
+            if self._forceModel is not None:
                 vel_offset = self._forceModel.macroscopic_velocity_shift(zeroth_order_moment)
         else:
-            if self._forceModel and hasattr(self._forceModel, 'macroscopic_velocity_shift'):
+            if self._forceModel is not None:
                 vel_offset = self._forceModel.macroscopic_velocity_shift(sp.Rational(1, 1))
-            zeroth_order_moment -= sp.Rational(1, 1)
         eqs = [Assignment(self._symbolOrder0, zeroth_order_moment)]
 
         first_order_moments = [a - b for a, b in zip(first_order_moments, vel_offset)]
         eqs += [Assignment(l, r) for l, r in zip(self._symbolsOrder1, first_order_moments)]
 
-        return AssignmentCollection(eqs, [])
+        result = AssignmentCollection(eqs, [])
 
-    def output_equations_from_pdfs(self, pdfs, output_quantity_names_to_symbols):
+        if self._forceModel is not None and force_substitution:
+            result = add_symbolic_force_substitutions(result, self._forceModel._subs_dict_force)
+
+        return result
+
+    def output_equations_from_pdfs(self, pdfs, output_quantity_names_to_symbols, force_substitution=True):
         dim = len(self._stencil[0])
 
         ac = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
@@ -176,7 +183,8 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         else:
             ac = add_density_offset(ac)
 
-        ac = apply_force_model_shift('macroscopic_velocity_shift', dim, ac, self._forceModel, self._compressible)
+        if self._forceModel is not None:
+            ac = apply_force_model_shift(self._forceModel.macroscopic_velocity_shift, dim, ac, self._compressible)
 
         main_assignments = []
         eqs = OrderedDict([(eq.lhs, eq.rhs) for eq in ac.all_assignments])
@@ -210,8 +218,9 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             mom_density_eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
                                                                                   self._symbolOrder0,
                                                                                   self._symbolsOrder1)
-            mom_density_eq_coll = apply_force_model_shift('macroscopic_momentum_density_shift', dim, 
-                                                          mom_density_eq_coll, self._forceModel, self._compressible)
+            if self._forceModel is not None:
+                mom_density_eq_coll = apply_force_model_shift(self._forceModel.macroscopic_momentum_density_shift, dim,
+                                                              mom_density_eq_coll, self._compressible)
 
             for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.main_assignments[1:]):
                 main_assignments.append(Assignment(sym, val.rhs))
@@ -235,10 +244,13 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                 del eqs[self._symbolsOrder2[i]]
 
         ac = ac.copy(main_assignments, [Assignment(a, b) for a, b in eqs.items()])
+        if self._forceModel is not None and force_substitution:
+            ac = add_symbolic_force_substitutions(ac, self._forceModel._subs_dict_force)
+
         return ac.new_without_unused_subexpressions()
 
     def __repr__(self):
-        return "ConservedValueComputation for %s" % (", " .join(self.conserved_quantities.keys()),)
+        return "ConservedValueComputation for %s" % (", ".join(self.conserved_quantities.keys()),)
 
 
 # -----------------------------------------  Helper functions ----------------------------------------------------------
@@ -264,6 +276,7 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs, symb
         symbolic_first_moments: called :math:`u` above
         symbolic_second_moments: called :math:`p` above
     """
+
     def filter_out_plus_terms(expr):
         result = 0
         for term in expr.args:
@@ -287,11 +300,13 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs, symb
                 p[dim * i + j] += f * int(offset[i]) * int(offset[j])
 
     plus_terms = [set(filter_out_plus_terms(u_i).args) for u_i in u]
+
+    velo_terms = sp.symbols(f"vel:{dim}Term")
     for i in range(dim):
         rhs = plus_terms[i]
         for j in range(i):
             rhs -= plus_terms[j]
-        eq = Assignment(sp.Symbol("vel%dTerm" % (i,)), sum(rhs))
+        eq = Assignment(velo_terms[i], sum(rhs))
         subexpressions.append(eq)
 
     for subexpression in subexpressions:
@@ -304,7 +319,7 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs, symb
     equations += [Assignment(symbolic_zeroth_moment, pdf_sum)]
     equations += [Assignment(u_i_sym, u_i) for u_i_sym, u_i in zip(symbolic_first_moments, u)]
     if symbolic_second_moments:
-        equations += [Assignment(symbolic_second_moments[i], p[i]) for i in range(dim**2)]
+        equations += [Assignment(symbolic_second_moments[i], p[i]) for i in range(dim ** 2)]
 
     return AssignmentCollection(equations, subexpressions)
 
@@ -334,23 +349,45 @@ def add_density_offset(assignment_collection, offset=sp.Rational(1, 1)):
     return assignment_collection.copy([new_density] + old_eqs[1:])
 
 
-def apply_force_model_shift(shift_member_name, dim, assignment_collection, force_model, compressible, reverse=False):
+def apply_force_model_shift(shift_func, dim, assignment_collection, compressible, reverse=False):
     """
     Modifies the first order moment equations in assignment collection according to the force model shift.
     It is applied if force model has a method named shift_member_name. The equations 1: dim+1 of the passed
     equation collection are assumed to be the velocity equations.
+
+    Args:
+        shift_func: shift function which is applied. See lbmpy.forcemodels.AbstractForceModel for details
+        dim: number of spatial dimensions
+        assignment_collection: assignment collection containing the conserved quantity computation
+        compressible: True if a compressible LB method is used. Otherwise the Helmholtz decomposition was applied
+                      for rho
+        reverse: If True the sign of the shift is flipped
     """
-    if force_model is not None and hasattr(force_model, shift_member_name):
-        old_eqs = assignment_collection.main_assignments
-        density = old_eqs[0].lhs if compressible else sp.Rational(1, 1)
-        old_vel_eqs = old_eqs[1:dim + 1]
-        shift_func = getattr(force_model, shift_member_name)
-        vel_offsets = shift_func(density)
-        if reverse:
-            vel_offsets = [-v for v in vel_offsets]
-        shifted_velocity_eqs = [Assignment(old_eq.lhs, old_eq.rhs + offset)
-                                for old_eq, offset in zip(old_vel_eqs, vel_offsets)]
-        new_eqs = [old_eqs[0]] + shifted_velocity_eqs + old_eqs[dim + 1:]
-        return assignment_collection.copy(new_eqs)
-    else:
-        return assignment_collection
+    old_eqs = assignment_collection.main_assignments
+    density = old_eqs[0].lhs if compressible else sp.Rational(1, 1)
+    old_vel_eqs = old_eqs[1:dim + 1]
+    vel_offsets = shift_func(density)
+    if reverse:
+        vel_offsets = [-v for v in vel_offsets]
+    shifted_velocity_eqs = [Assignment(old_eq.lhs, old_eq.rhs + offset)
+                            for old_eq, offset in zip(old_vel_eqs, vel_offsets)]
+    new_eqs = [old_eqs[0]] + shifted_velocity_eqs + old_eqs[dim + 1:]
+    return assignment_collection.copy(new_eqs)
+
+
+def add_symbolic_force_substitutions(assignment_collection, subs_dict):
+    """
+    Every force model holds a symbolic representation of the forcing terms internally. This function adds the
+    equations for the D-dimensional force vector to the symbolic replacements
+
+    Args:
+        assignment_collection: assignment collection which will be modified
+        subs_dict: substitution dict which can be obtained from the force model
+    """
+    old_eqs = assignment_collection.subexpressions
+    subs_equations = []
+    for key, value in zip(subs_dict.keys(), subs_dict.values()):
+        subs_equations.append(Assignment(key, value))
+
+    new_eqs = subs_equations + old_eqs
+    return assignment_collection.copy(main_assignments=None, subexpressions=new_eqs)

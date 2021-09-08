@@ -3,13 +3,14 @@ import sympy as sp
 from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule
 from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
-from pystencils import Assignment
+from pystencils import Assignment, AssignmentCollection
 
 
 class EntropicEquilibriumSRT(AbstractLbMethod):
     """Equilibrium from 'Minimal entropic kinetic models for hydrodynamics'
     Ansumali, S. ; Karlin, I. V;  Öttinger, H. C, (2003)
     """
+
     def __init__(self, stencil, relaxation_rate, force_model, conserved_quantity_calculation):
         super(EntropicEquilibriumSRT, self).__init__(stencil)
 
@@ -26,6 +27,10 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
     @property
     def weights(self):
         return self._weights
+
+    @property
+    def relaxation_rates(self):
+        return tuple([self._relaxationRate for i in range(len(self.stencil))])
 
     @property
     def zeroth_order_equilibrium_moment_symbol(self, ):
@@ -50,9 +55,13 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
         rho = self._cqc.zeroth_order_moment_symbol
         u = self._cqc.first_order_moment_symbols
 
+        all_subexpressions = []
+        if self._forceModel is not None:
+            all_subexpressions += AssignmentCollection(self._forceModel.subs_dict_force).all_assignments
+
         if conserved_quantity_equations is None:
-            conserved_quantity_equations = self._cqc.equilibrium_input_equations_from_pdfs(f)
-        all_subexpressions = conserved_quantity_equations.all_assignments
+            conserved_quantity_equations = self._cqc.equilibrium_input_equations_from_pdfs(f, False)
+        all_subexpressions += conserved_quantity_equations.all_assignments
 
         eq = []
         for w_i, direction in zip(self.weights, self.stencil):
@@ -86,4 +95,5 @@ def create_srt_entropic(stencil, relaxation_rate, force_model, compressible):
     if not compressible:
         raise NotImplementedError("entropic-srt only implemented for compressible models")
     density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
+
     return EntropicEquilibriumSRT(stencil, relaxation_rate, force_model, density_velocity_computation)

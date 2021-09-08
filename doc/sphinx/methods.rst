@@ -68,8 +68,6 @@ Creation Functions
 Utility
 -------
 
-.. autofunction:: lbmpy.methods.centeredcumulant.get_default_polynomial_cumulants_for_stencil
-
 .. autoclass:: lbmpy.methods.centeredcumulant.CenteredCumulantForceModel
     :members:
 
