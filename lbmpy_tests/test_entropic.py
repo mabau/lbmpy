@@ -28,6 +28,16 @@ def test_entropic_methods():
 
 def test_entropic_srt():
     stencil = get_stencil("D2Q9")
-    method = create_srt_entropic(stencil, 1.8, Guo((0, 1e-6)), True)
+    relaxation_rate = 1.8
+    method = create_srt_entropic(stencil, relaxation_rate, Guo((0, 1e-6)), True)
     assert method.zeroth_order_equilibrium_moment_symbol == sp.symbols("rho")
     assert method.first_order_equilibrium_moment_symbols == sp.symbols("u_:2")
+
+    eq = method.get_equilibrium()
+    terms = method.get_equilibrium_terms()
+    rel = method.relaxation_rates
+
+    for i in range(len(terms)):
+        assert sp.simplify(eq.main_assignments[i].rhs - terms[i]) == 0
+        assert rel[i] == 1.8
+

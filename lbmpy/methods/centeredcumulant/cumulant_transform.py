@@ -12,7 +12,7 @@ from lbmpy.moments import (
 from itertools import product, chain
 
 from lbmpy.moment_transforms import (
-    AbstractMomentTransform, PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT
+    AbstractMomentTransform, PRE_COLLISION_MONOMIAL_CENTRAL_MOMENT, POST_COLLISION_MONOMIAL_CENTRAL_MOMENT
 )
 
 #   ======================= Central Moments <-> Cumulants ==============================================================
@@ -72,7 +72,7 @@ class CentralMomentsToCumulantsByGeneratingFunc(AbstractMomentTransform):
 
     def forward_transform(self,
                           cumulant_base=PRE_COLLISION_CUMULANT,
-                          central_moment_base=PRE_COLLISION_CENTRAL_MOMENT,
+                          central_moment_base=PRE_COLLISION_MONOMIAL_CENTRAL_MOMENT,
                           simplification=True,
                           subexpression_base='sub_k_to_C'):
         simplification = self._get_simp_strategy(simplification)
@@ -92,7 +92,7 @@ class CentralMomentsToCumulantsByGeneratingFunc(AbstractMomentTransform):
 
     def backward_transform(self,
                            cumulant_base=POST_COLLISION_CUMULANT,
-                           central_moment_base=POST_COLLISION_CENTRAL_MOMENT,
+                           central_moment_base=POST_COLLISION_MONOMIAL_CENTRAL_MOMENT,
                            simplification=True,
                            omit_conserved_moments=False,
                            subexpression_base='sub_C_to_k'):

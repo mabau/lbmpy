@@ -46,8 +46,9 @@ General:
   compressible.
 - ``equilibrium_order=2``: order in velocity, at which the equilibrium moment/cumulant approximation is
   truncated. Order 2 is sufficient to approximate Navier-Stokes
-- ``force_model=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'``, ``'buick'``, ``'schiller'``, 
-  ``'cumulant'`` or an instance of a class implementing the same methods as the classes in :mod:`lbmpy.forcemodels`. 
+- ``force_model=None``: possible values: ``None``, ``'simple'``, ``'luo'``, ``'guo'``/``'schiller'``,
+  ``'buick'``/``'silva'``, ``'edm'``/``'kupershtokh'``, ``'he'``, ``'shanchen'``, ``'cumulant'``,
+  or an instance of a class implementing the same methods as the classes in :mod:`lbmpy.forcemodels`. 
   For details, see :mod:`lbmpy.forcemodels`
 - ``force=(0,0,0)``: either constant force or a symbolic expression depending on field value
 - ``maxwellian_moments=True``: way to compute equilibrium moments/cumulants, if False the standard
@@ -408,7 +409,7 @@ def create_lb_method(**params):
 
     no_force_model = 'force_model' not in params or params['force_model'] == 'none' or params['force_model'] is None
     if not force_is_zero and no_force_model:
-        params['force_model'] = 'cumulant' if method_name.lower().endswith('cumulant') else 'schiller'
+        params['force_model'] = 'cumulant' if method_name.lower().endswith('cumulant') else 'guo'
 
     if 'force_model' in params:
         force_model = force_model_from_string(params['force_model'], params['force'][:dim])
@@ -455,12 +456,15 @@ def create_lb_method(**params):
             except IndexError:
                 raise ValueError("Too few relaxation rates specified")
             return res
+
         weighted = params['weighted'] if 'weighted' in params else True
         nested_moments = params['nested_moments'] if 'nested_moments' in params else None
         method = create_mrt_orthogonal(stencil_entries, relaxation_rate_getter, weighted=weighted,
                                        nested_moments=nested_moments, **common_params)
     elif method_name.lower() == 'central_moment':
-        method = create_central_moment(stencil_entries, relaxation_rates, **common_params)
+        nested_moments = params['nested_moments'] if 'nested_moments' in params else None
+        method = create_central_moment(stencil_entries, relaxation_rates,
+                                       nested_moments=nested_moments, **common_params)
     elif method_name.lower() == 'mrt_raw':
         method = create_mrt_raw(stencil_entries, relaxation_rates, **common_params)
     elif method_name.lower().startswith('trt-kbc-n'):
@@ -519,6 +523,7 @@ def create_lb_method_from_existing(method, modification_function):
                             zip(method.moments, method.moment_equilibrium_values, method.relaxation_rates))
         return create_generic_mrt(method.stencil, relaxation_table, compressible, method.force_model)
 
+
 # ----------------------------------------------------------------------------------------------------------------------
 
 
@@ -532,11 +537,14 @@ def force_model_from_string(force_model_name, force_values):
         'simple': forcemodels.Simple,
         'luo': forcemodels.Luo,
         'guo': forcemodels.Guo,
+        'schiller': forcemodels.Guo,
         'buick': forcemodels.Buick,
         'silva': forcemodels.Buick,
         'edm': forcemodels.EDM,
-        'schiller': forcemodels.Schiller,
+        'kupershtokh': forcemodels.EDM,
         'cumulant': cumulant_force_model.CenteredCumulantForceModel,
+        'he': forcemodels.He,
+        'shanchen': forcemodels.ShanChen
     }
     if force_model_name.lower() not in force_model_dict:
         raise ValueError("Unknown force model %s" % (force_model_name,))
@@ -642,7 +650,8 @@ def update_with_default_parameters(params, opt_params=None, fail_on_unknown_para
         if 'relaxation_rates' not in params:
             if 'entropic' in params and params['entropic']:
                 params['relaxation_rates'] = [params['relaxation_rate']]
-            elif 'method' in params and params['method'].endswith('cumulant'):
+            elif 'method' in params and (params['method'].endswith('cumulant')
+                                         or params['method'].endswith('central_moment')):
                 params['relaxation_rates'] = [params['relaxation_rate']]
             else:
                 params['relaxation_rates'] = [params['relaxation_rate'],

@@ -6,17 +6,44 @@ from pystencils.simp import (
 from pystencils.simp.assignment_collection import SymbolGen
 
 from lbmpy.moments import (
-    moment_matrix, monomial_to_polynomial_transformation_matrix, non_aliased_polynomial_moments)
+    moment_matrix, monomial_to_polynomial_transformation_matrix, non_aliased_polynomial_raw_moments)
 from lbmpy.moments import statistical_quantity_symbol as sq_sym
 
 from .abstractmomenttransform import (
     AbstractMomentTransform,
-    PRE_COLLISION_MOMENT, POST_COLLISION_MOMENT,
-    PRE_COLLISION_RAW_MOMENT, POST_COLLISION_RAW_MOMENT
+    PRE_COLLISION_RAW_MOMENT, POST_COLLISION_RAW_MOMENT,
+    PRE_COLLISION_MONOMIAL_RAW_MOMENT, POST_COLLISION_MONOMIAL_RAW_MOMENT
 )
 
 
-class PdfsToMomentsByMatrixTransform(AbstractMomentTransform):
+class AbstractRawMomentTransform(AbstractMomentTransform):
+    """Abstract base class for all transformations between population space
+    and raw-moment space."""
+
+    def __init__(self, stencil, moment_polynomials,
+                 equilibrium_density,
+                 equilibrium_velocity,
+                 pre_collision_symbol_base=PRE_COLLISION_RAW_MOMENT,
+                 post_collision_symbol_base=POST_COLLISION_RAW_MOMENT,
+                 pre_collision_monomial_symbol_base=PRE_COLLISION_MONOMIAL_RAW_MOMENT,
+                 post_collision_monomial_symbol_base=POST_COLLISION_MONOMIAL_RAW_MOMENT,
+                 **kwargs):
+        super(AbstractRawMomentTransform, self).__init__(
+            stencil, equilibrium_density, equilibrium_velocity,
+            moment_polynomials=moment_polynomials,
+            pre_collision_symbol_base=pre_collision_symbol_base,
+            post_collision_symbol_base=post_collision_symbol_base,
+            pre_collision_monomial_symbol_base=pre_collision_monomial_symbol_base,
+            post_collision_monomial_symbol_base=post_collision_monomial_symbol_base,
+            **kwargs
+        )
+
+        assert len(self.moment_polynomials) == self.q, 'Number of moments must match stencil'
+
+# end class AbstractRawMomentTransform
+
+
+class PdfsToMomentsByMatrixTransform(AbstractRawMomentTransform):
     """Transform between populations and moment space spanned by a polynomial
     basis, using matrix-vector multiplication."""
 
@@ -24,19 +51,10 @@ class PdfsToMomentsByMatrixTransform(AbstractMomentTransform):
                  equilibrium_density,
                  equilibrium_velocity,
                  conserved_quantity_equations=None,
-                 pre_collision_moment_base=PRE_COLLISION_MOMENT,
-                 post_collision_moment_base=POST_COLLISION_MOMENT,
                  **kwargs):
-        assert len(moment_polynomials) == len(stencil), 'Number of moments must match stencil'
-
         super(PdfsToMomentsByMatrixTransform, self).__init__(
-            stencil, equilibrium_density, equilibrium_velocity,
-            conserved_quantity_equations=conserved_quantity_equations,
-            moment_polynomials=moment_polynomials,
-            **kwargs)
-
-        self.m_pre = pre_collision_moment_base
-        self.m_post = post_collision_moment_base
+            stencil, moment_polynomials, equilibrium_density, equilibrium_velocity,
+            conserved_quantity_equations=conserved_quantity_equations, **kwargs)
 
         self.moment_matrix = moment_matrix(self.moment_polynomials, stencil)
         self.inv_moment_matrix = self.moment_matrix.inv()
@@ -45,35 +63,34 @@ class PdfsToMomentsByMatrixTransform(AbstractMomentTransform):
     def absorbs_conserved_quantity_equations(self):
         return False
 
-    @property
-    def pre_collision_moment_symbols(self):
-        """List of symbols corresponding to the pre-collision moments
-        that will be the left-hand sides of assignments returned by :func:`forward_transform`."""
-        return sp.symbols(f'{self.m_pre}_:{self.q}')
-
-    @property
-    def post_collision_moment_symbols(self):
-        """List of symbols corresponding to the post-collision moments
-        that are input to the right-hand sides of assignments returned by:func:`backward_transform`."""
-        return sp.symbols(f'{self.m_post}_:{self.q}')
-
-    def forward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_f_to_M'):
+    def forward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_f_to_M',
+                          return_monomials=False):
         r"""Returns an assignment collection containing equations for pre-collision polynomial
         moments, expressed in terms of the pre-collision populations by matrix-multiplication.
-        
+
         The moment transformation matrix :math:`M` provided by :func:`lbmpy.moments.moment_matrix` is
-        used to compute the pre-collision moments as :math:`\mathbf{m}_{pre} = M \cdot \mathbf{f}_{pre}`,
+        used to compute the pre-collision moments as :math:`\mathbf{M} = M \cdot \mathbf{f}`,
         which is returned element-wise.
 
         Args:
             pdf_symbols: List of symbols that represent the pre-collision populations
             simplification: Simplification specification. See :class:`AbstractMomentTransform`
             subexpression_base: The base name used for any subexpressions of the transformation.
+            return_monomials: Return equations for monomial moments. Use only when specifying 
+                              ``moment_exponents`` in constructor!
         """
         simplification = self._get_simp_strategy(simplification, 'forward')
 
-        f_to_m_vec = self.moment_matrix * sp.Matrix(pdf_symbols)
-        pre_collision_moments = self.pre_collision_moment_symbols
+        if return_monomials:
+            assert len(self.moment_exponents) == self.q, "Could not derive invertible monomial transform." \
+                f"Expected {self.q} monomials, but got {len(self.moment_exponents)}."
+            mm = moment_matrix(self.moment_exponents, self.stencil)
+            pre_collision_moments = self.pre_collision_monomial_symbols
+        else:
+            mm = self.moment_matrix
+            pre_collision_moments = self.pre_collision_symbols
+
+        f_to_m_vec = mm * sp.Matrix(pdf_symbols)
         main_assignments = [Assignment(m, eq) for m, eq in zip(pre_collision_moments, f_to_m_vec)]
 
         symbol_gen = SymbolGen(symbol=subexpression_base)
@@ -83,13 +100,14 @@ class PdfsToMomentsByMatrixTransform(AbstractMomentTransform):
             ac = simplification.apply(ac)
         return ac
 
-    def backward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_k_to_f'):
+    def backward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_k_to_f',
+                           start_from_monomials=False):
         r"""Returns an assignment collection containing equations for post-collision populations, 
         expressed in terms of the post-collision polynomial moments by matrix-multiplication.
-        
+
         The moment transformation matrix :math:`M` provided by :func:`lbmpy.moments.moment_matrix` is
         inverted and used to compute the pre-collision moments as 
-        :math:`\mathbf{f}_{\mathrm{post}} = M^{-1} \cdot \mathbf{m}_{\mathrm{post}}`, which is returned element-wise.
+        :math:`\mathbf{f}^{\ast} = M^{-1} \cdot \mathbf{M}_{\mathrm{post}}`, which is returned element-wise.
 
         **Simplifications**
 
@@ -97,7 +115,7 @@ class PdfsToMomentsByMatrixTransform(AbstractMomentTransform):
         of opposite stencil directions :math:`\mathbf{c}_i` and :math:`\mathbf{c}_{\bar{i}} = - \mathbf{c}_i`
         are split into their symmetric and antisymmetric parts :math:`f_i^{\mathrm{sym}}, f_i^{\mathrm{anti}}`, such
         that
-        
+
         .. math::
 
             f_i = f_i^{\mathrm{sym}} + f_i^{\mathrm{anti}}
@@ -109,15 +127,26 @@ class PdfsToMomentsByMatrixTransform(AbstractMomentTransform):
             pdf_symbols: List of symbols that represent the post-collision populations
             simplification: Simplification specification. See :class:`AbstractMomentTransform`
             subexpression_base: The base name used for any subexpressions of the transformation.
+            start_from_monomials: Return equations for monomial moments. Use only when specifying 
+                                  ``moment_exponents`` in constructor!
         """
         simplification = self._get_simp_strategy(simplification, 'backward')
 
-        post_collision_moments = self.post_collision_moment_symbols
-        m_to_f_vec = self.inv_moment_matrix * sp.Matrix(post_collision_moments)
-        main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, m_to_f_vec)]
-        symbol_gen = SymbolGen(subexpression_base)
+        if start_from_monomials:
+            assert len(self.moment_exponents) == self.q, "Could not derive invertible monomial transform." \
+                f"Expected {self.q} monomials, but got {len(self.moment_exponents)}."
+            mm_inv = moment_matrix(self.moment_exponents, self.stencil).inv()
+            post_collision_moments = self.post_collision_monomial_symbols
+        else:
+            mm_inv = self.inv_moment_matrix
+            post_collision_moments = self.post_collision_symbols
 
+        m_to_f_vec = mm_inv * sp.Matrix(post_collision_moments)
+        main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, m_to_f_vec)]
+
+        symbol_gen = SymbolGen(subexpression_base)
         ac = AssignmentCollection(main_assignments, subexpression_symbol_generator=symbol_gen)
+
         ac.add_simplification_hint('stencil', self.stencil)
         ac.add_simplification_hint('post_collision_pdf_symbols', pdf_symbols)
         if simplification:
@@ -146,7 +175,7 @@ class PdfsToMomentsByMatrixTransform(AbstractMomentTransform):
 
 # end class PdfsToMomentsByMatrixTransform
 
-class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
+class PdfsToMomentsByChimeraTransform(AbstractRawMomentTransform):
     """Transform between populations and moment space spanned by a polynomial
     basis, using the raw-moment chimera transform in the forward direction and
     matrix-vector multiplication in the backward direction."""
@@ -155,28 +184,15 @@ class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
                  equilibrium_density,
                  equilibrium_velocity,
                  conserved_quantity_equations=None,
-                 pre_collision_moment_base=PRE_COLLISION_MOMENT,
-                 post_collision_moment_base=POST_COLLISION_MOMENT,
-                 pre_collision_raw_moment_base=PRE_COLLISION_RAW_MOMENT,
-                 post_collision_raw_moment_base=POST_COLLISION_RAW_MOMENT,
                  **kwargs):
 
         if moment_polynomials:
             #   Remove aliases
-            moment_polynomials = non_aliased_polynomial_moments(moment_polynomials, stencil)
+            moment_polynomials = non_aliased_polynomial_raw_moments(moment_polynomials, stencil)
 
         super(PdfsToMomentsByChimeraTransform, self).__init__(
-            stencil, equilibrium_density, equilibrium_velocity,
-            conserved_quantity_equations=conserved_quantity_equations,
-            moment_polynomials=moment_polynomials,
-            **kwargs)
-
-        assert len(self.moment_polynomials) == len(stencil), 'Number of moments must match stencil'
-
-        self.m_pre = pre_collision_moment_base
-        self.m_post = post_collision_moment_base
-        self.rm_pre = pre_collision_raw_moment_base
-        self.rm_post = post_collision_raw_moment_base
+            stencil, moment_polynomials, equilibrium_density, equilibrium_velocity,
+            conserved_quantity_equations=conserved_quantity_equations, **kwargs)
 
         self.inv_moment_matrix = moment_matrix(self.moment_exponents, self.stencil).inv()
         self.mono_to_poly_matrix = monomial_to_polynomial_transformation_matrix(self.moment_exponents,
@@ -186,32 +202,6 @@ class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
     @property
     def absorbs_conserved_quantity_equations(self):
         return True
-
-    @property
-    def pre_collision_moment_symbols(self):
-        """List of symbols corresponding to the pre-collision moments
-        that will be the left-hand sides of assignments returned by :func:`forward_transform`."""
-        return sp.symbols(f'{self.m_pre}_:{self.q}')
-
-    @property
-    def post_collision_moment_symbols(self):
-        """List of symbols corresponding to the post-collision moments
-        that are input to the right-hand sides of assignments returned by:func:`backward_transform`."""
-        return sp.symbols(f'{self.m_post}_:{self.q}')
-
-    @property
-    def pre_collision_raw_moment_symbols(self):
-        """List of symbols corresponding to the pre-collision raw (monomial) moments
-        that exist as left-hand sides of subexpressions in the assignment collection 
-        returned by :func:`forward_transform`."""
-        return tuple(sq_sym(self.rm_pre, e) for e in self.moment_exponents)
-
-    @property
-    def post_collision_raw_moment_symbols(self):
-        """List of symbols corresponding to the post-collision raw (monomial) moments
-        that exist as left-hand sides of subexpressions in the assignment collection
-        returned by :func:`backward_transform`."""
-        return tuple(sq_sym(self.rm_post, e) for e in self.moment_exponents)
 
     def get_cq_to_moment_symbols_dict(self, moment_symbol_base):
         """Returns a dictionary mapping the density and velocity symbols to the correspondig
@@ -232,50 +222,58 @@ class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
 
     def forward_transform(self, pdf_symbols, simplification=True,
                           subexpression_base='sub_f_to_m',
-                          return_raw_moments=False):
+                          return_monomials=False):
         r"""Returns an assignment collection containing equations for pre-collision polynomial
         moments, expressed in terms of the pre-collision populations, using the raw moment chimera transform.
 
         The chimera transform for raw moments is given by :cite:`geier2015` :
-        
+
         .. math::
-        
+
             f_{xyz} &:= f_i \text{ such that } c_i = (x,y,z)^T \\
             m_{xy|\gamma} &:= \sum_{z \in \{-1, 0, 1\} } f_{xyz} \cdot z^{\gamma} \\
             m_{x|\beta \gamma} &:= \sum_{y \in \{-1, 0, 1\}} m_{xy|\gamma} \cdot y^{\beta} \\
             m_{\alpha \beta \gamma} &:= \sum_{x \in \{-1, 0, 1\}} m_{x|\beta \gamma} \cdot x^{\alpha}
 
-        
+
         The obtained raw moments are afterward combined to the desired polynomial moments.
 
         **Conserved Quantity Equations**
 
         If given, this transform absorbs the conserved quantity equations and simplifies them
-        using the raw moment equations, if simplification is enabled.
+        using the monomial raw moment equations, if simplification is enabled.
+
+        **De-Aliasing**
+
+        If more than :math:`q` monomial moments are extracted from the polynomial set, the polynomials
+        are de-aliased by eliminating aliases according to the stencil 
+        using `lbmpy.moments.non_aliased_polynomial_raw_moments`.
 
         **Simplification**
 
         If simplification is enabled, the absorbed conserved quantity equations are - if possible - 
-        rewritten using the raw moment symbols. If the conserved quantities originate somewhere else
-        than in the lower-order moments (like from an external field), they are not affected by this.
+        rewritten using the monomial symbols. If the conserved quantities originate somewhere else
+        than in the lower-order moments (like from an external field), they are not affected by this
+        simplification.
 
         Args:
             pdf_symbols: List of symbols that represent the pre-collision populations
             simplification: Simplification specification. See :class:`AbstractMomentTransform`
             subexpression_base: The base name used for any subexpressions of the transformation.
-            return_raw_moments: If True raw moment equations are returned as main assignments
+            return_monomials: Return equations for monomial moments. Use only when specifying 
+                              ``moment_exponents`` in constructor!
         """
 
         simplification = self._get_simp_strategy(simplification, 'forward')
-        raw_moment_symbol_base = self.rm_pre
+        monomial_symbol_base = self.mono_base_pre
 
         def _partial_kappa_symbol(fixed_directions, remaining_exponents):
             fixed_str = '_'.join(str(direction) for direction in fixed_directions).replace('-', 'm')
             exp_str = '_'.join(str(exp) for exp in remaining_exponents).replace('-', 'm')
-            return sp.Symbol(f"partial_{raw_moment_symbol_base}_{fixed_str}_e_{exp_str}")
+            return sp.Symbol(f"partial_{monomial_symbol_base}_{fixed_str}_e_{exp_str}")
 
         partial_sums_dict = dict()
-        raw_moment_eqs = []
+        monomial_eqs = []
 
         def collect_partial_sums(exponents, dimension=0, fixed_directions=tuple()):
             if dimension == self.dim:
@@ -293,8 +291,8 @@ class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
                     summation += next_partial * d ** exponents[dimension]
 
                 if dimension == 0:
-                    lhs_symbol = sq_sym(raw_moment_symbol_base, exponents)
-                    raw_moment_eqs.append(Assignment(lhs_symbol, summation))
+                    lhs_symbol = sq_sym(monomial_symbol_base, exponents)
+                    monomial_eqs.append(Assignment(lhs_symbol, summation))
                 else:
                     lhs_symbol = _partial_kappa_symbol(fixed_directions, exponents[dimension:])
                     partial_sums_dict[lhs_symbol] = summation
@@ -307,17 +305,17 @@ class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
         subexpressions = self.cqe.subexpressions.copy() if self.cqe is not None else []
         subexpressions += [Assignment(lhs, rhs) for lhs, rhs in partial_sums_dict.items()]
 
-        if return_raw_moments:
-            main_assignments += raw_moment_eqs
+        if return_monomials:
+            main_assignments += monomial_eqs
         else:
-            subexpressions += raw_moment_eqs
-            moment_eqs = self.mono_to_poly_matrix * sp.Matrix(self.pre_collision_raw_moment_symbols)
-            main_assignments += [Assignment(m, v) for m, v in zip(self.pre_collision_moment_symbols, moment_eqs)]
+            subexpressions += monomial_eqs
+            moment_eqs = self.mono_to_poly_matrix * sp.Matrix(self.pre_collision_monomial_symbols)
+            main_assignments += [Assignment(m, v) for m, v in zip(self.pre_collision_symbols, moment_eqs)]
 
         symbol_gen = SymbolGen(subexpression_base)
         ac = AssignmentCollection(main_assignments, subexpressions=subexpressions,
                                   subexpression_symbol_generator=symbol_gen)
-        ac.add_simplification_hint('cq_symbols_to_moments', self.get_cq_to_moment_symbols_dict(raw_moment_symbol_base))
+        ac.add_simplification_hint('cq_symbols_to_moments', self.get_cq_to_moment_symbols_dict(monomial_symbol_base))
 
         if simplification:
             ac = simplification.apply(ac)
@@ -325,14 +323,18 @@ class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
 
     def backward_transform(self, pdf_symbols, simplification=True,
                            subexpression_base='sub_k_to_f',
-                           start_from_raw_moments=False):
+                           start_from_monomials=False):
         r"""Returns an assignment collection containing equations for post-collision populations, 
         expressed in terms of the post-collision polynomial moments by matrix-multiplication.
-        
-        The post-collision raw moments :math:`\mathbf{m}_{\mathrm{post}}` are first obtained from the polynomials.
-        Then, the raw moment transformation matrix :math:`M_r` provided by :func:`lbmpy.moments.moment_matrix` 
-        is inverted and used to compute the pre-collision moments as 
+
+        The post-collision monomial moments :math:`\mathbf{m}_{\mathrm{post}}` are first obtained from the polynomials.
+        Then, the monomial transformation matrix :math:`M_r` provided by :func:`lbmpy.moments.moment_matrix` 
+        is inverted and used to compute the post-collision populations as 
         :math:`\mathbf{f}_{\mathrm{post}} = M_r^{-1} \cdot \mathbf{m}_{\mathrm{post}}`.
+
+        **De-Aliasing**
+
+        See `PdfsToMomentsByChimeraTransform.forward_transform`.
 
         **Simplifications**
 
@@ -340,7 +342,7 @@ class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
         of opposite stencil directions :math:`\mathbf{c}_i` and :math:`\mathbf{c}_{\bar{i}} = - \mathbf{c}_i`
         are split into their symmetric and antisymmetric parts :math:`f_i^{\mathrm{sym}}, f_i^{\mathrm{anti}}`, such
         that
-        
+
         .. math::
 
             f_i = f_i^{\mathrm{sym}} + f_i^{\mathrm{anti}}
@@ -352,20 +354,21 @@ class PdfsToMomentsByChimeraTransform(AbstractMomentTransform):
             pdf_symbols: List of symbols that represent the post-collision populations
             simplification: Simplification specification. See :class:`AbstractMomentTransform`
             subexpression_base: The base name used for any subexpressions of the transformation.
-            start_from_raw_moments: If set to True the equations are not converted to monomials
+            start_from_monomials: Return equations for monomial moments. Use only when specifying 
+                                  ``moment_exponents`` in constructor!
         """
 
         simplification = self._get_simp_strategy(simplification, 'backward')
 
-        post_collision_moments = self.post_collision_moment_symbols
-        post_collision_raw_moments = self.post_collision_raw_moment_symbols
+        post_collision_moments = self.post_collision_symbols
+        post_collision_monomial_moments = self.post_collision_monomial_symbols
 
         subexpressions = []
-        if not start_from_raw_moments:
+        if not start_from_monomials:
             raw_moment_eqs = self.poly_to_mono_matrix * sp.Matrix(post_collision_moments)
-            subexpressions += [Assignment(rm, v) for rm, v in zip(post_collision_raw_moments, raw_moment_eqs)]
+            subexpressions += [Assignment(rm, v) for rm, v in zip(post_collision_monomial_moments, raw_moment_eqs)]
 
-        rm_to_f_vec = self.inv_moment_matrix * sp.Matrix(post_collision_raw_moments)
+        rm_to_f_vec = self.inv_moment_matrix * sp.Matrix(post_collision_monomial_moments)
         main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, rm_to_f_vec)]
         symbol_gen = SymbolGen(subexpression_base)
 

@@ -56,17 +56,26 @@ Documentation
 Read the docs [here](http://pycodegen.pages.i10git.cs.fau.de/lbmpy) and
 check out the Jupyter notebooks in `doc/notebooks`. 
 
-Authors
+Contributing
 -------
+To see how to open issues, submit bug reports, create feature requests or submit your additions to lbmpy please refer to
+[contribution documentation](https://i10git.cs.fau.de/pycodegen/pystencils/-/blob/master/CONTRIBUTING.md) of pystencils since lbmpy is heavily build on pystencils.
 
-Many thanks go to the [contributors](AUTHORS.txt) of lbmpy.
+
+Many thanks go to the [contributors](https://i10git.cs.fau.de/pycodegen/lbmpy/-/blob/master/AUTHORS.txt) of lbmpy.
+
 
 ### Please cite us
 
 If you use lbmpy in a publication, please cite the following articles:
 
 Overview:
-  - M. Bauer et al, lbmpy: Automatic code generation for efficient parallel lattice Boltzmann methods. Journal of Computational Science, 2021. https://doi.org/10.1016/j.jocs.2020.101269
+  - M. Bauer et al, lbmpy: Automatic code generation for efficient parallel lattice Boltzmann methods. Journal of Computational Science, 2021. https://doi.org/10.1016/j.jocs.2020.101269 ([Preprint](https://arxiv.org/abs/2001.11806))
 
 Multiphase:
    - M. Holzer et al, Highly efficient lattice Boltzmann multiphase simulations of immiscible fluids at high-density ratios on CPUs and GPUs through code generation. The International Journal of High Performance Computing Applications, 2021. https://doi.org/10.1177/10943420211016525
+
+
+### Further Reading
+
+- F. Hennig et al, Automatic Code Generation for the Cumulant Lattice Boltzmann Method. ICMMES, 2021. [Poster Link](https://www.researchgate.net/publication/353224406_Automatic_Code_Generation_for_the_Cumulant_Lattice_Boltzmann_Method)

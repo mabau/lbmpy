@@ -11,12 +11,13 @@ from lbmpy.stencils import get_stencil
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 
-from lbmpy.moments import (
-    moments_up_to_order, get_order,
-    monomial_to_polynomial_transformation_matrix,
-    moment_sort_key, exponent_tuple_sort_key,
-    exponent_to_polynomial_representation, extract_monomials, MOMENT_SYMBOLS,
-    statistical_quantity_symbol)
+from lbmpy.moments import (moments_up_to_order, get_order,
+                           monomial_to_polynomial_transformation_matrix,
+                           moment_sort_key, exponent_tuple_sort_key,
+                           exponent_to_polynomial_representation, extract_monomials, MOMENT_SYMBOLS,
+                           statistical_quantity_symbol)
+
+from lbmpy.forcemodels import Luo, Simple
 
 #   Local Imports
 
@@ -25,7 +26,7 @@ from .cumulant_transform import (
     CentralMomentsToCumulantsByGeneratingFunc)
 
 from lbmpy.moment_transforms import (
-    PRE_COLLISION_CENTRAL_MOMENT, POST_COLLISION_CENTRAL_MOMENT,
+    PRE_COLLISION_MONOMIAL_CENTRAL_MOMENT, POST_COLLISION_MONOMIAL_CENTRAL_MOMENT,
     PdfsToCentralMomentsByShiftMatrix)
 
 from lbmpy.methods.centeredcumulant.force_model import CenteredCumulantForceModel
@@ -53,8 +54,7 @@ def cached_backward_transform(transform_obj, *args, **kwargs):
 @disk_cache
 def relax_lower_order_central_moments(moment_indices, pre_collision_values,
                                       relaxation_rates, equilibrium_values,
-                                      post_collision_base=POST_COLLISION_CENTRAL_MOMENT):
-
+                                      post_collision_base=POST_COLLISION_MONOMIAL_CENTRAL_MOMENT):
     post_collision_symbols = [statistical_quantity_symbol(post_collision_base, i) for i in moment_indices]
     equilibrium_vec = sp.Matrix(equilibrium_values)
     moment_vec = sp.Matrix(pre_collision_values)
@@ -74,7 +74,6 @@ def relax_polynomial_cumulants(monomial_exponents, polynomials, relaxation_rates
                                pre_collision_base=PRE_COLLISION_CUMULANT,
                                post_collision_base=POST_COLLISION_CUMULANT,
                                subexpression_base='sub_col'):
-
     mon_to_poly_matrix = monomial_to_polynomial_transformation_matrix(monomial_exponents, polynomials)
     mon_vec = sp.Matrix([statistical_quantity_symbol(pre_collision_base, exp) for exp in monomial_exponents])
     equilibrium_vec = sp.Matrix(equilibrium_values)
@@ -143,6 +142,11 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         assert isinstance(conserved_quantity_computation,
                           AbstractConservedQuantityComputation)
         super(CenteredCumulantBasedLbMethod, self).__init__(stencil)
+
+        if force_model is not None:
+            assert (isinstance(force_model, CenteredCumulantForceModel)
+                    or isinstance(force_model, Simple)
+                    or isinstance(force_model, Luo)), "Given force model currently not supported."
 
         for m in moments_up_to_order(1, dim=self.dim):
             if exponent_to_polynomial_representation(m) not in cumulant_to_relaxation_info_dict.keys():
@@ -234,6 +238,9 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         self.set_first_moment_relaxation_rate(relaxation_rate)
 
     def set_force_model(self, force_model):
+        assert (isinstance(force_model, CenteredCumulantForceModel)
+                or isinstance(force_model, Simple)
+                or isinstance(force_model, Luo)), "Given force model currently not supported."
         self._force_model = force_model
 
     def _repr_html_(self):
@@ -321,7 +328,8 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         """Returns an LbmCollisionRule i.e. an equation collection with a reference to the method.
         This collision rule defines the collision operator."""
         return self._centered_cumulant_collision_rule(
-            self._cumulant_to_relaxation_info_dict, conserved_quantity_equations, pre_simplification, True)
+            self._cumulant_to_relaxation_info_dict, conserved_quantity_equations, pre_simplification, True,
+            symbolic_relaxation_rates=True)
 
     #   ------------------------------- Internals --------------------------------------------
 
@@ -330,7 +338,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         cqe = conserved_quantity_equations
 
         if cqe is None:
-            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f)
+            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f, False)
 
         return cqe.bound_symbols
 
@@ -350,18 +358,33 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
                                           conserved_quantity_equations=None,
                                           pre_simplification=False,
                                           include_force_terms=False,
-                                          include_galilean_correction=True):
+                                          include_galilean_correction=True,
+                                          symbolic_relaxation_rates=False):
         stencil = self.stencil
         f = self.pre_collision_pdf_symbols
         density = self.zeroth_order_equilibrium_moment_symbol
         velocity = self.first_order_equilibrium_moment_symbols
         cqe = conserved_quantity_equations
 
+        relaxation_info_dict = dict()
+        subexpressions_relaxation_rates = []
+        if symbolic_relaxation_rates:
+            subexpressions_relaxation_rates, sd = self._generate_symbolic_relaxation_matrix()
+            for i, cumulant in enumerate(cumulant_to_relaxation_info_dict):
+                relaxation_info_dict[cumulant] = RelaxationInfo(cumulant_to_relaxation_info_dict[cumulant][0],
+                                                                sd[i, i])
+        else:
+            relaxation_info_dict = cumulant_to_relaxation_info_dict
+
         if cqe is None:
-            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f)
+            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f, False)
+
+        forcing_subexpressions = AssignmentCollection([])
+        if self._force_model is not None:
+            forcing_subexpressions = AssignmentCollection(self._force_model.subs_dict_force)
 
         #   1) Extract Monomial Cumulants for the higher-order polynomials
-        polynomial_cumulants = cumulant_to_relaxation_info_dict.keys()
+        polynomial_cumulants = relaxation_info_dict.keys()
         polynomial_cumulants = sorted(list(polynomial_cumulants), key=moment_sort_key)
         higher_order_polynomials = [p for p in polynomial_cumulants if get_order(p) > 1]
         monomial_cumulants = sorted(list(extract_monomials(
@@ -378,15 +401,16 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
 
         #   3) Get Forward Transformation from PDFs to central moments
         pdfs_to_k_transform = self._central_moment_transform_class(
-            stencil, central_moments, density, velocity, conserved_quantity_equations=cqe)
-        pdfs_to_k_eqs = cached_forward_transform(pdfs_to_k_transform, f, simplification=pre_simplification)
+            stencil, None, density, velocity, moment_exponents=central_moments, conserved_quantity_equations=cqe)
+        pdfs_to_k_eqs = cached_forward_transform(
+            pdfs_to_k_transform, f, simplification=pre_simplification, return_monomials=True)
 
         #   4) Add relaxation rules for lower order moments
         lower_order_moments = moments_up_to_order(1, dim=self.dim)
-        lower_order_moment_symbols = [statistical_quantity_symbol(PRE_COLLISION_CENTRAL_MOMENT, exp)
+        lower_order_moment_symbols = [statistical_quantity_symbol(PRE_COLLISION_MONOMIAL_CENTRAL_MOMENT, exp)
                                       for exp in lower_order_moments]
 
-        lower_order_relaxation_infos = [cumulant_to_relaxation_info_dict[exponent_to_polynomial_representation(e)]
+        lower_order_relaxation_infos = [relaxation_info_dict[exponent_to_polynomial_representation(e)]
                                         for e in lower_order_moments]
         lower_order_relaxation_rates = [info.relaxation_rate for info in lower_order_relaxation_infos]
         lower_order_equilibrium = [info.equilibrium_value for info in lower_order_relaxation_infos]
@@ -396,13 +420,13 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
             tuple(lower_order_relaxation_rates), tuple(lower_order_equilibrium))
 
         #   5) Add relaxation rules for higher-order, polynomial cumulants
-        poly_relaxation_infos = [cumulant_to_relaxation_info_dict[c] for c in higher_order_polynomials]
+        poly_relaxation_infos = [relaxation_info_dict[c] for c in higher_order_polynomials]
         poly_relaxation_rates = [info.relaxation_rate for info in poly_relaxation_infos]
         poly_equilibrium = [info.equilibrium_value for info in poly_relaxation_infos]
 
         if self._galilean_correction and include_galilean_correction:
             galilean_correction_terms = get_galilean_correction_terms(
-                cumulant_to_relaxation_info_dict, density, velocity)
+                relaxation_info_dict, density, velocity)
         else:
             galilean_correction_terms = None
 
@@ -414,12 +438,14 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
 
         #   6) Get backward transformation from central moments to PDFs
         d = self.post_collision_pdf_symbols
-        k_post_to_pdfs_eqs = cached_backward_transform(pdfs_to_k_transform, d, simplification=pre_simplification)
+        k_post_to_pdfs_eqs = cached_backward_transform(
+            pdfs_to_k_transform, d, simplification=pre_simplification, start_from_monomials=True)
 
         #   7) That's all. Now, put it all together.
         all_acs = [] if pdfs_to_k_transform.absorbs_conserved_quantity_equations else [cqe]
-        all_acs += [pdfs_to_k_eqs, k_to_c_eqs, lower_order_moment_collision_eqs,
-                    cumulant_collision_eqs, c_post_to_k_post_eqs]
+        subexpressions_relaxation_rates = AssignmentCollection(subexpressions_relaxation_rates)
+        all_acs += [subexpressions_relaxation_rates, forcing_subexpressions, pdfs_to_k_eqs, k_to_c_eqs,
+                    lower_order_moment_collision_eqs, cumulant_collision_eqs, c_post_to_k_post_eqs]
         subexpressions = [ac.all_assignments for ac in all_acs]
         subexpressions += k_post_to_pdfs_eqs.subexpressions
         main_assignments = k_post_to_pdfs_eqs.main_assignments

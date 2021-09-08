@@ -82,7 +82,7 @@ def test_poiseuille_channel(target, stencil_name):
                                       relaxation_rate=omega,
                                       method="trt",
                                       compressible=True,
-                                      force_model="schiller",
+                                      force_model="guo",
                                       force=sp.Matrix([ext_force_density] + [0] * (dim - 1)),
                                       kernel_type='collide_only',
                                       optimization={'symbolic_field': src})

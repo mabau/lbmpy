@@ -44,7 +44,7 @@ def test_equivalence(stencil, compressible, method, force):
                      'weighted': True,
                      'compressible': compressible,
                      'force': force,
-                     'force_model': 'schiller',
+                     'force_model': 'guo',
                      'relaxation_rates': relaxation_rates}
     print("Running Scenario", common_params)
     with_split = create_lid_driven_cavity(optimization={'split': True}, **common_params)

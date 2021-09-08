@@ -82,7 +82,7 @@ def get_fluctuating_lb(size=None, kT=None, omega_shear=None, omega_bulk=None, om
         compressible=True,
         weighted=True,
         relaxation_rate_getter=rr_getter,
-        force_model=force_model_from_string('schiller', force_field.center_vector))
+        force_model=force_model_from_string('guo', force_field.center_vector))
     collision_rule = create_lb_collision_rule(
         method,
         fluctuating={

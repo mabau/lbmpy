@@ -21,6 +21,9 @@ extensions = [
     'sphinx_autodoc_typehints',
 ]
 
+# set mathjax v3 path according to https://www.sphinx-doc.org/en/master/usage/extensions/math.html
+mathjax_path="https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
+
 add_module_names = False
 templates_path = ['_templates']
 source_suffix = '.rst'
