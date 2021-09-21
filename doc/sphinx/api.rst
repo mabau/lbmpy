@@ -5,6 +5,7 @@ API Reference
    :maxdepth: 1
 
    scenarios.rst
+   enums.rst
    kernelcreation.rst
    methodcreation.rst
    stencils.rst

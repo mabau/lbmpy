@@ -5,14 +5,14 @@ import pystencils as ps
 from lbmpy.stencils import get_stencil
 from lbmpy.advanced_streaming.utility import get_timesteps, streaming_patterns, get_accessor, is_inplace, AccessPdfValues
 from lbmpy.updatekernels import create_stream_only_kernel
-from pystencils import create_kernel
+from pystencils import create_kernel, Target
 
 
 @pytest.mark.parametrize('streaming_pattern', streaming_patterns)
 def test_stream_only_kernel(streaming_pattern):
     domain_size = (4, 4)
     stencil = get_stencil("D2Q9")
-    dh = ps.create_data_handling(domain_size, default_target='cpu')
+    dh = ps.create_data_handling(domain_size, default_target=Target.CPU)
     pdfs = dh.add_array('pdfs', values_per_cell=len(stencil))
     pdfs_tmp = dh.add_array_like('pdfs_tmp', 'pdfs')
 

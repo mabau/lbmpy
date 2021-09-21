@@ -2,7 +2,7 @@ import numpy as np
 import sympy as sp
 
 from pystencils.datahandling import create_data_handling
-from pystencils import create_kernel
+from pystencils import create_kernel, Target
 from pystencils.slicing import make_slice
 
 from lbmpy.creationfunctions import create_lb_collision_rule, create_lb_function
@@ -18,11 +18,11 @@ from numpy.testing import assert_allclose
 
 all_results = dict()
 
-targets = ['cpu']
+targets = [Target.CPU]
 
 try:
     import pycuda.autoinit
-    targets += ['gpu']
+    targets += [Target.GPU]
 except Exception:
     pass
 
@@ -30,19 +30,19 @@ try:
     import pystencils.opencl.autoinit
     from pystencils.opencl.opencljit import get_global_cl_queue
     if get_global_cl_queue() is not None:
-        targets += ['opencl']
+        targets += [Target.OPENCL]
 except Exception:
     pass
 
 
 class PeriodicPipeFlow:
-    def __init__(self, stencil, streaming_pattern, wall_boundary=None, target='cpu'):
+    def __init__(self, stencil, streaming_pattern, wall_boundary=None, target=Target.CPU):
 
         if wall_boundary is None:
             wall_boundary = NoSlip()
 
         self.target = target
-        self.gpu = target in ['gpu', 'opencl']
+        self.gpu = target in [Target.GPU, Target.OPENCL]
 
         #   Stencil
         self.stencil = stencil

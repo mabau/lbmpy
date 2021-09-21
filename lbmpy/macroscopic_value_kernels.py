@@ -2,6 +2,7 @@ import functools
 from copy import deepcopy
 from lbmpy.simplificationfactory import create_simplification_strategy
 from pystencils.field import Field, get_layout_of_array
+from pystencils.enums import Target
 
 from lbmpy.advanced_streaming.utility import get_accessor, Timestep
 
@@ -51,7 +52,7 @@ macroscopic_values_setter = pdf_initialization_assignments
 
 def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None,
                                       ghost_layers=1, iteration_slice=None,
-                                      field_layout='numpy', target='cpu',
+                                      field_layout='numpy', target=Target.CPU,
                                       streaming_pattern='pull', previous_timestep=Timestep.BOTH):
     """
     Create kernel to compute macroscopic value(s) from a pdf field (e.g. density or velocity)
@@ -65,7 +66,7 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
                       is determined automatically and assumed to be equal for all dimensions.        
         iteration_slice: if not None, iteration is done only over this slice of the field
         field_layout: layout for output field, also used for pdf field if pdf_arr is not given
-        target: 'cpu' or 'gpu'
+        target: `Target.CPU` or `Target.GPU`
         previous_step_accessor: The accessor used by the streaming pattern of the previous timestep
 
     Returns:
@@ -116,16 +117,16 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
 
     eqs = cqc.output_equations_from_pdfs(pdf_symbols, output_mapping).all_assignments
 
-    if target == 'cpu':
+    if target == Target.CPU:
         import pystencils.cpu as cpu
         kernel = cpu.make_python_function(cpu.create_kernel(
             eqs, ghost_layers=ghost_layers, iteration_slice=iteration_slice))
-    elif target == 'gpu':
+    elif target == Target.GPU:
         import pystencils.gpucuda as gpu
         kernel = gpu.make_python_function(gpu.create_cuda_kernel(
             eqs, ghost_layers=ghost_layers, iteration_slice=iteration_slice))
     else:
-        raise ValueError("Unknown target '%s'. Possible targets are 'cpu' and 'gpu'" % (target,))
+        raise ValueError("Unknown target '%s'. Possible targets are `Target.CPU` and `Target.GPU`" % (target,))
 
     def getter(pdfs, **kwargs):
         if pdf_arr is not None:
@@ -141,7 +142,7 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
 
 def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None,
                                       ghost_layers=1, iteration_slice=None,
-                                      field_layout='numpy', target='cpu',
+                                      field_layout='numpy', target=Target.CPU,
                                       streaming_pattern='pull', previous_timestep=Timestep.BOTH):
     """
     Creates a function that sets a pdf field to specified macroscopic quantities
@@ -156,7 +157,7 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
                       is determined automatically and assumed to be equal for all dimensions.        
         iteration_slice: if not None, iteration is done only over this slice of the field
         field_layout: layout of the pdf field if pdf_arr was not given
-        target: 'cpu' or 'gpu'
+        target: `Target.CPU` or `Target.GPU`
         previous_step_accessor: The accessor used by the streaming pattern of the previous timestep
 
     Returns:
@@ -201,16 +202,16 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
     substitutions = {sym: write_accesses[i] for i, sym in enumerate(lb_method.post_collision_pdf_symbols)}
     eq = eq.new_with_substitutions(substitutions).all_assignments
 
-    if target == 'cpu':
+    if target == Target.CPU:
         import pystencils.cpu as cpu
         kernel = cpu.make_python_function(cpu.create_kernel(eq))
         kernel = functools.partial(kernel, **fixed_kernel_parameters)
-    elif target == 'gpu':
+    elif target == Target.GPU:
         import pystencils.gpucuda as gpu
         kernel = gpu.make_python_function(gpu.create_cuda_kernel(eq))
         kernel = functools.partial(kernel, **fixed_kernel_parameters)
     else:
-        raise ValueError("Unknown target '%s'. Possible targets are 'cpu' and 'gpu'" % (target,))
+        raise ValueError("Unknown target '%s'. Possible targets are `Target.CPU` and `Target.GPU`" % (target,))
 
     def setter(pdfs, **kwargs):
         if pdf_arr is not None:

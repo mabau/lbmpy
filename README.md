@@ -16,11 +16,12 @@ It even comes with an integrated Chapman Enskog analysis based on sympy!
 
 Common test scenarios can be set up quickly:
 ```python
-from lbmpy.scenarios import create_channel
+from pystencils import Target
+from lbmpy.session import *
 
-ch = create_channel(domain_size=(300,100, 100), force=1e-7, method="trt",
+ch = create_channel(domain_size=(300, 100, 100), force=1e-7, method=Method.TRT,
                     equilibrium_order=2, compressible=True,
-                    relaxation_rates=[1.97, 1.6], optimization={'target': 'gpu'})
+                    relaxation_rates=[1.97, 1.6], optimization={'target': Target.GPU})
 ```
 
 To find out more, check out the interactive [tutorial notebooks online with binder](https://mybinder.org/v2/gh/mabau/lbmpy/master?filepath=doc%2Fnotebooks).

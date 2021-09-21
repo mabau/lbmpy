@@ -3,14 +3,17 @@
 
 import pystencils as ps
 from lbmpy.creationfunctions import *
+from lbmpy.forcemodels import Guo
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
 import numpy as np
 from lbmpy.moments import is_bulk_moment, is_shear_moment, get_order
+from lbmpy.stencils import get_stencil
 from pystencils.rng import PhiloxTwoDoubles
 
 import pytest
 from pystencils.backends.simd_instruction_sets import get_supported_instruction_sets, get_vector_instruction_set
 from pystencils.cpu.cpujit import get_compiler_config
+from pystencils.enums import Target
 
 
 def single_component_maxwell(x1, x2, kT, mass):
@@ -72,9 +75,9 @@ def get_fluctuating_lb(size=None, kT=None, omega_shear=None, omega_bulk=None, om
     rho = dh.add_array('rho', layout='f', latex_name='\\rho')
     u = dh.add_array('u', values_per_cell=dh.dim, layout='f')
     pressure_field = dh.add_array('pressure', values_per_cell=(
-        3, 3), layout='f', gpu=target == 'gpu')
+        3, 3), layout='f', gpu=target == Target.GPU)
     force_field = dh.add_array(
-        'force', values_per_cell=3, layout='f', gpu=target == 'gpu')
+        'force', values_per_cell=3, layout='f', gpu=target == Target.GPU)
 
     # Method setup
     method = create_mrt_orthogonal(
@@ -82,7 +85,7 @@ def get_fluctuating_lb(size=None, kT=None, omega_shear=None, omega_bulk=None, om
         compressible=True,
         weighted=True,
         relaxation_rate_getter=rr_getter,
-        force_model=force_model_from_string('guo', force_field.center_vector))
+        force_model=Guo(force=force_field.center_vector))
     collision_rule = create_lb_collision_rule(
         method,
         fluctuating={
@@ -140,7 +143,7 @@ def get_fluctuating_lb(size=None, kT=None, omega_shear=None, omega_bulk=None, om
     return dh, time_loop
 
 
-def test_resting_fluid(target="cpu"):
+def test_resting_fluid(target=Target.CPU):
     rho_0 = 0.86
     kT = 4E-4
     L = [60]*3
@@ -209,7 +212,7 @@ def test_resting_fluid(target="cpu"):
             np.mean(res_pressure, axis=0), p_av_expected, atol=c_s**2/2000)
 
 
-def test_point_force(target="cpu"):
+def test_point_force(target=Target.CPU):
     """Test momentum balance for thermalized fluid with applied poitn forces"""
     rho_0 = 0.86
     kT = 4E-4
@@ -290,7 +293,7 @@ def test_vectorization(assume_aligned, assume_inner_stride_one, assume_sufficien
                 'assume_inner_stride_one': assume_inner_stride_one,
                 'assume_sufficient_line_padding': assume_sufficient_line_padding,
             },
-            'target': 'cpu'}
+            'target': Target.CPU}
 
     if not assume_inner_stride_one and 'storeS' not in get_vector_instruction_set('double', instruction_set):
         with pytest.warns(UserWarning) as warn:

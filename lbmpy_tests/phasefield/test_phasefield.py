@@ -8,6 +8,7 @@ from lbmpy.phasefield.analytical import (
     pressure_tensor_from_free_energy, substitute_laplacian_by_sum, symbolic_order_parameters,
     symmetric_symbolic_surface_tension)
 from pystencils.fd import evaluate_diffs, expand_diff_full
+from pystencils.enums import Target
 
 from lbmpy.phasefield.experiments2D import liquid_lens_setup
 from lbmpy.phasefield.contact_angle_circle_fitting import liquid_lens_neumann_angles
@@ -79,7 +80,7 @@ def test_neumann_angle():
     kappa3 = 0.03
     alpha = 1
 
-    sc = liquid_lens_setup(domain_size=(150, 60), optimization={'target': 'cpu'},
+    sc = liquid_lens_setup(domain_size=(150, 60), optimization={'target': Target.CPU},
                            kappas=(0.01, 0.02, kappa3),
                            cahn_hilliard_relaxation_rates=[np.nan, 1, 3 / 2],
                            cahn_hilliard_gammas=[1, 1, 1 / 3],

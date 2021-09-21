@@ -6,7 +6,7 @@ Silva, Semiao
 
 
 python3 scenario_square_channel.py server
-python3 scenario_square_channel.py client --host i10staff41 -P '{ "optimization" : { "target" : "gpu"} }'
+python3 scenario_square_channel.py client --host i10staff41 -P '{ "optimization" : { "target" : Target.GPU} }'
 """
 
 import numpy as np

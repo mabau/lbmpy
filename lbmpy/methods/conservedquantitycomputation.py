@@ -86,7 +86,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
                  zeroth_order_moment_symbol=sp.Symbol("rho"),
                  first_order_moment_symbols=sp.symbols("u_:3"),
                  second_order_moment_symbols=sp.symbols("p_:9")):
-        dim = len(stencil[0])
+        dim = stencil.D
         self._stencil = stencil
         self._compressible = compressible
         self._forceModel = force_model
@@ -97,7 +97,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
     @property
     def conserved_quantities(self):
         return {'density': 1,
-                'velocity': len(self._stencil[0])}
+                'velocity': self._stencil.D}
 
     @property
     def compressible(self):
@@ -134,7 +134,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         return result
 
     def equilibrium_input_equations_from_pdfs(self, pdfs, force_substitution=True):
-        dim = len(self._stencil[0])
+        dim = self._stencil.D
         eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs, self._symbolOrder0,
                                                                   self._symbolsOrder1[:dim])
         if self._compressible:
@@ -148,7 +148,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         return eq_coll
 
     def equilibrium_input_equations_from_init_values(self, density=1, velocity=(0, 0, 0), force_substitution=True):
-        dim = len(self._stencil[0])
+        dim = self._stencil.D
         zeroth_order_moment = density if self._compressible else density - sp.Rational(1, 1)
         first_order_moments = velocity[:dim]
         vel_offset = [0] * dim
@@ -172,7 +172,7 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
         return result
 
     def output_equations_from_pdfs(self, pdfs, output_quantity_names_to_symbols, force_substitution=True):
-        dim = len(self._stencil[0])
+        dim = self._stencil.D
 
         ac = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
                                                              self._symbolOrder0, self._symbolsOrder1,
@@ -284,7 +284,7 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs, symb
                 result += term
         return result
 
-    dim = len(stencil[0])
+    dim = stencil.D
 
     subexpressions = []
     pdf_sum = sum(symbolic_pdfs)

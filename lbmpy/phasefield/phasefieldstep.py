@@ -12,6 +12,7 @@ from lbmpy.phasefield.kerneleqs import (
 from pystencils import create_data_handling, create_kernel
 from pystencils.boundaries.boundaryhandling import FlagInterface
 from pystencils.boundaries.inkernel import add_neumann_boundary
+from pystencils.enums import Target
 from pystencils.simp import sympy_cse_on_assignment_list
 from pystencils.slicing import SlicedGetter, make_slice
 
@@ -34,9 +35,9 @@ class PhaseFieldStep:
                  discretization='standard'):
 
         if optimization is None:
-            optimization = {'openmp': False, 'target': 'cpu'}
+            optimization = {'openmp': False, 'target': Target.CPU}
         openmp = optimization.get('openmp', False)
-        target = optimization.get('target', 'cpu')
+        target = optimization.get('target', Target.CPU)
 
         if data_handling is None:
             data_handling = create_data_handling(domain_size, periodicity=True, parallel=False)
@@ -57,7 +58,7 @@ class PhaseFieldStep:
         self.chemical_potentials = chemical_potentials_from_free_energy(free_energy, order_parameters)
 
         # ------------------ Adding arrays ---------------------
-        gpu = target == 'gpu'
+        gpu = target == Target.GPU
         self.gpu = gpu
         self.num_order_parameters = len(order_parameters)
         self.order_parameters = order_parameters
@@ -134,7 +135,8 @@ class PhaseFieldStep:
 
         self.hydro_lbm_step = LatticeBoltzmannStep(data_handling=data_handling, name=name + '_hydroLBM',
                                                    relaxation_rate=hydro_dynamic_relaxation_rate,
-                                                   compute_velocity_in_every_step=True, force=self.force_field,
+                                                   compute_velocity_in_every_step=True,
+                                                   force=tuple([self.force_field(i) for i in range(dh.dim)]),
                                                    velocity_data_name=self.vel_field_name, kernel_params=kernel_params,
                                                    flag_interface=self.flag_interface,
                                                    time_step_order='collide_stream',

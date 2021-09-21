@@ -6,7 +6,7 @@ from lbmpy.phasefield.analytical import force_from_phi_and_mu
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
 from lbmpy.phasefield.kerneleqs import mu_kernel
 from lbmpy.stencils import get_stencil
-from pystencils import Assignment, create_data_handling, create_kernel
+from pystencils import Assignment, create_data_handling, create_kernel, Target
 from pystencils.fd import discretize_spatial
 from pystencils.fd.spatial import fd_stencils_forth_order_isotropic
 from pystencils.simp import sympy_cse_on_assignment_list
@@ -21,9 +21,9 @@ class PhaseFieldStepDirect:
                  cahn_hilliard_gammas=1,
                  optimization=None):
         if optimization is None:
-            optimization = {'openmp': False, 'target': 'cpu'}
+            optimization = {'openmp': False, 'target': Target.CPU}
         openmp = optimization.get('openmp', False)
-        target = optimization.get('target', 'cpu')
+        target = optimization.get('target', Target.CPU)
 
         if not hasattr(cahn_hilliard_relaxation_rates, '__len__'):
             cahn_hilliard_relaxation_rates = [cahn_hilliard_relaxation_rates] * len(order_parameters)
@@ -42,7 +42,7 @@ class PhaseFieldStepDirect:
 
         # Data Handling
         kernel_parameters = {'cpu_openmp': openmp, 'target': target, 'ghost_layers': 2}
-        gpu = target == 'gpu'
+        gpu = target == Target.GPU
         phi_size = len(order_parameters)
         gl = kernel_parameters['ghost_layers']
         self.phi_field = dh.add_array('{}_phi'.format(name), values_per_cell=phi_size, gpu=gpu, latex_name='φ',

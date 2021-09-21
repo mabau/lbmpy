@@ -46,9 +46,9 @@ def add_entropy_condition(collision_rule, omega_output_field=None):
     q = len(stencil)
     f_symbols = collision_rule.method.pre_collision_pdf_symbols
 
-    ds_symbols = [sp.Symbol("entropicDs_%d" % (i,)) for i in range(q)]
-    dh_symbols = [sp.Symbol("entropicDh_%d" % (i,)) for i in range(q)]
-    feq_symbols = [sp.Symbol("entropicFeq_%d" % (i,)) for i in range(q)]
+    ds_symbols = [sp.Symbol(f"entropicDs_{i}") for i in range(q)]
+    dh_symbols = [sp.Symbol(f"entropicDh_{i}") for i in range(q)]
+    feq_symbols = [sp.Symbol(f"entropicFeq_{i}") for i in range(q)]
 
     subexpressions = [Assignment(a, b) for a, b in zip(ds_symbols, ds)] + \
                      [Assignment(a, b) for a, b in zip(dh_symbols, dh)] + \
@@ -125,19 +125,19 @@ def add_iterative_entropy_condition(collision_rule, free_omega=None, newton_iter
 
     # 2) get equilibrium from method and define subexpressions for it
     eq_terms = [eq.rhs for eq in collision_rule.method.get_equilibrium().main_assignments]
-    eq_symbols = sp.symbols("entropicFeq_:%d" % (len(eq_terms, )))
+    eq_symbols = sp.symbols(f"entropicFeq_:{len(eq_terms)}")
     eq_subexpressions = [Assignment(a, b) for a, b in zip(eq_symbols, eq_terms)]
 
     # 3) find coefficients of entropy derivatives
     entropy_diff = sp.diff(discrete_approx_entropy(rr_polynomials, eq_symbols), free_omega)
     coefficients_first_diff = [c.expand() for c in reversed(sp.poly(entropy_diff, free_omega).all_coeffs())]
-    sym_coeff_diff1 = sp.symbols("entropicDiffCoeff_:%d" % (len(coefficients_first_diff, )))
+    sym_coeff_diff1 = sp.symbols(f"entropicDiffCoeff_:{len(coefficients_first_diff)}")
     coefficient_eqs = [Assignment(a, b) for a, b in zip(sym_coeff_diff1, coefficients_first_diff)]
     sym_coeff_diff2 = [(i + 1) * coeff for i, coeff in enumerate(sym_coeff_diff1[1:])]
 
     # 4) define Newtons method update iterations
     newton_iteration_equations = []
-    intermediate_omegas = [sp.Symbol("omega_iter_%i" % (i,)) for i in range(newton_iterations + 1)]
+    intermediate_omegas = [sp.Symbol(f"omega_iter_{i}") for i in range(newton_iterations + 1)]
     intermediate_omegas[0] = initial_value
     intermediate_omegas[-1] = free_omega
     for omega_idx in range(len(intermediate_omegas) - 1):
@@ -210,7 +210,7 @@ class RelaxationRatePolynomialDecomposition(object):
     def symbolic_relaxation_rate_factors(self, relaxation_rate, power):
         q = len(self._collisionRule.method.stencil)
         omega_idx = self._all_relaxation_rates.index(relaxation_rate)
-        return [sp.Symbol("entFacOmega_%d_%d_%d" % (i, omega_idx, power)) for i in range(q)]
+        return [sp.Symbol(f"entFacOmega_{i}_{omega_idx}_{power}") for i in range(q)]
 
     def relaxation_rate_factors(self, relaxation_rate):
         update_equations = self._collisionRule.main_assignments
@@ -236,7 +236,7 @@ class RelaxationRatePolynomialDecomposition(object):
 
     @staticmethod
     def symbolic_constant_expr(i):
-        return sp.Symbol("entOffset_%d" % (i,))
+        return sp.Symbol(f"entOffset_{i}")
 
     def constant_exprs(self):
         subs_dict = {rr: 0 for rr in self._free_relaxation_rates}
@@ -252,7 +252,7 @@ class RelaxationRatePolynomialDecomposition(object):
 
     def symbolic_equilibrium(self):
         q = len(self._collisionRule.method.stencil)
-        return [sp.Symbol("entFeq_%d" % (i,)) for i in range(q)]
+        return [sp.Symbol(f"entFeq_{i}") for i in range(q)]
 
 
 def _get_relaxation_rates(collision_rule):
@@ -267,6 +267,12 @@ def _get_relaxation_rates(collision_rule):
 
     method = collision_rule.method
     omega_s = get_shear_relaxation_rate(method)
+
+    # if the shear relaxation rate is not specified as a symbol look for its symbolic counter part in the subs dict
+    for symbolic_rr, rr in method.subs_dict_relxation_rate.items():
+        if omega_s == rr:
+            omega_s = symbolic_rr
+
     assert omega_s in relaxation_rates
 
     relaxation_rates_without_omega_s = relaxation_rates - {omega_s}

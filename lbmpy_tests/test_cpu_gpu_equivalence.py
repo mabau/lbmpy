@@ -2,15 +2,16 @@ from copy import deepcopy
 
 import numpy as np
 import pytest
+from pystencils import Target
 
 from lbmpy.scenarios import create_channel
 
 
 def run_equivalence_test(scenario_creator, time_steps=13, **params):
     print("Scenario", params)
-    params['optimization']['target'] = 'cpu'
+    params['optimization']['target'] = Target.CPU
     cpu_scenario = scenario_creator(**params)
-    params['optimization']['target'] = 'gpu'
+    params['optimization']['target'] = Target.GPU
     gpu_scenario = scenario_creator(**params)
 
     cpu_scenario.run(time_steps)

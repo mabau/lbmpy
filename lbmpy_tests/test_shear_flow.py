@@ -58,15 +58,15 @@ shear_velocity = 0.2  # scale by width to keep stable
 t_max = 2000
 
 
-@pytest.mark.parametrize('target', ('cpu', 'gpu', 'opencl'))
+@pytest.mark.parametrize('target', (ps.Target.CPU, ps.Target.GPU, ps.Target.OPENCL))
 @pytest.mark.parametrize('stencil_name', ("D2Q9", "D3Q19",))
 def test_shear_flow(target, stencil_name):
     # OpenCL and Cuda
-    if target == 'opencl':
+    if target == ps.Target.OPENCL:
         import pytest
         pytest.importorskip("pyopencl")
         import pystencils.opencl.autoinit
-    elif target == 'gpu':
+    elif target == ps.Target.GPU:
         import pytest
         pytest.importorskip("pycuda")
 

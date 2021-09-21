@@ -143,7 +143,7 @@ ubuntu:
   before_script:
     - apt-get -y remove python3-sympy
     - ln -s /usr/include/locale.h /usr/include/xlocale.h
-    - pip3 install `grep -Eo 'sympy[>=]+[0-9\.]+' setup.py | sed 's/>/=/g'`
+    # - pip3 install `grep -Eo 'sympy[>=]+[0-9\.]+' setup.py | sed 's/>/=/g'`
     - pip3 install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
   script:
     - export NUM_CORES=$(nproc --all)

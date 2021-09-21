@@ -1,4 +1,5 @@
 from pystencils.session import *
+from pystencils import Target
 from lbmpy.session import *
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
 import lbmpy.forcemodels
@@ -32,7 +33,7 @@ def test_total_momentum(method, force_model, omega):
     stencil = get_stencil("D2Q9")
     F = [2e-4, -3e-4]
 
-    dh = ps.create_data_handling(L, periodicity=True, default_target='cpu')
+    dh = ps.create_data_handling(L, periodicity=True, default_target=Target.CPU)
     src = dh.add_array('src', values_per_cell=len(stencil))
     dst = dh.add_array_like('dst', 'src')
     ρ = dh.add_array('rho')
@@ -102,7 +103,7 @@ def test_modes_longrun(stencil, force_model, compressible):
 
 @pytest.mark.parametrize("force_model", force_models)
 def test_momentum_density_shift(force_model):
-    target = 'cpu'
+    target = Target.CPU
 
     stencil = get_stencil('D2Q9')
     domain_size = (4, 4)

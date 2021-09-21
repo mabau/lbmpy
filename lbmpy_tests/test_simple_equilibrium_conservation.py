@@ -1,13 +1,16 @@
 import numpy as np
 
+from pystencils import Backend, Target
 from lbmpy.creationfunctions import create_lb_function
+import pytest
 
-
-def test_srt():
+@pytest.mark.parametrize('cuda', [False, True])
+def test_srt(cuda):
+    if cuda:
+        pytest.importorskip("pycuda")
     src = np.zeros((3, 3, 9))
     dst = np.zeros_like(src)
-    cuda = False
-    opt_params = {} if not cuda else {'target': 'gpu'}
+    opt_params = {} if not cuda else {'target': Target.GPU, 'backend': Backend.CUDA}
     func = create_lb_function(method='srt', stencil='D2Q9', relaxation_rates=[1.8], compressible=False,
                               optimization=opt_params)
 

@@ -8,14 +8,14 @@ from lbmpy.stencils import get_stencil
 
 
 def test_entropic_methods():
-    sc_kbc = create_lid_driven_cavity((20, 20), method='trt-kbc-n4', relaxation_rate=1.9999,
+    sc_kbc = create_lid_driven_cavity((20, 20), method='trt_kbc_n4', relaxation_rates=[1.9999, sp.Symbol("omega_free")],
                                       entropic_newton_iterations=3, entropic=True, compressible=True,
                                       force=(-1e-10, 0), force_model="luo")
 
     sc_srt = create_lid_driven_cavity((40, 40), relaxation_rate=1.9999, lid_velocity=0.05, compressible=True,
                                       force=(-1e-10, 0), force_model="luo")
 
-    sc_entropic = create_lid_driven_cavity((40, 40), method='entropic-srt', relaxation_rate=1.9999,
+    sc_entropic = create_lid_driven_cavity((40, 40), method='entropic_srt', relaxation_rate=1.9999,
                                            lid_velocity=0.05, compressible=True, force=(-1e-10, 0), force_model="luo")
 
     sc_srt.run(1000)

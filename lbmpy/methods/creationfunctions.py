@@ -125,8 +125,8 @@ def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_r
     if isinstance(stencil, str):
         stencil = get_stencil(stencil)
     mom_to_rr_dict = OrderedDict(moment_to_relaxation_rate_dict)
-    assert len(mom_to_rr_dict) == len(stencil), "The number of moments has to be equal to the number of stencil entries"
-    dim = len(stencil[0])
+    assert len(mom_to_rr_dict) == stencil.Q, "The number of moments has to be equal to the number of stencil entries"
+    dim = stencil.D
     density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
     moments = tuple(mom_to_rr_dict.keys())
 
@@ -480,9 +480,11 @@ def create_mrt_orthogonal(stencil, relaxation_rate_getter, maxwellian_moments=Fa
             moment_to_relaxation_rate_dict[m] = rr
 
     if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, **kwargs)
+        return create_with_continuous_maxwellian_eq_moments(stencil,
+                                                            moment_to_relaxation_rate_dict, **kwargs)
     else:
-        return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, **kwargs)
+        return create_with_discrete_maxwellian_eq_moments(stencil,
+                                                          moment_to_relaxation_rate_dict, **kwargs)
 
 
 def mrt_orthogonal_modes_literature(stencil, is_weighted):

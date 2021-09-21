@@ -46,7 +46,7 @@ def test_set_get_density_velocity_with_fields(stencil, force_model, compressible
 
 def test_set_get_constant_velocity():
     for stencil in ['D2Q9', 'D3Q19']:
-        for force_model in ['guo', 'luo', 'none']:
+        for force_model in ['guo', 'luo', None]:
             for compressible in [True, False]:
                 ref_velocity = [0.01, -0.2, 0.1]
 

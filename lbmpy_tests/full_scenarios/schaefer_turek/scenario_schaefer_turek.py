@@ -124,7 +124,7 @@ def schaefer_turek_2d(cells_per_diameter, u_max=0.3, max_lattice_velocity=0.05, 
           (u_max, domain_size, dx, dt, omega, re_lattice))
 
     initial_velocity = get_pipe_velocity_field(domain_size, max_lattice_velocity)
-    scenario = create_channel(domain_size=domain_size, u_max=max_lattice_velocity, kernel_params={'omega_0': omega},
+    scenario = create_channel(domain_size=domain_size, u_max=max_lattice_velocity, relaxation_rate=omega,
                               initial_velocity=initial_velocity, **kwargs)
     scenario.boundary_handling.set_boundary(NoSlip('obstacle'), mask_callback=geometry_callback)
     parameter_info['u_bar_l'] = u_bar_l
@@ -159,5 +159,5 @@ def test_schaefer_turek():
 
 
 if __name__ == '__main__':
-    long_run(entropic=True, method='trt-kbc-n1', compressible=True,
-             optimization={'target': 'gpu', 'gpuIndexingParams': {'blockSize': (16, 8, 2)}})
+    long_run(entropic=True, method='trt_kbc_n1', compressible=True,
+             optimization={'target': Target.GPU, 'gpuIndexingParams': {'blockSize': (16, 8, 2)}})

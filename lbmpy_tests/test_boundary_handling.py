@@ -1,14 +1,14 @@
 import numpy as np
 import pytest
 
-from lbmpy.boundaries import NoSlip, UBB, SimpleExtrapolationOutflow, ExtrapolationOutflow,\
+from lbmpy.boundaries import NoSlip, UBB, SimpleExtrapolationOutflow, ExtrapolationOutflow, \
     FixedDensity, DiffusionDirichlet, NeumannByCopy, StreamInConstant, FreeSlip
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import create_lb_function, create_lb_method
 from lbmpy.geometry import add_box_boundary
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.stencils import get_stencil
-from pystencils import create_data_handling, make_slice
+from pystencils import create_data_handling, make_slice, Target
 from pystencils.slicing import slice_from_direction
 from pystencils.stencil import inverse_direction
 
@@ -21,22 +21,22 @@ def mirror_stencil(direction, mirror_axis):
     return tuple(direction)
 
 
-@pytest.mark.parametrize("target", ['cpu', 'gpu', 'opencl'])
+@pytest.mark.parametrize("target", [Target.GPU, Target.CPU, Target.OPENCL])
 def test_simple(target):
-    if target == 'gpu':
+    if target == Target.GPU:
         import pytest
         pytest.importorskip('pycuda')
-    elif target == 'opencl':
+    elif target == Target.OPENCL:
         import pytest
         pytest.importorskip('pyopencl')
         import pystencils.opencl.autoinit
 
     dh = create_data_handling((4, 4), parallel=False, default_target=target)
-    dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=target != 'cpu')
+    dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=target != Target.CPU)
     for i in range(9):
         dh.fill("pdfs", i, value_idx=i, ghost_layers=True)
 
-    if target == 'gpu' or target == 'opencl':
+    if target == Target.GPU or target == Target.OPENCL:
         dh.all_to_gpu()
 
     lb_func = create_lb_function(stencil='D2Q9',
@@ -56,7 +56,7 @@ def test_simple(target):
     bh.prepare()
     bh()
 
-    if target == 'gpu' or target == 'opencl':
+    if target == Target.GPU or target == Target.OPENCL:
         dh.all_to_cpu()
     # left lower corner
     assert (dh.cpu_arrays['pdfs'][0, 0, 6] == 7)
@@ -201,7 +201,6 @@ def test_free_slip_equivalence():
                 dh.cpu_arrays['src1'][x, y, direction] = num
                 dh.cpu_arrays['src2'][x, y, direction] = num
                 num += 1
-
 
     method = create_lb_method(stencil='D2Q9', method='srt', relaxation_rate=1.8)
 
