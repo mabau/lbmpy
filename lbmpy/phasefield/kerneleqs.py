@@ -4,7 +4,7 @@ from lbmpy.phasefield.analytical import (
     chemical_potentials_from_free_energy, force_from_phi_and_mu, force_from_pressure_tensor,
     pressure_tensor_bulk_sqrt_term, pressure_tensor_from_free_energy, substitute_laplacian_by_sum,
     symmetric_tensor_linearization)
-from pystencils import Assignment
+from pystencils import Assignment, Target
 from pystencils.fd import Discretization2ndOrder, discretize_spatial
 
 # ---------------------------------- Kernels to compute force ----------------------------------------------------------
@@ -90,8 +90,8 @@ def cahn_hilliard_fd_eq(phase_idx, phi, mu, velocity, mobility, dx, dt):
 
 
 class CahnHilliardFDStep:
-    def __init__(self, data_handling, phi_field_name, mu_field_name, velocity_field_name, name='ch_fd', target='cpu',
-                 dx=1, dt=1, mobilities=1, equation_modifier=lambda eqs: eqs):
+    def __init__(self, data_handling, phi_field_name, mu_field_name, velocity_field_name, name='ch_fd',
+                 target=Target.CPU, dx=1, dt=1, mobilities=1, equation_modifier=lambda eqs: eqs):
         from pystencils import create_kernel
         self.data_handling = data_handling
 

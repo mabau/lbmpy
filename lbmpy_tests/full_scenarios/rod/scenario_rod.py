@@ -16,7 +16,7 @@ from lbmpy.boundaries import FixedDensity, NoSlip
 from lbmpy.geometry import add_pipe_inflow_boundary, add_pipe_walls
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity
-from pystencils import create_data_handling
+from pystencils import create_data_handling, Target
 from pystencils.slicing import make_slice, slice_from_direction
 
 
@@ -135,4 +135,4 @@ def test_rod_scenario_simple():
 if __name__ == '__main__':
     # High Re (Entropic method)
     rod_simulation(stencil_name=sys.argv[1], re=500, diameter=80, entropic=True, time_to_simulate=17,
-                   parallel=False, optimization_params={'target': 'gpu'})
+                   parallel=False, optimization_params={'target': Target.GPU})

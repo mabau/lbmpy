@@ -6,7 +6,7 @@ import sympy as sp
 
 import lbmpy.stencils as s
 import pystencils as ps
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import get_stencil, LBStencil
 
 
 def get_3d_stencils():
@@ -32,34 +32,41 @@ def get_all_stencils():
 
 
 def test_sizes():
-    assert len(s.get_stencil('D2Q9')) == 9
-    assert len(s.get_stencil('D3Q15')) == 15
-    assert len(s.get_stencil('D3Q19')) == 19
-    assert len(s.get_stencil('D3Q27')) == 27
+    assert len(s.get_stencil('D2Q9')) == get_stencil('D2Q9').Q
+
+    assert s.get_stencil('D2Q9').Q == 9
+    assert s.get_stencil('D3Q15').Q == 15
+    assert s.get_stencil('D3Q19').Q == 19
+    assert s.get_stencil('D3Q27').Q == 27
 
 
 def test_dimensionality():
-    for d in s.get_stencil('D2Q9'):
+    for d in s.get_stencil('D2Q9').stencil_entries:
         assert len(d) == 2
 
-    for d in itertools.chain(*get_3d_stencils()):
-        assert len(d) == 3
+    assert s.get_stencil('D2Q9').D == 2
+
+    for stencil in get_3d_stencils():
+        assert stencil.D == 3
 
 
 def test_uniqueness():
     for stencil in get_3d_stencils():
-        direction_set = set(stencil)
-        assert len(direction_set) == len(stencil)
+        direction_set = set(stencil.stencil_entries)
+        assert len(direction_set) == len(stencil.stencil_entries)
 
 
 def test_run_self_check():
     for st in get_all_stencils():
-        assert ps.stencil.is_valid(st, max_neighborhood=1)
-        assert ps.stencil.is_symmetric(st)
+        assert ps.stencil.is_valid(st.stencil_entries, max_neighborhood=1)
+        assert ps.stencil.is_symmetric(st.stencil_entries)
 
 
 def test_inverse_direction():
-    assert ps.stencil.inverse_direction((1, 0, -1)), (-1, 0 == 1)
+    stencil = s.get_stencil("D2Q9")
+
+    for i in range(stencil.Q):
+        assert ps.stencil.inverse_direction(stencil.stencil_entries[i]) == stencil.inverse_stencil_entries[i]
 
 
 def test_free_functions():
@@ -81,5 +88,19 @@ def test_visualize():
     figure = plt.gcf()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        ps.stencil.plot(d2q9, figure=figure, data=[str(i) for i in range(9)])
-        ps.stencil.plot(d3q19, figure=figure, data=sp.symbols("a_:19"))
+        d2q9.plot(figure=figure, data=[str(i) for i in range(9)])
+        d3q19.plot(figure=figure, data=sp.symbols("a_:19"))
+
+def test_comparability_of_stencils():
+    stencil_1 = LBStencil("D2Q9")
+    stencil_2 = LBStencil("D2Q9")
+    stencil_3 = LBStencil("D2Q9", ordering="braunschweig")
+    stencil_4 = LBStencil(stencil_1.stencil_entries)
+    stencil_5 = LBStencil(stencil_3.stencil_entries)
+    stencil_6 = LBStencil(stencil_1.stencil_entries)
+
+    assert stencil_1 == stencil_2
+    assert stencil_1 != stencil_3
+    assert stencil_1 != stencil_4
+    assert stencil_1 != stencil_5
+    assert stencil_4 == stencil_6

@@ -2,7 +2,7 @@ import numpy as np
 import sympy as sp
 
 from pystencils.datahandling import create_data_handling
-from pystencils import create_kernel
+from pystencils import create_kernel, Target
 from pystencils.plot import scalar_field, vector_field, vector_field_magnitude
 
 from lbmpy.creationfunctions import create_lb_collision_rule, create_lb_function
@@ -17,11 +17,11 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 all_results = dict()
 
-targets = ['cpu']
+targets = [Target.CPU]
 
 try:
     import pycuda.autoinit
-    targets += ['gpu']
+    targets += [Target.GPU]
 except Exception:
     pass
 
@@ -29,7 +29,7 @@ try:
     import pystencils.opencl.autoinit
     from pystencils.opencl.opencljit import get_global_cl_queue
     if get_global_cl_queue() is not None:
-        targets += ['opencl']
+        targets += [Target.OPENCL]
 except Exception:
     pass
 
@@ -40,12 +40,12 @@ except Exception:
 @pytest.mark.longrun
 def test_fully_periodic_flow(target, stencil, streaming_pattern):
 
-    if target == 'opencl':
+    if target == Target.OPENCL:
         opencl_queue = get_global_cl_queue()
     else:
         opencl_queue = None
 
-    gpu = target in ['gpu', 'opencl']
+    gpu = target in [Target.GPU, Target.OPENCL]
 
     #   Stencil
     stencil = get_stencil(stencil)

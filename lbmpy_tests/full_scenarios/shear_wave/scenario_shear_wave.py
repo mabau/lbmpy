@@ -8,6 +8,7 @@ import numpy as np
 import sympy as sp
 
 import pytest
+from pystencils import Target
 
 from lbmpy.creationfunctions import update_with_default_parameters
 from lbmpy.relaxationrates import (
@@ -166,7 +167,7 @@ def create_full_parameter_study():
                             'relaxation_rates': ["omega", str(relaxation_rate_from_magic_number(sp.Symbol("omega")))],
                             'equilibrium_order': eqOrder,
                             'maxwellian_moments': mbEq,
-                            'optimization': {'target': 'cpu', 'split': True, 'cse_pdfs': True}}
+                            'optimization': {'target': Target.CPU, 'split': True, 'cse_pdfs': True}}
                            for method in ('srt', 'trt')
                            for stencil in ('D3Q19', 'D3Q27')
                            for comp in (True, False)
@@ -222,7 +223,7 @@ def test_shear_wave():
 
         'stencil': 'D3Q19',
         'compressible': True,
-        "optimization": {"target": "gpu"}
+        "optimization": {"target": Target.GPU}
     }
     run(32, nu=1e-2, equilibrium_order=2, method='srt', y_size=1, periodicity_in_kernel=True,
         relaxation_rates=[sp.Symbol("omega"), 5, 5], maxwellian_moments=True, **params)

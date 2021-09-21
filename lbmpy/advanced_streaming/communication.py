@@ -5,6 +5,7 @@ from lbmpy.advanced_streaming.utility import is_inplace, get_accessor, numeric_i
     numeric_offsets, Timestep, get_timesteps
 from lbmpy.stencils import get_stencil
 from pystencils.datahandling import SerialDataHandling
+from pystencils.enums import Target
 from itertools import chain
 
 
@@ -105,7 +106,7 @@ def get_communication_slices(
 
 
 def periodic_pdf_copy_kernel(pdf_field, src_slice, dst_slice,
-                             domain_size=None, target='gpu',
+                             domain_size=None, target=Target.GPU,
                              opencl_queue=None, opencl_ctx=None):
     """Copies a rectangular array slice onto another non-overlapping array slice"""
     from pystencils.gpucuda.kernelcreation import create_cuda_kernel
@@ -134,10 +135,10 @@ def periodic_pdf_copy_kernel(pdf_field, src_slice, dst_slice,
 
     copy_eq = Assignment(pdf_field(pdf_idx), pdf_field[tuple(offset)](pdf_idx))
     ast = create_cuda_kernel([copy_eq], iteration_slice=dst_slice, skip_independence_check=True)
-    if target == 'gpu':
+    if target == Target.GPU:
         from pystencils.gpucuda import make_python_function
         return make_python_function(ast)
-    elif target == 'opencl':
+    elif target == Target.OPENCL:
         from pystencils.opencl import make_python_function
         return make_python_function(ast, opencl_queue, opencl_ctx)
     else:
@@ -176,17 +177,17 @@ class LBMPeriodicityHandling:
         self.dh = data_handling
 
         target = data_handling.default_target
-        assert target in ['cpu', 'gpu', 'opencl']
+        assert target in [Target.CPU, Target.GPU, Target.OPENCL]
 
         self.pdf_field_name = pdf_field_name
         self.ghost_layers = ghost_layers
         periodicity = data_handling.periodicity
         self.inplace_pattern = is_inplace(streaming_pattern)
         self.target = target
-        self.cpu = target == 'cpu'
+        self.cpu = target == Target.CPU
         self.opencl_queue = opencl_queue
         self.opencl_ctx = opencl_ctx
-        self.pycuda_direct_copy = target == 'gpu' and pycuda_direct_copy
+        self.pycuda_direct_copy = target == Target.GPU and pycuda_direct_copy
 
         def is_copy_direction(direction):
             s = 0
@@ -209,7 +210,7 @@ class LBMPeriodicityHandling:
                                                            ghost_layers=ghost_layers)
             self.comm_slices.append(list(chain.from_iterable(v for k, v in slices_per_comm_dir.items())))
 
-        if target == 'opencl' or (target == 'gpu' and not pycuda_direct_copy):
+        if target == Target.OPENCL or (target == Target.GPU and not pycuda_direct_copy):
             self.device_copy_kernels = []
             for timestep in timesteps:
                 self.device_copy_kernels.append(self._compile_copy_kernels(timestep))

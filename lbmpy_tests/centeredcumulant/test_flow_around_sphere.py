@@ -9,7 +9,7 @@ from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity
 from lbmpy.macroscopic_value_kernels import pdf_initialization_assignments
 from lbmpy.stencils import get_stencil
 
-from pystencils import create_kernel, create_data_handling, Assignment
+from pystencils import create_kernel, create_data_handling, Assignment, Target
 from pystencils.slicing import slice_from_direction, get_slice_before_ghost_layer
 
 def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
@@ -21,7 +21,7 @@ def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
     dim = len(stencil[0])
     Q = len(stencil)
 
-    target = 'gpu'
+    target = Target.GPU
     streaming_pattern = 'aa'
     timesteps = get_timesteps(streaming_pattern)
 
@@ -49,7 +49,7 @@ def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
         'pre_simplification': True
     }
 
-    lb_method = create_lb_method(optimization=optimization, **method_params)
+    lb_method = create_lb_method(**method_params)
 
     def get_extrapolation_kernel(timestep):
         boundary_assignments = []

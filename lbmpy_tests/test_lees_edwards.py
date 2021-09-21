@@ -60,7 +60,7 @@ def test_lees_edwards():
     stencil = get_stencil("D2Q9")
 
     dim = len(stencil[0])
-    dh = ps.create_data_handling(domain_size, periodicity=True, default_target='cpu')
+    dh = ps.create_data_handling(domain_size, periodicity=True, default_target=ps.Target.CPU)
 
     src = dh.add_array('src', values_per_cell=len(stencil))
     dh.fill('src', 1.0, ghost_layers=True)

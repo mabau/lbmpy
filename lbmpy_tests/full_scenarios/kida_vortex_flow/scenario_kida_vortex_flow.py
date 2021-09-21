@@ -250,8 +250,8 @@ def run(re=6000, eval_interval=0.05, total_time=3.0, domain_size=100, u_0=0.05,
 
 def create_full_parameter_study(gpu=False):
     """Creates a parameter study that can run the Kida vortex flow with entropic, KBC, Smagorinsky and MRT methods."""
-    opt_cpu = {'target': 'cpu', 'openmp': 4}
-    opt_gpu = {'target': 'gpu'}
+    opt_cpu = {'target': ps.Target.CPU, 'openmp': 4}
+    opt_gpu = {'target': ps.Target.GPU}
 
     mrt_one = [{'method': 'mrt3', 'relaxation_rates': ['viscosity', 1, 1], 'stencil': stencil}
                for stencil in ('D3Q19', 'D3Q27')]

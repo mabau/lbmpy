@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from pystencils import Target
 
 from lbmpy.scenarios import create_fully_periodic_flow, create_lid_driven_cavity
 
@@ -31,7 +32,7 @@ def test_data_handling_3d():
             if parallel and gpu and not hasattr(wLB, 'cuda'):
                 continue
             print("Testing parallel: %s\tgpu: %s" % (parallel, gpu))
-            opt_params = {'target': 'gpu' if gpu else 'cpu',
+            opt_params = {'target': Target.GPU if gpu else Target.CPU,
                           'gpu_indexing_params': {'block_size': (8, 4, 2)}}
             if parallel:
                 from pystencils.datahandling import ParallelDataHandling
@@ -65,7 +66,7 @@ def test_data_handling_2d_opencl():
             continue
 
         print("Testing parallel: %s\tgpu: %s" % (parallel, gpu))
-        opt_params = {'target': 'opencl' if gpu else 'cpu',
+        opt_params = {'target': Target.OPENCL if gpu else Target.CPU,
                       'gpu_indexing_params': {'block_size': (8, 4, 2)}}
         if parallel:
             from pystencils.datahandling import ParallelDataHandling
@@ -91,7 +92,7 @@ def test_data_handling_2d():
                 continue
 
             print("Testing parallel: %s\tgpu: %s" % (parallel, gpu))
-            opt_params = {'target': 'gpu' if gpu else 'cpu',
+            opt_params = {'target': Target.GPU if gpu else Target.CPU,
                           'gpu_indexing_params': {'block_size': (8, 4, 2)}}
             if parallel:
                 from pystencils.datahandling import ParallelDataHandling
@@ -104,7 +105,7 @@ def test_data_handling_2d():
                 rho = ldc_setup(domain_size=(10, 15), parallel=False, optimization=opt_params)
                 results.append(rho)
     for i, arr in enumerate(results[1:]):
-        print("Testing equivalence version 0 with version %d" % (i + 1,))
+        print(f"Testing equivalence version 0 with version {i + 1}")
         np.testing.assert_almost_equal(results[0], arr)
 
 

@@ -23,7 +23,7 @@ def test_contact_angle():
     dh.fill("C", 0.0, ghost_layers=True)
     dh.fill("C", phase_value, ghost_layers=False)
 
-    bh = BoundaryHandling(dh, C.name, stencil, target='cpu')
+    bh = BoundaryHandling(dh, C.name, stencil, target=ps.Target.CPU)
     bh.set_boundary(ContactAngle(45, 5), ps.make_slice[:, 0])
     bh()
 

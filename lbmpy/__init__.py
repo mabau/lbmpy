@@ -1,5 +1,6 @@
 from .creationfunctions import create_lb_ast, create_lb_collision_rule, create_lb_function,\
-    create_lb_method, create_lb_method_from_existing, create_lb_update_rule
+    create_lb_method, create_lb_method_from_existing, create_lb_update_rule, LBMConfig, LBMOptimisation
+from .enums import Stencil, Method, ForceModel
 from .lbstep import LatticeBoltzmannStep
 from .macroscopic_value_kernels import pdf_initialization_assignments, macroscopic_values_getter,\
     compile_macroscopic_values_getter, compile_macroscopic_values_setter, create_advanced_velocity_setter_collision_rule
@@ -7,11 +8,12 @@ from .maxwellian_equilibrium import get_weights
 from .relaxationrates import relaxation_rate_from_lattice_viscosity, lattice_viscosity_from_relaxation_rate,\
     relaxation_rate_from_magic_number
 from .scenarios import create_lid_driven_cavity, create_fully_periodic_flow
-from .stencils import get_stencil
+from .stencils import get_stencil, LBStencil
 
 
 __all__ = ['create_lb_ast', 'create_lb_collision_rule', 'create_lb_function', 'create_lb_method',
-           'create_lb_method_from_existing', 'create_lb_update_rule',
+           'create_lb_method_from_existing', 'create_lb_update_rule', 'LBMConfig', 'LBMOptimisation',
+           'Stencil', 'Method', 'ForceModel',
            'LatticeBoltzmannStep',
            'pdf_initialization_assignments', 'macroscopic_values_getter', 'compile_macroscopic_values_getter',
            'compile_macroscopic_values_setter', 'create_advanced_velocity_setter_collision_rule',
@@ -19,7 +21,7 @@ __all__ = ['create_lb_ast', 'create_lb_collision_rule', 'create_lb_function', 'c
            'relaxation_rate_from_lattice_viscosity', 'lattice_viscosity_from_relaxation_rate',
            'relaxation_rate_from_magic_number',
            'create_lid_driven_cavity', 'create_fully_periodic_flow',
-           'get_stencil']
+           'get_stencil', 'LBStencil']
 
 
 from ._version import get_versions

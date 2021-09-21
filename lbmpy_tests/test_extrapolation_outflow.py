@@ -5,6 +5,7 @@ from lbmpy.advanced_streaming.utility import AccessPdfValues, get_timesteps
 import pytest
 import numpy as np
 
+from pystencils import Target
 from pystencils.datahandling import create_data_handling
 from lbmpy.boundaries import LatticeBoltzmannBoundaryHandling, SimpleExtrapolationOutflow, ExtrapolationOutflow
 from lbmpy.creationfunctions import create_lb_method
@@ -24,11 +25,11 @@ def test_pdf_simple_extrapolation(stencil, streaming_pattern):
     #   Field contains exactly one fluid cell
     domain_size = (3,) * dim
     for timestep in get_timesteps(streaming_pattern):
-        dh = create_data_handling(domain_size, default_target='cpu')
+        dh = create_data_handling(domain_size, default_target=Target.CPU)
         lb_method = create_lb_method(stencil=stencil)
         pdf_field = dh.add_array('f', values_per_cell=values_per_cell)
         dh.fill(pdf_field.name, np.nan, ghost_layers=True)
-        bh = LatticeBoltzmannBoundaryHandling(lb_method, dh, pdf_field.name, streaming_pattern, target='cpu')
+        bh = LatticeBoltzmannBoundaryHandling(lb_method, dh, pdf_field.name, streaming_pattern, target=Target.CPU)
 
         #   Set up outflows in all directions
         for normal_dir in stencil[1:]:
@@ -69,13 +70,13 @@ def test_extrapolation_outflow_initialization_by_copy():
     pdf_acc = AccessPdfValues(stencil, streaming_pattern=streaming_pattern,
                               timestep=zeroth_timestep, streaming_dir='out')
 
-    dh = create_data_handling(domain_size, default_target='cpu')
+    dh = create_data_handling(domain_size, default_target=Target.CPU)
     lb_method = create_lb_method(stencil=stencil)
     pdf_field = dh.add_array('f', values_per_cell=values_per_cell)
     dh.fill(pdf_field.name, np.nan, ghost_layers=True)
     pdf_arr = dh.cpu_arrays[pdf_field.name]
     bh = LatticeBoltzmannBoundaryHandling(lb_method, dh, pdf_field.name,
-                                          streaming_pattern=streaming_pattern, target='cpu')
+                                          streaming_pattern=streaming_pattern, target=Target.CPU)
 
     for y in range(1, 6):
         for j in range(values_per_cell):
@@ -106,12 +107,12 @@ def test_extrapolation_outflow_initialization_by_callback():
     streaming_pattern = 'esotwist'
     zeroth_timestep = 'even'
 
-    dh = create_data_handling(domain_size, default_target='cpu')
+    dh = create_data_handling(domain_size, default_target=Target.CPU)
     lb_method = create_lb_method(stencil=stencil)
     pdf_field = dh.add_array('f', values_per_cell=values_per_cell)
     dh.fill(pdf_field.name, np.nan, ghost_layers=True)
     bh = LatticeBoltzmannBoundaryHandling(lb_method, dh, pdf_field.name,
-                                          streaming_pattern=streaming_pattern, target='cpu')
+                                          streaming_pattern=streaming_pattern, target=Target.CPU)
 
     normal_dir = (1, 0)
     density_callback = lambda x, y: 1

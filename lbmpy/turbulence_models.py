@@ -43,8 +43,17 @@ def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_fie
     """
     method = collision_rule.method
     omega_s = get_shear_relaxation_rate(method)
+
+    found_symbolic_shear_relaxation = False
     if isinstance(omega_s, float) or isinstance(omega_s, int):
-        raise ValueError("For the smagorinsky model the shear relaxation rate has to be a symbol")
+        for eq in collision_rule.all_assignments:
+            if eq.rhs == omega_s:
+                found_symbolic_shear_relaxation = True
+                omega_s = eq.lhs
+
+    if not found_symbolic_shear_relaxation:
+        raise ValueError("For the smagorinsky model the shear relaxation rate has to be a symbol or it has to be "
+                         "assigned to a single equation in the assignment list")
     f_neq = sp.Matrix(method.pre_collision_pdf_symbols) - method.get_equilibrium_terms()
 
     tau_0 = sp.Symbol("tau_0_")
@@ -52,7 +61,7 @@ def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_fie
     rho = method.zeroth_order_equilibrium_moment_symbol if method.conserved_quantity_computation.compressible else 1
     adapted_omega = sp.Symbol("smagorinsky_omega")
 
-    collision_rule = collision_rule.new_with_substitutions({omega_s: adapted_omega})
+    collision_rule = collision_rule.new_with_substitutions({omega_s: adapted_omega}, substitute_on_lhs=False)
     # for derivation see notebook demo_custom_LES_model.ipynb
     eqs = [Assignment(tau_0, 1 / omega_s),
            Assignment(second_order_neq_moments,

@@ -4,13 +4,13 @@ import numpy as np
 
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import (
-    create_lb_function, switch_to_symbolic_relaxation_rates_for_omega_adapting_methods,
-    update_with_default_parameters)
+    create_lb_function, update_with_default_parameters)
+from lbmpy.enums import Stencil
 from lbmpy.macroscopic_value_kernels import (
     create_advanced_velocity_setter_collision_rule, pdf_initialization_assignments)
 from lbmpy.simplificationfactory import create_simplification_strategy
-from lbmpy.stencils import get_stencil
-from pystencils import create_data_handling, create_kernel, make_slice
+from lbmpy.stencils import LBStencil
+from pystencils import create_data_handling, create_kernel, make_slice, Target, Backend
 from pystencils.slicing import SlicedGetter
 from pystencils.timeloop import TimeLoop
 
@@ -23,7 +23,8 @@ class LatticeBoltzmannStep:
                  compute_velocity_in_every_step=False, compute_density_in_every_step=False,
                  velocity_input_array_name=None, time_step_order='stream_collide', flag_interface=None,
                  alignment_if_vectorized=64, fixed_loop_sizes=True, fixed_relaxation_rates=True,
-                 timeloop_creation_function=TimeLoop, **method_parameters):
+                 timeloop_creation_function=TimeLoop,
+                 lbm_config=None, lbm_optimisation=None, config=None, **method_parameters):
 
         self._timeloop_creation_function = timeloop_creation_function
 
@@ -32,7 +33,11 @@ class LatticeBoltzmannStep:
             if domain_size is not None:
                 raise ValueError("When passing a data_handling, the domain_size parameter can not be specified")
 
-        target = optimization.get('target', 'cpu')
+        if config is not None:
+            target = config.target
+        else:
+            target = optimization.get('target', Target.CPU)
+
         if data_handling is None:
             if domain_size is None:
                 raise ValueError("Specify either domain_size or data_handling")
@@ -43,17 +48,19 @@ class LatticeBoltzmannStep:
                                                  parallel=False)
 
         if 'stencil' not in method_parameters:
-            method_parameters['stencil'] = 'D2Q9' if data_handling.dim == 2 else 'D3Q27'
+            method_parameters['stencil'] = LBStencil(Stencil.D2Q9) \
+                if data_handling.dim == 2 else LBStencil(Stencil.D3Q27)
 
-        method_parameters, optimization = update_with_default_parameters(method_parameters, optimization)
-        field_dtype = np.float64 if optimization['double_precision'] else np.float32
+        lbm_config, lbm_optimisation, config = update_with_default_parameters(method_parameters, optimization,
+                                                                              lbm_config, lbm_optimisation, config)
 
-        del method_parameters['kernel_type']
+        # the parallel datahandling understands only numpy datatypes. Strings lead to an error.
+        field_dtype = np.float64 if config.data_type == 'double' else np.float32
 
         if lbm_kernel:
-            q = len(lbm_kernel.method.stencil)
+            q = lbm_kernel.method.stencil.Q
         else:
-            q = len(get_stencil(method_parameters['stencil']))
+            q = lbm_config.stencil.Q
 
         self.name = name
         self._data_handling = data_handling
@@ -62,13 +69,12 @@ class LatticeBoltzmannStep:
         self.velocity_data_name = name + "_velocity" if velocity_data_name is None else velocity_data_name
         self.density_data_name = name + "_density" if density_data_name is None else density_data_name
         self.density_data_index = density_data_index
-        self._optimization = optimization
 
-        self._gpu = target == 'gpu' or target == 'opencl'
-        layout = optimization['field_layout']
+        self._gpu = target == Target.GPU or target == Target.OPENCL
+        layout = lbm_optimisation.field_layout
 
         alignment = False
-        if optimization['target'] == 'cpu' and optimization['vectorization']:
+        if config.backend == Backend.C and config.cpu_vectorize_info:
             alignment = alignment_if_vectorized
 
         self._data_handling.add_array(self._pdf_arr_name, values_per_cell=q, gpu=self._gpu, layout=layout,
@@ -86,49 +92,51 @@ class LatticeBoltzmannStep:
                                           layout=layout, latex_name='ρ', dtype=field_dtype, alignment=alignment)
 
         if compute_velocity_in_every_step:
-            method_parameters['output']['velocity'] = self._data_handling.fields[self.velocity_data_name]
+            lbm_config.output['velocity'] = self._data_handling.fields[self.velocity_data_name]
         if compute_density_in_every_step:
             density_field = self._data_handling.fields[self.density_data_name]
             if self.density_data_index is not None:
                 density_field = density_field(density_data_index)
-            method_parameters['output']['density'] = density_field
+            lbm_config.output['density'] = density_field
         if velocity_input_array_name is not None:
-            method_parameters['velocity_input'] = self._data_handling.fields[velocity_input_array_name]
-        if method_parameters['omega_output_field'] and isinstance(method_parameters['omega_output_field'], str):
-            method_parameters['omega_output_field'] = data_handling.add_array(method_parameters['omega_output_field'],
-                                                                              dtype=field_dtype, alignment=alignment)
+            lbm_config.velocity_input = self._data_handling.fields[velocity_input_array_name]
+        if isinstance(lbm_config.omega_output_field, str):
+            lbm_config.omega_output_field = data_handling.add_array(lbm_config.omega_output_field,
+                                                                    dtype=field_dtype, alignment=alignment)
 
         self.kernel_params = kernel_params.copy()
 
         # --- Kernel creation ---
         if lbm_kernel is None:
-            switch_to_symbolic_relaxation_rates_for_omega_adapting_methods(method_parameters, self.kernel_params,
-                                                                           force=not fixed_relaxation_rates)
+
             if fixed_loop_sizes:
-                optimization['symbolic_field'] = data_handling.fields[self._pdf_arr_name]
-            method_parameters['field_name'] = self._pdf_arr_name
-            method_parameters['temporary_field_name'] = self._tmp_arr_name
+                lbm_optimisation.symbolic_field = data_handling.fields[self._pdf_arr_name]
+            lbm_config.field_name = self._pdf_arr_name
+            lbm_config.temporary_field_name = self._tmp_arr_name
             if time_step_order == 'stream_collide':
-                self._lbmKernels = [create_lb_function(optimization=optimization,
-                                                       **method_parameters)]
+                self._lbmKernels = [create_lb_function(lbm_config=lbm_config,
+                                                       lbm_optimisation=lbm_optimisation,
+                                                       config=config)]
             elif time_step_order == 'collide_stream':
-                self._lbmKernels = [create_lb_function(optimization=optimization,
-                                                       kernel_type='collide_only',
-                                                       **method_parameters),
-                                    create_lb_function(optimization=optimization,
-                                                       kernel_type='stream_pull_only',
-                                                       ** method_parameters)]
+                self._lbmKernels = [create_lb_function(lbm_config=lbm_config,
+                                                       lbm_optimisation=lbm_optimisation,
+                                                       config=config,
+                                                       kernel_type='collide_only'),
+                                    create_lb_function(lbm_config=lbm_config,
+                                                       lbm_optimisation=lbm_optimisation,
+                                                       config=config,
+                                                       kernel_type='stream_pull_only')]
 
         else:
             assert self._data_handling.dim == lbm_kernel.method.dim, \
-                "Error: %dD Kernel for %d dimensional domain" % (lbm_kernel.method.dim, self._data_handling.dim)
+                f"Error: {lbm_kernel.method.dim}D Kernel for {self._data_handling.dim} dimensional domain"
             self._lbmKernels = [lbm_kernel]
 
         self.method = self._lbmKernels[0].method
         self.ast = self._lbmKernels[0].ast
 
         # -- Boundary Handling  & Synchronization ---
-        stencil_name = method_parameters['stencil']
+        stencil_name = lbm_config.stencil.name
         self._sync_src = data_handling.synchronization_function([self._pdf_arr_name], stencil_name, target,
                                                                 stencil_restricted=True)
         self._sync_tmp = data_handling.synchronization_function([self._tmp_arr_name], stencil_name, target,
@@ -137,7 +145,11 @@ class LatticeBoltzmannStep:
         self._boundary_handling = LatticeBoltzmannBoundaryHandling(self.method, self._data_handling, self._pdf_arr_name,
                                                                    name=name + "_boundary_handling",
                                                                    flag_interface=flag_interface,
-                                                                   target=target, openmp=optimization['openmp'])
+                                                                   target=target, openmp=config.cpu_openmp)
+
+        self._lbm_config = lbm_config
+        self._lbm_optimisation = lbm_optimisation
+        self._config = config
 
         # -- Macroscopic Value Kernels
         self._getterKernel, self._setterKernel = self._compile_macroscopic_setter_and_getter()
@@ -189,6 +201,21 @@ class LatticeBoltzmannStep:
     @property
     def pdf_array_name(self):
         return self._pdf_arr_name
+
+    @property
+    def lbm_config(self):
+        """LBM configuration of the scenario"""
+        return self._lbm_config
+
+    @property
+    def lbm_optimisation(self):
+        """LBM optimisation parameters"""
+        return self._lbm_optimisation
+
+    @property
+    def config(self):
+        """Configutation of pystencils parameters"""
+        return self.config
 
     def _get_slice(self, data_name, slice_obj, masked):
         if slice_obj is None:
@@ -343,11 +370,11 @@ class LatticeBoltzmannStep:
 
             collision_rule = create_advanced_velocity_setter_collision_rule(self.method, vel_backup_field,
                                                                             velocity_relaxation_rate)
-            optimization = self._optimization.copy()
-            optimization['symbolic_field'] = dh.fields[self._pdf_arr_name]
+            self._lbm_optimisation.symbolic_field = dh.fields[self._pdf_arr_name]
 
             kernel = create_lb_function(collision_rule=collision_rule, field_name=self._pdf_arr_name,
-                                        temporary_field_name=self._tmp_arr_name, optimization=optimization)
+                                        temporary_field_name=self._tmp_arr_name,
+                                        lbm_optimisation=self._lbm_optimisation)
             self._velocity_init_kernel = kernel
 
         def make_velocity_backup():
@@ -383,7 +410,7 @@ class LatticeBoltzmannStep:
             self._data_handling.all_to_cpu()
             self._data_handling.run_kernel(self._getterKernel, **self.kernel_params)
             global_residuum = compute_residuum()
-            print("Initialization iteration {}, residuum {}".format(steps_run, global_residuum))
+            print(f"Initialization iteration {steps_run}, residuum {global_residuum}")
             if np.isnan(global_residuum) or global_residuum < convergence_threshold:
                 break
 
@@ -391,8 +418,8 @@ class LatticeBoltzmannStep:
         converged = global_residuum < convergence_threshold
         if not converged:
             restore_velocity_backup()
-            raise ValueError("Iterative initialization did not converge after %d steps.\n"
-                             "Current residuum is %s" % (steps_run, global_residuum))
+            raise ValueError(f"Iterative initialization did not converge after {steps_run} steps.\n"
+                             f"Current residuum is {global_residuum}")
 
         return global_residuum, steps_run
 
@@ -406,10 +433,10 @@ class LatticeBoltzmannStep:
 
         getter_eqs = cqc.output_equations_from_pdfs(pdf_field.center_vector,
                                                     {'density': rho_field, 'velocity': vel_field})
-        getter_kernel = create_kernel(getter_eqs, target='cpu', cpu_openmp=self._optimization['openmp']).compile()
+        getter_kernel = create_kernel(getter_eqs, target=Target.CPU, cpu_openmp=self._config.cpu_openmp).compile()
 
         setter_eqs = pdf_initialization_assignments(lb_method, rho_field,
                                                     vel_field.center_vector, pdf_field.center_vector)
         setter_eqs = create_simplification_strategy(lb_method)(setter_eqs)
-        setter_kernel = create_kernel(setter_eqs, target='cpu', cpu_openmp=self._optimization['openmp']).compile()
+        setter_kernel = create_kernel(setter_eqs, target=Target.CPU, cpu_openmp=self._config.cpu_openmp).compile()
         return getter_kernel, setter_kernel

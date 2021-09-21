@@ -70,7 +70,7 @@ def test_pull_communication_slices(stencil):
 
 @pytest.mark.parametrize('stencil_name', ['D2Q9', 'D3Q15', 'D3Q19', 'D3Q27'])
 def test_optimised_and_full_communication_equivalence(stencil_name):
-    target = 'cpu'
+    target = ps.Target.CPU
     stencil = get_stencil(stencil_name)
     dim = len(stencil[0])
     domain_size = (4, ) * dim
