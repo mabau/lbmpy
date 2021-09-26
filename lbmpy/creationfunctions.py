@@ -638,14 +638,14 @@ class LBMConfig:
     entropic_newton_iterations: int = None
     omega_output_field: Field = None
     smagorinsky: bool = False
-    fluctuating: bool = False
+    fluctuating: dict = False
     temperature: Any = None
 
     output: dict = field(default_factory=dict)
     velocity_input: Field = None
     density_input: Field = None
 
-    kernel_type: str = 'default_stream_collide'
+    kernel_type: Union[str, PdfFieldAccessor] = 'default_stream_collide'
     streaming_pattern: str = 'pull'
     timestep: lbmpy.advanced_streaming.Timestep = Timestep.BOTH
 
