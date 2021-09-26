@@ -44,8 +44,9 @@ def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_fie
     method = collision_rule.method
     omega_s = get_shear_relaxation_rate(method)
 
-    found_symbolic_shear_relaxation = False
+    found_symbolic_shear_relaxation = True
     if isinstance(omega_s, float) or isinstance(omega_s, int):
+        found_symbolic_shear_relaxation = False
         for eq in collision_rule.all_assignments:
             if eq.rhs == omega_s:
                 found_symbolic_shear_relaxation = True
