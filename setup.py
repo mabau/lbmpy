@@ -1,5 +1,4 @@
 import os
-import sys
 import io
 from setuptools import setup, find_packages
 import distutils
@@ -10,6 +9,7 @@ import versioneer
 
 try:
     import cython  # noqa
+
     USE_CYTHON = True
 except ImportError:
     USE_CYTHON = False
@@ -18,6 +18,7 @@ quick_tests = [
     'test_serial_scenarios.test_ldc_mrt',
     'test_serial_scenarios.test_channel_srt',
 ]
+
 
 class SimpleTestRunner(distutils.cmd.Command):
     """A custom command to run selected tests"""
@@ -69,8 +70,9 @@ def cython_extensions(*extensions):
     else:
         return None
 
+
 def get_cmdclass():
-    cmdclass={"quicktest": SimpleTestRunner}
+    cmdclass = {"quicktest": SimpleTestRunner}
     cmdclass.update(versioneer.get_cmdclass())
     return cmdclass
 
@@ -85,7 +87,7 @@ setup(name='lbmpy',
       author_email='cs10-codegen@fau.de',
       url='https://i10git.cs.fau.de/pycodegen/lbmpy/',
       packages=['lbmpy'] + ['lbmpy.' + s for s in find_packages('lbmpy')],
-      install_requires=['pystencils', 'sympy>=1.2', 'numpy>=1.11.0'],
+      install_requires=['pystencils>=0.4.0', 'sympy>=1.2', 'numpy>=1.11.0'],
       package_data={'lbmpy': ['phasefield/simplex_projection.pyx',
                               'phasefield/simplex_projection.c']},
       ext_modules=cython_extensions("lbmpy.phasefield.simplex_projection"),
