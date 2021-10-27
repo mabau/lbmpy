@@ -42,10 +42,8 @@ class ContactAngle(Boundary):
             angle = TypedSymbol("a", self._data_type)
             tmp = TypedSymbol("tmp", self._data_type)
 
-            result = []
-            result.append(Assignment(tmp, sum([x * x for x in neighbor])))
-            result.append(Assignment(dist, 0.5 * sp.sqrt(tmp)))
-            result.append(Assignment(angle, math.cos(math.radians(self._contact_angle))))
+            result = [Assignment(tmp, sum([x * x for x in neighbor])), Assignment(dist, 0.5 * sp.sqrt(tmp)),
+                      Assignment(angle, math.cos(math.radians(self._contact_angle)))]
 
             var = - dist * (4.0 / self._interface_width) * angle
             tmp = 1 + var

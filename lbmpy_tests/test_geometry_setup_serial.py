@@ -4,8 +4,10 @@ import numpy as np
 import pytest
 
 from lbmpy.boundaries import NoSlip
+from lbmpy.enums import Method
 from lbmpy.geometry import add_black_and_white_image, add_pipe_walls
 from lbmpy.lbstep import LatticeBoltzmannStep
+import lbmpy.plot as plt
 from pystencils.slicing import make_slice
 
 
@@ -23,23 +25,20 @@ def test_pipe():
     plot = False
     for domain_size in [(30, 10, 10), (30, 10)]:
         for diameter in [5, 10, diameter_callback]:
-            sc = LatticeBoltzmannStep(domain_size=domain_size, method='srt', relaxation_rate=1.9,
-                                      optimization={})
+            sc = LatticeBoltzmannStep(domain_size=domain_size, method=Method.SRT, relaxation_rate=1.9)
             add_pipe_walls(sc.boundary_handling, diameter)
             if plot:
-                import lbmpy.plot as plt
-                from pystencils.slicing import make_slice
                 if len(domain_size) == 2:
                     plt.boundary_handling(sc.boundary_handling)
-                    plt.title("2D, diameter=%s" % (str(diameter,)))
+                    plt.title(f"2D, diameter={str(diameter,)}")
                     plt.show()
                 elif len(domain_size) == 3:
                     plt.subplot(1, 2, 1)
                     plt.boundary_handling(sc.boundary_handling, make_slice[0.5, :, :])
-                    plt.title("3D, diameter=%s" % (str(diameter,)))
+                    plt.title(f"3D, diameter={str(diameter,)}")
                     plt.subplot(1, 2, 2)
                     plt.boundary_handling(sc.boundary_handling, make_slice[:, 0.5, :])
-                    plt.title("3D, diameter=%s" % (str(diameter, )))
+                    plt.title(f"3D, diameter={str(diameter, )}")
                     plt.show()
 
 
@@ -51,14 +50,12 @@ def get_test_image_path():
 
 def test_image():
     pytest.importorskip('scipy.ndimage')
-    sc = LatticeBoltzmannStep(domain_size=(50, 40), method='srt', relaxation_rate=1.9,
-                              optimization={})
+    sc = LatticeBoltzmannStep(domain_size=(50, 40), method=Method.SRT, relaxation_rate=1.9)
     add_black_and_white_image(sc.boundary_handling, get_test_image_path(), keep_aspect_ratio=True)
 
 
 def test_slice_mask_combination():
-    sc = LatticeBoltzmannStep(domain_size=(30, 30), method='srt', relaxation_rate=1.9,
-                              optimization={})
+    sc = LatticeBoltzmannStep(domain_size=(30, 30), method=Method.SRT, relaxation_rate=1.9)
 
     def callback(*coordinates):
         x = coordinates[0]

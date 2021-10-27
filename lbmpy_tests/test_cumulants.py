@@ -1,9 +1,8 @@
-from lbmpy.creationfunctions import create_lb_method
 from lbmpy.cumulants import *
 from lbmpy.moments import (
     discrete_moment, exponent_to_polynomial_representation, exponents_to_polynomial_representations)
-from lbmpy.stencils import get_stencil
-
+from lbmpy.enums import Stencil
+from lbmpy.stencils import LBStencil
 
 def test_cumulants_from_pdfs():
     """
@@ -11,11 +10,10 @@ def test_cumulants_from_pdfs():
       - directly pdfs to cumulant
       - indirect pdfs -> raw moments -> cumulants
     """
-    stencil = get_stencil("D2Q9")
-    dim = len(stencil[0])
-    indices = moments_up_to_component_order(2, dim=dim)
+    stencil = LBStencil(Stencil.D2Q9)
+    indices = moments_up_to_component_order(2, dim=stencil.D)
 
-    pdf_symbols = sp.symbols("f_:%d" % (len(stencil),))
+    pdf_symbols = sp.symbols(f"f_:{stencil.Q}")
     direct_version = cumulants_from_pdfs(stencil, pdf_symbols=pdf_symbols, cumulant_indices=indices)
     polynomial_moment_indices = exponents_to_polynomial_representations(indices)
     direct_version2 = cumulants_from_pdfs(stencil, pdf_symbols=pdf_symbols, cumulant_indices=polynomial_moment_indices)
@@ -32,11 +30,10 @@ def test_cumulants_from_pdfs():
 
 def test_raw_moment_to_cumulant_transformation():
     """Transforms from raw moments to cumulants and back, then checks for identity"""
-    for stencil in [get_stencil("D2Q9"), get_stencil("D3Q27")]:
-        dim = len(stencil[0])
-        indices = moments_up_to_component_order(2, dim=dim)
+    for stencil in [LBStencil(Stencil.D2Q9), LBStencil(Stencil.D3Q27)]:
+        indices = moments_up_to_component_order(2, dim=stencil.D)
 
-        symbol_format = "m_%d_%d_%d" if dim == 3 else "m_%d_%d"
+        symbol_format = "m_%d_%d_%d" if stencil.D == 3 else "m_%d_%d"
         moment_symbols = {idx: sp.Symbol(symbol_format % idx) for idx in indices}
 
         forward = {idx: cumulant_as_function_of_raw_moments(idx, moments_dict=moment_symbols)
@@ -48,11 +45,10 @@ def test_raw_moment_to_cumulant_transformation():
 
 def test_central_moment_to_cumulant_transformation():
     """Transforms from central moments to cumulants and back, then checks for identity"""
-    for stencil in [get_stencil("D2Q9"), get_stencil("D3Q27")]:
-        dim = len(stencil[0])
-        indices = moments_up_to_component_order(2, dim=dim)
+    for stencil in [LBStencil(Stencil.D2Q9), LBStencil(Stencil.D3Q27)]:
+        indices = moments_up_to_component_order(2, dim=stencil.D)
 
-        symbol_format = "m_%d_%d_%d" if dim == 3 else "m_%d_%d"
+        symbol_format = "m_%d_%d_%d" if stencil.D == 3 else "m_%d_%d"
         moment_symbols = {idx: sp.Symbol(symbol_format % idx) for idx in indices}
 
         forward = {idx: cumulant_as_function_of_central_moments(idx, moments_dict=moment_symbols)
@@ -66,5 +62,5 @@ def test_central_moment_to_cumulant_transformation():
 
 
 def test_cumulants_from_pdf():
-    res = cumulants_from_pdfs(get_stencil("D2Q9"))
-    assert res[(0, 0)] == sp.log(sum(sp.symbols("f_:9")))
+    res = cumulants_from_pdfs(LBStencil(Stencil.D2Q9))
+    assert res[(0, 0)] == sp.log(sum(sp.symbols(f"f_:{9}")))

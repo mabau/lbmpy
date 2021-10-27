@@ -1,9 +1,12 @@
+import pytest
+
 from lbmpy.cumulants import raw_moment_as_function_of_cumulants
+from lbmpy.enums import Stencil
 from lbmpy.maxwellian_equilibrium import *
 from lbmpy.moments import (
     MOMENT_SYMBOLS, exponents_to_polynomial_representations, moment_matrix,
     moments_up_to_component_order, moments_up_to_order)
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 from pystencils.sympyextensions import remove_higher_order_terms
 
 
@@ -29,23 +32,24 @@ def test_maxwellian_moments():
     assert eq_moments[3] == rho * u[0] * u[1]
 
 
-def test_continuous_discrete_moment_equivalence():
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
+def test_continuous_discrete_moment_equivalence(stencil):
     """Check that moments up to order 3 agree with moments of the continuous Maxwellian"""
-    for stencil in [get_stencil(n) for n in ["D2Q9", "D3Q15", "D3Q19", "D3Q27"]]:
-        dim = len(stencil[0])
-        c_s_sq = sp.Rational(1, 3)
-        moments = tuple(moments_up_to_order(3, dim=dim, include_permutations=False))
-        cm = sp.Matrix(get_equilibrium_values_of_maxwell_boltzmann_function(moments, order=2, dim=dim, c_s_sq=c_s_sq,
-                                                                            space="moment"))
-        dm = sp.Matrix(get_moments_of_discrete_maxwellian_equilibrium(stencil, moments, order=2,
-                                                                      compressible=True, c_s_sq=c_s_sq))
+    stencil = LBStencil(stencil)
+    c_s_sq = sp.Rational(1, 3)
+    moments = tuple(moments_up_to_order(3, dim=stencil.D, include_permutations=False))
+    cm = sp.Matrix(get_equilibrium_values_of_maxwell_boltzmann_function(moments, order=2, dim=stencil.D,
+                                                                        c_s_sq=c_s_sq, space="moment"))
+    dm = sp.Matrix(get_moments_of_discrete_maxwellian_equilibrium(stencil, moments, order=2,
+                                                                  compressible=True, c_s_sq=c_s_sq))
 
-        diff = sp.simplify(cm - dm)
-        for d in diff:
-            assert d == 0
+    diff = sp.simplify(cm - dm)
+    for d in diff:
+        assert d == 0
 
 
-def test_moment_cumulant_continuous_equivalence():
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q27])
+def test_moment_cumulant_continuous_equivalence(stencil):
     """Test that discrete equilibrium is the same up to order 3 when obtained with following methods
 
     * eq1: take moments of continuous Maxwellian and transform back to pdf space
@@ -53,56 +57,55 @@ def test_moment_cumulant_continuous_equivalence():
     * eq3: take discrete equilibrium from LBM literature
     * eq4: same as eq1 but with built-in function
     """
-    for stencil in [get_stencil('D2Q9'), get_stencil('D3Q27')]:
-        dim = len(stencil[0])
-        u = sp.symbols("u_:{dim}".format(dim=dim))
-        indices = tuple(moments_up_to_component_order(2, dim=dim))
-        c_s_sq = sp.Rational(1, 3)
-        eq_moments1 = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=dim, u=u, c_s_sq=c_s_sq,
-                                                                           space="moment")
-        eq_cumulants = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=dim, u=u, c_s_sq=c_s_sq,
-                                                                            space="cumulant")
-        eq_cumulants = {idx: c for idx, c in zip(indices, eq_cumulants)}
-        eq_moments2 = [raw_moment_as_function_of_cumulants(idx, eq_cumulants) for idx in indices]
-        pdfs_to_moments = moment_matrix(indices, stencil)
+    stencil = LBStencil(stencil)
+    u = sp.symbols(f"u_:{stencil.D}")
+    indices = tuple(moments_up_to_component_order(2, dim=stencil.D))
+    c_s_sq = sp.Rational(1, 3)
+    eq_moments1 = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=stencil.D, u=u, c_s_sq=c_s_sq,
+                                                                       space="moment")
+    eq_cumulants = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=stencil.D, u=u, c_s_sq=c_s_sq,
+                                                                        space="cumulant")
+    eq_cumulants = {idx: c for idx, c in zip(indices, eq_cumulants)}
+    eq_moments2 = [raw_moment_as_function_of_cumulants(idx, eq_cumulants) for idx in indices]
+    pdfs_to_moments = moment_matrix(indices, stencil)
 
-        def normalize(expressions):
-            return [remove_higher_order_terms(e.expand(), symbols=u, order=3) for e in expressions]
+    def normalize(expressions):
+        return [remove_higher_order_terms(e.expand(), symbols=u, order=3) for e in expressions]
 
-        eq1 = normalize(pdfs_to_moments.inv() * sp.Matrix(eq_moments1))
-        eq2 = normalize(pdfs_to_moments.inv() * sp.Matrix(eq_moments2))
-        eq3 = normalize(discrete_maxwellian_equilibrium(stencil, order=3, c_s_sq=c_s_sq, compressible=True))
-        eq4 = normalize(generate_equilibrium_by_matching_moments(stencil, indices, c_s_sq=c_s_sq))
+    eq1 = normalize(pdfs_to_moments.inv() * sp.Matrix(eq_moments1))
+    eq2 = normalize(pdfs_to_moments.inv() * sp.Matrix(eq_moments2))
+    eq3 = normalize(discrete_maxwellian_equilibrium(stencil, order=3, c_s_sq=c_s_sq, compressible=True))
+    eq4 = normalize(generate_equilibrium_by_matching_moments(stencil, indices, c_s_sq=c_s_sq))
 
-        assert eq1 == eq2
-        assert eq2 == eq3
-        assert eq3 == eq4
+    assert eq1 == eq2
+    assert eq2 == eq3
+    assert eq3 == eq4
 
 
-def test_moment_cumulant_continuous_equivalence_polynomial_formulation():
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q27])
+def test_moment_cumulant_continuous_equivalence_polynomial_formulation(stencil):
     """Same as test above, but instead of index tuples, the polynomial formulation is used."""
-    for stencil in [get_stencil('D2Q9'), get_stencil('D3Q27')]:
-        dim = len(stencil[0])
-        u = sp.symbols(f"u_:{dim}")
-        index_tuples = tuple(moments_up_to_component_order(2, dim=dim))
-        indices = exponents_to_polynomial_representations(index_tuples)
-        c_s_sq = sp.Rational(1, 3)
-        eq_moments1 = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=dim, u=u, c_s_sq=c_s_sq,
-                                                                           space="moment")
-        eq_cumulants = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=dim, u=u, c_s_sq=c_s_sq,
-                                                                            space="cumulant")
-        eq_cumulants = {idx: c for idx, c in zip(index_tuples, eq_cumulants)}
-        eq_moments2 = [raw_moment_as_function_of_cumulants(idx, eq_cumulants) for idx in index_tuples]
-        pdfs_to_moments = moment_matrix(indices, stencil)
+    stencil = LBStencil(stencil)
+    u = sp.symbols(f"u_:{stencil.D}")
+    index_tuples = tuple(moments_up_to_component_order(2, dim=stencil.D))
+    indices = exponents_to_polynomial_representations(index_tuples)
+    c_s_sq = sp.Rational(1, 3)
+    eq_moments1 = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=stencil.D,
+                                                                       u=u, c_s_sq=c_s_sq, space="moment")
+    eq_cumulants = get_equilibrium_values_of_maxwell_boltzmann_function(indices, dim=stencil.D,
+                                                                        u=u, c_s_sq=c_s_sq, space="cumulant")
+    eq_cumulants = {idx: c for idx, c in zip(index_tuples, eq_cumulants)}
+    eq_moments2 = [raw_moment_as_function_of_cumulants(idx, eq_cumulants) for idx in index_tuples]
+    pdfs_to_moments = moment_matrix(indices, stencil)
 
-        def normalize(expressions):
-            return [remove_higher_order_terms(e.expand(), symbols=u, order=3) for e in expressions]
+    def normalize(expressions):
+        return [remove_higher_order_terms(e.expand(), symbols=u, order=3) for e in expressions]
 
-        eq1 = normalize(pdfs_to_moments.inv() * sp.Matrix(eq_moments1))
-        eq2 = normalize(pdfs_to_moments.inv() * sp.Matrix(eq_moments2))
-        eq3 = normalize(discrete_maxwellian_equilibrium(stencil, order=3, c_s_sq=c_s_sq, compressible=True))
-        eq4 = normalize(generate_equilibrium_by_matching_moments(stencil, indices, c_s_sq=c_s_sq))
+    eq1 = normalize(pdfs_to_moments.inv() * sp.Matrix(eq_moments1))
+    eq2 = normalize(pdfs_to_moments.inv() * sp.Matrix(eq_moments2))
+    eq3 = normalize(discrete_maxwellian_equilibrium(stencil, order=3, c_s_sq=c_s_sq, compressible=True))
+    eq4 = normalize(generate_equilibrium_by_matching_moments(stencil, indices, c_s_sq=c_s_sq))
 
-        assert eq1 == eq2
-        assert eq2 == eq3
-        assert eq3 == eq4
+    assert eq1 == eq2
+    assert eq2 == eq3
+    assert eq3 == eq4

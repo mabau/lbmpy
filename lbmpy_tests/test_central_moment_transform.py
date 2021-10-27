@@ -1,30 +1,27 @@
 import sympy as sp
 from pystencils.stencil import have_same_entries
-from lbmpy.moments import get_default_moment_set_for_stencil, extract_monomials, statistical_quantity_symbol
+from lbmpy.moments import get_default_moment_set_for_stencil
 from lbmpy.methods.creationfunctions import cascaded_moment_sets_literature
 import pytest
 
-from lbmpy.stencils import get_stencil
+from lbmpy.enums import Stencil
+from lbmpy.stencils import LBStencil
 from lbmpy.moment_transforms import (
-    PdfsToCentralMomentsByMatrix, FastCentralMomentTransform, PdfsToCentralMomentsByShiftMatrix,
-    PRE_COLLISION_MONOMIAL_CENTRAL_MOMENT, POST_COLLISION_MONOMIAL_CENTRAL_MOMENT
-)
+    PdfsToCentralMomentsByMatrix, FastCentralMomentTransform, PdfsToCentralMomentsByShiftMatrix)
 
 
-@pytest.mark.parametrize('type', ['monomial', 'polynomial'])
-@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q15', 'D3Q19', 'D3Q27'])
-def test_forward_transform(type, stencil):
-    stencil = get_stencil(stencil)
-    dim = len(stencil[0])
-    q = len(stencil)
-    if type == 'monomial':
+@pytest.mark.parametrize('cumulants', ['monomial', 'polynomial'])
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
+def test_forward_transform(cumulants, stencil):
+    stencil = LBStencil(stencil)
+    if cumulants == 'monomial':
         moment_polynomials = get_default_moment_set_for_stencil(stencil)
-    elif type == 'polynomial':
+    elif cumulants == 'polynomial':
         moment_polynomials = [item for sublist in cascaded_moment_sets_literature(stencil)
                               for item in sublist]
-    pdfs = sp.symbols(f"f_:{q}")
+    pdfs = sp.symbols(f"f_:{stencil.Q}")
     rho = sp.Symbol('rho')
-    u = sp.symbols(f"u_:{dim}")
+    u = sp.symbols(f"u_:{stencil.D}")
 
     matrix_transform = PdfsToCentralMomentsByMatrix(stencil, moment_polynomials, rho, u)
     fast_transform = FastCentralMomentTransform(stencil, moment_polynomials, rho, u)
@@ -32,12 +29,12 @@ def test_forward_transform(type, stencil):
 
     assert shift_transform.moment_exponents == fast_transform.moment_exponents
 
-    if type == 'monomial' and not have_same_entries(stencil, get_stencil('D3Q15')):
-        assert fast_transform.mono_to_poly_matrix == sp.eye(q)
-        assert shift_transform.mono_to_poly_matrix == sp.eye(q)
+    if cumulants == 'monomial' and not have_same_entries(stencil, LBStencil(Stencil.D3Q15)):
+        assert fast_transform.mono_to_poly_matrix == sp.eye(stencil.Q)
+        assert shift_transform.mono_to_poly_matrix == sp.eye(stencil.Q)
     else:
-        assert not fast_transform.mono_to_poly_matrix == sp.eye(q)
-        assert not shift_transform.mono_to_poly_matrix == sp.eye(q)
+        assert not fast_transform.mono_to_poly_matrix == sp.eye(stencil.Q)
+        assert not shift_transform.mono_to_poly_matrix == sp.eye(stencil.Q)
 
     f_to_k_matrix = matrix_transform.forward_transform(pdfs)
     f_to_k_matrix = f_to_k_matrix.new_without_subexpressions().main_assignments_dict
@@ -57,20 +54,19 @@ def test_forward_transform(type, stencil):
         assert (rhs_matrix - rhs_fast) == 0, f"Mismatch between matrix and fast transform at {moment_symbol}."
         assert (rhs_matrix - rhs_shift) == 0, f"Mismatch between matrix and shift-matrix transform at {moment_symbol}."
 
-@pytest.mark.parametrize('type', ['monomial', 'polynomial'])
-@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q15', 'D3Q19', 'D3Q27'])
-def test_backward_transform(type, stencil):
-    stencil = get_stencil(stencil)
-    dim = len(stencil[0])
-    q = len(stencil)
-    if type == 'monomial':
+
+@pytest.mark.parametrize('cumulants', ['monomial', 'polynomial'])
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
+def test_backward_transform(cumulants, stencil):
+    stencil = LBStencil(stencil)
+    if cumulants == 'monomial':
         moment_polynomials = get_default_moment_set_for_stencil(stencil)
-    elif type == 'polynomial':
+    elif cumulants == 'polynomial':
         moment_polynomials = [item for sublist in cascaded_moment_sets_literature(stencil)
                               for item in sublist]
-    pdfs = sp.symbols(f"f_:{q}")
+    pdfs = sp.symbols(f"f_:{stencil.Q}")
     rho = sp.Symbol('rho')
-    u = sp.symbols(f"u_:{dim}")
+    u = sp.symbols(f"u_:{stencil.D}")
 
     matrix_transform = PdfsToCentralMomentsByMatrix(stencil, moment_polynomials, rho, u)
     fast_transform = FastCentralMomentTransform(stencil, moment_polynomials, rho, u)

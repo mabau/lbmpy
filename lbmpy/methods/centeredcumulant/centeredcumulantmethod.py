@@ -1,13 +1,14 @@
 from pystencils.simp.simplifications import sympy_cse
 import sympy as sp
-from warnings import warn
+from warnings import warn, filterwarnings
 
 from pystencils import Assignment, AssignmentCollection
 from pystencils.simp.assignment_collection import SymbolGen
 from pystencils.stencil import have_same_entries
 from pystencils.cache import disk_cache
 
-from lbmpy.stencils import get_stencil
+from lbmpy.enums import Stencil
+from lbmpy.stencils import LBStencil
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 
@@ -122,7 +123,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
     for a given setup.
 
     Args:
-        stencil: see :func:`lbmpy.stencils.get_stencil`
+        stencil: see :class:`lbmpy.stencils.LBStencil`
         cumulant_to_relaxation_info_dict: a dictionary mapping cumulants in either tuple or polynomial formulation
                                           to a RelaxationInfo, which consists of the corresponding equilibrium cumulant
                                           and a relaxation rate
@@ -159,7 +160,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         self._galilean_correction = galilean_correction
 
         if galilean_correction:
-            if not have_same_entries(stencil, get_stencil("D3Q27")):
+            if not have_same_entries(stencil, LBStencil(Stencil.D3Q27)):
                 raise ValueError("Galilean Correction only available for D3Q27 stencil")
 
             if not contains_corrected_polynomials(cumulant_to_relaxation_info_dict):
@@ -177,7 +178,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
 
     @property
     def central_moment_transform_class(self):
-        self._central_moment_transform_class
+        return self._central_moment_transform_class
 
     @property
     def cumulants(self):
@@ -189,7 +190,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
 
     @property
     def cumulant_transform_class(self):
-        self._cumulant_transform_class
+        return self._cumulant_transform_class
 
     @property
     def first_order_equilibrium_moment_symbols(self, ):
@@ -360,6 +361,11 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
                                           include_force_terms=False,
                                           include_galilean_correction=True,
                                           symbolic_relaxation_rates=False):
+
+        # Filter out JobLib warnings. They are not usefull for use:
+        # https://github.com/joblib/joblib/issues/683
+        filterwarnings("ignore", message="Persisting input arguments took")
+
         stencil = self.stencil
         f = self.pre_collision_pdf_symbols
         density = self.zeroth_order_equilibrium_moment_symbol
@@ -397,7 +403,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         c_post_to_k_post_eqs = cached_backward_transform(
             k_to_c_transform, simplification=pre_simplification, omit_conserved_moments=True)
         central_moments = k_to_c_transform.required_central_moments
-        assert len(central_moments) == len(stencil), 'Number of required central moments must match stencil size.'
+        assert len(central_moments) == stencil.Q, 'Number of required central moments must match stencil size.'
 
         #   3) Get Forward Transformation from PDFs to central moments
         pdfs_to_k_transform = self._central_moment_transform_class(

@@ -17,3 +17,6 @@ doc/bibtex.json
 /db
 /lbmpy/phasefield/simplex_projection.*.so
 /lbmpy/phasefield/simplex_projection.c
+
+# macOS
+**/.DS_Store

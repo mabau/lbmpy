@@ -1,16 +1,18 @@
 import math
 import pytest
+from dataclasses import replace
 
 import pystencils as ps
 from pystencils.slicing import slice_from_direction
 
 from lbmpy import pdf_initialization_assignments
 
-from lbmpy.creationfunctions import create_lb_method, create_lb_update_rule
+from lbmpy.creationfunctions import create_lb_method, create_lb_update_rule, LBMConfig, LBMOptimisation
+from lbmpy.enums import Method, Stencil
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.boundaries.boundaryconditions import DiffusionDirichlet, NeumannByCopy
 from lbmpy.geometry import add_box_boundary
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 from lbmpy.maxwellian_equilibrium import get_weights
 
 import sympy as sp
@@ -19,17 +21,18 @@ import numpy as np
 
 def test_diffusion_boundary():
     domain_size = (10, 10)
-    stencil = get_stencil('D2Q9')
+    stencil = LBStencil(Stencil.D2Q9)
     weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
     concentration = 1.0
 
     # Data Handling
     dh = ps.create_data_handling(domain_size=domain_size)
 
-    dh.add_array('pdfs', values_per_cell=len(stencil))
+    dh.add_array('pdfs', values_per_cell=stencil.Q)
     dh.fill("pdfs", 0.0, ghost_layers=True)
 
-    method = create_lb_method(stencil=stencil, method="srt", relaxation_rate=1.8, compressible=True)
+    lbm_config = LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.8, compressible=True)
+    method = create_lb_method(lbm_config=lbm_config)
 
     # Boundary Handling
     bh = LatticeBoltzmannBoundaryHandling(method, dh, 'pdfs', name="bh")
@@ -80,38 +83,33 @@ def test_diffusion():
     diffusion = (1 / omega - 0.5) / 3
     velocity = 0.05
     time_steps = 50000
-    stencil = get_stencil('D2Q9')
+    stencil = LBStencil(Stencil.D2Q9)
 
     # Data Handling
     dh = ps.create_data_handling(domain_size=domain_size)
 
-    vel_field = dh.add_array('vel_field', values_per_cell=dh.dim)
+    vel_field = dh.add_array('vel_field', values_per_cell=stencil.D)
     dh.fill('vel_field', velocity, 0, ghost_layers=True)
     dh.fill('vel_field', 0.0, 1, ghost_layers=True)
 
     con_field = dh.add_array('con_field', values_per_cell=1)
     dh.fill('con_field', 0.0, ghost_layers=True)
 
-    pdfs = dh.add_array('pdfs', values_per_cell=len(stencil))
-    pdfs_tmp = dh.add_array('pdfs_tmp', values_per_cell=len(stencil))
+    pdfs = dh.add_array('pdfs', values_per_cell=stencil.Q)
+    pdfs_tmp = dh.add_array('pdfs_tmp', values_per_cell=stencil.Q)
 
     # Lattice Boltzmann method
-    params = {'stencil': stencil,
-              'method': 'mrt',
-              'relaxation_rates': [1, 1.5, 1, 1.5, 1],
-              'velocity_input': vel_field,
-              'output': {'density': con_field},
-              'compressible': True,
-              'weighted': True,
-              'optimization': {'symbolic_field': pdfs,
-                               'symbolic_temporary_field': pdfs_tmp},
-              'kernel_type': 'stream_pull_collide'
-              }
+    lbm_config = LBMConfig(stencil=stencil, method=Method.MRT, relaxation_rates=[1, 1.5, 1, 1.5, 1],
+                           velocity_input=vel_field, output={'density': con_field}, compressible=True,
+                           weighted=True, kernel_type='stream_pull_collide')
 
-    method = create_lb_method(**params)
+    lbm_opt = LBMOptimisation(symbolic_field=pdfs, symbolic_temporary_field=pdfs_tmp)
+
+    method = create_lb_method(lbm_config=lbm_config)
     method.set_conserved_moments_relaxation_rate(omega)
 
-    update_rule = create_lb_update_rule(lb_method=method, **params)
+    lbm_config = replace(lbm_config, lb_method=method)
+    update_rule = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
     kernel = ps.create_kernel(update_rule).compile()
 
     # PDF initalization

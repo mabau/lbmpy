@@ -36,7 +36,7 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
     equilibrium moments of the continuous Maxwellian.
 
     Args:
-        stencil: see :func:`lbmpy.stencils.get_stencil`
+        stencil: see :class:`lbmpy.stencils.LBStencil`
         moment_to_relaxation_info_dict: a dictionary mapping moments in either tuple or polynomial formulation
                                         to a RelaxationInfo, which consists of the corresponding equilibrium moment
                                         and a relaxation rate
@@ -287,7 +287,7 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
         if moment_space_forcing:
             force_model_terms = self._force_model.central_moment_space_forcing(self)
         else:
-            force_model_terms = sp.Matrix([0] * len(stencil))
+            force_model_terms = sp.Matrix([0] * stencil.Q)
 
         collision_eqs = relax_central_moments(k_pre, k_post, tuple(relaxation_rates),
                                               tuple(equilibrium_value), force_terms=force_model_terms)

@@ -1,7 +1,8 @@
 import pytest
 import sympy as sp
 
-from lbmpy.stencils import get_stencil
+from lbmpy.enums import Stencil
+from lbmpy.stencils import LBStencil
 from lbmpy.moments import get_default_moment_set_for_stencil
 
 from lbmpy.moment_transforms import (
@@ -14,15 +15,15 @@ transforms = [
     PdfsToCentralMomentsByShiftMatrix, PdfsToCentralMomentsByMatrix, FastCentralMomentTransform
 ]
 
-@pytest.mark.parametrize('stencil', ['D2Q9'])
+
 @pytest.mark.parametrize('transform_class', transforms)
-def test_monomial_equations(stencil, transform_class):
-    stencil = get_stencil(stencil)
+def test_monomial_equations(transform_class):
+    stencil = LBStencil(Stencil.D2Q9)
     rho = sp.symbols("rho")
-    u = sp.symbols(f"u_:{len(stencil[0])}")
+    u = sp.symbols(f"u_:{stencil.D}")
     moment_polynomials = get_default_moment_set_for_stencil(stencil)
     transform = transform_class(stencil, moment_polynomials, rho, u)
-    pdfs = sp.symbols(f"f_:{len(stencil)}")
+    pdfs = sp.symbols(f"f_:{stencil.Q}")
     fw_eqs = transform.forward_transform(pdfs, return_monomials=True)
     bw_eqs = transform.backward_transform(pdfs, start_from_monomials=True)
 

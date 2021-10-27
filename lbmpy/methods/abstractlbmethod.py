@@ -9,6 +9,9 @@ RelaxationInfo = namedtuple('RelaxationInfo', ['equilibrium_value', 'relaxation_
 
 
 class LbmCollisionRule(AssignmentCollection):
+    """
+    A pystencils AssignmentCollection that additionally holds an `AbstractLbMethod`
+    """
     def __init__(self, lb_method, *args, **kwargs):
         super(LbmCollisionRule, self).__init__(*args, **kwargs)
         self.method = lb_method

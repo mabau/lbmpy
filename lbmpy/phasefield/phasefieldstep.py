@@ -174,7 +174,7 @@ class PhaseFieldStep:
                                                compute_density_in_every_step=True,
                                                density_data_index=i,
                                                flag_interface=self.hydro_lbm_step.boundary_handling.flag_interface,
-                                               name=name + "_chLbm_%d" % (i,),
+                                               name=name + f"_chLbm_{i}",
                                                optimization=optimization)
                 self.cahn_hilliard_steps.append(ch_step)
 

@@ -4,11 +4,12 @@ known acceptable values.
 """
 import sympy as sp
 
+from lbmpy.enums import Stencil
 from lbmpy.forcemodels import Luo
 from lbmpy.methods import create_srt, create_trt, create_trt_with_magic_number
 from lbmpy.methods.momentbased.momentbasedsimplifications import cse_in_opposing_directions
 from lbmpy.simplificationfactory import create_simplification_strategy
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 
 
 def check_method(method, limits_default, limits_cse):
@@ -31,39 +32,39 @@ def check_method(method, limits_default, limits_cse):
 
 def test_simplifications_srt_d2q9_incompressible():
     omega = sp.symbols('omega')
-    method = create_srt(get_stencil("D2Q9"), omega, compressible=False,
+    method = create_srt(LBStencil(Stencil.D2Q9), omega, compressible=False,
                         equilibrium_order=2, moment_transform_class=None)
     check_method(method, [53, 46, 0], [49, 30, 0])
 
 
 def test_simplifications_srt_d2q9_compressible():
     omega = sp.symbols('omega')
-    method = create_srt(get_stencil("D2Q9"), omega, compressible=True, 
+    method = create_srt(LBStencil(Stencil.D2Q9), omega, compressible=True,
                         equilibrium_order=2, moment_transform_class=None)
     check_method(method, [53, 58, 1], [53, 42, 1])
 
 
 def test_simplifications_trt_d2q9_incompressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
-    method = create_trt(get_stencil("D2Q9"), o1, o2, compressible=False)
+    method = create_trt(LBStencil(Stencil.D2Q9), o1, o2, compressible=False)
     check_method(method, [77, 86, 0], [65, 38, 0])
 
 
 def test_simplifications_trt_d2q9_compressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
-    method = create_trt(get_stencil("D2Q9"), o1, o2, compressible=True)
+    method = create_trt(LBStencil(Stencil.D2Q9), o1, o2, compressible=True)
     check_method(method, [77, 106, 1], [65, 56, 1])
 
 
 def test_simplifications_trt_d3q19_force_incompressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
     force_model = Luo([sp.Rational(1, 3), sp.Rational(1, 2), sp.Rational(1, 5)])
-    method = create_trt(get_stencil("D3Q19"), o1, o2, compressible=False, force_model=force_model)
+    method = create_trt(LBStencil(Stencil.D3Q19), o1, o2, compressible=False, force_model=force_model)
     check_method(method, [268, 281, 0], [241, 175, 1])
 
 
 def test_simplifications_trt_d3q19_force_compressible():
     o1, o2 = sp.symbols("omega_1 omega_2")
     force_model = Luo([sp.Rational(1, 3), sp.Rational(1, 2), sp.Rational(1, 5)])
-    method = create_trt_with_magic_number(get_stencil("D3Q19"), o1, compressible=False, force_model=force_model)
+    method = create_trt_with_magic_number(LBStencil(Stencil.D3Q19), o1, compressible=False, force_model=force_model)
     check_method(method, [270, 284, 1], [243, 178, 1])

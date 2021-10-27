@@ -8,7 +8,7 @@ from .maxwellian_equilibrium import get_weights
 from .relaxationrates import relaxation_rate_from_lattice_viscosity, lattice_viscosity_from_relaxation_rate,\
     relaxation_rate_from_magic_number
 from .scenarios import create_lid_driven_cavity, create_fully_periodic_flow
-from .stencils import get_stencil, LBStencil
+from .stencils import LBStencil
 
 
 __all__ = ['create_lb_ast', 'create_lb_collision_rule', 'create_lb_function', 'create_lb_method',
@@ -21,7 +21,7 @@ __all__ = ['create_lb_ast', 'create_lb_collision_rule', 'create_lb_function', 'c
            'relaxation_rate_from_lattice_viscosity', 'lattice_viscosity_from_relaxation_rate',
            'relaxation_rate_from_magic_number',
            'create_lid_driven_cavity', 'create_fully_periodic_flow',
-           'get_stencil', 'LBStencil']
+           'LBStencil']
 
 
 from ._version import get_versions

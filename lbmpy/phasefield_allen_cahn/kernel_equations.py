@@ -22,24 +22,22 @@ def chemical_potential_symbolic(phi_field, stencil, beta, kappa):
         beta: coefficient related to surface tension and interface thickness
         kappa: coefficient related to surface tension and interface thickness
     """
-    dimensions = len(stencil[0])
-    q = len(stencil)
     lap = sp.simplify(0)
-    for i in range(dimensions):
+    for i in range(stencil.D):
         deriv = FiniteDifferenceStencilDerivation((i, i), stencil)
-        for j in range(dimensions):
+        for j in range(stencil.D):
             # assume the stencil is symmetric
             deriv.assume_symmetric(dim=j, anti_symmetric=False)
 
         # set weights for missing degrees of freedom in the calculation and assume the stencil is isotropic
-        if q == 9:
+        if stencil.Q == 9:
             res = deriv.get_stencil(isotropic=True)
             lap += res.apply(phi_field.center)
-        elif q == 15:
+        elif stencil.Q == 15:
             deriv.set_weight((0, 0, 0), sp.Rational(-32, 27))
             res = deriv.get_stencil(isotropic=True)
             lap += res.apply(phi_field.center)
-        elif q == 19:
+        elif stencil.Q == 19:
             res = deriv.get_stencil(isotropic=True)
             lap += res.apply(phi_field.center)
         else:
@@ -59,26 +57,24 @@ def isotropic_gradient_symbolic(phi_field, stencil):
         phi_field: the phase-field on which the isotropic gradient is applied
         stencil: stencil to derive the finite difference for the gradient (2nd order isotropic)
     """
-    dimensions = len(stencil[0])
-    q = len(stencil)
     deriv = FiniteDifferenceStencilDerivation((0,), stencil)
 
     deriv.assume_symmetric(0, anti_symmetric=True)
     deriv.assume_symmetric(1, anti_symmetric=False)
-    if dimensions == 3:
+    if stencil.D == 3:
         deriv.assume_symmetric(2, anti_symmetric=False)
 
     # set weights for missing degrees of freedom in the calculation and assume the stencil is isotropic
     # furthermore the stencils gets rotated to get the y and z components
-    if q == 9:
+    if stencil.Q == 9:
         res = deriv.get_stencil(isotropic=True)
         grad = [res.apply(phi_field.center), res.rotate_weights_and_apply(phi_field.center, (0, 1)), 0]
-    elif q == 15:
+    elif stencil.Q == 15:
         res = deriv.get_stencil(isotropic=True)
         grad = [res.apply(phi_field.center),
                 res.rotate_weights_and_apply(phi_field.center, (0, 1)),
                 res.rotate_weights_and_apply(phi_field.center, (1, 2))]
-    elif q == 19:
+    elif stencil.Q == 19:
         deriv.set_weight((0, 0, 0), sp.sympify(0))
         deriv.set_weight((1, 0, 0), sp.Rational(1, 6))
 
@@ -149,7 +145,7 @@ def viscous_force(lb_velocity_field, phi_field, mrt_method, tau, density_heavy, 
         field. If it is not given the stencil of the LB method will be applied.
     """
     stencil = mrt_method.stencil
-    dimensions = len(stencil[0])
+    dimensions = stencil.D
 
     if fd_stencil is None:
         fd_stencil = stencil
@@ -226,7 +222,6 @@ def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, tau,
         field. If it is not given the stencil of the LB method will be applied.
     """
     stencil = lb_method.stencil
-    dimensions = len(stencil[0])
 
     if fd_stencil is None:
         fd_stencil = stencil
@@ -236,7 +231,7 @@ def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, tau,
     fs = surface_tension_force(phi_field, stencil, beta, kappa, fd_stencil)
 
     result = []
-    for i in range(dimensions):
+    for i in range(stencil.D):
         result.append(fs[i] + fp[i] + fm[i] + body_force[i])
 
     return result
@@ -255,10 +250,9 @@ def interface_tracking_force(phi_field, stencil, interface_thickness, fd_stencil
     if fd_stencil is None:
         fd_stencil = stencil
 
-    dimensions = len(stencil[0])
     normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil)
     result = []
-    for i in range(dimensions):
+    for i in range(stencil.D):
         result.append(((1.0 - 4.0 * (phi_field.center - 0.5) ** 2) / interface_thickness) * normal_fd[i])
 
     return result
@@ -276,7 +270,6 @@ def get_update_rules_velocity(src_field, u_in, lb_method, force_model, density, 
          sub_iterations: number of updates of the velocity field
      """
     stencil = lb_method.stencil
-    dimensions = len(stencil[0])
 
     rho = lb_method.conserved_quantity_computation.zeroth_order_moment_symbol
     u_symp = lb_method.conserved_quantity_computation.first_order_moment_symbols
@@ -298,24 +291,24 @@ def get_update_rules_velocity(src_field, u_in, lb_method, force_model, density, 
     update_u.append(Assignment(rho, m0[0]))
 
     index = 0
-    aleph = sp.symbols(f"aleph_:{dimensions * sub_iterations}")
+    aleph = sp.symbols(f"aleph_:{stencil.D * sub_iterations}")
 
-    for i in range(dimensions):
+    for i in range(stencil.D):
         update_u.append(Assignment(aleph[i], u_in.center_vector[i]))
         index += 1
 
     for k in range(sub_iterations - 1):
-        subs_dict = dict(zip(u_symp, aleph[k * dimensions:index]))
-        for i in range(dimensions):
+        subs_dict = dict(zip(u_symp, aleph[k * stencil.D:index]))
+        for i in range(stencil.D):
             update_u.append(Assignment(aleph[index], m0[indices[i]] + force[i].subs(subs_dict) / density / 2))
             index += 1
 
-    subs_dict = dict(zip(u_symp, aleph[index - dimensions:index]))
+    subs_dict = dict(zip(u_symp, aleph[index - stencil.D:index]))
 
-    for i in range(dimensions):
+    for i in range(stencil.D):
         update_u.append(Assignment(force_symp[i], force[i].subs(subs_dict)))
 
-    for i in range(dimensions):
+    for i in range(stencil.D):
         update_u.append(Assignment(u_symp[i], m0[indices[i]] + force_symp[i] / density / 2))
 
     return update_u
@@ -341,7 +334,6 @@ def get_collision_assignments_hydro(lb_method, density, velocity_input, force_mo
         raise ValueError("For central moment lb methods a central moment force model needs the be applied")
 
     stencil = lb_method.stencil
-    dimensions = len(stencil[0])
 
     rho = lb_method.conserved_quantity_computation.zeroth_order_moment_symbol
 
@@ -362,8 +354,8 @@ def get_collision_assignments_hydro(lb_method, density, velocity_input, force_mo
     force_terms = force_model(lb_method)
     eq = eq - sp.Rational(1, 2) * force_terms
 
-    pre = sp.symbols(f"pre_:{len(stencil)}")
-    post = sp.symbols(f"post_:{len(stencil)}")
+    pre = sp.symbols(f"pre_:{stencil.Q}")
+    post = sp.symbols(f"post_:{stencil.Q}")
 
     to_moment_space = moment_matrix * sp.Matrix(accessor.read(src_field, stencil))
     to_moment_space[0] = rho
@@ -372,34 +364,34 @@ def get_collision_assignments_hydro(lb_method, density, velocity_input, force_mo
     subexpressions = get_update_rules_velocity(src_field, velocity_input, lb_method, force_model,
                                                density, sub_iterations=sub_iterations)
 
-    for i in range(0, len(stencil)):
+    for i in range(0, stencil.Q):
         subexpressions.append(Assignment(pre[i], to_moment_space[i]))
 
     if isinstance(lb_method, CentralMomentBasedLbMethod):
         n0 = lb_method.shift_matrix * sp.Matrix(pre)
-        to_central = sp.Matrix(sp.symbols(f"kappa_:{len(stencil)}"))
-        for i in range(0, len(stencil)):
+        to_central = sp.Matrix(sp.symbols(f"kappa_:{stencil.Q}"))
+        for i in range(0, stencil.Q):
             subexpressions.append(Assignment(to_central[i], n0[i]))
         pre = to_central
 
     collision = sp.Matrix(pre) - rel * (sp.Matrix(pre) - eq) + force_terms
 
-    for i in range(0, len(stencil)):
+    for i in range(0, stencil.Q):
         subexpressions.append(Assignment(post[i], collision[i]))
 
     if isinstance(lb_method, CentralMomentBasedLbMethod):
         n0_back = lb_method.shift_matrix.inv() * sp.Matrix(post)
-        from_central = sp.Matrix(sp.symbols(f"kappa_post:{len(stencil)}"))
-        for i in range(0, len(stencil)):
+        from_central = sp.Matrix(sp.symbols(f"kappa_post:{stencil.Q}"))
+        for i in range(0, stencil.Q):
             subexpressions.append(Assignment(from_central[i], n0_back[i]))
         post = from_central
 
     to_pdf_space = moment_matrix.inv() * sp.Matrix(post)
 
-    for i in range(0, len(stencil)):
+    for i in range(0, stencil.Q):
         main_assignments.append(Assignment(accessor.write(dst_field, stencil)[i], to_pdf_space[i]))
 
-    for i in range(dimensions):
+    for i in range(stencil.D):
         main_assignments.append(Assignment(velocity_input.center_vector[i], u_symp[i]))
 
     collision_rule = LbmCollisionRule(lb_method, main_assignments, subexpressions)
@@ -447,8 +439,8 @@ def get_collision_assignments_phase(lb_method, velocity_input, output, force_mod
     force_terms = force_model(lb_method)
     eq = eq - sp.Rational(1, 2) * force_terms
 
-    pre = sp.symbols(f"pre_:{len(stencil)}")
-    post = sp.symbols(f"post_:{len(stencil)}")
+    pre = sp.symbols(f"pre_:{stencil.Q}")
+    post = sp.symbols(f"post_:{stencil.Q}")
 
     to_moment_space = moment_matrix * sp.Matrix(accessor.read(src_field, stencil))
     to_moment_space[0] = rho
@@ -458,31 +450,31 @@ def get_collision_assignments_phase(lb_method, velocity_input, output, force_mod
         subexpressions.append(Assignment(u_symp[i], velocity_input.center_vector[i]))
     subexpressions.extend(force_model.subs_terms)
 
-    for i in range(len(stencil)):
+    for i in range(stencil.Q):
         subexpressions.append(Assignment(pre[i], to_moment_space[i]))
 
     if isinstance(lb_method, CentralMomentBasedLbMethod):
         n0 = lb_method.shift_matrix * sp.Matrix(pre)
-        to_central = sp.Matrix(sp.symbols(f"kappa_:{len(stencil)}"))
-        for i in range(0, len(stencil)):
+        to_central = sp.Matrix(sp.symbols(f"kappa_:{stencil.Q}"))
+        for i in range(stencil.Q):
             subexpressions.append(Assignment(to_central[i], n0[i]))
         pre = to_central
 
     collision = sp.Matrix(pre) - rel * (sp.Matrix(pre) - eq) + force_terms
 
-    for i in range(len(stencil)):
+    for i in range(stencil.Q):
         subexpressions.append(Assignment(post[i], collision[i]))
 
     if isinstance(lb_method, CentralMomentBasedLbMethod):
         n0_back = lb_method.shift_matrix.inv() * sp.Matrix(post)
-        from_central = sp.Matrix(sp.symbols(f"kappa_post:{len(stencil)}"))
-        for i in range(0, len(stencil)):
+        from_central = sp.Matrix(sp.symbols(f"kappa_post:{stencil.Q}"))
+        for i in range(stencil.Q):
             subexpressions.append(Assignment(from_central[i], n0_back[i]))
         post = from_central
 
     to_pdf_space = moment_matrix.inv() * sp.Matrix(post)
 
-    for i in range(len(stencil)):
+    for i in range(stencil.Q):
         main_assignments.append(Assignment(accessor.write(dst_field, stencil)[i], to_pdf_space[i]))
 
     main_assignments.append(Assignment(output_phase_field.center, sum(accessor.write(dst_field, stencil))))
@@ -509,13 +501,12 @@ def initializer_kernel_phase_field_lb(lb_phase_field, phi_field, velocity_field,
         field. If it is not given the stencil of the LB method will be applied.
     """
     stencil = mrt_method.stencil
-    dimensions = len(stencil[0])
 
     if fd_stencil is None:
         fd_stencil = stencil
 
     weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
-    u_symp = sp.symbols("u_:{}".format(dimensions))
+    u_symp = sp.symbols(f"u_:{stencil.D}")
 
     normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil)
 
@@ -531,7 +522,7 @@ def initializer_kernel_phase_field_lb(lb_phase_field, phi_field, velocity_field,
     f = []
     for i, d in enumerate(stencil):
         f.append(weights[i] * ((1.0 - 4.0 * (phi_field.center - 0.5) ** 2) / interface_thickness)
-                 * scalar_product(d, normal_fd[0:dimensions]))
+                 * scalar_product(d, normal_fd[0:stencil.D]))
 
     for i, _ in enumerate(stencil):
         h_updates.append(Assignment(lb_phase_field.center(i), phi_field.center * gamma_init[i] - 0.5 * f[i]))
@@ -548,9 +539,8 @@ def initializer_kernel_hydro_lb(lb_velocity_field, velocity_field, mrt_method):
         mrt_method: lattice Boltzmann method of the hydrodynamic lattice Boltzmann step
     """
     stencil = mrt_method.stencil
-    dimensions = len(stencil[0])
     weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
-    u_symp = sp.symbols("u_:{}".format(dimensions))
+    u_symp = sp.symbols(f"u_:{stencil.D}")
 
     gamma = mrt_method.get_equilibrium_terms()
     gamma = gamma.subs({sp.symbols("rho"): 1})

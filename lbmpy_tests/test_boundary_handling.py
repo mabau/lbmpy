@@ -4,11 +4,12 @@ import pytest
 from lbmpy.boundaries import NoSlip, UBB, SimpleExtrapolationOutflow, ExtrapolationOutflow, \
     FixedDensity, DiffusionDirichlet, NeumannByCopy, StreamInConstant, FreeSlip
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
-from lbmpy.creationfunctions import create_lb_function, create_lb_method
+from lbmpy.creationfunctions import create_lb_function, create_lb_method, LBMConfig, LBMOptimisation
+from lbmpy.enums import Stencil, Method
 from lbmpy.geometry import add_box_boundary
 from lbmpy.lbstep import LatticeBoltzmannStep
-from lbmpy.stencils import get_stencil
-from pystencils import create_data_handling, make_slice, Target
+from lbmpy.stencils import LBStencil
+from pystencils import create_data_handling, make_slice, Target, CreateKernelConfig
 from pystencils.slicing import slice_from_direction
 from pystencils.stencil import inverse_direction
 
@@ -39,10 +40,10 @@ def test_simple(target):
     if target == Target.GPU or target == Target.OPENCL:
         dh.all_to_gpu()
 
-    lb_func = create_lb_function(stencil='D2Q9',
-                                 compressible=False,
-                                 relaxation_rate=1.8,
-                                 optimization={'target': target})
+    lbm_config = LBMConfig(stencil=LBStencil(Stencil.D2Q9), compressible=False, relaxation_rate=1.8)
+    config = CreateKernelConfig(target=target)
+
+    lb_func = create_lb_function(lbm_config=lbm_config, config=config)
 
     bh = LatticeBoltzmannBoundaryHandling(lb_func.method, dh, 'pdfs', target=target)
 
@@ -116,11 +117,13 @@ def test_simple(target):
 
 
 def test_free_slip_index_list():
-    stencil = get_stencil('D2Q9')
+    stencil = LBStencil(Stencil.D2Q9)
     dh = create_data_handling(domain_size=(4, 4), periodicity=(False, False))
     src = dh.add_array('src', values_per_cell=len(stencil), alignment=True)
     dh.fill('src', 0.0, ghost_layers=True)
-    method = create_lb_method(stencil='D2Q9', method='srt', relaxation_rate=1.8)
+
+    lbm_config = LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.8)
+    method = create_lb_method(lbm_config=lbm_config)
 
     bh = LatticeBoltzmannBoundaryHandling(method, dh, 'src', name="bh")
 
@@ -185,10 +188,10 @@ def test_free_slip_index_list():
 def test_free_slip_equivalence():
     # check if Free slip BC does the same if the normal direction is specified or not
 
-    stencil = get_stencil('D2Q9')
+    stencil = LBStencil(Stencil.D2Q9)
     dh = create_data_handling(domain_size=(4, 4), periodicity=(False, False))
-    src1 = dh.add_array('src1', values_per_cell=len(stencil), alignment=True)
-    src2 = dh.add_array('src2', values_per_cell=len(stencil), alignment=True)
+    src1 = dh.add_array('src1', values_per_cell=stencil.Q, alignment=True)
+    src2 = dh.add_array('src2', values_per_cell=stencil.Q, alignment=True)
     dh.fill('src1', 0.0, ghost_layers=True)
     dh.fill('src2', 0.0, ghost_layers=True)
 
@@ -202,7 +205,7 @@ def test_free_slip_equivalence():
                 dh.cpu_arrays['src2'][x, y, direction] = num
                 num += 1
 
-    method = create_lb_method(stencil='D2Q9', method='srt', relaxation_rate=1.8)
+    method = create_lb_method(lbm_config=LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.8))
 
     bh1 = LatticeBoltzmannBoundaryHandling(method, dh, 'src1', name="bh1")
     free_slip1 = FreeSlip(stencil=stencil)
@@ -227,8 +230,8 @@ def test_exotic_boundaries():
 
 
 def test_boundary_utility_functions():
-    stencil = get_stencil("D2Q9")
-    method = create_lb_method(stencil=stencil)
+    stencil = LBStencil(Stencil.D2Q9)
+    method = create_lb_method(lbm_config=LBMConfig(stencil=stencil))
 
     noslip = NoSlip("noslip")
     assert noslip == NoSlip("noslip")

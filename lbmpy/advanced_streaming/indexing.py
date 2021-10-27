@@ -5,7 +5,6 @@ import pystencils as ps
 from pystencils.data_types import TypedSymbol, create_type
 from pystencils.backends.cbackend import CustomCodeNode
 
-from lbmpy.stencils import get_stencil
 from lbmpy.advanced_streaming.utility import get_accessor, inverse_dir_index, is_inplace, Timestep
 
 from itertools import product
@@ -45,9 +44,6 @@ class BetweenTimestepsIndexing:
             raise ValueError('Cannot create index arrays for both kinds of timesteps for inplace streaming pattern '
                              + streaming_pattern)
 
-        if isinstance(stencil, str):
-            stencil = get_stencil(stencil)
-
         prev_accessor = get_accessor(streaming_pattern, prev_timestep)
         next_accessor = get_accessor(streaming_pattern, prev_timestep.next())
 
@@ -58,8 +54,8 @@ class BetweenTimestepsIndexing:
 
         self._pdf_field = pdf_field
         self._stencil = stencil
-        self._dim = len(stencil[0])
-        self._q = len(stencil)
+        self._dim = stencil.D
+        self._q = stencil.Q
         self._coordinate_names = ['x', 'y', 'z'][:self._dim]
 
         self._index_dtype = create_type(index_dtype)

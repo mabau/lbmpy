@@ -7,7 +7,6 @@ Additionally functions are provided to compute moments and cumulants of these di
 import warnings
 
 import sympy as sp
-from sympy import Rational as R
 
 from pystencils.cache import disk_cache
 from pystencils.sympyextensions import remove_higher_order_terms
@@ -17,38 +16,36 @@ from lbmpy.continuous_distribution_measures import continuous_moment, continuous
 
 
 def get_weights(stencil, c_s_sq=sp.Rational(1, 3)):
-    q = len(stencil)
-
     if c_s_sq != sp.Rational(1, 3) and c_s_sq != sp.Symbol("c_s") ** 2:
         warnings.warn("Weights of discrete equilibrium are only valid if c_s^2 = 1/3")
 
     def weight_for_direction(direction):
         abs_sum = sum([abs(d) for d in direction])
-        return get_weights.weights[q][abs_sum]
+        return get_weights.weights[stencil.Q][abs_sum]
     return [weight_for_direction(d) for d in stencil]
 
 
 get_weights.weights = {
     9: {
-        0: R(4, 9),
-        1: R(1, 9),
-        2: R(1, 36),
+        0: sp.Rational(4, 9),
+        1: sp.Rational(1, 9),
+        2: sp.Rational(1, 36),
     },
     15: {
-        0: R(2, 9),
-        1: R(1, 9),
-        3: R(1, 72),
+        0: sp.Rational(2, 9),
+        1: sp.Rational(1, 9),
+        3: sp.Rational(1, 72),
     },
     19: {
-        0: R(1, 3),
-        1: R(1, 18),
-        2: R(1, 36),
+        0: sp.Rational(1, 3),
+        1: sp.Rational(1, 18),
+        2: sp.Rational(1, 36),
     },
     27: {
-        0: R(8, 27),
-        1: R(2, 27),
-        2: R(1, 54),
-        3: R(1, 216),
+        0: sp.Rational(8, 27),
+        1: sp.Rational(2, 27),
+        2: sp.Rational(1, 54),
+        3: sp.Rational(1, 216),
     }
 }
 
@@ -68,10 +65,9 @@ def discrete_maxwellian_equilibrium(stencil, rho=sp.Symbol("rho"), u=sp.symbols(
         compressible: compressibility
     """
     weights = get_weights(stencil, c_s_sq)
-    assert len(stencil) == len(weights)
+    assert stencil.Q == len(weights)
 
-    dim = len(stencil[0])
-    u = u[:dim]
+    u = u[:stencil.D]
 
     rho_outside = rho if compressible else sp.Rational(1, 1)
     rho_inside = rho if not compressible else sp.Rational(1, 1)
@@ -113,14 +109,12 @@ def generate_equilibrium_by_matching_moments(stencil, moments, rho=sp.Symbol("rh
     see :func:`get_equilibrium_values_of_maxwell_boltzmann_function`
     """
     from lbmpy.moments import moment_matrix
-    dim = len(stencil[0])
-    Q = len(stencil)
-    assert len(moments) == Q, "Moment count(%d) does not match stencil size(%d)" % (len(moments), Q)
-    continuous_moments_vector = get_equilibrium_values_of_maxwell_boltzmann_function(moments, dim, rho, u, c_s_sq,
+    assert len(moments) == stencil.Q, f"Moment count({len(moments)}) does not match stencil size({stencil.Q})"
+    continuous_moments_vector = get_equilibrium_values_of_maxwell_boltzmann_function(moments, stencil.D, rho, u, c_s_sq,
                                                                                      order, space="moment")
     continuous_moments_vector = sp.Matrix(continuous_moments_vector)
     M = moment_matrix(moments, stencil)
-    assert M.rank() == Q, "Rank of moment matrix (%d) does not match stencil size (%d)" % (M.rank(), Q)
+    assert M.rank() == stencil.Q, f"Rank of moment matrix ({M.rank()}) does not match stencil size ({stencil.Q})"
     return M.inv() * continuous_moments_vector
 
 

@@ -1,16 +1,10 @@
 import os
-import warnings
 from tempfile import TemporaryDirectory
 
-import numpy as np
-import sympy as sp
-
 from lbmpy.boundaries import NoSlip
-from lbmpy.phasefield.analytical import free_energy_functional_n_phases_penalty_term
 from lbmpy.phasefield.experiments2D import (
     create_two_drops_between_phases, write_phase_field_picture_sequence,
     write_phase_velocity_picture_sequence)
-from lbmpy.phasefield.phasefieldstep import PhaseFieldStep
 from lbmpy.phasefield.scenarios import *
 from pystencils import make_slice
 
@@ -55,11 +49,11 @@ def test_setup():
 
     scenarios = [
         create_three_phase_model(domain_size=domain_size, include_rho=True),
-        #create_three_phase_model(domain_size=domain_size, include_rho=False),
+        # create_three_phase_model(domain_size=domain_size, include_rho=False),
         create_n_phase_model_penalty_term(domain_size=domain_size, num_phases=4),
     ]
     for i, sc in enumerate(scenarios):
-        print("Testing scenario", i)
+        print(f"Testing scenario {i}")
         sc.set_concentration(make_slice[:, :0.5], [1, 0, 0])
         sc.set_concentration(make_slice[:, 0.5:], [0, 1, 0])
         sc.set_concentration(make_slice[0.4:0.6, 0.4:0.6], [0, 0, 1])

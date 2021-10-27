@@ -1,6 +1,7 @@
 import numpy as np
 
 from lbmpy.boundaries import UBB, NoSlip
+from lbmpy.enums import ForceModel
 from lbmpy.scenarios import create_channel
 from pystencils import make_slice
 
@@ -26,10 +27,11 @@ def test_force_on_boundary():
 
     for parallel in (False, True) if wLB else (False,):
         for boundary_obj in boundaries:
-            print("Testing parallel %d, boundary %s" % (parallel, boundary_obj.name))
-            step = create_channel(domain_size, force=1e-5, relaxation_rate=1.5, parallel=parallel, force_model='buick')
+            print(f"Testing parallel {parallel}, boundary {boundary_obj.name}")
+            step = create_channel(domain_size, force=1e-5, relaxation_rate=1.5, parallel=parallel,
+                                  force_model=ForceModel.BUICK)
             force = calculate_force(step, boundary_obj)
-            print("  -> force = ", force)
+            print(f"  -> force = {force}")
             results.append(force)
 
     for res in results[1:]:

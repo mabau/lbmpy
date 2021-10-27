@@ -2,7 +2,6 @@ import sympy as sp
 
 from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.methods.creationfunctions import create_from_equilibrium
-from lbmpy.stencils import get_stencil
 from pystencils.sympyextensions import kronecker_delta, multidimensional_sum
 
 
@@ -19,8 +18,6 @@ def cahn_hilliard_lb_method(stencil, mu, relaxation_rate=sp.Symbol("omega"), gam
         relaxation_rate: relaxation rate of method
         gamma: tunable parameter affecting the second order equilibrium moment
     """
-    if isinstance(stencil, str):
-        stencil = get_stencil(stencil)
     weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
 
     kd = kronecker_delta
@@ -30,7 +27,7 @@ def cahn_hilliard_lb_method(stencil, mu, relaxation_rate=sp.Symbol("omega"), gam
             yield r
 
     op = sp.Symbol("rho")
-    v = sp.symbols("u_:%d" % (len(stencil[0]),))
+    v = sp.symbols(f"u_:{stencil.D}")
 
     equilibrium = []
     for d, w in zip(stencil, weights):

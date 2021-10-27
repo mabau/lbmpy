@@ -1,33 +1,27 @@
 import numpy as np
 import sympy as sp
+import pytest
 
+from lbmpy.enums import ForceModel, Method, Stencil
 from lbmpy.forcemodels import Guo
 from lbmpy.methods.momentbased.entropic_eq_srt import create_srt_entropic
 from lbmpy.scenarios import create_lid_driven_cavity
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 
 
-def test_entropic_methods():
-    sc_kbc = create_lid_driven_cavity((20, 20), method='trt_kbc_n4', relaxation_rates=[1.9999, sp.Symbol("omega_free")],
+@pytest.mark.parametrize('method', [Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3])
+def test_entropic_methods(method):
+    sc_kbc = create_lid_driven_cavity((20, 20), method=method,
+                                      relaxation_rates=[1.9999, sp.Symbol("omega_free")],
                                       entropic_newton_iterations=3, entropic=True, compressible=True,
-                                      force=(-1e-10, 0), force_model="luo")
+                                      force=(-1e-10, 0), force_model=ForceModel.LUO)
 
-    sc_srt = create_lid_driven_cavity((40, 40), relaxation_rate=1.9999, lid_velocity=0.05, compressible=True,
-                                      force=(-1e-10, 0), force_model="luo")
-
-    sc_entropic = create_lid_driven_cavity((40, 40), method='entropic_srt', relaxation_rate=1.9999,
-                                           lid_velocity=0.05, compressible=True, force=(-1e-10, 0), force_model="luo")
-
-    sc_srt.run(1000)
     sc_kbc.run(1000)
-    sc_entropic.run(1000)
-    assert np.isnan(np.max(sc_srt.velocity[:, :]))
     assert np.isfinite(np.max(sc_kbc.velocity[:, :]))
-    assert np.isfinite(np.max(sc_entropic.velocity[:, :]))
 
 
 def test_entropic_srt():
-    stencil = get_stencil("D2Q9")
+    stencil = LBStencil(Stencil.D2Q9)
     relaxation_rate = 1.8
     method = create_srt_entropic(stencil, relaxation_rate, Guo((0, 1e-6)), True)
     assert method.zeroth_order_equilibrium_moment_symbol == sp.symbols("rho")

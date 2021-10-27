@@ -1,40 +1,43 @@
 import numpy as np
 import sympy as sp
 
-from lbmpy.creationfunctions import create_lb_method
+from lbmpy.creationfunctions import create_lb_method, LBMConfig
+from lbmpy.enums import Method, Stencil
 from lbmpy.forcemodels import Luo
 from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.moments import moment_matrix, set_up_shift_matrix
 from lbmpy.methods.creationfunctions import cascaded_moment_sets_literature
 from lbmpy.scenarios import create_lid_driven_cavity
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 
 from lbmpy.moment_transforms import PdfsToCentralMomentsByShiftMatrix
 
 
 def test_central_moment_ldc():
-    sc_central_moment = create_lid_driven_cavity((20, 20), method='central_moment',
+    sc_central_moment = create_lid_driven_cavity((20, 20), method=Method.CENTRAL_MOMENT,
                                                  relaxation_rate=1.8, equilibrium_order=4,
                                                  compressible=True, force=(-1e-10, 0))
 
-    sc_central_mometn_3D = create_lid_driven_cavity((20, 20, 3), method='central_moment',
+    sc_central_moment_3d = create_lid_driven_cavity((20, 20, 3), method=Method.CENTRAL_MOMENT,
                                                     relaxation_rate=1.8, equilibrium_order=4,
                                                     compressible=True, force=(-1e-10, 0, 0))
 
     sc_central_moment.run(1000)
-    sc_central_mometn_3D.run(1000)
+    sc_central_moment_3d.run(1000)
     assert np.isfinite(np.max(sc_central_moment.velocity[:, :]))
-    assert np.isfinite(np.max(sc_central_mometn_3D.velocity[:, :, :]))
+    assert np.isfinite(np.max(sc_central_moment_3d.velocity[:, :, :]))
 
 
 def test_central_moment_class():
-    stencil = get_stencil("D2Q9")
+    stencil = LBStencil(Stencil.D2Q9)
+    lbm_config = LBMConfig(stencil=stencil, method=Method.CENTRAL_MOMENT, relaxation_rates=[1.2, 1.3, 1.4, 1.5],
+                           equilibrium_order=4, compressible=True)
 
-    method = create_lb_method(stencil=stencil, method='central_moment',
-                              relaxation_rates=[1.2, 1.3, 1.4, 1.5], equilibrium_order=4, compressible=True)
+    method = create_lb_method(lbm_config=lbm_config)
 
-    srt = create_lb_method(stencil=stencil, method='srt',
-                           relaxation_rate=1.2, equilibrium_order=4, compressible=True)
+    lbm_config = LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.2,
+                           equilibrium_order=4, compressible=True)
+    srt = create_lb_method(lbm_config=lbm_config)
 
     rho = method.zeroth_order_equilibrium_moment_symbol
     u = method.first_order_equilibrium_moment_symbols
@@ -52,7 +55,7 @@ def test_central_moment_class():
     assert method.conserved_quantity_computation.first_order_moment_symbols == u
     assert method.moment_equilibrium_values == eq
 
-    assert method.force_model == None
+    assert method.force_model is None
     method.set_force_model(force_model)
     assert method.force_model == force_model
 
@@ -89,14 +92,16 @@ def test_central_moment_class():
     for i in range(len(stencil)):
         assert sp.simplify(eq_terms_central[i] - eq_terms_srt[i]) == 0
 
-    method = create_lb_method(stencil="D2Q9", method='central_moment',
-                              relaxation_rates=[1.7, 1.8, 1.2, 1.3, 1.4], equilibrium_order=4, compressible=True)
+    method = create_lb_method(lbm_config=LBMConfig(stencil=LBStencil(Stencil.D2Q9), method=Method.CENTRAL_MOMENT,
+                                                   relaxation_rates=[1.7, 1.8, 1.2, 1.3, 1.4], equilibrium_order=4,
+                                                   compressible=True))
 
     assert method.relaxation_matrix[0, 0] == 0
     assert method.relaxation_matrix[1, 1] == 0
     assert method.relaxation_matrix[2, 2] == 0
 
-    method = create_lb_method(stencil="D2Q9", method='central_moment',
-                              relaxation_rates=[1.3] * 9, equilibrium_order=4, compressible=True)
+    method = create_lb_method(lbm_config=LBMConfig(stencil=LBStencil(Stencil.D2Q9), method=Method.CENTRAL_MOMENT,
+                                                   relaxation_rates=[1.3] * 9, equilibrium_order=4,
+                                                   compressible=True))
 
-    np.testing.assert_almost_equal(sum(method.relaxation_rates), 1.3 * 6)
+    np.testing.assert_almost_equal(sum(method.relaxation_rates), 1.3 * 9)

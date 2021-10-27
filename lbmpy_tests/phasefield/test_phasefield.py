@@ -14,6 +14,7 @@ from lbmpy.phasefield.experiments2D import liquid_lens_setup
 from lbmpy.phasefield.contact_angle_circle_fitting import liquid_lens_neumann_angles
 from lbmpy.phasefield.post_processing import analytic_neumann_angles
 
+
 def test_analytic_interface_solution():
     """Ensures that the tanh is an analytical solution for the prescribed free energy / chemical potential
     """

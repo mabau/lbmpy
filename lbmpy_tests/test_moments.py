@@ -1,5 +1,6 @@
 from lbmpy.moments import *
-from lbmpy.stencils import get_stencil
+from lbmpy.enums import Stencil
+from lbmpy.stencils import LBStencil
 
 
 def test_moment_permutation_multiplicity():
@@ -69,7 +70,7 @@ def test_gram_schmidt_orthogonalization():
     moments = moments_up_to_component_order(2, 2)
     assert len(moments) == 9
 
-    stencil = get_stencil("D2Q9")
+    stencil = LBStencil(Stencil.D2Q9)
     orthogonal_moments = gram_schmidt(moments, stencil)
     pdfs_to_moments = moment_matrix(orthogonal_moments, stencil)
     assert (pdfs_to_moments * pdfs_to_moments.T).is_diagonal()

@@ -4,9 +4,9 @@ Scenario setup
 
 This module contains functions to set up pre-defined scenarios like a lid-driven cavity or channel flows.
 It is a good starting point if you are new to lbmpy.
-
+>>> from lbmpy.enums import Method
 >>> scenario = create_channel(domain_size=(20, 10), force=1e-5,
-...                          method='srt', relaxation_rate=1.9)
+...                          method=Method.SRT, relaxation_rate=1.9)
 >>> scenario.run(100)
 
 All scenarios can be modified, for example you can create a simple channel first, then place an object in it:

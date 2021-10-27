@@ -15,8 +15,9 @@ except ImportError:
     USE_CYTHON = False
 
 quick_tests = [
-    'test_serial_scenarios.test_ldc_mrt',
-    'test_serial_scenarios.test_channel_srt',
+    'test_quicktests.test_poiseuille_channel_quicktest',
+    'test_quicktests.test_entropic_methods',
+    'test_quicktests.test_cumulant_ldc',
 ]
 
 
@@ -87,7 +88,7 @@ setup(name='lbmpy',
       author_email='cs10-codegen@fau.de',
       url='https://i10git.cs.fau.de/pycodegen/lbmpy/',
       packages=['lbmpy'] + ['lbmpy.' + s for s in find_packages('lbmpy')],
-      install_requires=['pystencils>=0.4.0', 'sympy>=1.2', 'numpy>=1.11.0'],
+      install_requires=['pystencils>=0.4.0', 'sympy>=1.5.1,<=1.9', 'numpy>=1.11.0'],
       package_data={'lbmpy': ['phasefield/simplex_projection.pyx',
                               'phasefield/simplex_projection.c']},
       ext_modules=cython_extensions("lbmpy.phasefield.simplex_projection"),

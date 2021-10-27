@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
-from pystencils import Target
+from types import MappingProxyType
+from pystencils import Target, CreateKernelConfig
 
 from lbmpy.scenarios import create_fully_periodic_flow, create_lid_driven_cavity
 
@@ -31,18 +32,18 @@ def test_data_handling_3d():
         for gpu in [False, True] if gpu_available else [False]:
             if parallel and gpu and not hasattr(wLB, 'cuda'):
                 continue
-            print("Testing parallel: %s\tgpu: %s" % (parallel, gpu))
-            opt_params = {'target': Target.GPU if gpu else Target.CPU,
-                          'gpu_indexing_params': {'block_size': (8, 4, 2)}}
+            print(f"Testing parallel: {parallel}\tgpu: {gpu}")
+            config = CreateKernelConfig(target=Target.GPU if gpu else Target.CPU,
+                                        gpu_indexing_params=MappingProxyType({'block_size': (8, 4, 2)}))
             if parallel:
                 from pystencils.datahandling import ParallelDataHandling
                 blocks = wLB.createUniformBlockGrid(blocks=(2, 3, 4), cellsPerBlock=(5, 5, 5),
                                                     oneBlockPerProcess=False)
                 dh = ParallelDataHandling(blocks, dim=3)
-                rho = ldc_setup(data_handling=dh, optimization=opt_params)
+                rho = ldc_setup(data_handling=dh, config=config)
                 results.append(rho)
             else:
-                rho = ldc_setup(domain_size=(10, 15, 20), parallel=False, optimization=opt_params)
+                rho = ldc_setup(domain_size=(10, 15, 20), parallel=False, config=config)
                 results.append(rho)
     for i, arr in enumerate(results[1:]):
         print("Testing equivalence version 0 with version %d" % (i + 1,))
@@ -65,21 +66,21 @@ def test_data_handling_2d_opencl():
         if parallel and gpu and not hasattr(wLB, 'cuda'):
             continue
 
-        print("Testing parallel: %s\tgpu: %s" % (parallel, gpu))
-        opt_params = {'target': Target.OPENCL if gpu else Target.CPU,
-                      'gpu_indexing_params': {'block_size': (8, 4, 2)}}
+        print(f"Testing parallel: {parallel}\tgpu: {gpu}")
+        config = CreateKernelConfig(target=Target.GPU if gpu else Target.CPU,
+                                    gpu_indexing_params=MappingProxyType({'block_size': (8, 4, 2)}))
         if parallel:
             from pystencils.datahandling import ParallelDataHandling
             blocks = wLB.createUniformBlockGrid(blocks=(2, 3, 1), cellsPerBlock=(5, 5, 1),
                                                 oneBlockPerProcess=False)
             dh = ParallelDataHandling(blocks, dim=2)
-            rho = ldc_setup(data_handling=dh, optimization=opt_params)
+            rho = ldc_setup(data_handling=dh, config=config)
             results.append(rho)
         else:
-            rho = ldc_setup(domain_size=(10, 15), parallel=False, optimization=opt_params)
+            rho = ldc_setup(domain_size=(10, 15), parallel=False, config=config)
             results.append(rho)
     for i, arr in enumerate(results[1:]):
-        print("Testing equivalence version 0 with version %d" % (i + 1,))
+        print(f"Testing equivalence version 0 with version {i + 1}")
         np.testing.assert_almost_equal(results[0], arr)
 
 
@@ -91,18 +92,18 @@ def test_data_handling_2d():
             if parallel and gpu and not hasattr(wLB, 'cuda'):
                 continue
 
-            print("Testing parallel: %s\tgpu: %s" % (parallel, gpu))
-            opt_params = {'target': Target.GPU if gpu else Target.CPU,
-                          'gpu_indexing_params': {'block_size': (8, 4, 2)}}
+            print(f"Testing parallel: {parallel}\tgpu: {gpu}")
+            config = CreateKernelConfig(target=Target.GPU if gpu else Target.CPU,
+                                        gpu_indexing_params=MappingProxyType({'block_size': (8, 4, 2)}))
             if parallel:
                 from pystencils.datahandling import ParallelDataHandling
                 blocks = wLB.createUniformBlockGrid(blocks=(2, 3, 1), cellsPerBlock=(5, 5, 1),
                                                     oneBlockPerProcess=False)
                 dh = ParallelDataHandling(blocks, dim=2)
-                rho = ldc_setup(data_handling=dh, optimization=opt_params)
+                rho = ldc_setup(data_handling=dh, config=config)
                 results.append(rho)
             else:
-                rho = ldc_setup(domain_size=(10, 15), parallel=False, optimization=opt_params)
+                rho = ldc_setup(domain_size=(10, 15), parallel=False, config=config)
                 results.append(rho)
     for i, arr in enumerate(results[1:]):
         print(f"Testing equivalence version 0 with version {i + 1}")

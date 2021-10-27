@@ -6,22 +6,23 @@ given discrete_maxwellian_equilibrium
 import pytest
 import sympy as sp
 
-from lbmpy.creationfunctions import create_lb_method
+from lbmpy.creationfunctions import create_lb_method, LBMConfig
+from lbmpy.enums import Stencil, Method
 from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
 from lbmpy.methods import create_mrt_orthogonal, create_srt, create_trt, mrt_orthogonal_modes_literature
 from lbmpy.moments import is_bulk_moment, is_shear_moment
 from lbmpy.relaxationrates import get_shear_relaxation_rate
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 
 
 def check_for_matching_equilibrium(method_name, stencil, compressibility):
     omega = sp.Symbol("omega")
-    if method_name == 'srt':
+    if method_name == Method.SRT:
         method = create_srt(stencil, omega, compressible=compressibility, equilibrium_order=2)
-    elif method_name == 'trt':
+    elif method_name == Method.TRT:
         method = create_trt(stencil, omega, omega, compressible=compressibility, equilibrium_order=2)
-    elif method_name == 'mrt':
-        method = create_mrt_orthogonal(stencil, lambda v: omega, weighted=False, compressible=compressibility,
+    elif method_name == Method.MRT:
+        method = create_mrt_orthogonal(stencil, [omega] * stencil.Q, weighted=False, compressible=compressibility,
                                        equilibrium_order=2)
     else:
         raise ValueError("Unknown method")
@@ -36,19 +37,25 @@ def check_for_matching_equilibrium(method_name, stencil, compressibility):
     assert sum(diff).is_zero
 
 
-@pytest.mark.parametrize("stencil_name", ["D2Q9", "D3Q15", "D3Q19", "D3Q27"])
-def test_for_matching_equilibrium_for_stencil(stencil_name):
-    stencil = get_stencil(stencil_name)
-    for method in ['srt', 'trt', 'mrt']:
-        check_for_matching_equilibrium(method, stencil, True)
-        check_for_matching_equilibrium(method, stencil, False)
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
+@pytest.mark.parametrize('method', [Method.SRT, Method.TRT, Method.MRT])
+def test_for_matching_equilibrium_for_stencil(stencil, method):
+    stencil = LBStencil(stencil)
+    check_for_matching_equilibrium(method, stencil, True)
+    check_for_matching_equilibrium(method, stencil, False)
 
 
 def test_relaxation_rate_setter():
     o1, o2, o3 = sp.symbols("o1 o2 o3")
-    method = create_lb_method(method='srt', stencil='D2Q9', relaxation_rates=[o3])
-    method2 = create_lb_method(method='mrt', stencil='D2Q9', relaxation_rates=[o3, o3, o3, o3])
-    method3 = create_lb_method(method='mrt', stencil='D2Q9', relaxation_rates=[o3, o3, o3, o3], entropic=True)
+
+    lbm_config_1 = LBMConfig(method=Method.SRT, stencil=LBStencil(Stencil.D2Q9), relaxation_rates=[o3])
+    lbm_config_2 = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D2Q9), relaxation_rates=[o3, o3, o3, o3])
+    lbm_config_3 = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D2Q9),
+                             relaxation_rates=[o3] * 9, entropic=True)
+
+    method = create_lb_method(lbm_config=lbm_config_1)
+    method2 = create_lb_method(lbm_config=lbm_config_2)
+    method3 = create_lb_method(lbm_config=lbm_config_3)
     method.set_zeroth_moment_relaxation_rate(o1)
     method.set_first_moment_relaxation_rate(o2)
     assert get_shear_relaxation_rate(method) == o3
@@ -61,29 +68,39 @@ def test_relaxation_rate_setter():
 def test_mrt_orthogonal():
     m_ref = {}
 
-    moments = mrt_orthogonal_modes_literature(get_stencil("D2Q9"), True)
-    m = create_lb_method(stencil=get_stencil("D2Q9"), method='mrt', maxwellian_moments=True, nested_moments=moments)
+    moments = mrt_orthogonal_modes_literature(LBStencil(Stencil.D2Q9), True)
+    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D2Q9), maxwellian_moments=True,
+                           nested_moments=moments)
+    m = create_lb_method(lbm_config=lbm_config)
     assert m.is_weighted_orthogonal
-    m_ref[("D2Q9", True)] = m
+    m_ref[(Stencil.D2Q9, True)] = m
 
-    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q15"), True)
-    m = create_lb_method(stencil=get_stencil("D3Q15"), method='mrt', maxwellian_moments=True, nested_moments=moments)
+    moments = mrt_orthogonal_modes_literature(LBStencil(Stencil.D3Q15), True)
+    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q15), maxwellian_moments=True,
+                           nested_moments=moments)
+    m = create_lb_method(lbm_config=lbm_config)
     assert m.is_weighted_orthogonal
-    m_ref[("D3Q15", True)] = m
+    m_ref[(Stencil.D3Q15, True)] = m
 
-    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q19"), True)
-    m = create_lb_method(stencil=get_stencil("D3Q19"), method='mrt', maxwellian_moments=True, nested_moments=moments)
+    moments = mrt_orthogonal_modes_literature(LBStencil(Stencil.D3Q19), True)
+    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q19), maxwellian_moments=True,
+                           nested_moments=moments)
+    m = create_lb_method(lbm_config=lbm_config)
     assert m.is_weighted_orthogonal
-    m_ref[("D3Q19", True)] = m
+    m_ref[(Stencil.D3Q19, True)] = m
 
-    moments = mrt_orthogonal_modes_literature(get_stencil("D3Q27"), False)
-    m = create_lb_method(stencil=get_stencil("D3Q27"), method='mrt', maxwellian_moments=True, nested_moments=moments)
+    moments = mrt_orthogonal_modes_literature(LBStencil(Stencil.D3Q27), False)
+    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q27), maxwellian_moments=True,
+                           nested_moments=moments)
+    m = create_lb_method(lbm_config=lbm_config)
     assert m.is_orthogonal
-    m_ref[("D3Q27", False)] = m
+    m_ref[(Stencil.D3Q27, False)] = m
 
     for weighted in [True, False]:
-        for stencil in ["D2Q9", "D3Q15", "D3Q19", "D3Q27"]:
-            m = create_lb_method(stencil=get_stencil(stencil), method='mrt', maxwellian_moments=True, weighted=weighted)
+        for stencil in [Stencil.D2Q9, Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27]:
+            lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(stencil), maxwellian_moments=True,
+                                   weighted=weighted)
+            m = create_lb_method(lbm_config=lbm_config)
             if weighted:
                 assert m.is_weighted_orthogonal
             else:
@@ -98,6 +115,6 @@ def test_mrt_orthogonal():
                 bulk_moments_lit = set([mom for mom in ref.moments if is_bulk_moment(mom, ref.dim)])
                 shear_moments_lit = set([mom for mom in ref.moments if is_shear_moment(mom, ref.dim)])
 
-                if stencil != "D3Q27":  # this one uses a different linear combination in literature
+                if stencil != stencil.D3Q27:  # this one uses a different linear combination in literature
                     assert shear_moments == shear_moments_lit
                 assert bulk_moments == bulk_moments_lit

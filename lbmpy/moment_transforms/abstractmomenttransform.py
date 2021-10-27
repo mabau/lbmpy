@@ -50,8 +50,8 @@ class AbstractMomentTransform:
             raise ValueError("Both moment_exponents and moment_polynomials were given. Pass only one of them!")
 
         self.stencil = stencil
-        self.dim = len(stencil[0])
-        self.q = len(stencil)
+        self.dim = stencil.D
+        self.q = stencil.Q
 
         if moment_exponents is not None:
             self.moment_exponents = list(moment_exponents)

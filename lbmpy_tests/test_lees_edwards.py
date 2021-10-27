@@ -4,8 +4,9 @@ import pystencils as ps
 from pystencils.astnodes import LoopOverCoordinate
 from pystencils.slicing import get_periodic_boundary_functor
 
-from lbmpy.creationfunctions import create_lb_update_rule
-from lbmpy.stencils import get_stencil
+from lbmpy.creationfunctions import create_lb_update_rule, LBMConfig, LBMOptimisation
+from lbmpy.enums import Stencil, ForceModel
+from lbmpy.stencils import LBStencil
 from lbmpy.updatekernels import create_stream_pull_with_output_kernel
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
 from lbmpy.relaxationrates import lattice_viscosity_from_relaxation_rate
@@ -57,26 +58,25 @@ def test_lees_edwards():
     shear_dir = 0  # direction of shear flow
     shear_dir_normal = 1  # direction normal to shear plane, for interpolation
 
-    stencil = get_stencil("D2Q9")
+    stencil = LBStencil(Stencil.D2Q9)
 
-    dim = len(stencil[0])
     dh = ps.create_data_handling(domain_size, periodicity=True, default_target=ps.Target.CPU)
 
-    src = dh.add_array('src', values_per_cell=len(stencil))
+    src = dh.add_array('src', values_per_cell=stencil.Q)
     dh.fill('src', 1.0, ghost_layers=True)
 
     dst = dh.add_array_like('dst', 'src')
     dh.fill('dst', 0.0, ghost_layers=True)
 
-    force = dh.add_array('force', values_per_cell=dh.dim)
+    force = dh.add_array('force', values_per_cell=stencil.D)
     dh.fill('force', 0.0, ghost_layers=True)
 
     rho = dh.add_array('rho', values_per_cell=1)
     dh.fill('rho', 1.0, ghost_layers=True)
-    u = dh.add_array('u', values_per_cell=dh.dim)
+    u = dh.add_array('u', values_per_cell=stencil.D)
     dh.fill('u', 0.0, ghost_layers=True)
 
-    counters = [LoopOverCoordinate.get_loop_counter_symbol(i) for i in range(dim)]
+    counters = [LoopOverCoordinate.get_loop_counter_symbol(i) for i in range(stencil.D)]
     points_up = sp.Symbol('points_up')
     points_down = sp.Symbol('points_down')
 
@@ -84,15 +84,12 @@ def test_lees_edwards():
                        (-1, sp.And(ps.data_types.type_all_numbers(counters[1] >= src.shape[1] - 2, 'int'),
                                    points_up)), (0, True)) * shear_velocity
 
-    collision = create_lb_update_rule(stencil=stencil,
-                                      relaxation_rate=omega,
-                                      compressible=True,
-                                      velocity_input=u.center_vector + sp.Matrix([u_p, 0]),
-                                      density_input=rho,
-                                      force_model='luo',
-                                      force=force.center_vector,
-                                      kernel_type='collide_only',
-                                      optimization={'symbolic_field': src})
+    lbm_config = LBMConfig(stencil=stencil, relaxation_rate=omega, compressible=True,
+                           velocity_input=u.center_vector + sp.Matrix([u_p, 0]), density_input=rho,
+                           force_model=ForceModel.LUO, force=force.center_vector,
+                           kernel_type='collide_only')
+    lbm_opt = LBMOptimisation(symbolic_field=src)
+    collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
     to_insert = [s.lhs for s in collision.subexpressions
                  if collision.method.first_order_equilibrium_moment_symbols[shear_dir]
@@ -115,8 +112,9 @@ def test_lees_edwards():
     stream = create_stream_pull_with_output_kernel(collision.method, src, dst,
                                                    {'density': rho, 'velocity': u})
 
-    stream_kernel = ps.create_kernel(stream, target=dh.default_target).compile()
-    collision_kernel = ps.create_kernel(collision, target=dh.default_target).compile()
+    config = ps.CreateKernelConfig(target=dh.default_target)
+    stream_kernel = ps.create_kernel(stream, config=config).compile()
+    collision_kernel = ps.create_kernel(collision, config=config).compile()
 
     init = macroscopic_values_setter(collision.method, velocity=(0, 0),
                                      pdfs=src.center_vector, density=rho.center)
