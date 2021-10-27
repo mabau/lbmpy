@@ -1,5 +1,6 @@
 import functools
 
+import numpy as np
 import sympy as sp
 
 from lbmpy.chapman_enskog.chapman_enskog import (
@@ -150,7 +151,8 @@ class SteadyStateChapmanEnskogAnalysis:
 
                 have_shape = hasattr(arg, 'shape') and hasattr(new_prod, 'shape')
                 if have_shape and arg.shape == new_prod.shape and arg.shape[1] == 1:
-                    new_prod = sp.matrix_multiply_elementwise(new_prod, arg)
+                    # since sympy 1.9 sp.matrix_multiply_elementwise does not work anymore in this case
+                    new_prod = sp.Matrix(np.multiply(new_prod, arg))
                 else:
                     new_prod = arg * new_prod
                 if new_prod == 0:

@@ -3,7 +3,6 @@ from pystencils import Field, Assignment
 from pystencils.slicing import shift_slice, get_slice_before_ghost_layer, normalize_slice
 from lbmpy.advanced_streaming.utility import is_inplace, get_accessor, numeric_index, \
     numeric_offsets, Timestep, get_timesteps
-from lbmpy.stencils import get_stencil
 from pystencils.datahandling import SerialDataHandling
 from pystencils.enums import Target
 from itertools import chain
@@ -69,11 +68,10 @@ def get_communication_slices(
 
     """
 
-    dim = len(stencil[0])
     if comm_stencil is None:
-        comm_stencil = itertools.product(*([-1, 0, 1] for _ in range(dim)))
+        comm_stencil = itertools.product(*([-1, 0, 1] for _ in range(stencil.D)))
 
-    pdfs = Field.create_generic('pdfs', spatial_dimensions=len(stencil[0]), index_shape=(len(stencil),))
+    pdfs = Field.create_generic('pdfs', spatial_dimensions=len(stencil[0]), index_shape=(stencil.Q,))
     write_accesses = get_accessor(streaming_pattern, prev_timestep).write(pdfs, stencil)
     slices_per_comm_direction = dict()
 
@@ -169,11 +167,8 @@ class LBMPeriodicityHandling:
         if not isinstance(data_handling, SerialDataHandling):
             raise ValueError('Only serial data handling is supported!')
 
-        if isinstance(stencil, str):
-            stencil = get_stencil(stencil)
-
         self.stencil = stencil
-        self.dim = len(stencil[0])
+        self.dim = stencil.D
         self.dh = data_handling
 
         target = data_handling.default_target

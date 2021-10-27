@@ -43,12 +43,11 @@ def add_entropy_condition(collision_rule, omega_output_field=None):
         ds.append(entry[0])
 
     stencil = collision_rule.method.stencil
-    q = len(stencil)
     f_symbols = collision_rule.method.pre_collision_pdf_symbols
 
-    ds_symbols = [sp.Symbol(f"entropicDs_{i}") for i in range(q)]
-    dh_symbols = [sp.Symbol(f"entropicDh_{i}") for i in range(q)]
-    feq_symbols = [sp.Symbol(f"entropicFeq_{i}") for i in range(q)]
+    ds_symbols = [sp.Symbol(f"entropicDs_{i}") for i in range(stencil.Q)]
+    dh_symbols = [sp.Symbol(f"entropicDh_{i}") for i in range(stencil.Q)]
+    feq_symbols = [sp.Symbol(f"entropicFeq_{i}") for i in range(stencil.Q)]
 
     subexpressions = [Assignment(a, b) for a, b in zip(ds_symbols, ds)] + \
                      [Assignment(a, b) for a, b in zip(dh_symbols, dh)] + \
@@ -73,6 +72,17 @@ def add_entropy_condition(collision_rule, omega_output_field=None):
 
     if omega_output_field:
         new_collision_rule.main_assignments.append(Assignment(omega_output_field.center, omega_h))
+
+    try:
+        new_collision_rule.topological_sort()
+    except ValueError as e:
+        print("After adding the entropic condition, a cyclic dependency has been detected. This problem occurred most "
+              "likely due to the use of a force model combined with the entropic method. As described by Silva et al. "
+              "(https://doi.org/10.1103/PhysRevE.102.063307), most force schemes for the TRT collision operator depend "
+              "on both relaxation times. However, the force is also needed to calculate the free relaxation parameter "
+              "in the first place for entropic methods. Thus a cyclic dependency appears. The problem does not appear "
+              "with the SIMPLE, LUO or EDM force model.")
+        raise e
 
     return new_collision_rule
 
@@ -158,6 +168,17 @@ def add_iterative_entropy_condition(collision_rule, free_omega=None, newton_iter
         from lbmpy.updatekernels import write_quantities_to_field
         new_collision_rule = write_quantities_to_field(new_collision_rule, free_omega, omega_output_field)
 
+    try:
+        new_collision_rule.topological_sort()
+    except ValueError as e:
+        print("After adding the entropic condition, a cyclic dependency has been detected. This problem occurred most "
+              "likely due to the use of a force model combined with the entropic method. As described by Silva et al. "
+              "(https://doi.org/10.1103/PhysRevE.102.063307), most force schemes for the TRT collision operator depend "
+              "on both relaxation times. However, the force is also needed to calculate the free relaxation parameter "
+              "in the first place for entropic methods. Thus a cyclic dependency appears. The problem does not appear "
+              "with the SIMPLE, LUO or EDM force model.")
+        raise e
+
     return new_collision_rule
 
 
@@ -195,17 +216,13 @@ def _get_entropy_maximizing_omega(omega_s, f_eq, ds, dh):
     return 1 - ((omega_s - 1) * ds_dh / dh_dh)
 
 
-class RelaxationRatePolynomialDecomposition(object):
+class RelaxationRatePolynomialDecomposition:
 
     def __init__(self, collision_rule, free_relaxation_rates, fixed_relaxation_rates):
         self._collisionRule = collision_rule
         self._free_relaxation_rates = free_relaxation_rates
         self._fixed_relaxation_rates = fixed_relaxation_rates
         self._all_relaxation_rates = fixed_relaxation_rates + free_relaxation_rates
-        for se in collision_rule.subexpressions:
-            for rr in free_relaxation_rates:
-                assert rr not in se.rhs.atoms(sp.Symbol), \
-                    "Decomposition not possible since free relaxation rates are already in subexpressions"
 
     def symbolic_relaxation_rate_factors(self, relaxation_rate, power):
         q = len(self._collisionRule.method.stencil)

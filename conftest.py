@@ -4,6 +4,9 @@ import tempfile
 import runpy
 import sys
 import warnings
+import nbformat
+from nbconvert import PythonExporter
+import sympy
 # Trigger config file reading / creation once - to avoid race conditions when multiple instances are creating it
 # at the same time
 from pystencils.cpu import cpujit
@@ -12,11 +15,11 @@ from pystencils.cpu import cpujit
 # at the same time
 try:
     import pyximport
+
     pyximport.install(language_level=3)
 except ImportError:
     pass
 from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
-
 
 SCRIPT_FOLDER = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.abspath('lbmpy'))
@@ -40,7 +43,6 @@ collect_ignore = [os.path.join(SCRIPT_FOLDER, "doc", "conf.py"),
 add_path_to_ignore('pystencils_tests/benchmark')
 add_path_to_ignore('_local_tmp')
 
-
 try:
     import pycuda
 except ImportError:
@@ -49,18 +51,17 @@ except ImportError:
 try:
     import waLBerla
 except ImportError:
-    collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_serial_scenarios.py")]
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_datahandling_parallel.py")]
 
 try:
     import blitzdb
 except ImportError:
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/benchmark"),
-                       os.path.join(SCRIPT_FOLDER, "lbmpy_tests/full_scenarios/kida_vortex_flow/scenario_kida_vortex_flow.py")]
+                       os.path.join(SCRIPT_FOLDER,
+                                    "lbmpy_tests/full_scenarios/kida_vortex_flow/scenario_kida_vortex_flow.py")]
 
-import sympy
 sver = sympy.__version__.split(".")
-if (int(sver[0]) == 1 and int(sver[1]) < 2):
+if int(sver[0]) == 1 and int(sver[1]) < 2:
     add_path_to_ignore('lbmpy_tests/phasefield')
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_n_phase_boyer_noncoupled.ipynb")]
 
@@ -70,10 +71,6 @@ for root, sub_dirs, files in os.walk('.'):
     for f in files:
         if f.endswith(".ipynb") and not any(f.startswith(k) for k in ['demo', 'tutorial', 'test', 'doc']):
             collect_ignore.append(f)
-
-
-import nbformat
-from nbconvert import PythonExporter
 
 
 class IPythonMockup:

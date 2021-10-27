@@ -17,11 +17,11 @@ def symmetric_symbolic_surface_tension(i, j):
     if i == j:
         return 0
     index = (i, j) if i < j else (j, i)
-    return sp.Symbol("%s_%d_%d" % ((surface_tension_symbol_name,) + index))
+    return sp.Symbol(f"{surface_tension_symbol_name}_{index[0]}_{index[1]}")
 
 
 def symbolic_order_parameters(num_symbols):
-    return sp.symbols("%s_:%i" % (order_parameter_symbol_name, num_symbols))
+    return sp.symbols(f"{order_parameter_symbol_name}_:{num_symbols}")
 
 
 def free_energy_functional_3_phases(order_parameters=None, interface_width=interface_width_symbol, transformed=True,
@@ -65,7 +65,7 @@ def free_energy_functional_n_phases_penalty_term(order_parameters, interface_wid
                                                  penalty_term_factor=0.01):
     num_phases = len(order_parameters)
     if kappa is None:
-        kappa = sp.symbols("kappa_:%d" % (num_phases,))
+        kappa = sp.symbols(f"kappa_:{num_phases}")
     if not hasattr(kappa, "__len__"):
         kappa = [kappa] * num_phases
 
@@ -166,7 +166,8 @@ def free_energy_functional_n_phases(num_phases=None, surface_tensions=symmetric_
 
     def lambda_coeff(k, l):
         if symbolic_lambda:
-            return sp.Symbol("Lambda_%d%d" % ((k, l) if k < l else (l, k)))
+            symbol_names = (k, l) if k < l else (l, k)
+            return sp.Symbol(f"Lambda_{symbol_names[0]}{symbol_names[1]}")
         n = num_phases - 1
         if k == l:
             assert surface_tensions(l, l) == 0
@@ -241,7 +242,7 @@ def chemical_potentials_from_free_energy(free_energy, order_parameters=None):
 
 def force_from_phi_and_mu(order_parameters, dim, mu=None):
     if mu is None:
-        mu = sp.symbols("mu_:%d" % (len(order_parameters),))
+        mu = sp.symbols(f"mu_:{len(order_parameters)}")
 
     return sp.Matrix([sum(- c_i * Diff(mu_i, a) for c_i, mu_i in zip(order_parameters, mu))
                       for a in range(dim)])
@@ -298,7 +299,7 @@ def extract_gamma(free_energy, order_parameters):
             continue
 
         if len(diff_factors) != 2:
-            raise ValueError("Could not determine Λ because of term " + str(product))
+            raise ValueError(f"Could not determine Λ because of term {str(product)}")
 
         indices = sorted([order_parameters.index(d.args[0]) for d in diff_factors])
         increment = prod(e for e in product if e.func != Diff)

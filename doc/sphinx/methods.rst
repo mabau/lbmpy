@@ -6,6 +6,9 @@ Methods (lbmpy.methods)
 LBM Method Interfaces
 =====================
 
+.. autoclass:: lbmpy.methods.LbmCollisionRule
+    :members:
+
 .. autoclass:: lbmpy.methods.AbstractLbMethod
     :members:
 
@@ -77,3 +80,9 @@ Class
 .. autoclass:: lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod
     :members:
 
+Default Moment sets
+-------------------
+
+.. autofunction:: lbmpy.methods.default_moment_sets.cascaded_moment_sets_literature
+
+.. autofunction:: lbmpy.methods.default_moment_sets.mrt_orthogonal_modes_literature

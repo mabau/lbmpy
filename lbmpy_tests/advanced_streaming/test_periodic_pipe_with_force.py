@@ -1,17 +1,17 @@
 import numpy as np
-import sympy as sp
+from dataclasses import replace
 
 from pystencils.datahandling import create_data_handling
-from pystencils import create_kernel, Target
-from pystencils.slicing import make_slice
+from pystencils import create_kernel, Target, CreateKernelConfig
 
-from lbmpy.creationfunctions import create_lb_collision_rule, create_lb_function
+from lbmpy.creationfunctions import create_lb_collision_rule, create_lb_function, LBMConfig, LBMOptimisation
+from lbmpy.enums import ForceModel, Method, Stencil
 from lbmpy.macroscopic_value_kernels import macroscopic_values_getter, macroscopic_values_setter
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 
 from lbmpy.advanced_streaming import LBMPeriodicityHandling
 from lbmpy.boundaries import NoSlip, LatticeBoltzmannBoundaryHandling
-from lbmpy.advanced_streaming.utility import is_inplace, streaming_patterns, Timestep, get_timesteps
+from lbmpy.advanced_streaming.utility import is_inplace, streaming_patterns, get_timesteps
 
 import pytest
 from numpy.testing import assert_allclose
@@ -46,8 +46,8 @@ class PeriodicPipeFlow:
 
         #   Stencil
         self.stencil = stencil
-        self.q = len(self.stencil)
-        self.dim = len(self.stencil[0])
+        self.q = stencil.Q
+        self.dim = stencil.D
 
         #   Streaming
         self.streaming_pattern = streaming_pattern
@@ -70,32 +70,25 @@ class PeriodicPipeFlow:
             self.pdfs_tmp = self.dh.add_array_like('pdfs_tmp', self.pdfs.name)
 
         #   LBM Streaming and Collision
-        method_params = {
-            'stencil': stencil,
-            'method': 'srt',
-            'relaxation_rate': 1.0,
-            'force_model': 'guo',
-            'force': self.force,
-            'streaming_pattern': streaming_pattern
-        }
+        lbm_config = LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.0,
+                               force_model=ForceModel.GUO, force=self.force, streaming_pattern=streaming_pattern)
 
-        optimization = {
-            'symbolic_field': self.pdfs,
-            'target': self.target
-        }
+        lbm_opt = LBMOptimisation(symbolic_field=self.pdfs)
+        config = CreateKernelConfig(target=self.target)
 
         if not self.inplace:
-            optimization['symbolic_temporary_field'] = self.pdfs_tmp
+            lbm_opt = replace(lbm_opt, symbolic_temporary_field=self.pdfs_tmp)
 
-        self.lb_collision = create_lb_collision_rule(optimization=optimization, **method_params)
+        self.lb_collision = create_lb_collision_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
         self.lb_method = self.lb_collision.method
 
         self.lb_kernels = []
         for t in self.timesteps:
+            lbm_config = replace(lbm_config, timestep=t)
             self.lb_kernels.append(create_lb_function(collision_rule=self.lb_collision,
-                                                      optimization=optimization,
-                                                      timestep=t,
-                                                      **method_params))
+                                                      lbm_config=lbm_config,
+                                                      lbm_optimisation=lbm_opt,
+                                                      config=config))
 
         #   Macroscopic Values
         self.density = 1.0
@@ -107,14 +100,16 @@ class PeriodicPipeFlow:
         setter = macroscopic_values_setter(
             self.lb_method, self.density, self.velocity, self.pdfs,
             streaming_pattern=self.streaming_pattern, previous_timestep=self.zeroth_timestep)
-        self.init_kernel = create_kernel(setter, ghost_layers=1, target=self.target).compile()
+        self.init_kernel = create_kernel(setter,
+                                         config=CreateKernelConfig(target=target, ghost_layers=1)).compile()
 
         self.getter_kernels = []
         for t in self.timesteps:
             getter = macroscopic_values_getter(
                 self.lb_method, self.density_field, self.velocity_field, self.pdfs,
                 streaming_pattern=self.streaming_pattern, previous_timestep=t)
-            self.getter_kernels.append(create_kernel(getter, ghost_layers=1, target=self.target).compile())
+            self.getter_kernels.append(create_kernel(getter,
+                                                     config=CreateKernelConfig(target=target, ghost_layers=1)).compile())
 
         #   Periodicity
         self.periodicity_handler = LBMPeriodicityHandling(
@@ -182,12 +177,12 @@ class PeriodicPipeFlow:
         return u
 
 
-@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q19', 'D3Q27'])
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize('streaming_pattern', streaming_patterns)
 @pytest.mark.parametrize('target', targets)
 @pytest.mark.longrun
 def test_periodic_pipe(stencil, streaming_pattern, target):
-    stencil = get_stencil(stencil)
+    stencil = LBStencil(stencil)
     pipeflow = PeriodicPipeFlow(stencil, streaming_pattern, target=target)
     pipeflow.init()
     pipeflow.run(100)

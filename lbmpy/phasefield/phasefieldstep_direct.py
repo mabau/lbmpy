@@ -1,11 +1,12 @@
 import numpy as np
 
 from lbmpy.creationfunctions import create_lb_function
+from lbmpy.enums import Stencil
 from lbmpy.macroscopic_value_kernels import pdf_initialization_assignments
 from lbmpy.phasefield.analytical import force_from_phi_and_mu
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
 from lbmpy.phasefield.kerneleqs import mu_kernel
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 from pystencils import Assignment, create_data_handling, create_kernel, Target
 from pystencils.fd import discretize_spatial
 from pystencils.fd.spatial import fd_stencils_forth_order_isotropic
@@ -36,7 +37,7 @@ class PhaseFieldStepDirect:
         dh = data_handling
         self.data_handling = dh
 
-        stencil = get_stencil('D3Q19' if dh.dim == 3 else 'D2Q9')
+        stencil = LBStencil(Stencil.D3Q19) if dh.dim == 3 else LBStencil(Stencil.D2Q9)
 
         self.free_energy = free_energy
 
@@ -45,14 +46,14 @@ class PhaseFieldStepDirect:
         gpu = target == Target.GPU
         phi_size = len(order_parameters)
         gl = kernel_parameters['ghost_layers']
-        self.phi_field = dh.add_array('{}_phi'.format(name), values_per_cell=phi_size, gpu=gpu, latex_name='φ',
+        self.phi_field = dh.add_array(f'{name}_phi', values_per_cell=phi_size, gpu=gpu, latex_name='φ',
                                       ghost_layers=gl)
-        self.mu_field = dh.add_array("{}_mu".format(name), values_per_cell=phi_size, gpu=gpu, latex_name="μ",
+        self.mu_field = dh.add_array(f"{name}_mu", values_per_cell=phi_size, gpu=gpu, latex_name="μ",
                                      ghost_layers=gl)
-        self.vel_field = dh.add_array("{}_u".format(name), values_per_cell=data_handling.dim, gpu=gpu, latex_name="u",
+        self.vel_field = dh.add_array(f"{name}_u", values_per_cell=data_handling.dim, gpu=gpu, latex_name="u",
                                       ghost_layers=gl)
 
-        self.force_field = dh.add_array("{}_force".format(name), values_per_cell=dh.dim, gpu=gpu, latex_name="F",
+        self.force_field = dh.add_array(f"{name}_force", values_per_cell=dh.dim, gpu=gpu, latex_name="F",
                                         ghost_layers=gl)
 
         self.phi = SlicedGetterDataHandling(self.data_handling, self.phi_field.name)
@@ -62,11 +63,11 @@ class PhaseFieldStepDirect:
 
         self.ch_pdfs = []
         for i in range(len(order_parameters)):
-            src = dh.add_array("{}_ch_src{}".format(name, i), values_per_cell=len(stencil), ghost_layers=gl)
-            dst = dh.add_array("{}_ch_dst{}".format(name, i), values_per_cell=len(stencil), ghost_layers=gl)
+            src = dh.add_array(f"{name}_ch_src{i}", values_per_cell=stencil.Q, ghost_layers=gl)
+            dst = dh.add_array(f"{name}_ch_dst{i}", values_per_cell=stencil.Q, ghost_layers=gl)
             self.ch_pdfs.append((src, dst))
-        self.hydro_pdfs = (dh.add_array("{}_hydro_src".format(name), values_per_cell=len(stencil), ghost_layers=gl),
-                           dh.add_array("{}_hydro_dst".format(name), values_per_cell=len(stencil), ghost_layers=gl))
+        self.hydro_pdfs = (dh.add_array(f"{name}_hydro_src", values_per_cell=stencil.Q, ghost_layers=gl),
+                           dh.add_array(f"{name}_hydro_dst", values_per_cell=stencil.Q, ghost_layers=gl))
 
         # Compute Kernels
         mu_assignments = mu_kernel(self.free_energy, order_parameters, self.phi_field, self.mu_field)

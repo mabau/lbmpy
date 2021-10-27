@@ -10,31 +10,36 @@ from lbmpy.chapman_enskog.chapman_enskog_higher_order import (
     determine_higher_order_moments, get_solvability_conditions)
 from lbmpy.chapman_enskog.chapman_enskog_steady_state import (
     SteadyStateChapmanEnskogAnalysis, SteadyStateChapmanEnskogAnalysisSRT)
-from lbmpy.creationfunctions import create_lb_method
+from lbmpy.creationfunctions import create_lb_method, LBMConfig
+from lbmpy.enums import Method, Stencil
 from lbmpy.forcemodels import Guo
 from lbmpy.relaxationrates import lattice_viscosity_from_relaxation_rate
+from lbmpy.stencils import LBStencil
 from pystencils.fd import Diff, normalize_diff_order
 from pystencils.sympyextensions import multidimensional_sum
 
 
-def test_srt():
-    for stencil in ['D2Q9', 'D3Q19', 'D3Q27']:
-        for continuous_eq in (False, True):
-            omega = sp.Symbol("omega")
-            print("Analysing %s, ContMaxwellianConstruction %d" % (stencil, continuous_eq))
-            method = create_lb_method(method='srt', stencil=stencil, compressible=True,
-                                      relaxation_rate=omega, maxwellian_moments=continuous_eq)
-            analysis = ChapmanEnskogAnalysis(method)
-            omega_value = analysis.relaxation_rate_from_kinematic_viscosity(1)[omega]
-            assert omega_value, sp.Rational(2 == 7)
+@pytest.mark.parametrize('continuous_eq', [False, True])
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
+def test_srt(continuous_eq, stencil):
+    omega = sp.Symbol("omega")
+    print(f"Analysing {stencil}, ContMaxwellianConstruction {continuous_eq}")
+
+    lbm_config = LBMConfig(stencil=LBStencil(stencil), method=Method.SRT, compressible=True,
+                           relaxation_rate=omega, maxwellian_moments=continuous_eq)
+    method = create_lb_method(lbm_config=lbm_config)
+    analysis = ChapmanEnskogAnalysis(method)
+    omega_value = analysis.relaxation_rate_from_kinematic_viscosity(1)[omega]
+    assert omega_value, sp.Rational(2 == 7)
 
 
 @pytest.mark.longrun
 def test_steady_state_silva_paper_comparison():
     eps, tau, lambda_plus, f = sp.symbols("epsilon tau Lambda f")
 
-    method = create_lb_method(stencil="D3Q19", compressible=False, relaxation_rate=1 / tau,
-                              maxwellian_moments=False)
+    lbm_config = LBMConfig(stencil=LBStencil(Stencil.D3Q19), compressible=False, relaxation_rate=1 / tau,
+                           maxwellian_moments=False)
+    method = create_lb_method(lbm_config=lbm_config)
     analysis = SteadyStateChapmanEnskogAnalysis(method)
 
     dim = 3
@@ -142,7 +147,8 @@ def test_steady_state_silva_paper_comparison():
 def test_higher_order_moment_computation():
     """In chapman_enskog_higher_order.py there are some functions to generalize the std Chapman Enskog expansion
     These are not used by the Chapman Enskog class yet."""
-    method = create_lb_method(stencil='D2Q9', method='trt', maxwellian_moments=False)
+    method = create_lb_method(lbm_config=LBMConfig(stencil=LBStencil(Stencil.D2Q9),
+                                                   method=Method.TRT, compressible=False))
     mom_comp = LbMethodEqMoments(method)
     dim = method.dim
     order = 2
@@ -168,7 +174,8 @@ def test_higher_order_moment_computation():
 
 def test_steady_state():
     rr = sp.symbols("omega")
-    method = create_lb_method(stencil='D2Q9', method='srt', relaxation_rate=rr)
+    method = create_lb_method(lbm_config=LBMConfig(stencil=LBStencil(Stencil.D2Q9),
+                                                   method=Method.SRT, relaxation_rate=rr))
     a1 = SteadyStateChapmanEnskogAnalysis(method, order=2)
     a2 = SteadyStateChapmanEnskogAnalysisSRT(method, order=2)
 

@@ -7,12 +7,14 @@ import numpy as np
 import pytest
 import sympy as sp
 
-import lbmpy
 from lbmpy.boundaries import UBB
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
-from lbmpy.creationfunctions import create_lb_update_rule, create_stream_pull_with_output_kernel
+from lbmpy.creationfunctions import create_lb_update_rule, create_stream_pull_with_output_kernel,\
+    LBMConfig, LBMOptimisation
+from lbmpy.enums import Method, Stencil
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
-from lbmpy.stencils import get_stencil
+from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity
+from lbmpy.stencils import LBStencil
 
 import pystencils as ps
 
@@ -59,56 +61,48 @@ t_max = 2000
 
 
 @pytest.mark.parametrize('target', (ps.Target.CPU, ps.Target.GPU, ps.Target.OPENCL))
-@pytest.mark.parametrize('stencil_name', ("D2Q9", "D3Q19",))
+@pytest.mark.parametrize('stencil_name', (Stencil.D2Q9, Stencil.D3Q19))
 def test_shear_flow(target, stencil_name):
     # OpenCL and Cuda
     if target == ps.Target.OPENCL:
-        import pytest
         pytest.importorskip("pyopencl")
         import pystencils.opencl.autoinit
     elif target == ps.Target.GPU:
-        import pytest
         pytest.importorskip("pycuda")
 
     # LB parameters
-    lb_stencil = get_stencil(stencil_name)
-    dim = len(lb_stencil[0])
+    stencil = LBStencil(stencil_name)
 
-    if dim == 2:
-        L = [4, width]
-    elif dim == 3:
-        L = [4, width, 4]
+    if stencil.D == 2:
+        L = (4, width)
+    elif stencil.D == 3:
+        L = (4, width, 4)
     else:
         raise Exception()
-    periodicity = [True, False] + [True] * (dim - 2)
+    periodicity = [True, False] + [True] * (stencil.D - 2)
 
-    omega = lbmpy.relaxationrates.relaxation_rate_from_lattice_viscosity(eta)
+    omega = relaxation_rate_from_lattice_viscosity(eta)
 
     # ## Data structures
     dh = ps.create_data_handling(L, periodicity=periodicity, default_target=target)
 
-    src = dh.add_array('src', values_per_cell=len(lb_stencil))
+    src = dh.add_array('src', values_per_cell=stencil.Q)
     dst = dh.add_array_like('dst', 'src')
-    ρ = dh.add_array('rho', latex_name='\\rho')
-    u = dh.add_array('u', values_per_cell=dh.dim)
-    p = dh.add_array('p', values_per_cell=dh.dim**2)
+    ρ = dh.add_array('rho', latex_name='\\rho', values_per_cell=1)
+    u = dh.add_array('u', values_per_cell=stencil.D)
+    p = dh.add_array('p', values_per_cell=stencil.D**2)
 
     # LB Setup
-    collision = create_lb_update_rule(stencil=lb_stencil,
-                                      relaxation_rate=omega,
-                                      method="trt",
-                                      compressible=True,
-                                      kernel_type='collide_only',
-                                      optimization={'symbolic_field': src})
+    lbm_config = LBMConfig(stencil=stencil, relaxation_rate=omega, method=Method.TRT,
+                           compressible=True, kernel_type='collide_only')
+    lbm_opt = LBMOptimisation(symbolic_field=src)
+    collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
     stream = create_stream_pull_with_output_kernel(collision.method, src, dst, {'velocity': u})
+    config = ps.CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
 
-    opts = {'cpu_openmp': False,
-            'cpu_vectorize_info': None,
-            'target': dh.default_target}
-
-    stream_kernel = ps.create_kernel(stream, **opts).compile()
-    collision_kernel = ps.create_kernel(collision, **opts).compile()
+    stream_kernel = ps.create_kernel(stream, config=config).compile()
+    collision_kernel = ps.create_kernel(collision, config=config).compile()
 
     # Boundaries
     lbbh = LatticeBoltzmannBoundaryHandling(collision.method, dh, src.name, target=dh.default_target)
@@ -118,7 +112,7 @@ def test_shear_flow(target, stencil_name):
     getter_eqs = cqc.output_equations_from_pdfs(src.center_vector,
                                                 {'moment2': p})
 
-    kernel_compute_p = ps.create_kernel(getter_eqs, **opts).compile()
+    kernel_compute_p = ps.create_kernel(getter_eqs, config=config).compile()
 
     # ## Set up the simulation
 
@@ -126,11 +120,11 @@ def test_shear_flow(target, stencil_name):
                                      pdfs=src.center_vector, density=ρ.center)
     init_kernel = ps.create_kernel(init, ghost_layers=0).compile()
 
-    vel_vec = sp.Matrix([0.5 * shear_velocity] + [0] * (dim - 1))
-    if dim == 2:
+    vel_vec = sp.Matrix([0.5 * shear_velocity] + [0] * (stencil.D - 1))
+    if stencil.D == 2:
         lbbh.set_boundary(UBB(velocity=vel_vec), ps.make_slice[:, :wall_thickness])
         lbbh.set_boundary(UBB(velocity=-vel_vec), ps.make_slice[:, -wall_thickness:])
-    elif dim == 3:
+    elif stencil.D == 3:
         lbbh.set_boundary(UBB(velocity=vel_vec), ps.make_slice[:, :wall_thickness, :])
         lbbh.set_boundary(UBB(velocity=-vel_vec), ps.make_slice[:, -wall_thickness:, :])
     else:
@@ -164,7 +158,7 @@ def test_shear_flow(target, stencil_name):
             dh.to_cpu(u.name)
         uu = dh.gather_array(u.name)
         # average periodic directions
-        if dim == 3:  # dont' swap order
+        if stencil.D == 3:  # dont' swap order
             uu = np.average(uu, axis=2)
         uu = np.average(uu, axis=0)
 
@@ -172,7 +166,7 @@ def test_shear_flow(target, stencil_name):
             dh.to_cpu(p.name)
         pp = dh.gather_array(p.name)
         # average periodic directions
-        if dim == 3:  # dont' swap order
+        if stencil.D == 3:  # dont' swap order
             pp = np.average(pp, axis=2)
         pp = np.average(pp, axis=0)
 
@@ -180,9 +174,9 @@ def test_shear_flow(target, stencil_name):
         uu = uu[wall_thickness:-wall_thickness]
         pp = pp[wall_thickness:-wall_thickness]
 
-        if(dh.dim == 2):
+        if stencil.D == 2:
             pp = pp.reshape((len(pp), 2, 2))
-        if(dh.dim == 3):
+        if stencil.D == 3:
             pp = pp.reshape((len(pp), 3, 3))
         return uu, pp
 
@@ -197,10 +191,10 @@ def test_shear_flow(target, stencil_name):
                           h=actual_width,
                           k_max=100)
 
-    if(dh.dim == 2):
+    if stencil.D == 2:
         shear_direction = np.array((1, 0), dtype=float)
         shear_plane_normal = np.array((0, 1), dtype=float)
-    if(dh.dim == 3):
+    if stencil.D == 3:
         shear_direction = np.array((1, 0, 0), dtype=float)
         shear_plane_normal = np.array((0, 1, 0), dtype=float)
 

@@ -1,5 +1,6 @@
 import lbmpy
 
+
 def test_version_string():
     version = lbmpy.__version__
     print(version)

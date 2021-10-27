@@ -11,11 +11,12 @@ except ImportError:
 
 import sympy as sp
 
-from lbmpy.creationfunctions import create_lb_update_rule
+from lbmpy.creationfunctions import create_lb_update_rule, LBMConfig, LBMOptimisation
+from lbmpy.enums import Stencil
 from lbmpy.macroscopic_value_kernels import pdf_initialization_assignments
 from lbmpy.phasefield.analytical import chemical_potentials_from_free_energy, force_from_phi_and_mu
 from lbmpy.phasefield.cahn_hilliard_lbm import cahn_hilliard_lb_method
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 from pystencils import Assignment, create_data_handling, create_kernel
 from pystencils.fd import Diff, discretize_spatial, expand_diff_full
 from pystencils.fd.derivation import FiniteDifferenceStencilDerivation
@@ -78,7 +79,7 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
     dh = create_data_handling(domain_size, periodicity=(True, True), default_ghost_layers=2)
 
     c = dh.add_array("c", values_per_cell=num_phases)
-    rho = dh.add_array("rho")
+    rho = dh.add_array("rho", values_per_cell=1)
     mu = dh.add_array("mu", values_per_cell=num_phases, latex_name="\\mu")
     force = dh.add_array("F", values_per_cell=dh.dim)
     u = dh.add_array("u", values_per_cell=dh.dim)
@@ -87,8 +88,8 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
     pdf_field = []
     pdf_dst_field = []
     for i in range(num_phases):
-        pdf_field_local = dh.add_array("pdf_ch_%d" % i, values_per_cell=9)  # 9 for D2Q9
-        pdf_dst_field_local = dh.add_array("pdfs_ch_%d_dst" % i, values_per_cell=9)
+        pdf_field_local = dh.add_array(f"pdf_ch_{i}", values_per_cell=9)  # 9 for D2Q9
+        pdf_dst_field_local = dh.add_array(f"pdfs_ch_{i}_dst", values_per_cell=9)
         pdf_field.append(pdf_field_local)
         pdf_dst_field.append(pdf_dst_field_local)
 
@@ -117,15 +118,16 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
     ch_collide_kernels = []
     ch_methods = []
     for i in range(num_phases):
-        ch_method = cahn_hilliard_lb_method(get_stencil("D2Q9"), mu(i),
+        ch_method = cahn_hilliard_lb_method(LBStencil(Stencil.D2Q9), mu(i),
                                             relaxation_rate=1.0, gamma=1.0)
         ch_methods.append(ch_method)
-        ch_update_rule = create_lb_update_rule(lb_method=ch_method,
-                                               kernel_type='collide_only',
-                                               density_input=c(i),
-                                               velocity_input=u.center_vector,
-                                               compressible=True,
-                                               optimization={"symbolic_field": pdf_field[i]})
+
+        lbm_config = LBMConfig(lb_method=ch_method, kernel_type='collide_only', density_input=c(i),
+                               velocity_input=u.center_vector, compressible=True)
+        lbm_opt = LBMOptimisation(symbolic_field=pdf_field[i])
+        ch_update_rule = create_lb_update_rule(lbm_config=lbm_config,
+                                               lbm_optimisation=lbm_opt)
+
         ch_assign = ch_update_rule.all_assignments
         ch_kernel = create_kernel(ch_assign).compile()
         ch_collide_kernels.append(ch_kernel)
@@ -134,10 +136,11 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
     for i in range(num_phases):
         ch_method = ch_methods[i]
 
-        ch_update_rule = create_lb_update_rule(lb_method=ch_method,
-                                               kernel_type='stream_pull_only',
-                                               temporary_field_name=pdf_dst_field[i].name,
-                                               optimization={"symbolic_field": pdf_field[i]})
+        lbm_config = LBMConfig(lb_method=ch_method, kernel_type='stream_pull_only',
+                               temporary_field_name=pdf_dst_field[i].name)
+        lbm_opt = LBMOptimisation(symbolic_field=pdf_field[i])
+        ch_update_rule = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
+
         ch_assign = ch_update_rule.all_assignments
         ch_kernel = create_kernel(ch_assign).compile()
         ch_stream_kernels.append(ch_kernel)
@@ -147,7 +150,9 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
     for i in range(num_phases):
         ch_method = ch_methods[i]
         init_assign = pdf_initialization_assignments(lb_method=ch_method,
-                                                     density=c_vec[i], velocity=(0, 0), pdfs=pdf_field[i].center_vector)
+                                                     density=c_vec[i],
+                                                     velocity=(0, 0),
+                                                     pdfs=pdf_field[i].center_vector)
         init_kernel = create_kernel(init_assign).compile()
         init_kernels.append(init_kernel)
 
@@ -159,17 +164,16 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
         getter_kernel = create_kernel(output_assign).compile()
         getter_kernels.append(getter_kernel)
 
-    collide_assign = create_lb_update_rule(kernel_type='collide_only',
-                                           relaxation_rate=1.0,
-                                           force=force,
-                                           optimization={"symbolic_field": pdf_hydro_field},
-                                           compressible=True)
+    lbm_config = LBMConfig(kernel_type='collide_only', relaxation_rate=1.0, force=force, compressible=True)
+    lbm_opt = LBMOptimisation(symbolic_field=pdf_hydro_field)
+    collide_assign = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
     collide_kernel = create_kernel(collide_assign).compile()
 
-    stream_assign = create_lb_update_rule(kernel_type='stream_pull_only',
-                                          temporary_field_name=pdf_hydro_dst_field.name,
-                                          optimization={"symbolic_field": pdf_hydro_field},
-                                          output={"density": rho, "velocity": u})
+    lbm_config = LBMConfig(kernel_type='stream_pull_only', temporary_field_name=pdf_hydro_dst_field.name,
+                           output={"density": rho, "velocity": u})
+    lbm_opt = LBMOptimisation(symbolic_field=pdf_hydro_field)
+    stream_assign = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
+
     stream_kernel = create_kernel(stream_assign).compile()
 
     method_collide = collide_assign.method

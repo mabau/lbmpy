@@ -1,10 +1,10 @@
 from types import MappingProxyType
+from dataclasses import replace
 
 import numpy as np
 
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
-from lbmpy.creationfunctions import (
-    create_lb_function, update_with_default_parameters)
+from lbmpy.creationfunctions import (create_lb_function, update_with_default_parameters)
 from lbmpy.enums import Stencil
 from lbmpy.macroscopic_value_kernels import (
     create_advanced_velocity_setter_collision_rule, pdf_initialization_assignments)
@@ -18,14 +18,16 @@ from pystencils.timeloop import TimeLoop
 class LatticeBoltzmannStep:
 
     def __init__(self, domain_size=None, lbm_kernel=None, periodicity=False,
-                 kernel_params=MappingProxyType({}), data_handling=None, name="lbm", optimization={},
+                 kernel_params=MappingProxyType({}), data_handling=None, name="lbm", optimization=None,
                  velocity_data_name=None, density_data_name=None, density_data_index=None,
                  compute_velocity_in_every_step=False, compute_density_in_every_step=False,
                  velocity_input_array_name=None, time_step_order='stream_collide', flag_interface=None,
-                 alignment_if_vectorized=64, fixed_loop_sizes=True, fixed_relaxation_rates=True,
+                 alignment_if_vectorized=64, fixed_loop_sizes=True,
                  timeloop_creation_function=TimeLoop,
                  lbm_config=None, lbm_optimisation=None, config=None, **method_parameters):
 
+        if optimization is None:
+            optimization = {}
         self._timeloop_creation_function = timeloop_creation_function
 
         # --- Parameter normalization  ---
@@ -55,7 +57,9 @@ class LatticeBoltzmannStep:
                                                                               lbm_config, lbm_optimisation, config)
 
         # the parallel datahandling understands only numpy datatypes. Strings lead to an error.
-        field_dtype = np.float64 if config.data_type == 'double' else np.float32
+        field_dtype = np.float64
+        if config.data_type == 'float' or config.data_type == 'float32':
+            field_dtype = np.float32
 
         if lbm_kernel:
             q = lbm_kernel.method.stencil.Q
@@ -99,10 +103,12 @@ class LatticeBoltzmannStep:
                 density_field = density_field(density_data_index)
             lbm_config.output['density'] = density_field
         if velocity_input_array_name is not None:
-            lbm_config.velocity_input = self._data_handling.fields[velocity_input_array_name]
+            lbm_config = replace(lbm_config, velocity_input=self._data_handling.fields[velocity_input_array_name])
         if isinstance(lbm_config.omega_output_field, str):
-            lbm_config.omega_output_field = data_handling.add_array(lbm_config.omega_output_field,
-                                                                    dtype=field_dtype, alignment=alignment)
+            lbm_config = replace(lbm_config, omega_output_field=data_handling.add_array(lbm_config.omega_output_field,
+                                                                                        dtype=field_dtype,
+                                                                                        alignment=alignment,
+                                                                                        values_per_cell=1))
 
         self.kernel_params = kernel_params.copy()
 
@@ -110,9 +116,10 @@ class LatticeBoltzmannStep:
         if lbm_kernel is None:
 
             if fixed_loop_sizes:
-                lbm_optimisation.symbolic_field = data_handling.fields[self._pdf_arr_name]
-            lbm_config.field_name = self._pdf_arr_name
-            lbm_config.temporary_field_name = self._tmp_arr_name
+                lbm_optimisation = replace(lbm_optimisation, symbolic_field=data_handling.fields[self._pdf_arr_name])
+            lbm_config = replace(lbm_config, field_name=self._pdf_arr_name)
+            lbm_config = replace(lbm_config, temporary_field_name=self._tmp_arr_name)
+
             if time_step_order == 'stream_collide':
                 self._lbmKernels = [create_lb_function(lbm_config=lbm_config,
                                                        lbm_optimisation=lbm_optimisation,

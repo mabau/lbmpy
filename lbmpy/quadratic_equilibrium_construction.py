@@ -46,9 +46,9 @@ def match_generic_equilibrium_ansatz(stencil, equilibrium, u=sp.symbols("u_:3"))
         generic quadratic form, a ValueError is raised
 
     Example:
-          >>> from lbmpy.stencils import get_stencil
+          >>> from lbmpy import LBStencil, Stencil
           >>> from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
-          >>> stencil = get_stencil("D2Q9")
+          >>> stencil = LBStencil(Stencil.D2Q9)
           >>> eq = discrete_maxwellian_equilibrium(stencil)
           >>> result = match_generic_equilibrium_ansatz(stencil, eq)
           >>> result[sp.Symbol('A_0')]

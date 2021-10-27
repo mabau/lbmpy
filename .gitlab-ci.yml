@@ -14,8 +14,7 @@ tests-and-coverage:
       - $ENABLE_NIGHTLY_BUILDS
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
-    - env
-    - pip list
+    # - pip install sympy --upgrade
     - export NUM_CORES=$(nproc --all)
     - mkdir -p ~/.config/matplotlib
     - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
@@ -134,6 +133,22 @@ minimal-windows:
     - python -c "import numpy"
     - py.test -v -n $NUM_CORES -m "not (notebook or longrun)"
 
+minimal-sympy-master:
+  stage: test
+  except:
+    variables:
+      - $ENABLE_NIGHTLY_BUILDS
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
+  script:
+    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
+    - python -m pip install --upgrade git+https://github.com/sympy/sympy.git
+    - pip list
+    - python setup.py quicktest
+  allow_failure: true
+  tags:
+    - docker
+    - cuda
+
 ubuntu:
   stage: test
   except:
@@ -141,7 +156,7 @@ ubuntu:
       - $ENABLE_NIGHTLY_BUILDS
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/ubuntu
   before_script:
-    - apt-get -y remove python3-sympy
+    # - apt-get -y remove python3-sympy
     - ln -s /usr/include/locale.h /usr/include/xlocale.h
     # - pip3 install `grep -Eo 'sympy[>=]+[0-9\.]+' setup.py | sed 's/>/=/g'`
     - pip3 install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
@@ -199,7 +214,7 @@ pycodegen-integration:
 
 build-documentation:
   stage: test
-  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/documentation
   script:
     - export PYTHONPATH=`pwd`
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils

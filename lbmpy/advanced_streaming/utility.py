@@ -94,7 +94,7 @@ class AccessPdfValues:
         if streaming_dir not in ['in', 'out']:
             raise ValueError('Invalid streaming direction.', streaming_dir)
 
-        pdf_field = ps.Field.create_generic('pdfs', len(stencil[0]), index_shape=(len(stencil),))
+        pdf_field = ps.Field.create_generic('pdfs', len(stencil[0]), index_shape=(stencil.Q,))
 
         if accessor is None:
             accessor = get_accessor(streaming_pattern, timestep)

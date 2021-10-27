@@ -75,7 +75,7 @@ def create_stream_only_kernel(stencil, src_field, dst_field=None, accessor=Strea
     if not accessor.is_inplace and dst_field is None:
         raise ValueError("For two field accessors a destination field has to be provided")
 
-    temporary_symbols = sp.symbols(f'streamed_:{len(stencil)}')
+    temporary_symbols = sp.symbols(f'streamed_:{stencil.Q}')
     subexpressions = [Assignment(tmp, acc) for tmp, acc in zip(temporary_symbols, accessor.read(src_field, stencil))]
     main_assignments = [Assignment(acc, tmp) for acc, tmp in zip(accessor.write(dst_field, stencil), temporary_symbols)]
     return AssignmentCollection(main_assignments, subexpressions=subexpressions)
@@ -105,7 +105,7 @@ def create_stream_pull_with_output_kernel(lb_method, src_field, dst_field=None, 
 
     stencil = lb_method.stencil
     cqc = lb_method.conserved_quantity_computation
-    streamed = sp.symbols(f"streamed_:{len(stencil)}")
+    streamed = sp.symbols(f"streamed_:{stencil.Q}")
     stream_assignments = [Assignment(a, b) for a, b in zip(streamed, accessor.read(src_field, stencil))]
     output_eq_collection = cqc.output_equations_from_pdfs(streamed, output) if output\
         else AssignmentCollection(main_assignments=[])

@@ -1,62 +1,54 @@
-from pystencils.session import *
-from pystencils import Target
-from lbmpy.session import *
-from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
-import lbmpy.forcemodels
-from lbmpy.moments import is_bulk_moment
-from lbmpy.relaxationrates import get_bulk_relaxation_rate, get_shear_relaxation_rate
-
 import pytest
 
-force_models = {fm.lower(): getattr(lbmpy.forcemodels, fm) for fm in dir(lbmpy.forcemodels) if fm[0].isupper()}
-del force_models["abstractforcemodel"]
-del force_models["schiller"]
-del force_models["force_symbols"]
-del force_models["moment_symbols"]
+import numpy as np
+import sympy as sp
+import pystencils as ps
+from pystencils import Target
+
+from lbmpy.creationfunctions import create_lb_method, create_lb_update_rule, LBMConfig, LBMOptimisation
+from lbmpy.enums import Stencil, Method, ForceModel
+from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
+from lbmpy.moments import is_bulk_moment
+from lbmpy.stencils import LBStencil
+from lbmpy.updatekernels import create_stream_pull_with_output_kernel
+
+# all force models available are defined in the ForceModel enum, but Cumulant is not a "real" force model
+force_models = [f for f in ForceModel if f is not ForceModel.CUMULANT]
 
 
-def test_force_models_available():
-    assert set(force_models) == {'simple', 'luo', 'guo', 'he', 'edm', 'buick', 'shanchen'}
-
-
-@pytest.mark.parametrize("method", ["srt", "trt"])
+@pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT])
 @pytest.mark.parametrize("force_model", force_models)
 @pytest.mark.parametrize("omega", [0.5, 1.5])
-def test_total_momentum(method, force_model, omega):
+def test_total_momentum(method_enum, force_model, omega):
     # for the EDM force model this test case not work. However it is successfully used in test_entropic_model
     # Any attempt to adapted the EDM force model so it fullfills the test case did result in a failure in the
     # entropic test case. Note also that the test runs for MRT and EMD
-    if force_model == 'edm':
+    if force_model == ForceModel.EDM:
         pytest.skip()
 
     L = (16, 16)
-    stencil = get_stencil("D2Q9")
-    F = [2e-4, -3e-4]
+    stencil = LBStencil(Stencil.D2Q9)
+    F = (2e-4, -3e-4)
 
     dh = ps.create_data_handling(L, periodicity=True, default_target=Target.CPU)
-    src = dh.add_array('src', values_per_cell=len(stencil))
+    src = dh.add_array('src', values_per_cell=stencil.Q)
     dst = dh.add_array_like('dst', 'src')
-    ρ = dh.add_array('rho')
-    u = dh.add_array('u', values_per_cell=dh.dim)
+    ρ = dh.add_array('rho', values_per_cell=1)
+    u = dh.add_array('u', values_per_cell=stencil.D)
 
-    collision = create_lb_update_rule(method=method,
-                                      stencil=stencil,
-                                      relaxation_rate=omega,
-                                      compressible=True,
-                                      force_model=force_model,
-                                      force=F,
-                                      kernel_type='collide_only',
-                                      optimization={'symbolic_field': src})
+    lbm_config = LBMConfig(method=method_enum, stencil=stencil, relaxation_rate=omega,
+                           compressible=True, force_model=force_model, force=F, kernel_type='collide_only')
+    lbm_opt = LBMOptimisation(symbolic_field=src)
+
+    collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
     stream = create_stream_pull_with_output_kernel(collision.method, src, dst,
                                                    {'density': ρ, 'velocity': u})
 
-    opts = {'cpu_openmp': True,
-            'cpu_vectorize_info': None,
-            'target': dh.default_target}
+    config = ps.CreateKernelConfig(cpu_openmp=True, target=dh.default_target)
 
-    stream_kernel = ps.create_kernel(stream, **opts).compile()
-    collision_kernel = ps.create_kernel(collision, **opts).compile()
+    stream_kernel = ps.create_kernel(stream, config=config).compile()
+    collision_kernel = ps.create_kernel(collision, config=config).compile()
 
     def init():
         dh.fill(ρ.name, 1)
@@ -89,31 +81,28 @@ def test_total_momentum(method, force_model, omega):
 @pytest.mark.parametrize("compressible", [True, False])
 def test_modes(force_model, compressible):
     """check force terms in mode space"""
-    _check_modes(get_stencil("D2Q9"), force_model, compressible)
+    _check_modes(LBStencil(Stencil.D2Q9), force_model, compressible)
 
 
-@pytest.mark.parametrize("stencil", ["D3Q15", "D3Q19", "D3Q27"])
+@pytest.mark.parametrize("stencil", [Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize("force_model", force_models)
 @pytest.mark.parametrize("compressible", [True, False])
 @pytest.mark.longrun
 def test_modes_longrun(stencil, force_model, compressible):
     """check force terms in mode space"""
-    _check_modes(get_stencil(stencil), force_model, compressible)
+    _check_modes(LBStencil(stencil), force_model, compressible)
 
 
 @pytest.mark.parametrize("force_model", force_models)
 def test_momentum_density_shift(force_model):
     target = Target.CPU
 
-    stencil = get_stencil('D2Q9')
+    stencil = LBStencil(Stencil.D2Q9)
     domain_size = (4, 4)
     dh = ps.create_data_handling(domain_size=domain_size, default_target=target)
 
     rho = dh.add_array('rho', values_per_cell=1)
     dh.fill('rho', 0.0, ghost_layers=True)
-
-    velField = dh.add_array('velField', values_per_cell=dh.dim)
-    dh.fill('velField', 0.0, ghost_layers=True)
 
     momentum_density = dh.add_array('momentum_density', values_per_cell=dh.dim)
     dh.fill('momentum_density', 0.0, ghost_layers=True)
@@ -121,16 +110,18 @@ def test_momentum_density_shift(force_model):
     src = dh.add_array('src', values_per_cell=len(stencil))
     dh.fill('src', 0.0, ghost_layers=True)
 
-    method = create_lb_method(method="srt", compressible=True, force_model=force_model, force=[1, 2])
+    lbm_config = LBMConfig(method=Method.SRT, compressible=True, force_model=force_model,
+                           force=(1, 2))
+    method = create_lb_method(lbm_config=lbm_config)
 
-    momentum_density_symbols = sp.symbols("md_:2")
     cqc = method.conserved_quantity_computation
 
     momentum_density_getter = cqc.output_equations_from_pdfs(src.center_vector,
                                                              {'density': rho.center,
                                                               'momentum_density': momentum_density.center_vector})
 
-    momentum_density_ast = ps.create_kernel(momentum_density_getter, target=dh.default_target)
+    config = ps.CreateKernelConfig(target=dh.default_target)
+    momentum_density_ast = ps.create_kernel(momentum_density_getter, config=config)
     momentum_density_kernel = momentum_density_ast.compile()
 
     dh.run_kernel(momentum_density_kernel)
@@ -140,15 +131,16 @@ def test_momentum_density_shift(force_model):
 
 @pytest.mark.parametrize('force_model', force_models)
 def test_forcing_space_equivalences(force_model):
-    if force_model == 'he':
+    if force_model == ForceModel.HE:
         #   We don't expect equivalence for the He model since its
         #   moments are derived from the continuous maxwellian
         return
-    d, q = 3, 27
-    stencil = get_stencil(f"D{d}Q{q}")
-    force = sp.symbols(f"F_:{d}")
-    fmodel = force_models[force_model](force)
-    lb_method = create_lb_method(stencil=stencil, method='srt')
+    stencil = LBStencil(Stencil.D3Q27)
+    force = sp.symbols(f"F_:{stencil.D}")
+    lbm_config = LBMConfig(stencil=stencil, method=Method.SRT, force=force, force_model=force_model)
+    fmodel = lbm_config.force_model
+
+    lb_method = create_lb_method(lbm_config=lbm_config)
     inv_moment_matrix = lb_method.moment_matrix.inv()
 
     force_pdfs = sp.Matrix(fmodel(lb_method))
@@ -160,9 +152,9 @@ def test_forcing_space_equivalences(force_model):
                        f"in force model {force_model}, population f_{i}"
 
 
-@pytest.mark.parametrize("force_model", ["guo", "buick", "shanchen"])
-@pytest.mark.parametrize("stencil", ["D2Q9", "D3Q19", "D3Q27"])
-@pytest.mark.parametrize("method", ["srt", "mrt", "trt"])
+@pytest.mark.parametrize("force_model", [ForceModel.GUO, ForceModel.BUICK, ForceModel.SHANCHEN])
+@pytest.mark.parametrize("stencil", [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
+@pytest.mark.parametrize("method", [Method.SRT, Method.TRT, Method.MRT])
 def test_literature(force_model, stencil, method):
     # Be aware that the choice of the conserved moments does not affect the forcing although omega is introduced
     # in the forcing vector then. The reason is that:
@@ -171,32 +163,29 @@ def test_literature(force_model, stencil, method):
     # m_{100}^{\ast} = m_{100} + F_x
     # Thus the relaxation rate gets cancled again.
 
-    stencil = get_stencil(stencil)
-    dim = len(stencil[0])
-    q = len(stencil)
+    stencil = LBStencil(stencil)
 
     omega_s = sp.Symbol("omega_s")
     omega_b = sp.Symbol("omega_b")
     omega_o = sp.Symbol("omega_o")
     omega_e = sp.Symbol("omega_e")
-    if method == 'srt':
+    if method == Method.SRT:
         rrs = [omega_s]
         omega_o = omega_b = omega_e = omega_s
-    elif method == 'trt':
+    elif method == Method.TRT:
         rrs = [omega_e, omega_o]
         omega_s = omega_b = omega_e
     else:
         rrs = [omega_s, omega_b, omega_o, omega_e, omega_o, omega_e]
 
-    F = [sp.Symbol(f"F_{i}") for i in range(dim)]
+    F = sp.symbols(f"F_:{stencil.D}")
 
-    lb_method = create_lb_method(method=method[:3], weighted=True,
-                                 stencil=stencil,
-                                 relaxation_rates=rrs,
-                                 compressible=(force_model != 'buick'),
-                                 force_model=force_model,
-                                 force=F)
-    omega_momentum = list(set(lb_method.relaxation_rates[1:dim + 1]))
+    lbm_config = LBMConfig(method=method, weighted=True, stencil=stencil, relaxation_rates=rrs,
+                           compressible=force_model != ForceModel.BUICK,
+                           force_model=force_model, force=F)
+
+    lb_method = create_lb_method(lbm_config=lbm_config)
+    omega_momentum = list(set(lb_method.relaxation_rates[1:stencil.D + 1]))
     assert len(omega_momentum) == 1
     omega_momentum = omega_momentum[0]
 
@@ -209,8 +198,8 @@ def test_literature(force_model, stencil, method):
     F = sp.Matrix(F)
     uf = sp.Matrix(u).dot(F)
     F2 = sp.Matrix(F).dot(sp.Matrix(F))
-    Fq = sp.zeros(q, 1)
-    uq = sp.zeros(q, 1)
+    Fq = sp.zeros(stencil.Q, 1)
+    uq = sp.zeros(stencil.Q, 1)
     for i, cq in enumerate(stencil):
         Fq[i] = sp.Matrix(cq).dot(sp.Matrix(F))
         uq[i] = sp.Matrix(cq).dot(u)
@@ -219,7 +208,7 @@ def test_literature(force_model, stencil, method):
     common_minus = 3 * (1 - omega_momentum / 2)
 
     result = []
-    if method == "mrt" and force_model == 'guo':
+    if method == Method.MRT and force_model == ForceModel.GUO:
         # check against eq. 4.68 from schiller2008thermal
         uf = u.dot(F) * sp.eye(len(F))
         G = (u * F.transpose() + F * u.transpose() - uf * sp.Rational(2, lb_method.dim)) * sp.Rational(1, 2) * \
@@ -228,42 +217,43 @@ def test_literature(force_model, stencil, method):
             direction = sp.Matrix(direction)
             tr = sp.trace(G * (direction * direction.transpose() - sp.Rational(1, 3) * sp.eye(len(F))))
             result.append(3 * w_i * (F.dot(direction) + sp.Rational(3, 2) * tr))
-    elif force_model == 'guo':
+    elif force_model == ForceModel.GUO:
         # check against table 2 in silva2020 (correct for SRT and TRT), matches eq. 20 from guo2002discrete (for SRT)
-        Sq_plus = sp.zeros(q, 1)
-        Sq_minus = sp.zeros(q, 1)
+        Sq_plus = sp.zeros(stencil.Q, 1)
+        Sq_minus = sp.zeros(stencil.Q, 1)
         for i, w_i in enumerate(lb_method.weights):
             Sq_plus[i] = common_plus * w_i * (3 * uq[i] * Fq[i] - uf)
             Sq_minus[i] = common_minus * w_i * Fq[i]
         result = Sq_plus + Sq_minus
-    elif force_model == 'buick':
-        # check against table 2 in silva2020 (correct for all collision models due to the simplicity of Buick), matches eq. 18 from silva2010 (for SRT)
-        Sq_plus = sp.zeros(q, 1)
-        Sq_minus = sp.zeros(q, 1)
+    elif force_model == ForceModel.BUICK:
+        # check against table 2 in silva2020 (correct for all collision models due to the simplicity of Buick),
+        # matches eq. 18 from silva2010 (for SRT)
+        Sq_plus = sp.zeros(stencil.Q, 1)
+        Sq_minus = sp.zeros(stencil.Q, 1)
         for i, w_i in enumerate(lb_method.weights):
             Sq_plus[i] = 0
             Sq_minus[i] = common_minus * w_i * Fq[i]
         result = Sq_plus + Sq_minus
-    elif force_model == 'edm':
+    elif force_model == ForceModel.EDM:
         # check against table 2 in silva2020
-        if method == 'mrt':
+        if method == Method.MRT:
             # for mrt no literature terms are known at the time of writing this test case.
             # However it is most likly correct since SRT and TRT are derived from the moment space representation
             pytest.skip()
-        Sq_plus = sp.zeros(q, 1)
-        Sq_minus = sp.zeros(q, 1)
+        Sq_plus = sp.zeros(stencil.Q, 1)
+        Sq_minus = sp.zeros(stencil.Q, 1)
         for i, w_i in enumerate(lb_method.weights):
             Sq_plus[i] = common_plus * w_i * (3 * uq[i] * Fq[i] - uf) + ((w_i / (8 * rho)) * (3 * Fq[i] ** 2 - F2))
             Sq_minus[i] = common_minus * w_i * Fq[i]
         result = Sq_plus + Sq_minus
-    elif force_model == 'shanchen':
+    elif force_model == ForceModel.SHANCHEN:
         # check against table 2 in silva2020
-        if method == 'mrt':
+        if method == Method.MRT:
             # for mrt no literature terms are known at the time of writing this test case.
             # However it is most likly correct since SRT and TRT are derived from the moment space representation
             pytest.skip()
-        Sq_plus = sp.zeros(q, 1)
-        Sq_minus = sp.zeros(q, 1)
+        Sq_plus = sp.zeros(stencil.Q, 1)
+        Sq_minus = sp.zeros(stencil.Q, 1)
         for i, w_i in enumerate(lb_method.weights):
             Sq_plus[i] = common_plus * w_i * (3 * uq[i] * Fq[i] - uf) + common_plus ** 2 * (
                 (w_i / (2 * rho)) * (3 * Fq[i] ** 2 - F2))
@@ -276,17 +266,13 @@ def test_literature(force_model, stencil, method):
 @pytest.mark.parametrize("compressible", [True, False])
 def test_modes_central_moment(force_model, compressible):
     """check force terms in mode space"""
-    stencil = get_stencil("D2Q9")
-    dim = len(stencil[0])
+    stencil = LBStencil(Stencil.D2Q9)
     omega_s = sp.Symbol("omega_s")
-    F = [sp.Symbol(f"F_{i}") for i in range(dim)]
+    F = list(sp.symbols(f"F_:{stencil.D}"))
 
-    method = create_lb_method(method="central_moment",
-                              stencil=stencil,
-                              relaxation_rate=omega_s,
-                              compressible=compressible,
-                              force_model=force_model,
-                              force=F)
+    lbm_config = LBMConfig(method=Method.CENTRAL_MOMENT, stencil=stencil, relaxation_rate=omega_s,
+                           compressible=True, force_model=force_model, force=tuple(F))
+    method = create_lb_method(lbm_config=lbm_config)
 
     subs_dict = method.subs_dict_relxation_rate
     force_moments = method.force_model.moment_space_forcing(method)
@@ -296,26 +282,22 @@ def test_modes_central_moment(force_model, compressible):
     assert force_moments[0] == 0
 
     # The momentum moments should contain the force
-    assert list(force_moments[1:dim + 1]) == F
+    assert list(force_moments[1:stencil.D + 1]) == F
 
 
-@pytest.mark.parametrize("stencil", ["D3Q15", "D3Q19", "D3Q27"])
+@pytest.mark.parametrize("stencil", [Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize("force_model", force_models)
 @pytest.mark.parametrize("compressible", [True, False])
 @pytest.mark.longrun
 def test_modes_central_moment_longrun(stencil, force_model, compressible):
     """check force terms in mode space"""
-    stencil = get_stencil(stencil)
-    dim = len(stencil[0])
+    stencil = LBStencil(stencil)
     omega_s = sp.Symbol("omega_s")
-    F = [sp.Symbol(f"F_{i}") for i in range(dim)]
+    F = list(sp.symbols(f"F_:{stencil.D}"))
 
-    method = create_lb_method(method="central_moment",
-                              stencil=stencil,
-                              relaxation_rate=omega_s,
-                              compressible=compressible,
-                              force_model=force_model,
-                              force=F)
+    lbm_config = LBMConfig(method=Method.CENTRAL_MOMENT, stencil=stencil, relaxation_rate=omega_s,
+                           compressible=True, force_model=force_model, force=tuple(F))
+    method = create_lb_method(lbm_config=lbm_config)
 
     subs_dict = method.subs_dict_relxation_rate
     force_moments = method.force_model.moment_space_forcing(method)
@@ -325,25 +307,21 @@ def test_modes_central_moment_longrun(stencil, force_model, compressible):
     assert force_moments[0] == 0
 
     # The momentum moments should contain the force
-    assert list(force_moments[1:dim + 1]) == F
+    assert list(force_moments[1:stencil.Q + 1]) == F
 
 
 def _check_modes(stencil, force_model, compressible):
-    dim = len(stencil[0])
-
     omega_s = sp.Symbol("omega_s")
     omega_b = sp.Symbol("omega_b")
     omega_o = sp.Symbol("omega_o")
     omega_e = sp.Symbol("omega_e")
 
-    F = [sp.Symbol(f"F_{i}") for i in range(dim)]
+    F = list(sp.symbols(f"F_:{stencil.D}"))
 
-    method = create_lb_method(method="mrt", weighted=True,
-                              stencil=stencil,
-                              relaxation_rates=[omega_s, omega_b, omega_o, omega_e, omega_o, omega_e],
-                              compressible=compressible,
-                              force_model=force_model,
-                              force=F)
+    lbm_config = LBMConfig(method=Method.MRT, stencil=stencil,
+                           relaxation_rates=[omega_s, omega_b, omega_o, omega_e, omega_o, omega_e],
+                           compressible=compressible, force_model=force_model, force=tuple(F))
+    method = create_lb_method(lbm_config=lbm_config)
 
     subs_dict = method.subs_dict_relxation_rate
     force_moments = method.force_model.moment_space_forcing(method)
@@ -353,17 +331,17 @@ def _check_modes(stencil, force_model, compressible):
     assert force_moments[0] == 0
 
     # The momentum moments should contain the force
-    assert list(force_moments[1:dim + 1]) == F
+    assert list(force_moments[1:stencil.D + 1]) == F
 
-    if force_model == "guo":
-        num_stresses = (dim * dim - dim) // 2 + dim
+    if force_model == ForceModel.GUO:
+        num_stresses = (stencil.D * stencil.D - stencil.D) // 2 + stencil.D
         lambda_s, lambda_b = -omega_s, -omega_b
 
         # The stress moments should match eq. 47 from https://doi.org/10.1023/A:1010414013942
         u = method.first_order_equilibrium_moment_symbols
 
         def traceless(m):
-            tr = sp.simplify(sum([m[i, i] for i in range(dim)]))
+            tr = sp.simplify(sum([m[i, i] for i in range(stencil.D)]))
             return m - tr / m.shape[0] * sp.eye(m.shape[0])
 
         C = sp.Rational(1, 2) * (2 + lambda_s) * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) +
@@ -371,12 +349,12 @@ def _check_modes(stencil, force_model, compressible):
             sp.Rational(1, method.dim) * (2 + lambda_b) * sp.Matrix(u).dot(F) * sp.eye(method.dim)
 
         subs = {sp.Symbol(chr(ord("x") + i)) * sp.Symbol(chr(ord("x") + j)): C[i, j]
-                for i in range(dim) for j in range(dim)}
-        for force_moment, moment in zip(force_moments[dim + 1:dim + 1 + num_stresses],
-                                        method.moments[dim + 1:dim + 1 + num_stresses]):
+                for i in range(stencil.D) for j in range(stencil.D)}
+        for force_moment, moment in zip(force_moments[stencil.D + 1:stencil.D + 1 + num_stresses],
+                                        method.moments[stencil.D + 1:stencil.D + 1 + num_stresses]):
             ref = moment.subs(subs)
             diff = sp.simplify(ref - force_moment)
-            if is_bulk_moment(moment, dim):
+            if is_bulk_moment(moment, stencil.D):
                 assert diff == 0 or isinstance(diff, sp.Rational)  # difference should be zero or a constant
             else:
                 assert diff == 0  # difference should be zero
@@ -385,20 +363,20 @@ def _check_modes(stencil, force_model, compressible):
         # Check eq. 4.53a from schiller2008thermal
         assert sp.simplify(sum(ff)) == 0
         # Check eq. 4.53b from schiller2008thermal
-        assert [sp.simplify(sum(ff[i] * stencil[i][j] for i in range(len(stencil)))) for j in range(dim)] == F
+        assert [sp.simplify(sum(ff[i] * stencil[i][j] for i in range(len(stencil)))) for j in range(stencil.D)] == F
         # Check eq. 4.61a from schiller2008thermal
         ref = (2 + lambda_s) / 2 * (traceless(sp.Matrix(u) * sp.Matrix(F).transpose()) +
                                     traceless(sp.Matrix(F) * sp.Matrix(u).transpose()))
-        s = sp.zeros(dim)
+        s = sp.zeros(stencil.D)
         for i in range(0, len(stencil)):
             s += ff[i] * traceless(sp.Matrix(stencil[i]) * sp.Matrix(stencil[i]).transpose())
-        assert sp.simplify(s - ref) == sp.zeros(dim)
+        assert sp.simplify(s - ref) == sp.zeros(stencil.D)
         # Check eq. 4.61b from schiller2008thermal
-        assert sp.simplify(sum(ff[i] * stencil[i][a] ** 2 for i in range(len(stencil)) for a in range(dim))
+        assert sp.simplify(sum(ff[i] * stencil[i][a] ** 2 for i in range(len(stencil)) for a in range(stencil.D))
                            - (2 + lambda_b) * sp.Matrix(u).dot(F)) == 0
 
         # All other moments should be zero
-        assert list(force_moments[dim + 1 + num_stresses:]) == [0] * (len(stencil) - (dim + 1 + num_stresses))
-    elif force_model == "simple":
+        assert list(force_moments[stencil.D + 1 + num_stresses:]) == [0] * (len(stencil) - (stencil.D + 1 + num_stresses))
+    elif force_model == ForceModel.SIMPLE:
         # All other moments should be zero
-        assert list(force_moments[dim + 1:]) == [0] * (len(stencil) - (dim + 1))
+        assert list(force_moments[stencil.D + 1:]) == [0] * (len(stencil) - (stencil.D + 1))

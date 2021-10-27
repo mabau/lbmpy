@@ -2,4 +2,4 @@ Bibliography
 ------------
 
 .. bibliography:: lbmpy.bib
-   :cited:
+   :all:

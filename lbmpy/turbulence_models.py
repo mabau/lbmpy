@@ -6,9 +6,8 @@ from pystencils import Assignment
 
 def second_order_moment_tensor(function_values, stencil):
     """Returns (D x D) Matrix of second order moments of the given function where D is the dimension"""
-    assert len(function_values) == len(stencil)
-    dim = len(stencil[0])
-    return sp.Matrix(dim, dim, lambda i, j: sum(c[i] * c[j] * f for f, c in zip(function_values, stencil)))
+    assert len(function_values) == stencil.Q
+    return sp.Matrix(stencil.D, stencil.D, lambda i, j: sum(c[i] * c[j] * f for f, c in zip(function_values, stencil)))
 
 
 def frobenius_norm(matrix, factor=1):

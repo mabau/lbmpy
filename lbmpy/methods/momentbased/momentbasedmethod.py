@@ -1,8 +1,8 @@
 from collections import OrderedDict
 
 import sympy as sp
+import numpy as np
 
-from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 from lbmpy.moments import MOMENT_SYMBOLS, moment_matrix
@@ -22,7 +22,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         equilibrium moments can e.g. be determined by taking the equilibrium moments of the continuous Maxwellian.
 
         Args:
-            stencil: see :func:`lbmpy.stencils.get_stencil`
+            stencil: see :class:`lbmpy.stencils.LBStencil`
             moment_to_relaxation_info_dict: a dictionary mapping moments in either tuple or polynomial formulation
                                             to a RelaxationInfo, which consists of the corresponding equilibrium moment
                                             and a relaxation rate
@@ -158,9 +158,10 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     @property
     def is_weighted_orthogonal(self):
-        w = get_weights(self.stencil, sp.Rational(1, 3))
-        return (sp.matrix_multiply_elementwise(self.moment_matrix, sp.Matrix([w] * len(w))) * self.moment_matrix.T
-                ).is_diagonal()
+        weights_matrix = sp.Matrix([self.weights] * len(self.weights))
+        moment_matrix_times_weights = sp.Matrix(np.multiply(self.moment_matrix, weights_matrix))
+
+        return (moment_matrix_times_weights * self.moment_matrix.T).is_diagonal()
 
     def __getstate__(self):
         # Workaround for a bug in joblib

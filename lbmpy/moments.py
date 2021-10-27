@@ -396,7 +396,7 @@ def discrete_moment(func, moment, stencil, shift_velocity=None):
         shift_velocity: velocity vector u to compute central moments, the lattice velocity is replaced by
                         (lattice_velocity - shift_velocity)
     """
-    assert len(stencil) == len(func)
+    assert stencil.Q == len(func)
     if shift_velocity is None:
         shift_velocity = (0,) * len(stencil[0])
     res = 0
@@ -437,7 +437,7 @@ def moment_matrix(moments, stencil, shift_velocity=None):
                 evaluated = evaluated.subs(var, stencil_entry - shift)
             return evaluated
 
-    return sp.Matrix(len(moments), len(stencil), generator)
+    return sp.Matrix(len(moments), stencil.Q, generator)
 
 
 def set_up_shift_matrix(moments, stencil, velocity_symbols=sp.symbols("u_:3")):
@@ -460,7 +460,7 @@ def set_up_shift_matrix(moments, stencil, velocity_symbols=sp.symbols("u_:3")):
     N = sp.simplify(MN * M.inv())
 
     assert N.is_lower, "Calculating the shift matrix gave not a lower diagonal matrix. Thus it failed"
-    assert sum(N[i, i] for i in range(len(stencil))) == len(stencil), "Calculating the shift matrix failed. " \
+    assert sum(N[i, i] for i in range(stencil.Q)) == stencil.Q, "Calculating the shift matrix failed. " \
         "There are entries on the diagonal which are not equal to one"
 
     return N
@@ -480,9 +480,9 @@ def gram_schmidt(moments, stencil, weights=None):
         set of orthogonal moments in polynomial form
     """
     if weights is None:
-        weights = sp.eye(len(stencil))
+        weights = sp.eye(stencil.Q)
     if type(weights) is list:
-        assert len(weights) == len(stencil)
+        assert len(weights) == stencil.Q
         weights = sp.diag(*weights)
 
     if type(moments[0]) is tuple:
@@ -605,7 +605,7 @@ def central_moment_reduced_monomial_to_polynomial_matrix(polynomials, stencil, v
     reduced_polynomials = non_aliased_polynomial_raw_moments(polynomials, stencil)
     reduced_monomials = sorted(extract_monomials(reduced_polynomials), key=exponent_tuple_sort_key)
 
-    assert len(reduced_monomials) == len(stencil), "Could not extract a base set of correct size from the polynomials."
+    assert len(reduced_monomials) == stencil.Q, "Could not extract a base set of correct size from the polynomials."
 
     N = set_up_shift_matrix(reduced_monomials, stencil, velocity_symbols=velocity_symbols)
     N_P = set_up_shift_matrix(polynomials, stencil, velocity_symbols=velocity_symbols)

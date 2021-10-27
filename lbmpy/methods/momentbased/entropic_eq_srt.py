@@ -7,8 +7,8 @@ from pystencils import Assignment, AssignmentCollection
 
 
 class EntropicEquilibriumSRT(AbstractLbMethod):
-    """Equilibrium from 'Minimal entropic kinetic models for hydrodynamics'
-    Ansumali, S. ; Karlin, I. V;  Öttinger, H. C, (2003)
+    """
+    Equilibrium from 'Minimal entropic kinetic models for hydrodynamics' :cite:`Ansumali2003`
     """
 
     def __init__(self, stencil, relaxation_rate, force_model, conserved_quantity_calculation):

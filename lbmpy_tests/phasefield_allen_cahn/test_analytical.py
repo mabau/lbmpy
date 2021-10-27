@@ -6,7 +6,6 @@ from lbmpy.phasefield_allen_cahn.parameter_calculation import calculate_dimensio
 from lbmpy.phasefield_allen_cahn.analytical import analytic_rising_speed
 
 
-
 def test_analytical():
     parameters = calculate_dimensionless_rising_bubble(reference_time=18000,
                                                        density_heavy=1.0,
@@ -30,7 +29,8 @@ def test_analytical():
                                           viscosity_ratio=3)
 
     np.isclose(parameters["density_light"], 1/3, rtol=1e-05, atol=1e-08, equal_nan=False)
-    np.isclose(parameters["gravitational_acceleration"], -3.9506172839506174e-07, rtol=1e-05, atol=1e-08, equal_nan=False)
+    np.isclose(parameters["gravitational_acceleration"], -3.9506172839506174e-07,
+               rtol=1e-05, atol=1e-08, equal_nan=False)
     np.isclose(parameters["mobility"], 0.0012234169653524492, rtol=1e-05, atol=1e-08, equal_nan=False)
 
     rs = analytic_rising_speed(1-6, 20, 0.01)

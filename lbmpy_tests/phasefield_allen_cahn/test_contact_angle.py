@@ -1,17 +1,17 @@
 import math
 
 import pystencils as ps
-from pystencils.boundaries.boundaryconditions import Neumann
 from pystencils.boundaries.boundaryhandling import BoundaryHandling
 
+from lbmpy.enums import Stencil
 from lbmpy.phasefield_allen_cahn.contact_angle import ContactAngle
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 
 import numpy as np
 
 
 def test_contact_angle():
-    stencil = get_stencil("D2Q9")
+    stencil = LBStencil(Stencil.D2Q9)
     contact_angle = 45
     phase_value = 0.5
 

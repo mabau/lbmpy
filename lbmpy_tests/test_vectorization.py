@@ -1,8 +1,10 @@
 import numpy as np
 import pytest
 
+import pystencils as ps
 from pystencils.backends.simd_instruction_sets import get_supported_instruction_sets
 from lbmpy.scenarios import create_lid_driven_cavity
+from lbmpy.creationfunctions import LBMConfig, LBMOptimisation
 
 
 @pytest.mark.skipif(not get_supported_instruction_sets(), reason='cannot detect CPU instruction set')
@@ -14,14 +16,14 @@ def test_lbm_vectorization_short():
     ldc1_ref = create_lid_driven_cavity(size1, relaxation_rate=relaxation_rate)
     ldc1_ref.run(10)
 
-    ldc1 = create_lid_driven_cavity(size1, relaxation_rate=relaxation_rate,
-                                    optimization={
-                                        'vectorization': {'instruction_set': get_supported_instruction_sets()[-1],
-                                                          'assume_aligned': True,
-                                                          'nontemporal': True,
-                                                          'assume_inner_stride_one': True,
-                                                          'assume_sufficient_line_padding': False,
-                                                          }},
+    lbm_config = LBMConfig(relaxation_rate=relaxation_rate)
+    config = ps.CreateKernelConfig(cpu_vectorize_info={'instruction_set': get_supported_instruction_sets()[-1],
+                                                       'assume_aligned': True,
+                                                       'nontemporal': True,
+                                                       'assume_inner_stride_one': True,
+                                                       'assume_sufficient_line_padding': False,
+                                                       })
+    ldc1 = create_lid_driven_cavity(size1, lbm_config=lbm_config, config=config,
                                     fixed_loop_sizes=False)
     ldc1.run(10)
 
@@ -49,23 +51,20 @@ def test_lbm_vectorization(instruction_set, aligned_and_padding, nontemporal, do
     ldc2_ref = create_lid_driven_cavity(size2, relaxation_rate=relaxation_rate)
     ldc2_ref.run(time_steps)
 
-    optimization = {'double_precision': double_precision,
-                    'vectorization': vectorization_options,
-                    'cse_global': True,
-                    }
-    print("Vectorization test, double precision {}, vectorization {}, fixed loop sizes {}".format(
-        double_precision, vectorization_options, fixed_loop_sizes))
-    ldc1 = create_lid_driven_cavity(size1, relaxation_rate=relaxation_rate, optimization=optimization,
-                                    fixed_loop_sizes=fixed_loop_sizes)
+    lbm_config = LBMConfig(relaxation_rate=relaxation_rate)
+    config = ps.CreateKernelConfig(data_type="double" if double_precision else "float32",
+                                   cpu_vectorize_info=vectorization_options)
+    lbm_opt_split = LBMOptimisation(cse_global=True, split=True)
+    lbm_opt = LBMOptimisation(cse_global=True, split=False)
+
+    print(f"Vectorization test, double precision {double_precision}, vectorization {vectorization_options}, "
+          f"fixed loop sizes {fixed_loop_sizes}")
+    ldc1 = create_lid_driven_cavity(size1, fixed_loop_sizes=fixed_loop_sizes,
+                                    lbm_config=lbm_config, lbm_optimisation=lbm_opt, config=config)
     ldc1.run(time_steps)
     np.testing.assert_almost_equal(ldc1_ref.velocity[:, :], ldc1.velocity[:, :])
 
-    optimization['split'] = True
-    ldc2 = create_lid_driven_cavity(size2, relaxation_rate=relaxation_rate, optimization=optimization,
-                                    fixed_loop_sizes=fixed_loop_sizes)
+    ldc2 = create_lid_driven_cavity(size2, fixed_loop_sizes=fixed_loop_sizes,
+                                    lbm_config=lbm_config, lbm_optimisation=lbm_opt_split, config=config)
     ldc2.run(time_steps)
     np.testing.assert_almost_equal(ldc2_ref.velocity[:, :], ldc2.velocity[:, :])
-
-
-if __name__ == '__main__':
-    test_lbm_vectorization()

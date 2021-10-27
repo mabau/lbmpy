@@ -102,7 +102,7 @@ def __cumulant_raw_moment_transform(index, dependent_var_dict, outer_function, d
 
 @memorycache(maxsize=16)
 def __get_discrete_cumulant_generating_function(func, stencil, wave_numbers):
-    assert len(stencil) == len(func)
+    assert stencil.Q == len(func)
 
     laplace_transformation = sum([factor * sp.exp(scalar_product(wave_numbers, e)) for factor, e in zip(func, stencil)])
     return sp.ln(laplace_transformation)
@@ -121,7 +121,7 @@ def discrete_cumulant(func, cumulant, stencil):
                   (similar to moment description)
         stencil: sequence of directions
     """
-    assert len(stencil) == len(func)
+    assert stencil.Q == len(func)
 
     dim = len(stencil[0])
     wave_numbers = sp.symbols(f"Xi_:{dim}")
@@ -157,9 +157,9 @@ def cumulants_from_pdfs(stencil, cumulant_indices=None, pdf_symbols=None):
     dim = len(stencil[0])
     if cumulant_indices is None:
         cumulant_indices = moments_up_to_component_order(2, dim=dim)
-    assert len(stencil) == len(cumulant_indices), "Stencil has to have same length as cumulant_indices sequence"
+    assert stencil.Q == len(cumulant_indices), "Stencil has to have same length as cumulant_indices sequence"
     if pdf_symbols is None:
-        pdf_symbols = __get_indexed_symbols(pdf_symbols, "f", range(len(stencil)))
+        pdf_symbols = __get_indexed_symbols(pdf_symbols, "f", range(stencil.Q))
     return {idx: discrete_cumulant(tuple(pdf_symbols), idx, stencil) for idx in cumulant_indices}
 
 

@@ -1,19 +1,19 @@
 import numpy as np
-import sympy as sp
+from dataclasses import replace
 
 from pystencils.datahandling import create_data_handling
-from pystencils import create_kernel, Target
-from pystencils.plot import scalar_field, vector_field, vector_field_magnitude
+from pystencils import create_kernel, Target, CreateKernelConfig
 
-from lbmpy.creationfunctions import create_lb_collision_rule, create_lb_function
+from lbmpy.creationfunctions import create_lb_collision_rule, create_lb_function, LBMConfig, LBMOptimisation
+from lbmpy.enums import Method, Stencil
 from lbmpy.macroscopic_value_kernels import macroscopic_values_getter, macroscopic_values_setter
-from lbmpy.stencils import get_stencil
+from lbmpy.stencils import LBStencil
 
 from lbmpy.advanced_streaming import LBMPeriodicityHandling
 from lbmpy.advanced_streaming.utility import is_inplace, streaming_patterns, get_timesteps
 
 import pytest
-from numpy.testing import assert_allclose, assert_array_equal
+from numpy.testing import assert_allclose
 
 all_results = dict()
 
@@ -35,7 +35,7 @@ except Exception:
 
 
 @pytest.mark.parametrize('target', targets)
-@pytest.mark.parametrize('stencil', ['D2Q9', 'D3Q19', 'D3Q27'])
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize('streaming_pattern', streaming_patterns)
 @pytest.mark.longrun
 def test_fully_periodic_flow(target, stencil, streaming_pattern):
@@ -48,9 +48,7 @@ def test_fully_periodic_flow(target, stencil, streaming_pattern):
     gpu = target in [Target.GPU, Target.OPENCL]
 
     #   Stencil
-    stencil = get_stencil(stencil)
-    q = len(stencil)
-    dim = len(stencil[0])
+    stencil = LBStencil(stencil)
 
     #   Streaming
     inplace = is_inplace(streaming_pattern)
@@ -58,62 +56,57 @@ def test_fully_periodic_flow(target, stencil, streaming_pattern):
     zeroth_timestep = timesteps[0]
 
     #   Data Handling and PDF fields
-    domain_size = (30,) * dim
-    periodicity = (True,) * dim
+    domain_size = (30,) * stencil.D
+    periodicity = (True,) * stencil.D
 
     dh = create_data_handling(domain_size=domain_size, periodicity=periodicity,
                               default_target=target, opencl_queue=opencl_queue)
 
-    pdfs = dh.add_array('pdfs', q)
+    pdfs = dh.add_array('pdfs', stencil.Q)
     if not inplace:
         pdfs_tmp = dh.add_array_like('pdfs_tmp', pdfs.name)
 
     #   LBM Streaming and Collision
-    method_params = {
-        'stencil': stencil,
-        'method': 'srt',
-        'relaxation_rate': 1.0,
-        'streaming_pattern': streaming_pattern
-    }
+    lbm_config = LBMConfig(stencil=stencil, method=Method.SRT,
+                           relaxation_rate=1.0, streaming_pattern=streaming_pattern)
 
-    optimization = {
-        'symbolic_field': pdfs,
-        'target': target
-    }
+    lbm_opt = LBMOptimisation(symbolic_field=pdfs)
+    config = CreateKernelConfig(target=target)
 
     if not inplace:
-        optimization['symbolic_temporary_field'] = pdfs_tmp
+        lbm_opt = replace(lbm_opt, symbolic_temporary_field=pdfs_tmp)
 
-    lb_collision = create_lb_collision_rule(optimization=optimization, **method_params)
+    lb_collision = create_lb_collision_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt, config=config)
     lb_method = lb_collision.method
 
     lb_kernels = []
     for t in timesteps:
+        lbm_config = replace(lbm_config, timestep=t)
         lb_kernels.append(create_lb_function(collision_rule=lb_collision,
-                                             optimization=optimization,
-                                             timestep=t,
-                                             **method_params))
+                                             lbm_config=lbm_config, lbm_optimisation=lbm_opt))
 
     #   Macroscopic Values
     density = 1.0
     density_field = dh.add_array('rho', 1)
     u_x = 0.01
-    velocity = (u_x,) * dim
-    velocity_field = dh.add_array('u', dim)
+    velocity = (u_x,) * stencil.D
+    velocity_field = dh.add_array('u', stencil.D)
 
-    u_ref = np.full(domain_size + (dim,), u_x)
+    u_ref = np.full(domain_size + (stencil.D,), u_x)
 
     setter = macroscopic_values_setter(
         lb_method, density, velocity, pdfs,
         streaming_pattern=streaming_pattern, previous_timestep=zeroth_timestep)
-    setter_kernel = create_kernel(setter, ghost_layers=1, target=target).compile()
+    setter_kernel = create_kernel(setter,
+                                  config=CreateKernelConfig(target=target, ghost_layers=1)).compile()
 
     getter_kernels = []
     for t in timesteps:
         getter = macroscopic_values_getter(
             lb_method, density_field, velocity_field, pdfs,
             streaming_pattern=streaming_pattern, previous_timestep=t)
-        getter_kernels.append(create_kernel(getter, ghost_layers=1, target=target).compile())
+        getter_kernels.append(create_kernel(getter,
+                                            config=CreateKernelConfig(target=target, ghost_layers=1)).compile())
 
     #   Periodicity
     periodicity_handler = LBMPeriodicityHandling(stencil, dh, pdfs.name, streaming_pattern=streaming_pattern)

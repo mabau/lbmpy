@@ -7,33 +7,30 @@ This setup is used to illustrate the difference of D3Q19 and D3Q27 for high Reyn
 The deficiencies of the D3Q19 model can be resolved by choosing a better equilibrium (D3Q19_new)
 """
 import os
-import sys
-
 import numpy as np
-import sympy as sp
 
 from lbmpy.boundaries import FixedDensity, NoSlip
+from lbmpy.creationfunctions import LBMConfig
+from lbmpy.enums import Method, Stencil
 from lbmpy.geometry import add_pipe_inflow_boundary, add_pipe_walls
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.relaxationrates import relaxation_rate_from_lattice_viscosity
-from pystencils import create_data_handling, Target
+from lbmpy.stencils import LBStencil
+from pystencils import create_data_handling
 from pystencils.slicing import make_slice, slice_from_direction
 
 
 def rod_simulation(stencil_name, diameter, parallel=False, entropic=False, re=150,
-                   time_to_simulate=17.0, eval_interval=0.5, write_vtk=True, write_numpy=True,
-                   optimization_params=None):
-    if optimization_params is None:
-        optimization_params = {}
+                   time_to_simulate=17.0, eval_interval=0.5, write_vtk=True, write_numpy=True):
 
     if stencil_name == 'D3Q19_new':
-        stencil = 'D3Q19'
+        stencil = Stencil.D3Q19
         maxwellian_moments = True
     elif stencil_name == 'D3Q19_old':
-        stencil = 'D3Q19'
+        stencil = Stencil.D3Q19
         maxwellian_moments = False
     elif stencil_name == 'D3Q27':
-        stencil = 'D3Q27'
+        stencil = Stencil.D3Q27
         maxwellian_moments = False
     else:
         raise ValueError("Unknown stencil name " + stencil_name)
@@ -53,23 +50,15 @@ def rod_simulation(stencil_name, diameter, parallel=False, entropic=False, re=15
     lattice_viscosity = u_mean_at_throat * constriction_diameter / re
     omega = relaxation_rate_from_lattice_viscosity(lattice_viscosity)
 
-    method_parameters = {'stencil': stencil,
-                         'compressible': True,
-                         'method': 'srt',
-                         'relaxation_rates': [omega],
-                         'entropic': entropic,
-                         'maxwellian_moments': maxwellian_moments, }
+    lbm_config = LBMConfig(stencil=LBStencil(stencil), compressible=True, method=Method.SRT, relaxation_rate=omega,
+                           entropic=entropic, maxwellian_moments=maxwellian_moments)
     kernel_params = {}
-    if entropic:
-        method_parameters['method'] = 'mrt3'
-        method_parameters['relaxation_rates'] = sp.symbols("omega_fix omega_fix omega_free")
-        kernel_params['omega_fix'] = omega
 
     print("ω=", omega)
 
     dh = create_data_handling(domain_size=(length, d, d), parallel=parallel)
-    sc = LatticeBoltzmannStep(data_handling=dh, kernel_params=kernel_params, optimization=optimization_params,
-                              name=stencil_name, **method_parameters)
+    sc = LatticeBoltzmannStep(data_handling=dh, kernel_params=kernel_params,
+                              name=stencil_name, lbm_config=lbm_config)
 
     # -----------------   Boundary Setup   --------------------------------
 
@@ -100,8 +89,6 @@ def rod_simulation(stencil_name, diameter, parallel=False, entropic=False, re=15
     # -----------------   Run  --------------------------------------------
 
     scenario_name = stencil_name
-    if entropic:
-        scenario_name += "_entropic"
 
     if not os.path.exists(scenario_name):
         os.mkdir(scenario_name)
@@ -124,15 +111,15 @@ def rod_simulation(stencil_name, diameter, parallel=False, entropic=False, re=15
         if np.isnan(max_vel):
             raise ValueError("Simulation went unstable")
         if write_numpy:
-            np.save(scenario_name + '/velocity_%06d' % (sc.time_steps_run,), sc.velocity_slice().filled(0.0))
+            np.save(scenario_name + f'/velocity_{sc.time_steps_run}', sc.velocity_slice().filled(0.0))
 
 
 def test_rod_scenario_simple():
     rod_simulation("D3Q19_new", re=100, diameter=20, parallel=False, entropic=False,
                    time_to_simulate=0.2, eval_interval=0.1, write_vtk=False, write_numpy=False)
 
-
-if __name__ == '__main__':
-    # High Re (Entropic method)
-    rod_simulation(stencil_name=sys.argv[1], re=500, diameter=80, entropic=True, time_to_simulate=17,
-                   parallel=False, optimization_params={'target': Target.GPU})
+# depricated usage
+# if __name__ == '__main__':
+#     # High Re (Entropic method)
+#     rod_simulation(stencil_name=sys.argv[1], re=500, diameter=80, entropic=True, time_to_simulate=17,
+#                    parallel=False, optimization_params={'target': Target.GPU})

@@ -7,6 +7,9 @@ from pystencils import Field
 from pystencils.astnodes import LoopOverCoordinate
 from pystencils.stencil import inverse_direction
 
+from lbmpy.enums import Stencil
+from lbmpy.stencils import LBStencil
+
 __all__ = ['PdfFieldAccessor', 'CollideOnlyInplaceAccessor', 'StreamPullTwoFieldsAccessor',
            'AAEvenTimeStepAccessor', 'AAOddTimeStepAccessor',
            'PeriodicTwoFieldsAccessor', 'StreamPushTwoFieldsAccessor',
@@ -51,11 +54,11 @@ class CollideOnlyInplaceAccessor(PdfFieldAccessor):
 
     @staticmethod
     def read(field, stencil):
-        return [field(i) for i in range(len(stencil))]
+        return [field(i) for i in range(stencil.Q)]
 
     @staticmethod
     def write(field, stencil):
-        return [field(i) for i in range(len(stencil))]
+        return [field(i) for i in range(stencil.Q)]
 
 
 class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
@@ -67,7 +70,7 @@ class StreamPullTwoFieldsAccessor(PdfFieldAccessor):
 
     @staticmethod
     def write(field, stencil):
-        return [field(i) for i in range(len(stencil))]
+        return [field(i) for i in range(stencil.Q)]
 
 
 class StreamPushTwoFieldsAccessor(PdfFieldAccessor):
@@ -75,7 +78,7 @@ class StreamPushTwoFieldsAccessor(PdfFieldAccessor):
 
     @staticmethod
     def read(field, stencil):
-        return [field(i) for i in range(len(stencil))]
+        return [field(i) for i in range(stencil.Q)]
 
     @staticmethod
     def write(field, stencil):
@@ -125,7 +128,7 @@ class PeriodicTwoFieldsAccessor(PdfFieldAccessor):
 
     @staticmethod
     def write(field, stencil):
-        return [field(i) for i in range(len(stencil))]
+        return [field(i) for i in range(stencil.Q)]
 
 
 class AAEvenTimeStepAccessor(PdfFieldAccessor):
@@ -133,7 +136,7 @@ class AAEvenTimeStepAccessor(PdfFieldAccessor):
 
     @staticmethod
     def read(field, stencil):
-        return [field(i) for i in range(len(stencil))]
+        return [field(i) for i in range(stencil.Q)]
 
     @staticmethod
     def write(field, stencil):
@@ -214,15 +217,18 @@ def visualize_field_mapping(axes, stencil, field_mapping, inverted=False, color=
     grid.draw(axes)
 
 
-def visualize_pdf_field_accessor(pdf_field_accessor, title=True, read_plot_params={}, write_plot_params={},
+def visualize_pdf_field_accessor(pdf_field_accessor, title=True, read_plot_params=None, write_plot_params=None,
                                  figure=None):
-    from lbmpy.stencils import get_stencil
 
+    if write_plot_params is None:
+        write_plot_params = {}
+    if read_plot_params is None:
+        read_plot_params = {}
     if figure is None:
         import matplotlib.pyplot as plt
         figure = plt.gcf()
 
-    stencil = get_stencil('D2Q9')
+    stencil = LBStencil(Stencil.D2Q9)
 
     figure.patch.set_facecolor('white')
 

@@ -1,6 +1,6 @@
-*********
-Enums
-*********
+************
+Enumerations
+************
 
 .. automodule:: lbmpy.enums
    :members:
