@@ -296,7 +296,7 @@ def test_modes_central_moment_longrun(stencil, force_model, compressible):
     F = list(sp.symbols(f"F_:{stencil.D}"))
 
     lbm_config = LBMConfig(method=Method.CENTRAL_MOMENT, stencil=stencil, relaxation_rate=omega_s,
-                           compressible=True, force_model=force_model, force=tuple(F))
+                           compressible=compressible, force_model=force_model, force=tuple(F))
     method = create_lb_method(lbm_config=lbm_config)
 
     subs_dict = method.subs_dict_relxation_rate
@@ -307,7 +307,7 @@ def test_modes_central_moment_longrun(stencil, force_model, compressible):
     assert force_moments[0] == 0
 
     # The momentum moments should contain the force
-    assert list(force_moments[1:stencil.Q + 1]) == F
+    assert list(force_moments[1:stencil.D + 1]) == F
 
 
 def _check_modes(stencil, force_model, compressible):

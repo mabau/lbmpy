@@ -1,7 +1,6 @@
 from statistics import median
 
 import numpy as np
-import pytest
 import sympy as sp
 
 from lbmpy.scenarios import create_lid_driven_cavity
@@ -228,11 +227,11 @@ def study_block_sizes_trt(study):
                 study.add_run(params, weight=ds[0] // domain_sizes[0][0])
 
 
-@pytest.mark.longrun
-def test_run():
-    """Called by test suite - ensures that benchmark can be run"""
-    s = ParameterStudy(run)
-    study_optimization_options(s, domain_sizes=((17, 23), (19, 17, 18))).run()
+# @pytest.mark.longrun
+# def test_run():
+#     """Called by test suite - ensures that benchmark can be run"""
+#     s = ParameterStudy(run)
+#     study_optimization_options(s, domain_sizes=((17, 23), (19, 17, 18))).run()
 
 
 def study_compiler_flags(study):

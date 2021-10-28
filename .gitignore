@@ -20,3 +20,6 @@ doc/bibtex.json
 
 # macOS
 **/.DS_Store
+
+# benchmark database
+/lbmpy_tests/benchmark/db
