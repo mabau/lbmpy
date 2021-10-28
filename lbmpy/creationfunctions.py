@@ -669,6 +669,13 @@ def create_lb_method(lbm_config=None, **params):
     else:
         raise ValueError("Failed to create LB method. Please use lbmpy.enums.Method for the creation")
 
+    # >>Entropic methods can only be created for methods with two relaxation rates One free relaxation rate
+    # determining the viscosity and one to be determined by the entropy condition<<
+    # Thus we fix the conserved quantities to one of the relaxation rates because zero would be recognised as
+    # a third relaxation rate here.
+    if lbm_config.entropic:
+        method.set_conserved_moments_relaxation_rate(relaxation_rates[0])
+
     return method
 
 
