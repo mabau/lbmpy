@@ -286,7 +286,7 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs, symb
 
     dim = stencil.D
 
-    subexpressions = []
+    subexpressions = list()
     pdf_sum = sum(symbolic_pdfs)
     u = [0] * dim
     for f, offset in zip(symbolic_pdfs, stencil):
@@ -308,12 +308,16 @@ def get_equations_for_zeroth_and_first_order_moment(stencil, symbolic_pdfs, symb
             rhs -= plus_terms[j]
         eq = Assignment(velo_terms[i], sum(rhs))
         subexpressions.append(eq)
+        if len(rhs) == 0:  # if one of the substitutions is not found the simplification can not be applied
+            subexpressions = []
+            break
 
     for subexpression in subexpressions:
         pdf_sum = pdf_sum.subs(subexpression.rhs, subexpression.lhs)
 
-    for i in range(dim):
-        u[i] = u[i].subs(subexpressions[i].rhs, subexpressions[i].lhs)
+    if len(subexpressions) > 0:
+        for i in range(dim):
+            u[i] = u[i].subs(subexpressions[i].rhs, subexpressions[i].lhs)
 
     equations = []
     equations += [Assignment(symbolic_zeroth_moment, pdf_sum)]

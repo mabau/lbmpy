@@ -31,6 +31,10 @@ get_weights.weights = {
         1: sp.Rational(1, 9),
         2: sp.Rational(1, 36),
     },
+    7: {
+        0: sp.simplify(0.0),
+        1: sp.Rational(1, 6),
+    },
     15: {
         0: sp.Rational(2, 9),
         1: sp.Rational(1, 9),

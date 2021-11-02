@@ -159,7 +159,7 @@ def polynomial_to_exponent_representation(polynomial, dim=3):
     summands = [polynomial] if polynomial.func != sp.Add else polynomial.args
     for expr in summands:
         if len(expr.atoms(sp.Symbol) - set(MOMENT_SYMBOLS)) > 0:
-            raise ValueError("Invalid moment polynomial: " + str(expr))
+            raise ValueError(f"Invalid moment polynomial: {str(expr)}")
         c, x_exp, y_exp, z_exp = sp.Wild('c'), sp.Wild('xexp'), sp.Wild('yexp'), sp.Wild('zc')
         match_res = expr.match(c * x**x_exp * y**y_exp * z**z_exp)
         assert match_res[x_exp].is_integer and match_res[y_exp].is_integer and match_res[z_exp].is_integer
@@ -393,8 +393,8 @@ def discrete_moment(func, moment, stencil, shift_velocity=None):
         func: list of distribution functions for each direction
         moment: can either be a exponent tuple, or a sympy polynomial expression
         stencil: sequence of directions
-        shift_velocity: velocity vector u to compute central moments, the lattice velocity is replaced by
-                        (lattice_velocity - shift_velocity)
+        shift_velocity: velocity vector :math:`\mathbf{u}` to compute central moments, the lattice
+                        velocity is replaced by (lattice_velocity - shift_velocity)
     """
     assert stencil.Q == len(func)
     if shift_velocity is None:
@@ -474,7 +474,7 @@ def gram_schmidt(moments, stencil, weights=None):
         moments: sequence of moments, either in tuple or polynomial form
         stencil: stencil as sequence of directions
         weights: optional weights, that define the scalar product which is used for normalization.
-                 Scalar product :math:`< a,b > = \sum a_i b_i w_i` with weights :math:`w_i`.
+                 Scalar product :math:`< \mathbf{a},\mathbf{b} > = \sum a_i b_i w_i` with weights :math:`w_i`.
                  Passing no weights sets all weights to 1.
     Returns:
         set of orthogonal moments in polynomial form
@@ -499,8 +499,8 @@ def gram_schmidt(moments, stencil, weights=None):
             prev_element = orthogonalized_vectors[j]
             denominator = prev_element.dot(weights * prev_element)
             if denominator == 0:
-                raise ValueError("Not an independent set of vectors given: "
-                                 "vector %d is dependent on previous vectors" % (i,))
+                raise ValueError(f"Not an independent set of vectors given: "
+                                 f"vector {i} is dependent on previous vectors")
             overlap = current_element.dot(weights * prev_element) / denominator
             current_element -= overlap * prev_element
             moments[i] -= overlap * moments[j]
@@ -533,6 +533,15 @@ def get_default_moment_set_for_stencil(stencil):
                               3 * (y * (x ** 2 + z ** 2)),
                               3 * (z * (x ** 2 + y ** 2)),
                               )
+        to_remove = set(extend_moments_with_permutations(non_matched_moments))
+        return sorted(to_poly(set(all27_moments) - to_remove) + additional_moments, key=moment_sort_key)
+    if stencil.D == 3 and stencil.Q == 7:
+        x, y, z = MOMENT_SYMBOLS
+        non_matched_moments = [(1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 2, 0),
+                               (1, 2, 2), (2, 0, 0), (2, 2, 0), (2, 2, 2)]
+        additional_moments = (x ** 2 - y ** 2,
+                              x ** 2 - z ** 2,
+                              x ** 2 + y ** 2 + z ** 2)
         to_remove = set(extend_moments_with_permutations(non_matched_moments))
         return sorted(to_poly(set(all27_moments) - to_remove) + additional_moments, key=moment_sort_key)
 
@@ -569,8 +578,7 @@ def monomial_to_polynomial_transformation_matrix(monomials, polynomials):
         polynomials: sequence of polynomials in the MOMENT_SYMBOLS
 
     >>> x, y, z = MOMENT_SYMBOLS
-    >>> polys = [7 * x**2 + 3 * x + 2 * y **2, \
-                 9 * x**2 - 5 * x]
+    >>> polys = [7 * x**2 + 3 * x + 2 * y **2, 9 * x**2 - 5 * x]
     >>> mons = list(extract_monomials(polys, dim=2))
     >>> mons.sort()
     >>> monomial_to_polynomial_transformation_matrix(mons, polys)
@@ -638,21 +646,20 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
     import ipy_table
     from lbmpy.continuous_distribution_measures import continuous_moment
 
-    dim = len(stencil[0])
-    u = sp.symbols("u_:{dim}".format(dim=dim))
+    u = sp.symbols(f"u_:{stencil.D}")
     if discrete_equilibrium is None:
         from lbmpy.maxwellian_equilibrium import discrete_maxwellian_equilibrium
         discrete_equilibrium = discrete_maxwellian_equilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
                                                                u=u, order=truncate_order)
     if continuous_equilibrium is None:
         from lbmpy.maxwellian_equilibrium import continuous_maxwellian_equilibrium
-        continuous_equilibrium = continuous_maxwellian_equilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
+        continuous_equilibrium = continuous_maxwellian_equilibrium(dim=stencil.D, u=u, c_s_sq=sp.Rational(1, 3))
 
     table = []
     matched_moments = 0
     non_matched_moments = 0
 
-    moments_list = [list(moments_of_order(o, dim, include_permutations=False)) for o in range(max_order + 1)]
+    moments_list = [list(moments_of_order(o, stencil.D, include_permutations=False)) for o in range(max_order + 1)]
 
     colors = dict()
     nr_of_columns = max([len(v) for v in moments_list]) + 1
@@ -663,11 +670,11 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
 
     for order, moments in enumerate(moments_list):
         row = [' '] * nr_of_columns
-        row[0] = '%d' % (order,)
+        row[0] = f'{order}'
         for moment, col_idx in zip(moments, range(1, len(row))):
             multiplicity = moment_multiplicity(moment)
             dm = discrete_moment(discrete_equilibrium, moment, stencil)
-            cm = continuous_moment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:dim])
+            cm = continuous_moment(continuous_equilibrium, moment, symbols=sp.symbols("v_0 v_1 v_2")[:stencil.D])
             difference = sp.simplify(dm - cm)
             if truncate_order:
                 difference = sp.simplify(remove_higher_order_terms(difference, symbols=u, order=truncate_order))
@@ -678,7 +685,7 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
                 colors[(order + 1, col_idx)] = 'lightGreen'
                 matched_moments += multiplicity
 
-            row[col_idx] = '%s  x %d' % (moment, moment_multiplicity(moment))
+            row[col_idx] = f'{moment}  x {moment_multiplicity(moment)}'
 
         table.append(row)
 
@@ -687,8 +694,8 @@ def moment_equality_table(stencil, discrete_equilibrium=None, continuous_equilib
     for cell_idx, color in colors.items():
         ipy_table.set_cell_style(cell_idx[0], cell_idx[1], color=color)
 
-    print("Matched moments %d - non matched moments %d - total %d" %
-          (matched_moments, non_matched_moments, matched_moments + non_matched_moments))
+    print(f"Matched moments {matched_moments} - non matched moments {non_matched_moments} "
+          f"- total {matched_moments + non_matched_moments}")
 
     return table_display
 
@@ -719,8 +726,8 @@ def moment_equality_table_by_stencil(name_to_stencil_dict, moments, truncate_ord
 
     colors = {}
     for stencil_idx, stencil in enumerate(stencils):
-        dim = len(stencil[0])
-        u = sp.symbols("u_:{dim}".format(dim=dim))
+        dim = stencil.D
+        u = sp.symbols(f"u_:{dim}")
         discrete_equilibrium = discrete_maxwellian_equilibrium(stencil, c_s_sq=sp.Rational(1, 3), compressible=True,
                                                                u=u, order=truncate_order)
         continuous_equilibrium = continuous_maxwellian_equilibrium(dim=dim, u=u, c_s_sq=sp.Rational(1, 3))
@@ -777,7 +784,7 @@ def __unique_permutations(elements: Sequence[T]) -> Iterable[T]:
 
     """
     if len(elements) == 1:
-        yield (elements[0],)
+        yield elements[0],
     else:
         unique_elements = set(elements)
         for first_element in unique_elements:

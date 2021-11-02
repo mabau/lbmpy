@@ -115,8 +115,8 @@ class NoSlip(LbBoundary):
 
 class FreeSlip(LbBoundary):
     """
-    Free-Slip boundary condition, which enforces a zero normal fluid velocity $u_n = 0$ but places no restrictions
-    on the tangential fluid velocity $u_t$.
+    Free-Slip boundary condition, which enforces a zero normal fluid velocity :math:`u_n = 0` but places no restrictions
+    on the tangential fluid velocity :math:`u_t`.
 
     Args:
         stencil: LBM stencil which is used for the simulation

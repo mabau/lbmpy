@@ -247,21 +247,21 @@ class LBMConfig:
 
     kernel_type: Union[str, Type[PdfFieldAccessor]] = 'default_stream_collide'
     """
-    Supported values: 'default_stream_collide' (default), 'collide_only', 'stream_pull_only'. 
-    With 'default_stream_collide', streaming pattern and even/odd time-step (for in-place patterns) can be specified
+    Supported values: ``'default_stream_collide'`` (default), ``'collide_only'``, ``'stream_pull_only'``. 
+    With ``'default_stream_collide'``, streaming pattern and even/odd time-step (for in-place patterns) can be specified
     by the ``streaming_pattern`` and ``timestep`` arguments. For backwards compatibility, ``kernel_type`` also accepts
-    'stream_pull_collide', 'collide_stream_push', 'esotwist_even', 'esotwist_odd', 'aa_even' and 'aa_odd' for selection 
-    of the streaming pattern. 
+    ``'stream_pull_collide'``, ``'collide_stream_push'``, ``'esotwist_even'``, ``'esotwist_odd'``, ``'aa_even'``
+    and ``'aa_odd'`` for selection of the streaming pattern. 
     """
     streaming_pattern: str = 'pull'
     """
-    The streaming pattern to be used with a 'default_stream_collide' kernel. Accepted values are
-    'pull', 'push', 'aa' and 'esotwist'.
+    The streaming pattern to be used with a ``'default_stream_collide'`` kernel. Accepted values are
+    ``'pull'``, ``'push'``, ``'aa'`` and ``'esotwist'``.
     """
     timestep: Timestep = Timestep.BOTH
     """
     Timestep modulus for the streaming pattern. For two-fields patterns, this argument is irrelevant and
-    by default set to ``Timestep.BOTH``. For in-place patterns, ``Timestep.EVEN`` or ``Timestep.ODD`` must be speficied.
+    by default set to ``Timestep.BOTH``. For in-place patterns, ``Timestep.EVEN`` or ``Timestep.ODD`` must be specified.
     """
 
     field_name: str = 'src'

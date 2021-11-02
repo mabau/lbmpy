@@ -423,8 +423,10 @@ def create_mrt_orthogonal(stencil, relaxation_rates, maxwellian_moments=False, w
             diagonal_viscous_moments = [x ** 2 + y ** 2, x ** 2]
         else:
             diagonal_viscous_moments = [x ** 2 + y ** 2 + z ** 2, x ** 2, y ** 2 - z ** 2]
+
         for i, d in enumerate(MOMENT_SYMBOLS[:stencil.D]):
-            moments[moments.index(d ** 2)] = diagonal_viscous_moments[i]
+            if d ** 2 in moments:
+                moments[moments.index(d ** 2)] = diagonal_viscous_moments[i]
         orthogonal_moments = gram_schmidt(moments, stencil, weights)
         orthogonal_moments_scaled = [e * common_denominator(e) for e in orthogonal_moments]
         nested_moments = list(sort_moments_into_groups_of_same_order(orthogonal_moments_scaled).values())

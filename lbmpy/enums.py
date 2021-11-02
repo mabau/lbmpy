@@ -21,6 +21,10 @@ class Stencil(Enum):
     """
     A two dimensional stencil using 37 discrete velocities. (long range stencil).
     """
+    D3Q7 = auto()
+    """
+    A three dimensional stencil using 7 discrete velocities.
+    """
     D3Q15 = auto()
     """
     A three dimensional stencil using 15 discrete velocities.

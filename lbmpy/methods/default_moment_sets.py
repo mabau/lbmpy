@@ -18,7 +18,7 @@ def cascaded_moment_sets_literature(stencil):
     - Remaining groups do not govern hydrodynamic properties
 
     Args:
-        stencil: instance of :class:`lbmpy.stencils.LBStencil`. Can be D2Q9, D3Q15, D3Q19 or D3Q27
+        stencil: instance of :class:`lbmpy.stencils.LBStencil`. Can be D2Q9, D3Q7, D3Q15, D3Q19 or D3Q27
     """
     x, y, z = MOMENT_SYMBOLS
     if have_same_entries(stencil, LBStencil(Stencil.D2Q9)):
@@ -40,6 +40,18 @@ def cascaded_moment_sets_literature(stencil):
 
             [x ** 2 * y, x * y ** 2],
             [x ** 2 * y ** 2]
+        ]
+
+    elif have_same_entries(stencil, LBStencil(Stencil.D3Q7)):
+        # D3Q7 moments: https://arxiv.org/ftp/arxiv/papers/1611/1611.03329.pdf
+        return [
+            [sp.sympify(1)],  # density is conserved
+            [x, y, z],  # momentum might be affected by forcing
+
+            [x ** 2 - y ** 2,
+             x ** 2 - z ** 2],  # shear
+
+            [x ** 2 + y ** 2 + z ** 2],  # bulk
         ]
 
     elif have_same_entries(stencil, LBStencil(Stencil.D3Q15)):

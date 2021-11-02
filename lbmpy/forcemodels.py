@@ -17,16 +17,16 @@ Force models add a term :math:`C_F` to the collision equation:
 
 .. math ::
 
-    f(\pmb{x} + c_q \Delta t, t + \Delta t) - f(\pmb{x},t) = \Omega(f, f^{(\mathrm{eq})})
+    f(\mathbf{x} + c_q \Delta t, t + \Delta t) - f(\mathbf{x},t) = \Omega(f, f^{(\mathrm{eq})})
                                                             + \underbrace{F_q}_{\mbox{forcing term}}
 
 The form of this term depends on the concrete force model: the first moment of this forcing term is equal
-to the acceleration :math:`\pmb{a}` for all force models. Here :math:`\mathbf{F}` is the D dimensional force vector,
+to the acceleration :math:`\mathbf{a}` for all force models. Here :math:`\mathbf{F}` is the D dimensional force vector,
 which defines the force for each spatial dircetion.
 
 .. math ::
 
-    \sum_q \pmb{c}_q \mathbf{F} = \pmb{a}
+    \sum_q \mathbf{c}_q \mathbf{F} = \mathbf{a}
 
 
 The second order moment is different for the forcing models - if it is zero the model is suited for
@@ -57,7 +57,7 @@ For all force models the computation of the macroscopic velocity has to be adapt
     
     .. math ::
     
-        \pmb{u} &= \sum_q \pmb{c}_q f_q + S_{\mathrm{macro}}
+        \mathbf{u} &= \sum_q \mathbf{c}_q f_q + S_{\mathrm{macro}}
         
         S_{\mathrm{macro}} &= \frac{\Delta t}{2 \cdot \rho} \sum_q F_q
 
@@ -296,7 +296,7 @@ class He(AbstractForceModel):
                 F_x m^{\mathrm{eq}}_{\alpha+1,\beta,\gamma} 
                 + F_y m^{\mathrm{eq}}_{\alpha,\beta+1,\gamma} 
                 + F_z m^{\mathrm{eq}}_{\alpha,\beta,\gamma+1} 
-                - m^{eq}_{\alpha\beta\gamma} ( \mathbf{F} \cdot \vec{u} ) 
+                - m^{eq}_{\alpha\beta\gamma} ( \mathbf{F} \cdot \mathbf{u} )
             \right)
     """
 

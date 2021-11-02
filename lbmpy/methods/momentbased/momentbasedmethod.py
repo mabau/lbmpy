@@ -48,7 +48,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
     @property
     def moment_space_collision(self):
         """Returns whether collision is derived in terms of moments or in terms of populations only."""
-        return (self._moment_transform_class is not None)
+        return self._moment_transform_class is not None
 
     @property
     def relaxation_info_dict(self):
