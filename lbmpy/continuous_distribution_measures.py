@@ -15,11 +15,11 @@ def moment_generating_function(generating_function, symbols, symbols_in_result, 
     Computes the moment generating function of a probability distribution. It is defined as:
 
     .. math ::
-        F[f(\mathbf{x})](\mathbf{t}) = \int e^{<\mathbf{x}, \mathbf{t}>} f(x)\; dx
+        F[f(\mathbf{x})](t) = \int e^{<\mathbf{x}, t>} f(\mathbf{x})\; dx
 
     Args:
         generating_function: sympy expression
-        symbols: a sequence of symbols forming the vector x
+        symbols: a sequence of symbols forming the vector :math:`\mathbf{x}`
         symbols_in_result: a sequence forming the vector t
         velocity: if the generating function generates central moments, the velocity needs to be substracted. Thus the
                   velocity symbols need to be passed. All generating functions need to have the same parameters.
@@ -62,7 +62,7 @@ def central_moment_generating_function(func, symbols, symbols_in_result, velocit
     Computes central moment generating func, which is defined as:
 
     .. math ::
-        K( \vec{\Xi} ) = \exp ( - \vec{\Xi} \cdot \vec{u} ) M( \vec{\Xi}.
+        K( \mathbf{\Xi} ) = \exp ( - \mathbf{\Xi} \cdot \mathbf{u} ) M( \mathbf{\Xi} ).
 
     For parameter description see :func:`moment_generating_function`.
     """
@@ -76,7 +76,7 @@ def cumulant_generating_function(func, symbols, symbols_in_result, velocity=None
     Computes cumulant generating func, which is the logarithm of the moment generating func:
 
     .. math ::
-        C(\vec{\Xi}) = \log M(\vec{\Xi})
+        C(\mathbf{\Xi}) = \log M(\mathbf{\Xi})
 
     For parameter description see :func:`moment_generating_function`.
     """
