@@ -2,6 +2,7 @@ import abc
 from collections import namedtuple
 
 import sympy as sp
+from sympy.core.numbers import Zero
 
 from pystencils import Assignment, AssignmentCollection
 
@@ -52,6 +53,7 @@ class AbstractLbMethod(abc.ABC):
         """Returns a qxq diagonal matrix which contains the relaxation rate for each moment on the diagonal"""
         d = sp.zeros(len(self.relaxation_rates))
         for i in range(0, len(self.relaxation_rates)):
+            # note that 0.0 is converted to sp.Zero here. It is not possible to prevent this.
             d[i, i] = self.relaxation_rates[i]
         return d
 
@@ -104,6 +106,9 @@ class AbstractLbMethod(abc.ABC):
         for relaxation_rate in rr:
             if relaxation_rate not in unique_relaxation_rates:
                 relaxation_rate = sp.sympify(relaxation_rate)
+                # special treatment for zero, sp.Zero would be an integer ..
+                if isinstance(relaxation_rate, Zero):
+                    relaxation_rate = 0.0
                 if not isinstance(relaxation_rate, sp.Symbol):
                     rt_symbol = sp.Symbol(f"rr_{len(subexpressions)}")
                     subexpressions[relaxation_rate] = rt_symbol
