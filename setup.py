@@ -78,6 +78,7 @@ def get_cmdclass():
     return cmdclass
 
 
+major_version = versioneer.get_version().split("+")[0]
 setup(name='lbmpy',
       version=versioneer.get_version(),
       description='Code Generation for Lattice Boltzmann Methods',
@@ -88,9 +89,8 @@ setup(name='lbmpy',
       author_email='cs10-codegen@fau.de',
       url='https://i10git.cs.fau.de/pycodegen/lbmpy/',
       packages=['lbmpy'] + ['lbmpy.' + s for s in find_packages('lbmpy')],
-      install_requires=['pystencils>=0.4.0', 'sympy>=1.5.1,<=1.9', 'numpy>=1.11.0'],
-      package_data={'lbmpy': ['phasefield/simplex_projection.pyx',
-                              'phasefield/simplex_projection.c']},
+      install_requires=[f'pystencils>=0.4.0,<={major_version}', 'sympy>=1.5.1,<=1.9', 'numpy>=1.11.0'],
+      package_data={'lbmpy': ['phasefield/simplex_projection.pyx', 'phasefield/simplex_projection.c']},
       ext_modules=cython_extensions("lbmpy.phasefield.simplex_projection"),
       classifiers=[
           'Development Status :: 4 - Beta',

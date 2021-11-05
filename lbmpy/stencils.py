@@ -112,6 +112,7 @@ class LBStencil:
         table = """
         <table style="border:none; width: 100%">
             <tr {nb}>
+                <th {nb} >Nr.</th>
                 <th {nb} >Direction Name</th>
                 <th {nb} >Direction </th>
             </tr>
@@ -119,13 +120,15 @@ class LBStencil:
         </table>
         """
         content = ""
-        for direction in self._stencil_entries:
+        for i, direction in enumerate(self._stencil_entries):
             vals = {
+                'nr': sp.latex(i),
                 'name': sp.latex(ps.stencil.offset_to_direction_string(direction)),
                 'entry': sp.latex(direction),
                 'nb': 'style="border:none"'
             }
             content += """<tr {nb}>
+                            <td {nb}>${nr}$</td>
                             <td {nb}>${name}$</td>
                             <td {nb}>${entry}$</td>
                          </tr>\n""".format(**vals)
@@ -188,16 +191,16 @@ def _predefined_stencils(stencil: str, ordering: str):
                          (-1, 1, 0), (1, 1, 0), (-1, -1, 0), (1, -1, 0),
                          (0, 1, 1), (0, -1, 1), (-1, 0, 1), (1, 0, 1),
                          (0, 1, -1), (0, -1, -1), (-1, 0, -1), (1, 0, -1)),
+            'counterclockwise': ((0, 0, 0),
+                                 (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                                 (1, 1, 0), (-1, -1, 0), (1, 0, 1), (-1, 0, -1),
+                                 (0, 1, 1), (0, -1, -1), (1, -1, 0), (-1, 1, 0),
+                                 (1, 0, -1), (-1, 0, 1), (0, 1, -1), (0, -1, 1)),
             'braunschweig': ((0, 0, 0),
-                             (1, 0, 0), (-1, 0, 0),
-                             (0, 1, 0), (0, -1, 0),
-                             (0, 0, 1), (0, 0, -1),
-                             (1, 1, 0), (-1, -1, 0),
-                             (1, -1, 0), (-1, 1, 0),
-                             (1, 0, 1), (-1, 0, -1),
-                             (1, 0, -1), (-1, 0, 1),
-                             (0, 1, 1), (0, -1, -1),
-                             (0, 1, -1), (0, -1, 1)),
+                             (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                             (1, 1, 0), (-1, -1, 0),  (1, -1, 0), (-1, 1, 0),
+                             (1, 0, 1), (-1, 0, -1), (1, 0, -1), (-1, 0, 1),
+                             (0, 1, 1), (0, -1, -1), (0, 1, -1), (0, -1, 1)),
             'premnath': ((0, 0, 0),
                          (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
                          (1, 1, 0), (-1, 1, 0), (1, -1, 0), (-1, -1, 0),
