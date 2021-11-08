@@ -19,10 +19,11 @@ class WallFunctionBounce(LbBoundary):
         name: optional name of the boundary.
     """
 
-    def __init__(self, stencil, normal_direction, omega, name=None):
+    def __init__(self, stencil, normal_direction, omega, vel_debug, name=None):
         """Set an optional name here, to mark boundaries, for example for force evaluations"""
         self.stencil = stencil
         self.omega = omega
+        self.vel_debug = vel_debug
 
         if len(normal_direction) - normal_direction.count(0) != 1:
             raise ValueError("Only normal directions for straight walls are supported for example (0, 1, 0) for "
@@ -68,6 +69,7 @@ class WallFunctionBounce(LbBoundary):
         pdf_center_vector = sp.Matrix([0] * stencil.Q)
 
         for i in range(stencil.Q):
+            m = sp.IndexedBase(mirrored_stencil_symbol, shape=(1,))[i]
             pdf_center_vector[i] = f_in[normal_direction](i)
 
         eq_equations = cqc.equilibrium_input_equations_from_pdfs(pdf_center_vector)
@@ -94,6 +96,10 @@ class WallFunctionBounce(LbBoundary):
         shear_stress = Assignment(tau_w, u_t[newton_steps]**2 * rho)
 
         result = eq_equations.all_assignments
+        # result.append(Assignment(f_in(1), f_out(1)))
+        result.append(Assignment(self.vel_debug[0, 0, 0](0), u[0]))
+        result.append(Assignment(self.vel_debug[0, 0, 0](1), u[1]))
+        result.append(Assignment(self.vel_debug[0, 0, 0](2), u[2]))
         result.append(u_mag)
         result.append(init_guess)
         result.extend(newton_assignmets)
@@ -105,6 +111,6 @@ class WallFunctionBounce(LbBoundary):
         neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         drag = neighbor_offset[0] * factor * tau_w_x + neighbor_offset[2] * factor * tau_w_z
 
-        result.append(Assignment(f_in(inv_dir[dir_symbol]), f_in[normal_direction](mirrored_direction) * drag))
+        result.append(Assignment(f_in(inv_dir[dir_symbol]), f_in[normal_direction](mirrored_direction) - drag))
 
         return result
