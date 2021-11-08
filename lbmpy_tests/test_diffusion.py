@@ -75,8 +75,8 @@ def test_diffusion():
         C(x,y) = 1 * erfc(y / sqrt(4Dx/u))
 
       The hydrodynamic field is not simulated, instead a constant velocity is assumed.
-  """
-
+    """
+    pytest.importorskip("pycuda")
     # Parameters
     domain_size = (1600, 160)
     omega = 1.38
@@ -84,9 +84,10 @@ def test_diffusion():
     velocity = 0.05
     time_steps = 50000
     stencil = LBStencil(Stencil.D2Q9)
+    target = ps.Target.GPU
 
     # Data Handling
-    dh = ps.create_data_handling(domain_size=domain_size)
+    dh = ps.create_data_handling(domain_size=domain_size, default_target=target)
 
     vel_field = dh.add_array('vel_field', values_per_cell=stencil.D)
     dh.fill('vel_field', velocity, 0, ghost_layers=True)
@@ -96,7 +97,9 @@ def test_diffusion():
     dh.fill('con_field', 0.0, ghost_layers=True)
 
     pdfs = dh.add_array('pdfs', values_per_cell=stencil.Q)
+    dh.fill('pdfs', 0.0, ghost_layers=True)
     pdfs_tmp = dh.add_array('pdfs_tmp', values_per_cell=stencil.Q)
+    dh.fill('pdfs_tmp', 0.0, ghost_layers=True)
 
     # Lattice Boltzmann method
     lbm_config = LBMConfig(stencil=stencil, method=Method.MRT, relaxation_rates=[1, 1.5, 1, 1.5, 1],
@@ -104,21 +107,24 @@ def test_diffusion():
                            weighted=True, kernel_type='stream_pull_collide')
 
     lbm_opt = LBMOptimisation(symbolic_field=pdfs, symbolic_temporary_field=pdfs_tmp)
+    config = ps.CreateKernelConfig(target=dh.default_target, cpu_openmp=True)
 
     method = create_lb_method(lbm_config=lbm_config)
     method.set_conserved_moments_relaxation_rate(omega)
 
     lbm_config = replace(lbm_config, lb_method=method)
     update_rule = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
-    kernel = ps.create_kernel(update_rule).compile()
+    kernel = ps.create_kernel(update_rule, config=config).compile()
 
     # PDF initalization
     init = pdf_initialization_assignments(method, con_field.center,
                                           vel_field.center_vector, pdfs.center_vector)
     dh.run_kernel(ps.create_kernel(init).compile())
 
+    dh.all_to_gpu()
+
     # Boundary Handling
-    bh = LatticeBoltzmannBoundaryHandling(update_rule.method, dh, 'pdfs', name="bh")
+    bh = LatticeBoltzmannBoundaryHandling(update_rule.method, dh, 'pdfs', name="bh", target=dh.default_target)
     add_box_boundary(bh, boundary=NeumannByCopy())
     bh.set_boundary(DiffusionDirichlet(0), slice_from_direction('W', dh.dim))
     bh.set_boundary(DiffusionDirichlet(1), slice_from_direction('S', dh.dim))
@@ -129,6 +135,7 @@ def test_diffusion():
         dh.run_kernel(kernel)
         dh.swap("pdfs", "pdfs_tmp")
 
+    dh.all_to_cpu()
     # Verification
     x = np.arange(1, domain_size[0], 1)
     y = np.arange(0, domain_size[1], 1)

@@ -58,7 +58,7 @@ def check_for_collision_rule_equivalence(collision_rule1, collision_rule2, use_n
     for eq1, eq2 in zip(collision_rule1.main_assignments, collision_rule2.main_assignments):
         diff = sp.cancel(sp.expand(eq1.rhs - eq2.rhs))
         if use_numeric_subs:
-            assert math.isclose(diff, 0, rel_tol=0.0, abs_tol=1e-12)
+            assert math.isclose(diff, 0, rel_tol=0.0, abs_tol=1e-10)
         else:
             assert diff == 0
 
@@ -78,8 +78,8 @@ def test_cumulant():
     original_method = create_with_default_polynomial_cumulants(stencil, [sp.Symbol("omega")])
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
-    check_method_equivalence(original_method, changed_method, True, True)
-    check_method_equivalence(original_method, changed_method, False, True)
+    check_method_equivalence(original_method, changed_method, True, use_numeric_subs=True)
+    check_method_equivalence(original_method, changed_method, False, use_numeric_subs=True)
 
 
 @pytest.mark.longrun
@@ -89,8 +89,8 @@ def test_srt():
                                  maxwellian_moments=True)
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
-    check_method_equivalence(original_method, changed_method, True)
-    check_method_equivalence(original_method, changed_method, False)
+    check_method_equivalence(original_method, changed_method, True, use_numeric_subs=True)
+    check_method_equivalence(original_method, changed_method, False, use_numeric_subs=True)
 
 
 def test_srt_short():
@@ -99,8 +99,8 @@ def test_srt_short():
                                  maxwellian_moments=True)
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
-    check_method_equivalence(original_method, changed_method, True)
-    check_method_equivalence(original_method, changed_method, False)
+    check_method_equivalence(original_method, changed_method, True, use_numeric_subs=False)
+    check_method_equivalence(original_method, changed_method, False, use_numeric_subs=False)
 
 
 @pytest.mark.parametrize('stencil_name', [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
@@ -117,8 +117,8 @@ def test_trt(stencil_name, continuous_moments):
 
 
 @pytest.mark.parametrize('method_name', [Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4])
-@pytest.mark.parametrize('dim', [2, 3])
-def test_trt_kbc_long(method_name, dim):
+def test_trt_kbc(method_name):
+    dim = 2
     method_nr = method_name.name[-1]
     original_method = create_trt_kbc(dim, sp.Symbol("omega1"), sp.Symbol("omega2"),
                                      method_name='KBC-N' + method_nr,
@@ -127,3 +127,15 @@ def test_trt_kbc_long(method_name, dim):
     check_method_equivalence(original_method, changed_method, True)
     check_method_equivalence(original_method, changed_method, False)
 
+
+@pytest.mark.parametrize('method_name', [Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4])
+@pytest.mark.longrun
+def test_trt_kbc_long(method_name):
+    dim = 3
+    method_nr = method_name.name[-1]
+    original_method = create_trt_kbc(dim, sp.Symbol("omega1"), sp.Symbol("omega2"),
+                                     method_name='KBC-N' + method_nr,
+                                     maxwellian_moments=False)
+    changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
+    check_method_equivalence(original_method, changed_method, True)
+    check_method_equivalence(original_method, changed_method, False)
