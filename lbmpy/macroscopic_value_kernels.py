@@ -8,12 +8,16 @@ from lbmpy.advanced_streaming.utility import get_accessor, Timestep
 
 
 def pdf_initialization_assignments(lb_method, density, velocity, pdfs,
-                                   streaming_pattern='pull', previous_timestep=Timestep.BOTH):
+                                   streaming_pattern='pull', previous_timestep=Timestep.BOTH,
+                                   set_pre_collision_pdfs=False):
     """Assignments to initialize the pdf field with equilibrium"""
     if isinstance(pdfs, Field):
-        previous_step_accessor = get_accessor(streaming_pattern, previous_timestep)
-        field_accesses = previous_step_accessor.write(pdfs, lb_method.stencil)
-    elif streaming_pattern == 'pull':
+        accessor = get_accessor(streaming_pattern, previous_timestep)
+        if set_pre_collision_pdfs:
+            field_accesses = accessor.read(pdfs, lb_method.stencil)
+        else:
+            field_accesses = accessor.write(pdfs, lb_method.stencil)
+    elif streaming_pattern == 'pull' and not set_pre_collision_pdfs:
         field_accesses = pdfs
     else:
         raise ValueError("Invalid value of pdfs: A PDF field reference is required to derive "
@@ -28,11 +32,15 @@ def pdf_initialization_assignments(lb_method, density, velocity, pdfs,
 
 
 def macroscopic_values_getter(lb_method, density, velocity, pdfs,
-                              streaming_pattern='pull', previous_timestep=Timestep.BOTH):
+                              streaming_pattern='pull', previous_timestep=Timestep.BOTH,
+                              use_pre_collision_pdfs=False):
     if isinstance(pdfs, Field):
-        previous_step_accessor = get_accessor(streaming_pattern, previous_timestep)
-        field_accesses = previous_step_accessor.write(pdfs, lb_method.stencil)
-    elif streaming_pattern == 'pull':
+        accessor = get_accessor(streaming_pattern, previous_timestep)
+        if use_pre_collision_pdfs:
+            field_accesses = accessor.read(pdfs, lb_method.stencil)
+        else:
+            field_accesses = accessor.write(pdfs, lb_method.stencil)
+    elif streaming_pattern == 'pull' and not use_pre_collision_pdfs:
         field_accesses = pdfs
     else:
         raise ValueError("Invalid value of pdfs: A PDF field reference is required to derive "
