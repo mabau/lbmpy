@@ -7,7 +7,7 @@ from pystencils import Target
 
 from lbmpy.creationfunctions import create_lb_method, create_lb_update_rule, LBMConfig, LBMOptimisation
 from lbmpy.enums import Stencil, Method, ForceModel
-from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
+from lbmpy.macroscopic_value_kernels import macroscopic_values_setter, macroscopic_values_getter
 from lbmpy.moments import is_bulk_moment
 from lbmpy.stencils import LBStencil
 from lbmpy.updatekernels import create_stream_pull_with_output_kernel
@@ -37,17 +37,13 @@ def test_total_momentum(method_enum, force_model, omega):
     u = dh.add_array('u', values_per_cell=stencil.D)
 
     lbm_config = LBMConfig(method=method_enum, stencil=stencil, relaxation_rate=omega,
-                           compressible=True, force_model=force_model, force=F, kernel_type='collide_only')
+                           compressible=True, force_model=force_model, force=F, streaming_pattern='pull')
     lbm_opt = LBMOptimisation(symbolic_field=src)
 
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
-    stream = create_stream_pull_with_output_kernel(collision.method, src, dst,
-                                                   {'density': ρ, 'velocity': u})
-
     config = ps.CreateKernelConfig(cpu_openmp=True, target=dh.default_target)
 
-    stream_kernel = ps.create_kernel(stream, config=config).compile()
     collision_kernel = ps.create_kernel(collision, config=config).compile()
 
     def init():
@@ -55,24 +51,28 @@ def test_total_momentum(method_enum, force_model, omega):
         dh.fill(u.name, 0)
 
         setter = macroscopic_values_setter(collision.method, velocity=(0,) * dh.dim,
-                                           pdfs=src.center_vector, density=ρ.center)
-        kernel = ps.create_kernel(setter, ghost_layers=0).compile()
+                                           pdfs=src, density=ρ.center,
+                                           set_pre_collision_pdfs=True)
+        kernel = ps.create_kernel(setter).compile()
         dh.run_kernel(kernel)
 
     sync_pdfs = dh.synchronization_function([src.name])
 
+    getter = macroscopic_values_getter(collision.method, ρ.center, u.center_vector, src, use_pre_collision_pdfs=True)
+    getter_kernel = ps.create_kernel(getter).compile()
+
     def time_loop(steps):
         dh.all_to_gpu()
-        for i in range(steps):
+        for _ in range(steps):
             dh.run_kernel(collision_kernel)
-            sync_pdfs()
-            dh.run_kernel(stream_kernel)
             dh.swap(src.name, dst.name)
+            sync_pdfs()
         dh.all_to_cpu()
 
     t = 20
     init()
     time_loop(t)
+    dh.run_kernel(getter_kernel)
     total = np.sum(dh.gather_array(u.name), axis=(0, 1))
     assert np.allclose(total / np.prod(L) / F / t, 1)
 
