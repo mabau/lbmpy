@@ -38,7 +38,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
         self._prev_timestep = None
 
     def add_fixed_steps(self, fixed_loop, **kwargs):
-        if self._inplace:   # Fixed Loop can't do timestep selection
+        if self._inplace:  # Fixed Loop can't do timestep selection
             raise NotImplementedError("Adding to fixed loop is currently not supported for inplace kernels")
         super(LatticeBoltzmannBoundaryHandling, self).add_fixed_steps(fixed_loop, **kwargs)
 
@@ -52,10 +52,12 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
         if boundary_obj not in self._boundary_object_to_boundary_info:
             sym_index_field = Field.create_generic('indexField', spatial_dimensions=1,
                                                    dtype=numpy_data_type_for_boundary_object(boundary_obj, self.dim))
-            kernels = [self._create_boundary_kernel(
-                self._data_handling.fields[self._field_name], sym_index_field, boundary_obj, Timestep.EVEN).compile(),
-                self._create_boundary_kernel(
-                self._data_handling.fields[self._field_name], sym_index_field, boundary_obj, Timestep.ODD).compile()]
+
+            ast_even = self._create_boundary_kernel(self._data_handling.fields[self._field_name], sym_index_field,
+                                                    boundary_obj, Timestep.EVEN)
+            ast_odd = self._create_boundary_kernel(self._data_handling.fields[self._field_name], sym_index_field,
+                                                   boundary_obj, Timestep.ODD)
+            kernels = [ast_even.compile(), ast_odd.compile()]
             if flag is None:
                 flag = self.flag_interface.reserve_next_flag()
             boundary_info = self.InplaceStreamingBoundaryInfo(self, boundary_obj, flag, kernels)
@@ -84,6 +86,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
             self.boundary_object = boundary_obj
             self.flag = flag
             self._kernels = kernels
+
     #   end class InplaceStreamingBoundaryInfo
 
     # ------------------------------ Force On Boundary ------------------------------------------------------------
@@ -148,29 +151,32 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
 
         return dh.reduce_float_sequence(list(result), 'sum')
 
+
 # end class LatticeBoltzmannBoundaryHandling
 
 
 class LbmWeightInfo(CustomCodeNode):
+    def __init__(self, lb_method, data_type='double'):
+        self.weights_symbol = TypedSymbol("weights", data_type)
+        data_type_string = "double" if self.weights_symbol.dtype.numpy_dtype == np.float64 else "float"
 
-    # --------------------------- Functions to be used by boundaries --------------------------
+        weights = [str(w.evalf()) for w in lb_method.weights]
+        if data_type_string == "float":
+            weights = "f, ".join(weights)
+            weights += "f"  # suffix for the last element
+        else:
+            weights = ", ".join(weights)
+        w_sym = self.weights_symbol
+        code = f"const {data_type_string} {w_sym.name} [] = {{{ weights }}};\n"
+        super(LbmWeightInfo, self).__init__(code, symbols_read=set(), symbols_defined={w_sym})
 
-    @staticmethod
-    def weight_of_direction(dir_idx, lb_method=None):
+    def weight_of_direction(self, dir_idx, lb_method=None):
         if isinstance(sp.sympify(dir_idx), sp.Integer):
             return lb_method.weights[dir_idx].evalf()
         else:
-            return sp.IndexedBase(LbmWeightInfo.WEIGHTS_SYMBOL, shape=(1,))[dir_idx]
+            return sp.IndexedBase(self.weights_symbol, shape=(1,))[dir_idx]
 
-    # ---------------------------------- Internal ---------------------------------------------
 
-    WEIGHTS_SYMBOL = TypedSymbol("weights", "double")
-
-    def __init__(self, lb_method):
-        weights = [str(w.evalf()) for w in lb_method.weights]
-        w_sym = LbmWeightInfo.WEIGHTS_SYMBOL
-        code = "const double %s [] = { %s };\n" % (w_sym.name, ",".join(weights))
-        super(LbmWeightInfo, self).__init__(code, symbols_read=set(), symbols_defined={w_sym})
 # end class LbmWeightInfo
 
 

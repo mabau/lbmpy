@@ -283,7 +283,7 @@ class UBB(LbBoundary):
         Returns:
             list containing LbmWeightInfo and NeighbourOffsetArrays
         """
-        return [LbmWeightInfo(lb_method), NeighbourOffsetArrays(lb_method.stencil)]
+        return [LbmWeightInfo(lb_method, self.data_type), NeighbourOffsetArrays(lb_method.stencil)]
 
     @property
     def velocity_is_callable(self):
@@ -312,7 +312,8 @@ class UBB(LbBoundary):
             velocity = [eq.rhs for eq in shifted_vel_eqs.new_filtered(cqc.first_order_moment_symbols).main_assignments]
 
         c_s_sq = sp.Rational(1, 3)
-        weight_of_direction = LbmWeightInfo.weight_of_direction
+        weight_info = LbmWeightInfo(lb_method, data_type=self.data_type)
+        weight_of_direction = weight_info.weight_of_direction
         vel_term = 2 / c_s_sq * sum([d_i * v_i for d_i, v_i in zip(neighbor_offset, velocity)]) * weight_of_direction(
             dir_symbol, lb_method)
 
@@ -595,10 +596,11 @@ class DiffusionDirichlet(LbBoundary):
         name: optional name of the boundary.
     """
 
-    def __init__(self, concentration, name=None):
+    def __init__(self, concentration, name=None, data_type='double'):
         if name is None:
             name = "Diffusion Dirichlet " + str(concentration)
         self.concentration = concentration
+        self._data_type = data_type
 
         super(DiffusionDirichlet, self).__init__(name)
 
@@ -611,10 +613,11 @@ class DiffusionDirichlet(LbBoundary):
         Returns:
             list containing LbmWeightInfo
         """
-        return [LbmWeightInfo(lb_method)]
+        return [LbmWeightInfo(lb_method, self._data_type)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
-        w_dir = LbmWeightInfo.weight_of_direction(dir_symbol, lb_method)
+        weight_info = LbmWeightInfo(lb_method, self._data_type)
+        w_dir = weight_info.weight_of_direction(dir_symbol, lb_method)
         return [Assignment(f_in(inv_dir[dir_symbol]),
                            2 * w_dir * self.concentration - f_out(dir_symbol))]
 
