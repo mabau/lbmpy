@@ -104,8 +104,7 @@ def get_communication_slices(
 
 
 def periodic_pdf_copy_kernel(pdf_field, src_slice, dst_slice,
-                             domain_size=None, target=Target.GPU,
-                             opencl_queue=None, opencl_ctx=None):
+                             domain_size=None, target=Target.GPU):
     """Copies a rectangular array slice onto another non-overlapping array slice"""
     from pystencils.gpucuda.kernelcreation import create_cuda_kernel
 
@@ -136,9 +135,6 @@ def periodic_pdf_copy_kernel(pdf_field, src_slice, dst_slice,
     if target == Target.GPU:
         from pystencils.gpucuda import make_python_function
         return make_python_function(ast)
-    elif target == Target.OPENCL:
-        from pystencils.opencl import make_python_function
-        return make_python_function(ast, opencl_queue, opencl_ctx)
     else:
         raise ValueError('Invalid target:', target)
 
@@ -147,22 +143,17 @@ class LBMPeriodicityHandling:
 
     def __init__(self, stencil, data_handling, pdf_field_name,
                  streaming_pattern='pull', ghost_layers=1,
-                 opencl_queue=None, opencl_ctx=None,
                  pycuda_direct_copy=True):
         """
             Periodicity Handling for Lattice Boltzmann Streaming.
 
-            **On the usage with cuda/opencl:** 
+            **On the usage with cuda:**
             - pycuda allows the copying of sliced arrays within device memory using the numpy syntax,
             e.g. `dst[:,0] = src[:,-1]`. In this implementation, this is the default for periodicity
             handling. Alternatively, if you set `pycuda_direct_copy=False`, GPU kernels are generated and
             compiled. The compiled kernels are almost twice as fast in execution as pycuda array copying,
             but especially for large stencils like D3Q27, their compilation can take up to 20 seconds. 
             Choose your weapon depending on your use case.
-
-            - pyopencl does not support copying of non-contiguous sliced arrays, so the usage of compiled
-            copy kernels is forced on us. On the positive side, compilation of the OpenCL kernels appears
-            to be about four times faster.
         """
         if not isinstance(data_handling, SerialDataHandling):
             raise ValueError('Only serial data handling is supported!')
@@ -172,7 +163,7 @@ class LBMPeriodicityHandling:
         self.dh = data_handling
 
         target = data_handling.default_target
-        assert target in [Target.CPU, Target.GPU, Target.OPENCL]
+        assert target in [Target.CPU, Target.GPU]
 
         self.pdf_field_name = pdf_field_name
         self.ghost_layers = ghost_layers
@@ -180,8 +171,6 @@ class LBMPeriodicityHandling:
         self.inplace_pattern = is_inplace(streaming_pattern)
         self.target = target
         self.cpu = target == Target.CPU
-        self.opencl_queue = opencl_queue
-        self.opencl_ctx = opencl_ctx
         self.pycuda_direct_copy = target == Target.GPU and pycuda_direct_copy
 
         def is_copy_direction(direction):
@@ -205,7 +194,7 @@ class LBMPeriodicityHandling:
                                                            ghost_layers=ghost_layers)
             self.comm_slices.append(list(chain.from_iterable(v for k, v in slices_per_comm_dir.items())))
 
-        if target == Target.OPENCL or (target == Target.GPU and not pycuda_direct_copy):
+        if target == Target.GPU and not pycuda_direct_copy:
             self.device_copy_kernels = []
             for timestep in timesteps:
                 self.device_copy_kernels.append(self._compile_copy_kernels(timestep))
@@ -227,9 +216,7 @@ class LBMPeriodicityHandling:
         kernels = []
         for src, dst in self.comm_slices[timestep.idx]:
             kernels.append(
-                periodic_pdf_copy_kernel(
-                    pdf_field, src, dst, target=self.target,
-                    opencl_queue=self.opencl_queue, opencl_ctx=self.opencl_ctx))
+                periodic_pdf_copy_kernel(pdf_field, src, dst, target=self.target))
         return kernels
 
     def _periodicity_handling_gpu(self, prev_timestep):

@@ -4,7 +4,7 @@ import pytest
 from lbmpy.boundaries import NoSlip, UBB, SimpleExtrapolationOutflow, ExtrapolationOutflow, \
     FixedDensity, DiffusionDirichlet, NeumannByCopy, StreamInConstant, FreeSlip
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
-from lbmpy.creationfunctions import create_lb_function, create_lb_method, LBMConfig, LBMOptimisation
+from lbmpy.creationfunctions import create_lb_function, create_lb_method, LBMConfig
 from lbmpy.enums import Stencil, Method
 from lbmpy.geometry import add_box_boundary
 from lbmpy.lbstep import LatticeBoltzmannStep
@@ -22,22 +22,18 @@ def mirror_stencil(direction, mirror_axis):
     return tuple(direction)
 
 
-@pytest.mark.parametrize("target", [Target.GPU, Target.CPU, Target.OPENCL])
+@pytest.mark.parametrize("target", [Target.GPU, Target.CPU])
 def test_simple(target):
     if target == Target.GPU:
         import pytest
         pytest.importorskip('pycuda')
-    elif target == Target.OPENCL:
-        import pytest
-        pytest.importorskip('pyopencl')
-        import pystencils.opencl.autoinit
 
     dh = create_data_handling((4, 4), parallel=False, default_target=target)
     dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=target != Target.CPU)
     for i in range(9):
         dh.fill("pdfs", i, value_idx=i, ghost_layers=True)
 
-    if target == Target.GPU or target == Target.OPENCL:
+    if target == Target.GPU:
         dh.all_to_gpu()
 
     lbm_config = LBMConfig(stencil=LBStencil(Stencil.D2Q9), compressible=False, relaxation_rate=1.8)
@@ -57,7 +53,7 @@ def test_simple(target):
     bh.prepare()
     bh()
 
-    if target == Target.GPU or target == Target.OPENCL:
+    if target == Target.GPU:
         dh.all_to_cpu()
     # left lower corner
     assert (dh.cpu_arrays['pdfs'][0, 0, 6] == 7)

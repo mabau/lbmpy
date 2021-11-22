@@ -50,40 +50,6 @@ def test_data_handling_3d():
         np.testing.assert_almost_equal(results[0], arr)
 
 
-def test_data_handling_2d_opencl():
-    pytest.importorskip('pyopencl')
-    import pystencils.opencl.opencljit
-    pystencils.opencl.opencljit.init_globally()
-    print("--- LDC 2D test ---")
-    results = []
-
-    # Since waLBerla has no OpenCL Backend yet, it is not possible to use the
-    # parallel Datahandling with OpenCL at the moment
-
-    # TODO: Activate parallel Datahandling if Backend is available
-    parallel = False
-    for gpu in [True, False] if gpu_available else [False]:
-        if parallel and gpu and not hasattr(wLB, 'cuda'):
-            continue
-
-        print(f"Testing parallel: {parallel}\tgpu: {gpu}")
-        config = CreateKernelConfig(target=Target.GPU if gpu else Target.CPU,
-                                    gpu_indexing_params=MappingProxyType({'block_size': (8, 4, 2)}))
-        if parallel:
-            from pystencils.datahandling import ParallelDataHandling
-            blocks = wLB.createUniformBlockGrid(blocks=(2, 3, 1), cellsPerBlock=(5, 5, 1),
-                                                oneBlockPerProcess=False)
-            dh = ParallelDataHandling(blocks, dim=2)
-            rho = ldc_setup(data_handling=dh, config=config)
-            results.append(rho)
-        else:
-            rho = ldc_setup(domain_size=(10, 15), parallel=False, config=config)
-            results.append(rho)
-    for i, arr in enumerate(results[1:]):
-        print(f"Testing equivalence version 0 with version {i + 1}")
-        np.testing.assert_almost_equal(results[0], arr)
-
-
 def test_data_handling_2d():
     print("--- LDC 2D test ---")
     results = []
