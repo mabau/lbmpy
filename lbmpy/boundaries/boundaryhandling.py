@@ -160,7 +160,7 @@ class LbmWeightInfo(CustomCodeNode):
         self.weights_symbol = TypedSymbol("weights", data_type)
         data_type_string = "double" if self.weights_symbol.dtype.numpy_dtype == np.float64 else "float"
 
-        weights = [str(w.evalf()) for w in lb_method.weights]
+        weights = [str(w.evalf(17)) for w in lb_method.weights]
         if data_type_string == "float":
             weights = "f, ".join(weights)
             weights += "f"  # suffix for the last element
@@ -172,7 +172,7 @@ class LbmWeightInfo(CustomCodeNode):
 
     def weight_of_direction(self, dir_idx, lb_method=None):
         if isinstance(sp.sympify(dir_idx), sp.Integer):
-            return lb_method.weights[dir_idx].evalf()
+            return lb_method.weights[dir_idx].evalf(17)
         else:
             return sp.IndexedBase(self.weights_symbol, shape=(1,))[dir_idx]
 
