@@ -25,27 +25,15 @@ try:
 except Exception:
     pass
 
-try:
-    import pystencils.opencl.autoinit
-    from pystencils.opencl.opencljit import get_global_cl_queue
-    if get_global_cl_queue() is not None:
-        targets += [Target.OPENCL]
-except Exception:
-    pass
-
 
 @pytest.mark.parametrize('target', targets)
 @pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize('streaming_pattern', streaming_patterns)
 @pytest.mark.longrun
 def test_fully_periodic_flow(target, stencil, streaming_pattern):
-
-    if target == Target.OPENCL:
-        opencl_queue = get_global_cl_queue()
-    else:
-        opencl_queue = None
-
-    gpu = target in [Target.GPU, Target.OPENCL]
+    gpu = False
+    if target == Target.GPU:
+        gpu = True
 
     #   Stencil
     stencil = LBStencil(stencil)
@@ -59,8 +47,7 @@ def test_fully_periodic_flow(target, stencil, streaming_pattern):
     domain_size = (30,) * stencil.D
     periodicity = (True,) * stencil.D
 
-    dh = create_data_handling(domain_size=domain_size, periodicity=periodicity,
-                              default_target=target, opencl_queue=opencl_queue)
+    dh = create_data_handling(domain_size=domain_size, periodicity=periodicity, default_target=target)
 
     pdfs = dh.add_array('pdfs', stencil.Q)
     if not inplace:

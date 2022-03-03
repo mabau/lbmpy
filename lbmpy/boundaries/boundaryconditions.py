@@ -120,9 +120,10 @@ class FreeSlip(LbBoundary):
 
     Args:
         stencil: LBM stencil which is used for the simulation
-        normal_direction: optional normal direction. If the Free slip boundary is applied to a certain side in the
-                          domain it is not necessary to calculate the normal direction since it can be stated for all
-                          boundary cells. This reduces the memory space for the index array significantly.
+        normal_direction: optional normal direction pointing from wall to fluid.
+                          If the Free slip boundary is applied to a certain side in the domain it is not necessary
+                          to calculate the normal direction since it can be stated for all boundary cells.
+                          This reduces the memory space for the index array significantly.
         name: optional name of the boundary.
     """
 
@@ -182,7 +183,12 @@ class FreeSlip(LbBoundary):
                     normal_direction[i] = direction[i]
                     ref_direction = MirroredStencilDirections.mirror_stencil(ref_direction, i)
 
-            ref_direction = inverse_direction(ref_direction)
+            # convex corner special case:
+            if all(n == 0 for n in normal_direction):
+                normal_direction = direction
+            else:
+                ref_direction = inverse_direction(ref_direction)
+
             for i, cell_name in zip(range(dim), self.additional_data):
                 cell[cell_name[0]] = -normal_direction[i]
             cell['ref_dir'] = self.stencil.index(ref_direction)
@@ -208,13 +214,14 @@ class FreeSlip(LbBoundary):
 
     def get_additional_code_nodes(self, lb_method):
         if self.normal_direction:
-            return [MirroredStencilDirections(self.stencil, self.mirror_axis)]
+            return [MirroredStencilDirections(self.stencil, self.mirror_axis), NeighbourOffsetArrays(lb_method.stencil)]
         else:
-            return []
+            return [NeighbourOffsetArrays(lb_method.stencil)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         if self.normal_direction:
-            normal_direction = self.normal_direction
+            tangential_offset = tuple(offset + normal for offset, normal in zip(neighbor_offset, self.normal_direction))
             mirrored_stencil_symbol = MirroredStencilDirections._mirrored_symbol(self.mirror_axis)
             mirrored_direction = inv_dir[sp.IndexedBase(mirrored_stencil_symbol, shape=(1,))[dir_symbol]]
         else:
@@ -222,10 +229,11 @@ class FreeSlip(LbBoundary):
             for i, cell_name in zip(range(self.dim), self.additional_data):
                 normal_direction.append(index_field[0](cell_name[0]))
             normal_direction = tuple(normal_direction)
+            tangential_offset = tuple(offset + normal for offset, normal in zip(neighbor_offset, normal_direction))
 
             mirrored_direction = index_field[0]('ref_dir')
 
-        return Assignment(f_in(inv_dir[dir_symbol]), f_in[normal_direction](mirrored_direction))
+        return Assignment(f_in.center(inv_dir[dir_symbol]), f_out[tangential_offset](mirrored_direction))
 
 
 # end class FreeSlip
@@ -283,7 +291,7 @@ class UBB(LbBoundary):
         Returns:
             list containing LbmWeightInfo and NeighbourOffsetArrays
         """
-        return [LbmWeightInfo(lb_method), NeighbourOffsetArrays(lb_method.stencil)]
+        return [LbmWeightInfo(lb_method, self.data_type), NeighbourOffsetArrays(lb_method.stencil)]
 
     @property
     def velocity_is_callable(self):
@@ -312,7 +320,8 @@ class UBB(LbBoundary):
             velocity = [eq.rhs for eq in shifted_vel_eqs.new_filtered(cqc.first_order_moment_symbols).main_assignments]
 
         c_s_sq = sp.Rational(1, 3)
-        weight_of_direction = LbmWeightInfo.weight_of_direction
+        weight_info = LbmWeightInfo(lb_method, data_type=self.data_type)
+        weight_of_direction = weight_info.weight_of_direction
         vel_term = 2 / c_s_sq * sum([d_i * v_i for d_i, v_i in zip(neighbor_offset, velocity)]) * weight_of_direction(
             dir_symbol, lb_method)
 
@@ -595,10 +604,11 @@ class DiffusionDirichlet(LbBoundary):
         name: optional name of the boundary.
     """
 
-    def __init__(self, concentration, name=None):
+    def __init__(self, concentration, name=None, data_type='double'):
         if name is None:
             name = "Diffusion Dirichlet " + str(concentration)
         self.concentration = concentration
+        self._data_type = data_type
 
         super(DiffusionDirichlet, self).__init__(name)
 
@@ -611,10 +621,11 @@ class DiffusionDirichlet(LbBoundary):
         Returns:
             list containing LbmWeightInfo
         """
-        return [LbmWeightInfo(lb_method)]
+        return [LbmWeightInfo(lb_method, self._data_type)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
-        w_dir = LbmWeightInfo.weight_of_direction(dir_symbol, lb_method)
+        weight_info = LbmWeightInfo(lb_method, self._data_type)
+        w_dir = weight_info.weight_of_direction(dir_symbol, lb_method)
         return [Assignment(f_in(inv_dir[dir_symbol]),
                            2 * w_dir * self.concentration - f_out(dir_symbol))]
 

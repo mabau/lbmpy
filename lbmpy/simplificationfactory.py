@@ -2,6 +2,7 @@ import sympy as sp
 
 from lbmpy.innerloopsplit import create_lbm_split_groups
 from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
+from lbmpy.methods.momentbased.centralmomentbasedmethod import CentralMomentBasedLbMethod
 from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
 from lbmpy.methods.momentbased.momentbasedsimplifications import (
     factor_density_after_factoring_relaxation_times, factor_relaxation_rates,
@@ -22,6 +23,8 @@ def create_simplification_strategy(lb_method, split_inner_loop=False):
             else:
                 # General MRT methods with population-space collision
                 return _mrt_population_space_simplification(split_inner_loop)
+    elif isinstance(lb_method, CentralMomentBasedLbMethod):
+        return _moment_space_simplification(split_inner_loop)
     elif isinstance(lb_method, CenteredCumulantBasedLbMethod):
         return _moment_space_simplification(split_inner_loop)
     else:

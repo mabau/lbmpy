@@ -26,14 +26,6 @@ try:
 except Exception:
     pass
 
-try:
-    import pystencils.opencl.autoinit
-    from pystencils.opencl.opencljit import get_global_cl_queue
-    if get_global_cl_queue() is not None:
-        targets += [Target.OPENCL]
-except Exception:
-    pass
-
 
 class PeriodicPipeFlow:
     def __init__(self, stencil, streaming_pattern, wall_boundary=None, target=Target.CPU):
@@ -42,7 +34,7 @@ class PeriodicPipeFlow:
             wall_boundary = NoSlip()
 
         self.target = target
-        self.gpu = target in [Target.GPU, Target.OPENCL]
+        self.gpu = target in [Target.GPU]
 
         #   Stencil
         self.stencil = stencil

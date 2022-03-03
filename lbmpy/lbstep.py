@@ -74,7 +74,7 @@ class LatticeBoltzmannStep:
         self.density_data_name = name + "_density" if density_data_name is None else density_data_name
         self.density_data_index = density_data_index
 
-        self._gpu = target == Target.GPU or target == Target.OPENCL
+        self._gpu = target == Target.GPU
         layout = lbm_optimisation.field_layout
 
         alignment = False

@@ -268,7 +268,7 @@ class FastCentralMomentTransform(AbstractCentralMomentTransform):
         ac = AssignmentCollection(main_assignments, subexpressions=subexpressions,
                                   subexpression_symbol_generator=symbol_gen)
         if simplification:
-            ac = self._simplify_lower_order_moments(ac, monomial_symbol_base)
+            ac = self._simplify_lower_order_moments(ac, monomial_symbol_base, return_monomials)
             ac = simplification.apply(ac)
         return ac
 
@@ -335,14 +335,19 @@ class FastCentralMomentTransform(AbstractCentralMomentTransform):
             'backward': backward_simp
         }
 
-    def _simplify_lower_order_moments(self, ac, moment_base):
+    def _simplify_lower_order_moments(self, ac, moment_base, search_in_main_assignments):
         if self.cqe is None:
             return ac
 
-        f_to_cm_dict = ac.main_assignments_dict
-        f_to_cm_dict_reduced = ac.new_without_subexpressions().main_assignments_dict
-
         moment_symbols = [sq_sym(moment_base, e) for e in moments_up_to_order(1, dim=self.dim)]
+
+        if search_in_main_assignments:
+            f_to_cm_dict = ac.main_assignments_dict
+            f_to_cm_dict_reduced = ac.new_without_subexpressions().main_assignments_dict
+        else:
+            f_to_cm_dict = ac.subexpressions_dict
+            f_to_cm_dict_reduced = ac.new_without_subexpressions(moment_symbols).subexpressions_dict
+
         cqe_subs = self.cqe.new_without_subexpressions().main_assignments_dict
         for m in moment_symbols:
             m_eq = fast_subs(fast_subs(f_to_cm_dict_reduced[m], cqe_subs), cqe_subs)
@@ -351,8 +356,12 @@ class FastCentralMomentTransform(AbstractCentralMomentTransform):
                 m_eq = subs_additive(m_eq, cqe_sym, cqe_exp)
             f_to_cm_dict[m] = m_eq
 
-        main_assignments = [Assignment(lhs, rhs) for lhs, rhs in f_to_cm_dict.items()]
-        return ac.copy(main_assignments=main_assignments)
+        if search_in_main_assignments:
+            main_assignments = [Assignment(lhs, rhs) for lhs, rhs in f_to_cm_dict.items()]
+            return ac.copy(main_assignments=main_assignments)
+        else:
+            subexpressions = [Assignment(lhs, rhs) for lhs, rhs in f_to_cm_dict.items()]
+            return ac.copy(subexpressions=subexpressions)
 
     def _split_backward_equations_recursive(self, assignment, all_subexpressions,
                                             stencil_direction, subexp_symgen, known_coeffs_dict,
