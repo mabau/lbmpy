@@ -63,6 +63,8 @@ class WallFunctionBounce(LbBoundary):
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         # needed symbols for offsets and indices
+        neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+        tangential_offset = tuple(offset + normal for offset, normal in zip(neighbor_offset, self.normal_direction))
         mirrored_stencil_symbol = MirroredStencilDirections._mirrored_symbol(self.mirror_axis)
         mirrored_direction = inv_dir[sp.IndexedBase(mirrored_stencil_symbol, shape=(1,))[dir_symbol]]
 
@@ -130,6 +132,6 @@ class WallFunctionBounce(LbBoundary):
         neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         drag = neighbor_offset[0] * factor * tau_w_x + neighbor_offset[2] * factor * tau_w_z
 
-        result.append(Assignment(f_in(inv_dir[dir_symbol]), f_in[normal_direction](mirrored_direction) - drag))
+        result.append(Assignment(f_in.center(inv_dir[dir_symbol]), f_out[tangential_offset](mirrored_direction) - drag))
 
         return result
