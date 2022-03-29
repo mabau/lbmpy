@@ -1,14 +1,10 @@
 from pystencils.fd.derivation import FiniteDifferenceStencilDerivation
-from pystencils import Assignment
+from pystencils import Assignment, AssignmentCollection, Field
 
-from lbmpy.methods.momentbased.centralmomentbasedmethod import CentralMomentBasedLbMethod
-from lbmpy.moments import get_order
-from lbmpy.maxwellian_equilibrium import get_weights
-from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor, StreamPushTwoFieldsAccessor, CollideOnlyInplaceAccessor
+from lbmpy import pdf_initialization_assignments
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
-
-from lbmpy.phasefield_allen_cahn.phasefield_simplifications import create_phasefield_simplification_strategy
-from lbmpy.phasefield_allen_cahn.force_model import CentralMomentMultiphaseForceModel
+from lbmpy.utils import second_order_moment_tensor
+from lbmpy.phasefield_allen_cahn.parameter_calculation import AllenCahnParameters
 
 import sympy as sp
 
@@ -46,7 +42,10 @@ def chemical_potential_symbolic(phi_field, stencil, beta, kappa):
             lap += res.apply(phi_field.center)
 
     # get the chemical potential
-    mu = 4.0 * beta * phi_field.center * (phi_field.center - 1.0) * (phi_field.center - 0.5) - kappa * lap
+    four = sp.Rational(4, 1)
+    one = sp.Rational(1, 1)
+    half = sp.Rational(1, 2)
+    mu = four * beta * phi_field.center * (phi_field.center - one) * (phi_field.center - half) - kappa * lap
     return mu
 
 
@@ -106,7 +105,7 @@ def normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil=None):
     if fd_stencil is None:
         fd_stencil = stencil
 
-    tmp = (sum(map(lambda x: x * x, isotropic_gradient_symbolic(phi_field, fd_stencil))) + 1.e-32) ** 0.5
+    tmp = (sum(map(lambda x: x * x, isotropic_gradient_symbolic(phi_field, fd_stencil))) + sp.Float(1e-32)) ** 0.5
 
     result = [x / tmp for x in isotropic_gradient_symbolic(phi_field, fd_stencil)]
     return result
@@ -131,56 +130,37 @@ def pressure_force(phi_field, stencil, density_heavy, density_light, fd_stencil=
     return result
 
 
-def viscous_force(lb_velocity_field, phi_field, mrt_method, tau, density_heavy, density_light, fd_stencil=None):
+def viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, density_light, fd_stencil=None):
     r"""
     Get a symbolic expression for the viscous force
     Args:
         lb_velocity_field: hydrodynamic distribution function
         phi_field: phase-field
-        mrt_method: mrt lattice boltzmann method used for hydrodynamics
+        lb_method: lattice boltzmann method used for hydrodynamics
         tau: relaxation time of the hydrodynamic lattice boltzmann step
         density_heavy: density of the heavier fluid
         density_light: density of the lighter fluid
         fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
         field. If it is not given the stencil of the LB method will be applied.
     """
-    stencil = mrt_method.stencil
-    dimensions = stencil.D
+    stencil = lb_method.stencil
 
     if fd_stencil is None:
         fd_stencil = stencil
 
-    iso_grad = isotropic_gradient_symbolic(phi_field, fd_stencil)
+    iso_grad = sp.Matrix(isotropic_gradient_symbolic(phi_field, fd_stencil)[:stencil.D])
 
-    non_equilibrium = lb_velocity_field.center_vector - mrt_method.get_equilibrium_terms()
-
-    stress_tensor = [0] * 6
-    # Calculate Stress Tensor MRT
-    for i, d in enumerate(stencil):
-        stress_tensor[0] = sp.Add(stress_tensor[0], non_equilibrium[i] * (d[0] * d[0]))
-        stress_tensor[1] = sp.Add(stress_tensor[1], non_equilibrium[i] * (d[1] * d[1]))
-
-        if dimensions == 3:
-            stress_tensor[2] = sp.Add(stress_tensor[2], non_equilibrium[i] * (d[2] * d[2]))
-            stress_tensor[3] = sp.Add(stress_tensor[3], non_equilibrium[i] * (d[1] * d[2]))
-            stress_tensor[4] = sp.Add(stress_tensor[4], non_equilibrium[i] * (d[0] * d[2]))
-
-        stress_tensor[5] = sp.Add(stress_tensor[5], non_equilibrium[i] * (d[0] * d[1]))
+    f_neq = lb_velocity_field.center_vector - lb_method.get_equilibrium_terms()
+    stress_tensor = second_order_moment_tensor(f_neq, lb_method.stencil)
+    normal_stress_tensor = stress_tensor * iso_grad
 
     density_difference = density_heavy - density_light
 
     # Calculate Viscous Force MRT
-    fmx = (0.5 - tau) * (stress_tensor[0] * iso_grad[0]
-                         + stress_tensor[5] * iso_grad[1]
-                         + stress_tensor[4] * iso_grad[2]) * density_difference
-
-    fmy = (0.5 - tau) * (stress_tensor[5] * iso_grad[0]
-                         + stress_tensor[1] * iso_grad[1]
-                         + stress_tensor[3] * iso_grad[2]) * density_difference
-
-    fmz = (0.5 - tau) * (stress_tensor[4] * iso_grad[0]
-                         + stress_tensor[3] * iso_grad[1]
-                         + stress_tensor[2] * iso_grad[2]) * density_difference
+    half = sp.Rational(1, 2)
+    fmx = (half - tau) * normal_stress_tensor[0] * density_difference
+    fmy = (half - tau) * normal_stress_tensor[1] * density_difference
+    fmz = (half - tau) * normal_stress_tensor[2] * density_difference if stencil.D == 3 else 0
 
     return [fmx, fmy, fmz]
 
@@ -204,19 +184,15 @@ def surface_tension_force(phi_field, stencil, beta, kappa, fd_stencil=None):
     return [chemical_potential * x for x in iso_grad]
 
 
-def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, tau,
-                       density_heavy, density_light, kappa, beta, body_force, fd_stencil=None):
+def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, parameters: AllenCahnParameters,
+                       body_force, fd_stencil=None):
     r"""
     Get a symbolic expression for the hydrodynamic force
     Args:
         lb_velocity_field: hydrodynamic distribution function
         phi_field: phase-field
         lb_method: Lattice boltzmann method used for hydrodynamics
-        tau: relaxation time of the hydrodynamic lattice boltzmann step
-        density_heavy: density of the heavier fluid
-        density_light: density of the lighter fluid
-        beta: coefficient related to surface tension and interface thickness
-        kappa: coefficient related to surface tension and interface thickness
+        parameters: AllenCahnParameters
         body_force: force acting on the fluids. Usually the gravity
         fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
         field. If it is not given the stencil of the LB method will be applied.
@@ -225,6 +201,14 @@ def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, tau,
 
     if fd_stencil is None:
         fd_stencil = stencil
+
+    density_heavy = parameters.symbolic_density_heavy
+    density_light = parameters.symbolic_density_light
+    tau_L = parameters.symbolic_tau_light
+    tau_H = parameters.symbolic_tau_heavy
+    tau = sp.Rational(1, 2) + tau_L + phi_field.center * (tau_H - tau_L)
+    beta = parameters.beta
+    kappa = parameters.kappa
 
     fp = pressure_force(phi_field, stencil, density_heavy, density_light, fd_stencil)
     fm = viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, density_light, fd_stencil)
@@ -237,317 +221,201 @@ def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, tau,
     return result
 
 
-def interface_tracking_force(phi_field, stencil, interface_thickness, fd_stencil=None):
+def interface_tracking_force(phi_field, stencil, parameters: AllenCahnParameters, fd_stencil=None,
+                             phi_heavy=1, phi_light=0):
     r"""
     Get a symbolic expression for the hydrodynamic force
     Args:
         phi_field: phase-field
         stencil: stencil of the phase-field distribution lattice Boltzmann step
-        interface_thickness: interface thickness
+        parameters: AllenCahnParameters
         fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
         field. If it is not given the stencil of the LB method will be applied.
+        phi_heavy: phase field value in the bulk of the heavy fluid
+        phi_light: phase field value in the bulk of the light fluid
+
     """
     if fd_stencil is None:
         fd_stencil = stencil
 
+    phi_zero = sp.Rational(1, 2) * (phi_light + phi_heavy)
+
     normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil)
     result = []
+    interface_thickness = parameters.symbolic_interface_thickness
     for i in range(stencil.D):
-        result.append(((1.0 - 4.0 * (phi_field.center - 0.5) ** 2) / interface_thickness) * normal_fd[i])
+        fraction = (sp.Rational(1, 1) - sp.Rational(4, 1) * (phi_field.center - phi_zero) ** 2) / interface_thickness
+        result.append(sp.Rational(1, 3) * fraction * normal_fd[i])
 
     return result
 
 
-def get_update_rules_velocity(src_field, u_in, lb_method, force_model, density, sub_iterations=2):
+def hydrodynamic_force_assignments(lb_velocity_field, velocity_field, phi_field, lb_method,
+                                   parameters: AllenCahnParameters,
+                                   body_force, fd_stencil=None, sub_iterations=2):
+
     r"""
-     Get assignments to update the velocity with a force shift
-     Args:
-         src_field: the source field of the hydrodynamic distribution function
-         u_in: velocity field
-         lb_method: mrt lattice boltzmann method used for hydrodynamics
-         force_model: one of the phase_field force models which are applied in the collision space
-         density: the interpolated density of the simulation
-         sub_iterations: number of updates of the velocity field
-     """
+    Get a symbolic expression for the hydrodynamic force
+    Args:
+        lb_velocity_field: hydrodynamic distribution function
+        velocity_field: velocity
+        phi_field: phase-field
+        lb_method: Lattice boltzmann method used for hydrodynamics
+        parameters: AllenCahnParameters
+        body_force: force acting on the fluids. Usually the gravity
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
+        sub_iterations: number of sub iterations for the hydrodynamic force
+    """
+
+    rho_L = parameters.symbolic_density_light
+    rho_H = parameters.symbolic_density_heavy
+    density = rho_L + phi_field.center * (rho_H - rho_L)
+
     stencil = lb_method.stencil
+    # method has to have a force model
+    symbolic_force = lb_method.force_model.symbolic_force_vector
 
-    rho = lb_method.conserved_quantity_computation.zeroth_order_moment_symbol
-    u_symp = lb_method.conserved_quantity_computation.first_order_moment_symbols
+    force = hydrodynamic_force(lb_velocity_field, phi_field, lb_method, parameters, body_force, fd_stencil=fd_stencil)
 
-    force = force_model._force
-    force_symp = force_model.force_symp
+    cqc = lb_method.conserved_quantity_computation
 
-    moment_matrix = lb_method.moment_matrix
+    u_symp = cqc.first_order_moment_symbols
+    cqe = cqc.equilibrium_input_equations_from_pdfs(lb_velocity_field.center_vector)
+    cqe = cqe.new_without_subexpressions()
 
-    moments = lb_method.moments
-    indices = list()
-    for i in range(len(moments)):
-        if get_order(moments[i]) == 1:
-            indices.append(i)
-
-    m0 = moment_matrix * sp.Matrix(src_field.center_vector)
-
-    update_u = list()
-    update_u.append(Assignment(rho, m0[0]))
-
+    cqe_velocity = [eq.rhs for eq in cqe.main_assignments[1:]]
     index = 0
     aleph = sp.symbols(f"aleph_:{stencil.D * sub_iterations}")
 
+    force_Assignments = []
+
     for i in range(stencil.D):
-        update_u.append(Assignment(aleph[i], u_in.center_vector[i]))
+        force_Assignments.append(Assignment(aleph[i], velocity_field.center_vector[i]))
         index += 1
 
     for k in range(sub_iterations - 1):
         subs_dict = dict(zip(u_symp, aleph[k * stencil.D:index]))
         for i in range(stencil.D):
-            update_u.append(Assignment(aleph[index], m0[indices[i]] + force[i].subs(subs_dict) / density / 2))
+            new_force = force[i].subs(subs_dict) / density
+            force_Assignments.append(Assignment(aleph[index], cqe_velocity[i].subs({symbolic_force[i]: new_force})))
             index += 1
 
     subs_dict = dict(zip(u_symp, aleph[index - stencil.D:index]))
 
     for i in range(stencil.D):
-        update_u.append(Assignment(force_symp[i], force[i].subs(subs_dict)))
+        force_Assignments.append(Assignment(symbolic_force[i], force[i].subs(subs_dict)))
 
-    for i in range(stencil.D):
-        update_u.append(Assignment(u_symp[i], m0[indices[i]] + force_symp[i] / density / 2))
-
-    return update_u
+    return force_Assignments
 
 
-def get_collision_assignments_hydro(lb_method, density, velocity_input, force_model, sub_iterations, symbolic_fields,
-                                    kernel_type):
+def add_interface_tracking_force(update_rule: LbmCollisionRule, force):
     r"""
-     Get collision assignments for the hydrodynamic lattice Boltzmann step. Here the force gets applied in the moment
-     space. Afterwards the transformation back to the pdf space happens.
+     Adds the interface tracking force to a lattice Boltzmann update rule
      Args:
-         lb_method: moment based lattice Boltzmann method
-         density: the interpolated density of the simulation
-         velocity_input: velocity field for the hydrodynamic and Allen-Chan LB step
-         force_model: one of the phase_field force models which are applied in the collision space
-         sub_iterations: number of updates of the velocity field
-         symbolic_fields: PDF fields for source and destination
-         kernel_type: collide_stream_push or collide_only
+         update_rule: lattice Boltzmann update rule
+         force: interface tracking force
      """
+    method = update_rule.method
+    symbolic_force = method.force_model.symbolic_force_vector
 
-    if isinstance(lb_method, CentralMomentBasedLbMethod) and not \
-            isinstance(force_model, CentralMomentMultiphaseForceModel):
-        raise ValueError("For central moment lb methods a central moment force model needs the be applied")
+    for i in range(method.stencil.D):
+        update_rule.subexpressions += [Assignment(symbolic_force[i], force[i])]
 
-    stencil = lb_method.stencil
+    update_rule.topological_sort(sort_subexpressions=True, sort_main_assignments=False)
 
-    rho = lb_method.conserved_quantity_computation.zeroth_order_moment_symbol
-
-    src_field = symbolic_fields['symbolic_field']
-    dst_field = symbolic_fields['symbolic_temporary_field']
-
-    if kernel_type == 'collide_stream_push':
-        accessor = StreamPushTwoFieldsAccessor()
-    else:
-        accessor = CollideOnlyInplaceAccessor()
-
-    u_symp = lb_method.conserved_quantity_computation.first_order_moment_symbols
-
-    moment_matrix = lb_method.moment_matrix
-    rel = sp.diag(*lb_method.relaxation_rates)
-    eq = sp.Matrix(lb_method.moment_equilibrium_values)
-
-    force_terms = force_model(lb_method)
-    eq = eq - sp.Rational(1, 2) * force_terms
-
-    pre = sp.symbols(f"pre_:{stencil.Q}")
-    post = sp.symbols(f"post_:{stencil.Q}")
-
-    to_moment_space = moment_matrix * sp.Matrix(accessor.read(src_field, stencil))
-    to_moment_space[0] = rho
-
-    main_assignments = list()
-    subexpressions = get_update_rules_velocity(src_field, velocity_input, lb_method, force_model,
-                                               density, sub_iterations=sub_iterations)
-
-    for i in range(0, stencil.Q):
-        subexpressions.append(Assignment(pre[i], to_moment_space[i]))
-
-    if isinstance(lb_method, CentralMomentBasedLbMethod):
-        n0 = lb_method.shift_matrix * sp.Matrix(pre)
-        to_central = sp.Matrix(sp.symbols(f"kappa_:{stencil.Q}"))
-        for i in range(0, stencil.Q):
-            subexpressions.append(Assignment(to_central[i], n0[i]))
-        pre = to_central
-
-    collision = sp.Matrix(pre) - rel * (sp.Matrix(pre) - eq) + force_terms
-
-    for i in range(0, stencil.Q):
-        subexpressions.append(Assignment(post[i], collision[i]))
-
-    if isinstance(lb_method, CentralMomentBasedLbMethod):
-        n0_back = lb_method.shift_matrix.inv() * sp.Matrix(post)
-        from_central = sp.Matrix(sp.symbols(f"kappa_post:{stencil.Q}"))
-        for i in range(0, stencil.Q):
-            subexpressions.append(Assignment(from_central[i], n0_back[i]))
-        post = from_central
-
-    to_pdf_space = moment_matrix.inv() * sp.Matrix(post)
-
-    for i in range(0, stencil.Q):
-        main_assignments.append(Assignment(accessor.write(dst_field, stencil)[i], to_pdf_space[i]))
-
-    for i in range(stencil.D):
-        main_assignments.append(Assignment(velocity_input.center_vector[i], u_symp[i]))
-
-    collision_rule = LbmCollisionRule(lb_method, main_assignments, subexpressions)
-
-    simplification = create_phasefield_simplification_strategy(lb_method)
-    collision_rule = simplification(collision_rule)
-
-    return collision_rule
+    return update_rule
 
 
-def get_collision_assignments_phase(lb_method, velocity_input, output, force_model, symbolic_fields, kernel_type):
+def add_hydrodynamic_force(update_rule: LbmCollisionRule, force, phi_field,
+                           hydro_pdfs, parameters: AllenCahnParameters):
     r"""
-     Get collision assignments for the phasefield lattice Boltzmann step. Here the force gets applied in the moment
-     space. Afterwards the transformation back to the pdf space happens.
+     Adds the interface tracking force to a lattice Boltzmann update rule
      Args:
-         lb_method: moment based lattice Boltzmann method
-         velocity_input: velocity field for the hydrodynamic and Allen-Chan LB step
-         output: output field for the phasefield (calles density as for normal LB update rules)
-         force_model: one of the phase_field force models which are applied in the collision space
-         symbolic_fields: PDF fields for source and destination
-         kernel_type: stream_pull_collide or collide_only
+         update_rule: lattice Boltzmann update rule
+         force: interface tracking force
+         phi_field: phase-field
+         hydro_pdfs: source field of the hydrodynamic PDFs
+         parameters: AllenCahnParameters
      """
+    rho_L = parameters.symbolic_density_light
+    rho_H = parameters.symbolic_density_heavy
+    density = rho_L + phi_field.center * (rho_H - rho_L)
 
-    stencil = lb_method.stencil
+    method = update_rule.method
+    symbolic_force = method.force_model.symbolic_force_vector
+    cqc = method.conserved_quantity_computation
+    rho = cqc.zeroth_order_moment_symbol
 
-    src_field = symbolic_fields['symbolic_field']
-    dst_field = symbolic_fields['symbolic_temporary_field']
-    output_phase_field = output['density']
+    force_subs = {f: f / density for f in symbolic_force}
 
-    if kernel_type == 'stream_pull_collide':
-        accessor = StreamPullTwoFieldsAccessor()
-    else:
-        accessor = CollideOnlyInplaceAccessor()
+    update_rule = update_rule.subs(force_subs)
 
-    subexpressions = list()
-    main_assignments = list()
+    update_rule.subexpressions += [Assignment(rho, sum(hydro_pdfs.center_vector))]
+    update_rule.subexpressions += force
+    update_rule.topological_sort(sort_subexpressions=True, sort_main_assignments=False)
 
-    rho = lb_method.conserved_quantity_computation.zeroth_order_moment_symbol
-    u_symp = lb_method.conserved_quantity_computation.first_order_moment_symbols
-
-    moment_matrix = lb_method.moment_matrix
-    rel = sp.diag(*lb_method.relaxation_rates)
-    eq = sp.Matrix(lb_method.moment_equilibrium_values)
-
-    force_terms = force_model(lb_method)
-    eq = eq - sp.Rational(1, 2) * force_terms
-
-    pre = sp.symbols(f"pre_:{stencil.Q}")
-    post = sp.symbols(f"post_:{stencil.Q}")
-
-    to_moment_space = moment_matrix * sp.Matrix(accessor.read(src_field, stencil))
-    to_moment_space[0] = rho
-
-    subexpressions.append(Assignment(rho, sum(accessor.read(src_field, stencil))))
-    for i in range(lb_method.dim):
-        subexpressions.append(Assignment(u_symp[i], velocity_input.center_vector[i]))
-    subexpressions.extend(force_model.subs_terms)
-
-    for i in range(stencil.Q):
-        subexpressions.append(Assignment(pre[i], to_moment_space[i]))
-
-    if isinstance(lb_method, CentralMomentBasedLbMethod):
-        n0 = lb_method.shift_matrix * sp.Matrix(pre)
-        to_central = sp.Matrix(sp.symbols(f"kappa_:{stencil.Q}"))
-        for i in range(stencil.Q):
-            subexpressions.append(Assignment(to_central[i], n0[i]))
-        pre = to_central
-
-    collision = sp.Matrix(pre) - rel * (sp.Matrix(pre) - eq) + force_terms
-
-    for i in range(stencil.Q):
-        subexpressions.append(Assignment(post[i], collision[i]))
-
-    if isinstance(lb_method, CentralMomentBasedLbMethod):
-        n0_back = lb_method.shift_matrix.inv() * sp.Matrix(post)
-        from_central = sp.Matrix(sp.symbols(f"kappa_post:{stencil.Q}"))
-        for i in range(stencil.Q):
-            subexpressions.append(Assignment(from_central[i], n0_back[i]))
-        post = from_central
-
-    to_pdf_space = moment_matrix.inv() * sp.Matrix(post)
-
-    for i in range(stencil.Q):
-        main_assignments.append(Assignment(accessor.write(dst_field, stencil)[i], to_pdf_space[i]))
-
-    main_assignments.append(Assignment(output_phase_field.center, sum(accessor.write(dst_field, stencil))))
-
-    collision_rule = LbmCollisionRule(lb_method, main_assignments, subexpressions)
-
-    simplification = create_phasefield_simplification_strategy(lb_method)
-    collision_rule = simplification(collision_rule)
-
-    return collision_rule
+    return update_rule
 
 
-def initializer_kernel_phase_field_lb(lb_phase_field, phi_field, velocity_field, mrt_method, interface_thickness,
+def initializer_kernel_phase_field_lb(lb_method, phi, velocity, ac_pdfs, parameters: AllenCahnParameters,
                                       fd_stencil=None):
     r"""
     Returns an assignment list for initializing the phase-field distribution functions
     Args:
-        lb_phase_field: source field of phase-field distribution function
-        phi_field: phase-field
-        velocity_field: velocity field
-        mrt_method: lattice Boltzmann method of the phase-field lattice Boltzmann step
-        interface_thickness: interface thickness
+        lb_method: lattice Boltzmann method of the phase-field lattice Boltzmann step
+        phi: order parameter of the Allen-Cahn LB step (phase field)
+        velocity: initial velocity
+        ac_pdfs: source field of the Allen-Cahn PDFs
+        parameters: AllenCahnParameters
         fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
         field. If it is not given the stencil of the LB method will be applied.
     """
-    stencil = mrt_method.stencil
 
-    if fd_stencil is None:
-        fd_stencil = stencil
+    h_updates = pdf_initialization_assignments(lb_method, phi, velocity, ac_pdfs)
+    force_h = interface_tracking_force(phi, lb_method.stencil, parameters,
+                                       fd_stencil=fd_stencil)
 
-    weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
-    u_symp = sp.symbols(f"u_:{stencil.D}")
+    cqc = lb_method.conserved_quantity_computation
 
-    normal_fd = normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil)
+    rho = cqc.zeroth_order_moment_symbol
+    u_symp = cqc.first_order_moment_symbols
+    symbolic_force = lb_method.force_model.symbolic_force_vector
 
-    gamma = mrt_method.get_equilibrium_terms()
-    gamma = gamma.subs({sp.symbols("rho"): 1})
-    gamma_init = gamma.subs({x: y for x, y in zip(u_symp, velocity_field.center_vector)})
-    # create the kernels for the initialization of the h field
-    h_updates = list()
+    macro_quantities = []
 
-    def scalar_product(a, b):
-        return sum(a_i * b_i for a_i, b_i in zip(a, b))
+    if isinstance(velocity, Field):
+        velocity = velocity.center_vector
 
-    f = []
-    for i, d in enumerate(stencil):
-        f.append(weights[i] * ((1.0 - 4.0 * (phi_field.center - 0.5) ** 2) / interface_thickness)
-                 * scalar_product(d, normal_fd[0:stencil.D]))
+    if isinstance(phi, Field):
+        phi = phi.center
 
-    for i, _ in enumerate(stencil):
-        h_updates.append(Assignment(lb_phase_field.center(i), phi_field.center * gamma_init[i] - 0.5 * f[i]))
+    for i in range(lb_method.stencil.D):
+        macro_quantities.append(Assignment(symbolic_force[i], force_h[i]))
+
+    for i in range(lb_method.stencil.D):
+        macro_quantities.append(Assignment(u_symp[i],
+                                           velocity[i] - sp.Rational(1, 2) * symbolic_force[i]))
+
+    h_updates = AssignmentCollection(main_assignments=h_updates.main_assignments, subexpressions=macro_quantities)
+    h_updates = h_updates.new_with_substitutions({rho: phi})
 
     return h_updates
 
 
-def initializer_kernel_hydro_lb(lb_velocity_field, velocity_field, mrt_method):
+def initializer_kernel_hydro_lb(lb_method, pressure, velocity, hydro_pdfs):
     r"""
     Returns an assignment list for initializing the velocity distribution functions
     Args:
-        lb_velocity_field: source field of velocity distribution function
-        velocity_field: velocity field
-        mrt_method: lattice Boltzmann method of the hydrodynamic lattice Boltzmann step
+        lb_method: lattice Boltzmann method of the hydrodynamic lattice Boltzmann step
+        pressure: order parameter of the hydrodynamic LB step (pressure)
+        velocity: initial velocity
+        hydro_pdfs: source field of the hydrodynamic PDFs
     """
-    stencil = mrt_method.stencil
-    weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
-    u_symp = sp.symbols(f"u_:{stencil.D}")
+    symbolic_force = lb_method.force_model.symbolic_force_vector
+    force_subs = {f: 0 for f in symbolic_force}
 
-    gamma = mrt_method.get_equilibrium_terms()
-    gamma = gamma.subs({sp.symbols("rho"): 1})
-    gamma_init = gamma.subs({x: y for x, y in zip(u_symp, velocity_field.center_vector)})
-
-    g_updates = list()
-    for i, _ in enumerate(stencil):
-        g_updates.append(Assignment(lb_velocity_field.center(i), gamma_init[i] - weights[i]))
+    g_updates = pdf_initialization_assignments(lb_method, pressure, velocity, hydro_pdfs)
+    g_updates = g_updates.new_with_substitutions(force_subs)
 
     return g_updates

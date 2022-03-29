@@ -23,6 +23,12 @@ def pdf_initialization_assignments(lb_method, density, velocity, pdfs,
         raise ValueError("Invalid value of pdfs: A PDF field reference is required to derive "
                          + f"initialization assignments for streaming pattern {streaming_pattern}.")
 
+    if isinstance(density, Field):
+        density = density.center
+
+    if isinstance(velocity, Field):
+        velocity = velocity.center_vector
+
     cqc = lb_method.conserved_quantity_computation
     inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity, force_substitution=False)
     setter_eqs = lb_method.get_equilibrium(conserved_quantity_equations=inp_eqs)
