@@ -1,4 +1,143 @@
 import math
+import sympy as sp
+
+
+class AllenCahnParameters:
+    def __init__(self, density_heavy: float, density_light: float,
+                 dynamic_viscosity_heavy: float, dynamic_viscosity_light: float,
+                 surface_tension: float, mobility: float = 0.2,
+                 gravitational_acceleration: float = 0.0, interface_thickness: int = 5):
+
+        self.density_heavy = density_heavy
+        self.density_light = density_light
+        self.dynamic_viscosity_heavy = dynamic_viscosity_heavy
+        self.dynamic_viscosity_light = dynamic_viscosity_light
+        self.surface_tension = surface_tension
+        self.mobility = mobility
+        self.gravitational_acceleration = gravitational_acceleration
+        self.interface_thickness = interface_thickness
+
+    @property
+    def kinematic_viscosity_heavy(self):
+        return self.dynamic_viscosity_heavy / self.density_heavy
+
+    @property
+    def kinematic_viscosity_light(self):
+        return self.dynamic_viscosity_light / self.density_light
+
+    @property
+    def relaxation_time_heavy(self):
+        return 3.0 * self.kinematic_viscosity_heavy
+
+    @property
+    def relaxation_time_light(self):
+        return 3.0 * self.kinematic_viscosity_light
+
+    @property
+    def omega_phi(self):
+        return 1.0 / (0.5 + (3.0 * self.mobility))
+
+    @property
+    def symbolic_density_heavy(self):
+        return sp.Symbol("rho_H")
+
+    @property
+    def symbolic_density_light(self):
+        return sp.Symbol("rho_L")
+
+    @property
+    def symbolic_tau_heavy(self):
+        return sp.Symbol("tau_H")
+
+    @property
+    def symbolic_tau_light(self):
+        return sp.Symbol("tau_L")
+
+    @property
+    def symbolic_omega_phi(self):
+        return sp.Symbol("omega_phi")
+
+    @property
+    def symbolic_surface_tension(self):
+        return sp.Symbol("sigma")
+
+    @property
+    def symbolic_mobility(self):
+        return sp.Symbol("M_m")
+
+    @property
+    def symbolic_gravitational_acceleration(self):
+        return sp.Symbol("F_g")
+
+    @property
+    def symbolic_interface_thickness(self):
+        return sp.Symbol("W")
+
+    @property
+    def beta(self):
+        return sp.Rational(12, 1) * (self.symbolic_surface_tension / self.symbolic_interface_thickness)
+
+    @property
+    def kappa(self):
+        return sp.Rational(3, 2) * self.symbolic_surface_tension * self.symbolic_interface_thickness
+
+    def omega(self, phase_field):
+        tau_L = self.symbolic_tau_light
+        tau_H = self.symbolic_tau_heavy
+        tau = sp.Rational(1, 2) + tau_L + phase_field.center * (tau_H - tau_L)
+        return sp.simplify(1 / tau)
+
+    def parameter_map(self):
+        result = {self.symbolic_density_heavy: self.density_heavy,
+                  self.symbolic_density_light: self.density_light,
+                  self.symbolic_tau_heavy: self.relaxation_time_heavy,
+                  self.symbolic_tau_light: self.relaxation_time_light,
+                  self.symbolic_omega_phi: self.omega_phi,
+                  self.symbolic_gravitational_acceleration: self.gravitational_acceleration,
+                  self.symbolic_interface_thickness: self.interface_thickness,
+                  self.symbolic_mobility: self.mobility,
+                  self.symbolic_surface_tension: self.surface_tension}
+        return result
+
+    @property
+    def symbolic_to_numeric_map(self):
+        return {t.name: self.parameter_map()[t] for t in self.parameter_map()}
+
+    def _repr_html_(self):
+        names = ("Density heavy phase",
+                 "Density light phase",
+                 "Relaxation time heavy phase",
+                 "Relaxation time light phase",
+                 "Relaxation rate Allen Cahn LB",
+                 "Gravitational acceleration",
+                 "Interface thickness",
+                 "Mobility",
+                 "Surface tension")
+
+        table = """
+        <table style="border:none; width: 100%">
+            <tr {nb}>
+                <th {nb} >Name</th>
+                <th {nb} >SymPy Symbol </th>
+                <th {nb} >Value</th>
+            </tr>
+            {content}
+        </table>
+        """
+        content = ""
+        for name, (symbol, value) in zip(names, self.parameter_map().items()):
+            vals = {
+                'Name': name,
+                'Sympy Symbol': sp.latex(symbol),
+                'numeric value': sp.latex(value),
+                'nb': 'style="border:none"',
+            }
+            content += """<tr {nb}>
+                            <td {nb}>{Name}</td>
+                            <td {nb}>${Sympy Symbol}$</td>
+                            <td {nb}>${numeric value}$</td>
+                         </tr>\n""".format(**vals)
+        return table.format(content=content, nb='style="border:none"')
 
 
 def calculate_parameters_rti(reference_length=256,
@@ -39,25 +178,16 @@ def calculate_parameters_rti(reference_length=256,
 
     density_light = density_heavy / density_ratio
 
-    kinematic_viscosity_heavy = dynamic_viscosity_heavy / density_heavy
-    kinematic_viscosity_light = dynamic_viscosity_light / density_light
-
-    relaxation_time_heavy = 3.0 * kinematic_viscosity_heavy
-    relaxation_time_light = 3.0 * kinematic_viscosity_light
-
     surface_tension = (dynamic_viscosity_heavy * reference_velocity) / capillary_number
     mobility = (reference_velocity * reference_length) / peclet_number
 
-    parameters = {
-        "density_light": density_light,
-        "dynamic_viscosity_heavy": dynamic_viscosity_heavy,
-        "dynamic_viscosity_light": dynamic_viscosity_light,
-        "relaxation_time_heavy": relaxation_time_heavy,
-        "relaxation_time_light": relaxation_time_light,
-        "gravitational_acceleration": -g,
-        "mobility": mobility,
-        "surface_tension": surface_tension
-    }
+    parameters = AllenCahnParameters(density_heavy=density_heavy,
+                                     density_light=density_light,
+                                     dynamic_viscosity_heavy=dynamic_viscosity_heavy,
+                                     dynamic_viscosity_light=dynamic_viscosity_light,
+                                     surface_tension=surface_tension,
+                                     mobility=mobility,
+                                     gravitational_acceleration=-g)
     return parameters
 
 
@@ -93,23 +223,14 @@ def calculate_dimensionless_rising_bubble(reference_time=18000,
     dynamic_viscosity_heavy = (density_heavy * math.sqrt(g * bubble_diameter ** 3)) / reynolds_number
     dynamic_viscosity_light = dynamic_viscosity_heavy / viscosity_ratio
 
-    kinematic_viscosity_heavy = dynamic_viscosity_heavy / density_heavy
-    kinematic_viscosity_light = dynamic_viscosity_light / density_light
-
-    relaxation_time_heavy = 3 * kinematic_viscosity_heavy
-    relaxation_time_light = 3 * kinematic_viscosity_light
-
     surface_tension = (density_heavy - density_light) * g * bubble_diameter ** 2 / bond_number
     # calculation of the Morton number
     # Mo = gravitational_acceleration * dynamic_viscosity_heavy / (density_heavy * surface_tension ** 3)
 
-    parameters = {
-        "density_light": density_light,
-        "dynamic_viscosity_heavy": dynamic_viscosity_heavy,
-        "dynamic_viscosity_light": dynamic_viscosity_light,
-        "relaxation_time_heavy": relaxation_time_heavy,
-        "relaxation_time_light": relaxation_time_light,
-        "gravitational_acceleration": -g,
-        "surface_tension": surface_tension
-    }
+    parameters = AllenCahnParameters(density_heavy=density_heavy,
+                                     density_light=density_light,
+                                     dynamic_viscosity_heavy=dynamic_viscosity_heavy,
+                                     dynamic_viscosity_light=dynamic_viscosity_light,
+                                     surface_tension=surface_tension,
+                                     gravitational_acceleration=-g)
     return parameters

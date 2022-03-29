@@ -1,19 +1,8 @@
 import sympy as sp
 
 from lbmpy.relaxationrates import get_shear_relaxation_rate
+from lbmpy.utils import frobenius_norm, second_order_moment_tensor
 from pystencils import Assignment
-
-
-def second_order_moment_tensor(function_values, stencil):
-    """Returns (D x D) Matrix of second order moments of the given function where D is the dimension"""
-    assert len(function_values) == stencil.Q
-    return sp.Matrix(stencil.D, stencil.D, lambda i, j: sum(c[i] * c[j] * f for f, c in zip(function_values, stencil)))
-
-
-def frobenius_norm(matrix, factor=1):
-    """Computes the Frobenius norm of a matrix defined as the square root of the sum of squared matrix elements
-    The optional factor is added inside the square root"""
-    return sp.sqrt(sum(i * i for i in matrix) * factor)
 
 
 def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_field=None):
