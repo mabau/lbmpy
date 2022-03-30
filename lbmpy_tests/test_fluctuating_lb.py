@@ -99,7 +99,7 @@ def get_fluctuating_lb(size=None, kT=None,
     stream = create_stream_pull_with_output_kernel(collision.method, src, dst,
                                                    {'density': rho, 'velocity': u})
 
-    config = ps.CreateKernelConfig(cpu_openmp=True, target=dh.default_target)
+    config = ps.CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
 
     # Compile kernels
     stream_kernel = ps.create_kernel(stream, config=config).compile()

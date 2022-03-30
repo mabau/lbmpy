@@ -81,7 +81,7 @@ setups = [
 
 
 @pytest.mark.parametrize('setup', setups)
-def test_population_and_moment_space_equivalence(setup):
+def test_population_and_moment_space_equivalence(setup: tuple):
     stencil = LBStencil(setup[0])
     method = setup[1]
     nested_moments = setup[2]

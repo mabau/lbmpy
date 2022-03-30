@@ -248,7 +248,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         m_eq = sp.Matrix(self.moment_equilibrium_values)
 
         if self._moment_transform_class:
-            #   Derive equations in moment space if a transform is given
+            # Derive equations in moment space if a transform is given
             pdf_to_m_transform = self._moment_transform_class(self.stencil, moment_polynomials, rho, u,
                                                               conserved_quantity_equations=cqe)
 
@@ -276,8 +276,9 @@ class MomentBasedLbMethod(AbstractLbMethod):
             subexpressions += m_post_to_f_post_eqs.subexpressions
             main_assignments = m_post_to_f_post_eqs.main_assignments
         else:
-            #   For SRT, TRT by default, and whenever customly required, derive equations entirely in
-            #   population space
+            # TODO: This is confusing since we still transform with the moment matrix.
+            # TODO: Furthermore, the inverse is not a good idea even symbolically
+            # For SRT, TRT by default, and whenever custom required, derive equations entirely in population space
             pdf_to_moment = self.moment_matrix
             collision_rule = f + pdf_to_moment.inv() * d * (m_eq - pdf_to_moment * f)
             collision_eqs = [Assignment(lhs, rhs) for lhs, rhs in zip(self.post_collision_pdf_symbols, collision_rule)]

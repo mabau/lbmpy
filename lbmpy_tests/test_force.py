@@ -42,7 +42,7 @@ def test_total_momentum(method_enum, force_model, omega):
 
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
-    config = ps.CreateKernelConfig(cpu_openmp=True, target=dh.default_target)
+    config = ps.CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
 
     collision_kernel = ps.create_kernel(collision, config=config).compile()
 

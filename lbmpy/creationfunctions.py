@@ -151,7 +151,7 @@ class LBMConfig:
     If this argument is not provided, Gram-Schmidt orthogonalization of the default modes is performed.
     """
 
-    force_model: Union[Type[lbmpy.forcemodels.AbstractForceModel], ForceModel] = None
+    force_model: Union[lbmpy.forcemodels.AbstractForceModel, ForceModel] = None
     """
     Force model to determine how forcing terms enter the collision rule.
     Possibilities are defined in :class: `lbmpy.enums.ForceModel`
@@ -177,7 +177,8 @@ class LBMConfig:
     Special correction for D3Q27 cumulant LBMs. For Details see
     :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
     """
-    moment_transform_class: Type[lbmpy.moment_transforms.AbstractMomentTransform] = PdfsToMomentsByChimeraTransform
+    moment_transform_class: Union[Type[lbmpy.moment_transforms.AbstractMomentTransform], None] = \
+        PdfsToMomentsByChimeraTransform
     """
     Python class that determines how PDFs are transformed to the moment space. Usually, the chimera transform is 
     the best choice (see :cite:`geier2015`). However, for the SRT and TRT methods it defaults to `None`, since 
