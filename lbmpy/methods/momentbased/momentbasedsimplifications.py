@@ -202,6 +202,7 @@ def cse_in_opposing_directions(cr: LbmCollisionRule):
 
                 found_subexpressions, new_terms = sp.cse(handled_terms, symbols=replacement_symbol_generator,
                                                          order='None', optimizations=[])
+
                 substitutions += [Assignment(f[0], f[1]) for f in found_subexpressions]
 
                 update_rules = [Assignment(ur.lhs, ur.rhs.subs(relaxation_rate * old_term, new_coefficient * new_term))
@@ -247,14 +248,14 @@ def substitute_moments_in_conserved_quantity_equations(ac: AssignmentCollection)
 
     for cq_sym, moment_sym in cq_symbols_to_moments.items():
         moment_eq = reduced_assignments[moment_sym]
-        assert moment_eq.count(cq_sym) == 0, "Expressing conserved quantity " \
-            f"{cq_sym} using moment {moment_sym} would introduce a circular dependency."
+        assert moment_eq.count(cq_sym) == 0, f"Expressing conserved quantity {cq_sym} using moment {moment_sym} " \
+                                             "would introduce a circular dependency."
         cq_eq = subs_additive(reduced_assignments[cq_sym], moment_sym, moment_eq)
         if cq_sym in main_asm_dict:
             main_asm_dict[cq_sym] = cq_eq
         else:
             assert moment_sym in subexp_dict, f"Cannot express subexpression {cq_sym}" \
-                f" using main assignment {moment_sym}!"
+                                              f" using main assignment {moment_sym}!"
             subexp_dict[cq_sym] = cq_eq
 
     main_assignments = [Assignment(lhs, rhs) for lhs, rhs in main_asm_dict.items()]
@@ -315,6 +316,7 @@ def split_pdf_main_assignments_by_symmetry(ac: AssignmentCollection):
         subexpressions.append(Assignment(sym, subexp))
     main_assignments = [Assignment(lhs, rhs) for lhs, rhs in asm_dict.items()]
     return ac.copy(main_assignments=main_assignments, subexpressions=subexpressions)
+
 
 # -------------------------------------- Helper Functions --------------------------------------------------------------
 

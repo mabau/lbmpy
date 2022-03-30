@@ -108,7 +108,7 @@ class AbstractLbMethod(abc.ABC):
                 relaxation_rate = sp.sympify(relaxation_rate)
                 # special treatment for zero, sp.Zero would be an integer ..
                 if isinstance(relaxation_rate, Zero):
-                    relaxation_rate = 0.0
+                    relaxation_rate = sp.Number(0)
                 if not isinstance(relaxation_rate, sp.Symbol):
                     rt_symbol = sp.Symbol(f"rr_{len(subexpressions)}")
                     subexpressions[relaxation_rate] = rt_symbol

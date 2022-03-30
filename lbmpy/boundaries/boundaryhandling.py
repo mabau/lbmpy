@@ -18,7 +18,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
     """
 
     def __init__(self, lb_method, data_handling, pdf_field_name, streaming_pattern='pull',
-                 name="boundary_handling", flag_interface=None, target=Target.CPU, openmp=True):
+                 name="boundary_handling", flag_interface=None, target=Target.CPU, openmp=False):
         self._lb_method = lb_method
         self._streaming_pattern = streaming_pattern
         self._inplace = is_inplace(streaming_pattern)
