@@ -8,7 +8,8 @@ from pystencils.stencil import have_same_entries
 
 def cascaded_moment_sets_literature(stencil):
     """
-    Returns default groups of cumulants to be relaxed with common relaxation rates as stated in literature.
+    Returns default groups of central moments or cumulants to be relaxed with common relaxation rates 
+    as stated in literature.
     Groups are ordered like this:
 
     - First group is density
@@ -235,6 +236,6 @@ def mrt_orthogonal_modes_literature(stencil, is_weighted):
         nested_moments = list(sort_moments_into_groups_of_same_order(all_moments).values())
     else:
         raise NotImplementedError("No MRT model is available (yet) for this stencil. "
-                                  "Create a custom MRT using 'create_with_discrete_maxwellian_eq_moments'")
+                                  "Create a custom MRT using 'create_with_discrete_maxwellian_equilibrium'")
 
     return nested_moments

@@ -12,14 +12,15 @@ from lbmpy.stencils import LBStencil
 @pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19])
 @pytest.mark.parametrize('force_model', [ForceModel.GUO, ForceModel.LUO, None])
 @pytest.mark.parametrize('compressible', [True, False])
+@pytest.mark.parametrize('zero_centered', [True, False])
 @pytest.mark.parametrize('streaming_pattern', streaming_patterns)
 @pytest.mark.parametrize('prev_timestep', [Timestep.EVEN, Timestep.ODD])
-def test_set_get_density_velocity_with_fields(stencil, force_model, compressible, streaming_pattern, prev_timestep):
+def test_set_get_density_velocity_with_fields(stencil, force_model, compressible, zero_centered, streaming_pattern, prev_timestep):
     force = (0.1, 0.12, -0.17)
     stencil = LBStencil(stencil)
 
     lbm_config = LBMConfig(stencil=stencil, force_model=force_model, method=Method.TRT,
-                           compressible=compressible, force=force)
+                           compressible=compressible, zero_centered=zero_centered, force=force)
 
     method = create_lb_method(lbm_config=lbm_config)
     ghost_layers = 1
@@ -40,13 +41,17 @@ def test_set_get_density_velocity_with_fields(stencil, force_model, compressible
                                                ghost_layers=ghost_layers, streaming_pattern=streaming_pattern, previous_timestep=prev_timestep)
     setter(pdf_arr)
 
-    getter = compile_macroscopic_values_getter(method, ['density', 'velocity'], pdf_arr=pdf_arr, 
+    getter = compile_macroscopic_values_getter(method, ['density', 'density_deviation', 'velocity'], pdf_arr=pdf_arr, 
                                                ghost_layers=ghost_layers, streaming_pattern=streaming_pattern, previous_timestep=prev_timestep)
 
+    inner_part = (slice(ghost_layers, -ghost_layers), ) * stencil.D
+
     density_output_field = np.zeros_like(density_input_field)
+    density_deviation_output_field = np.zeros_like(density_input_field)
     velocity_output_field = np.zeros_like(velocity_input_field)
-    getter(pdfs=pdf_arr, density=density_output_field, velocity=velocity_output_field)
+    getter(pdfs=pdf_arr, density=density_output_field, density_deviation=density_deviation_output_field, velocity=velocity_output_field)
     np.testing.assert_almost_equal(density_input_field, density_output_field)
+    np.testing.assert_almost_equal(density_input_field[inner_part] - 1.0, density_deviation_output_field[inner_part])
     np.testing.assert_almost_equal(velocity_input_field, velocity_output_field)
 
 

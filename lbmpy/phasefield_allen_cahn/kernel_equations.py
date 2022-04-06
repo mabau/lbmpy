@@ -111,11 +111,12 @@ def normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil=None):
     return result
 
 
-def pressure_force(phi_field, stencil, density_heavy, density_light, fd_stencil=None):
+def pressure_force(phi_field, lb_method, stencil, density_heavy, density_light, fd_stencil=None):
     r"""
     Get a symbolic expression for the pressure force
     Args:
         phi_field: phase-field
+        lb_method: lattice boltzmann method used for hydrodynamics
         stencil: stencil of the lattice Boltzmann step
         density_heavy: density of the heavier fluid
         density_light: density of the lighter fluid
@@ -125,8 +126,11 @@ def pressure_force(phi_field, stencil, density_heavy, density_light, fd_stencil=
     if fd_stencil is None:
         fd_stencil = stencil
 
+    cqc = lb_method.conserved_quantity_computation
+    rho = cqc.density_deviation_symbol
+
     iso_grad = isotropic_gradient_symbolic(phi_field, fd_stencil)
-    result = list(map(lambda x: sp.Rational(-1, 3) * sp.symbols("rho") * (density_heavy - density_light) * x, iso_grad))
+    result = list(map(lambda x: sp.Rational(-1, 3) * rho * (density_heavy - density_light) * x, iso_grad))
     return result
 
 
@@ -210,7 +214,7 @@ def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, parameters: Alle
     beta = parameters.beta
     kappa = parameters.kappa
 
-    fp = pressure_force(phi_field, stencil, density_heavy, density_light, fd_stencil)
+    fp = pressure_force(phi_field, lb_method, stencil, density_heavy, density_light, fd_stencil)
     fm = viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, density_light, fd_stencil)
     fs = surface_tension_force(phi_field, stencil, beta, kappa, fd_stencil)
 
@@ -280,7 +284,7 @@ def hydrodynamic_force_assignments(lb_velocity_field, velocity_field, phi_field,
 
     cqc = lb_method.conserved_quantity_computation
 
-    u_symp = cqc.first_order_moment_symbols
+    u_symp = cqc.velocity_symbols
     cqe = cqc.equilibrium_input_equations_from_pdfs(lb_velocity_field.center_vector)
     cqe = cqe.new_without_subexpressions()
 
@@ -345,7 +349,7 @@ def add_hydrodynamic_force(update_rule: LbmCollisionRule, force, phi_field,
     method = update_rule.method
     symbolic_force = method.force_model.symbolic_force_vector
     cqc = method.conserved_quantity_computation
-    rho = cqc.zeroth_order_moment_symbol
+    rho = cqc.density_deviation_symbol
 
     force_subs = {f: f / density for f in symbolic_force}
 
@@ -378,8 +382,8 @@ def initializer_kernel_phase_field_lb(lb_method, phi, velocity, ac_pdfs, paramet
 
     cqc = lb_method.conserved_quantity_computation
 
-    rho = cqc.zeroth_order_moment_symbol
-    u_symp = cqc.first_order_moment_symbols
+    rho = cqc.density_symbol
+    u_symp = cqc.velocity_symbols
     symbolic_force = lb_method.force_model.symbolic_force_vector
 
     macro_quantities = []

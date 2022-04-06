@@ -12,6 +12,9 @@ _build
 /.idea
 _local_tmp
 **/.vscode
+**/pylintrc
+*.bak
+*.tmp
 /lbmpy_tests/db
 doc/bibtex.json
 /db

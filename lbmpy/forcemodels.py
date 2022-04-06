@@ -442,8 +442,8 @@ class EDM(AbstractForceModel):
 
     def __call__(self, lb_method):
         cqc = lb_method.conserved_quantity_computation
-        rho = cqc.zeroth_order_moment_symbol if cqc.compressible else 1
-        u = cqc.first_order_moment_symbols
+        rho = cqc.density_symbol if cqc.compressible else 1
+        u = cqc.velocity_symbols
 
         equilibrium_terms = lb_method.get_equilibrium_terms()
 
@@ -471,8 +471,8 @@ class ShanChen(AbstractForceModel):
     def forcing_terms(self, lb_method):
         q = len(lb_method.stencil)
         cqc = lb_method.conserved_quantity_computation
-        rho = cqc.zeroth_order_moment_symbol if cqc.compressible else 1
-        u = cqc.first_order_moment_symbols
+        rho = cqc.density_symbol if cqc.compressible else 1
+        u = cqc.velocity_symbols
 
         F = sp.Matrix(self.symbolic_force_vector)
         uf = sp.Matrix(u).dot(F)

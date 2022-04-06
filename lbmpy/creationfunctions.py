@@ -49,7 +49,6 @@ For example, to modify the AST one can run::
     func = create_lb_function(ast=ast, ...)
 
 """
-from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from typing import Union, List, Tuple, Any, Type, Iterable
 from warnings import warn, filterwarnings
@@ -59,20 +58,16 @@ import pystencils.astnodes
 import sympy as sp
 import sympy.core.numbers
 
-from lbmpy.enums import Stencil, Method, ForceModel
+from lbmpy.enums import Stencil, Method, ForceModel, CollisionSpace
 import lbmpy.forcemodels as forcemodels
 import lbmpy.methods.centeredcumulant.force_model as cumulant_force_model
 from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
 from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_central_moment,
                            create_srt, create_trt, create_trt_kbc)
-from lbmpy.methods.abstractlbmethod import RelaxationInfo
-from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
-from lbmpy.moment_transforms import PdfsToMomentsByChimeraTransform, PdfsToCentralMomentsByShiftMatrix
-from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
+from lbmpy.methods.creationfunctions import CollisionSpaceInfo
 from lbmpy.methods.creationfunctions import (
     create_with_monomial_cumulants, create_with_polynomial_cumulants, create_with_default_polynomial_cumulants)
-from lbmpy.methods.creationfunctions import create_generic_mrt
 from lbmpy.methods.momentbased.entropic import add_entropy_condition, add_iterative_entropy_condition
 from lbmpy.methods.momentbased.entropic_eq_srt import create_srt_entropic
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
@@ -81,7 +76,7 @@ from lbmpy.stencils import LBStencil
 from lbmpy.turbulence_models import add_smagorinsky_model
 from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
 from lbmpy.advanced_streaming.utility import Timestep, get_accessor
-from pystencils import Assignment, AssignmentCollection, create_kernel, CreateKernelConfig
+from pystencils import create_kernel, CreateKernelConfig
 from pystencils.cache import disk_cache_no_fallback
 from pystencils.data_types import collate_types
 from pystencils.field import Field
@@ -128,11 +123,29 @@ class LBMConfig:
     Navier Stokes Equations. However when chosen as False, the approximation is better, the standard LBM derivation is
     compressible.
     """
+    zero_centered: bool = True
+    """
+    Governs the storage format of populations. If `False`, the discrete particle distribution vector is stored in its
+    absolute form. If `True`, instead, only the distribution's deviation from its rest state (typically given by the
+    lattice weights) is stored.
+    """
+    delta_equilibrium: bool = None
+    """
+    Determines whether or not the (continuous or discrete, see `continuous_equilibrium`) maxwellian equilibrium is
+    expressed in its absolute form, or only by its deviation from the rest state (typically given by the reference
+    density and zero velocity). This parameter is only effective if `zero_centered` is set to `True`. Then, if
+    `delta_equilibrium` is `False`, the rest state must be reintroduced to the populations during collision. Otherwise,
+    if `delta_equilibrium` is `True`, the collision equations can be derived using only the deviations from the rest 
+    state.
+
+    If `None` is passed to `delta_equilibrium`, its value will be chosen automatically, depending on the value of
+    `zero_centered` and the chosen `method`.
+    """
     equilibrium_order: int = 2
     """
-    Order in velocity, at which the equilibrium moment/cumulant approximation is
-    truncated. Order 2 is sufficient to approximate Navier-Stokes. Note cumulant methods are by 
-    definition at least order 4.
+    Order in velocity, at which the equilibrium moment approximation is
+    truncated. Order 2 is sufficient to approximate Navier-Stokes. This parameter has no effect on cumulant-based
+    methods, whose equilibrium terms have no contributions above order one.
     """
     c_s_sq: sympy.Rational = sp.Rational(1, 3)
     """
@@ -160,11 +173,15 @@ class LBMConfig:
     """
     Either constant force or a symbolic expression depending on field value
     """
-    maxwellian_moments: bool = True
+    continuous_equilibrium: bool = True
     """
     Way to compute equilibrium moments/cumulants, if False the standard discretised LBM equilibrium is used,
     otherwise the equilibrium moments are computed from the continuous Maxwellian. This makes only a 
     difference if sparse stencils are used e.g. D2Q9 and D3Q27 are not affected, D319 and DQ15 are affected.
+    """
+    maxwellian_moments: bool = None
+    """
+    Deprecated and due for removal by version 0.5; use `continuous_equilibrium` instead.
     """
     initial_velocity: Tuple = None,
     """
@@ -177,25 +194,15 @@ class LBMConfig:
     Special correction for D3Q27 cumulant LBMs. For Details see
     :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
     """
-    moment_transform_class: Union[Type[lbmpy.moment_transforms.AbstractMomentTransform], None] = \
-        PdfsToMomentsByChimeraTransform
+    collision_space_info: CollisionSpaceInfo = None
     """
-    Python class that determines how PDFs are transformed to the moment space. Usually, the chimera transform is 
-    the best choice (see :cite:`geier2015`). However, for the SRT and TRT methods it defaults to `None`, since 
-    no transformation is necessary and the collision can happen in PDF space.
+    Information about the LB method's collision space (see :class:`lbmpy.methods.creationfunctions.CollisionSpaceInfo`)
+    including the classes defining how populations are transformed to these spaces.
+    If left at `None`, it will be inferred according to the value of `method`.
+    If an instance of the :class:`lbmpy.enums.CollisionSpace` enum is passed, a
+    :class:`lbmpy.method.CollisionSpaceInfo` instance with the space's default setup is created.
+    Otherwise, the selected collision space must be in accord with the chosen :class:`lbmpy.enum.Method`.
     """
-    central_moment_transform_class: Type[lbmpy.moment_transforms.AbstractMomentTransform] = \
-        PdfsToCentralMomentsByShiftMatrix
-    """
-    Python class that determines how PDFs are transformed to the central moment space.
-    Usually, a transformation based on the shift matrix is the best choice.
-    """
-    cumulant_transform_class: Type[lbmpy.moment_transforms.AbstractMomentTransform] = \
-        CentralMomentsToCumulantsByGeneratingFunc
-    """
-    Python class that determines how PDFs are transformed from the central moment space to the cumulant space.
-    """
-
     entropic: bool = False
     """
     In case there are two distinct relaxation rate in a method, one of them (usually the one, not
@@ -298,8 +305,13 @@ class LBMConfig:
     def __post_init__(self):
         if isinstance(self.method, str):
             new_method = Method[self.method.upper()]
-            warn(f'Method "{self.method}" as str is deprecated. Use {new_method} instead', category=DeprecationWarning)
+            warn(f'Method "{self.method}" as str is deprecated. Use {new_method} instead')
             self.method = new_method
+
+        if self.maxwellian_moments is not None:
+            warn("Argument 'maxwellian_moments' is deprecated and will be removed by version 0.5."
+                 "Use `continuous_equilibrium` instead.")
+            self.continuous_equilibrium = self.maxwellian_moments
 
         if not isinstance(self.stencil, LBStencil):
             self.stencil = LBStencil(self.stencil)
@@ -316,14 +328,58 @@ class LBMConfig:
             else:
                 self.relaxation_rates = [self.relaxation_rate]
 
-        #   By default, do not derive moment equations for SRT and TRT methods
-        if self.method == Method.SRT or self.method == Method.TRT:
-            self.moment_transform_class = None
+        #   Incompressible cumulant method is not available
+        if not self.compressible and self.method in (Method.MONOMIAL_CUMULANT, Method.CUMULANT):
+            raise ValueError("Incompressible cumulant-based methods are not supported (yet).")
 
-        #   Workaround until entropic method supports relaxation in subexpressions
-        #   and the problem with RNGs in the assignment collection has been solved
-        if self.entropic or self.fluctuating:
-            self.moment_transform_class = None
+        if self.zero_centered and (self.entropic or self.fluctuating):
+            raise ValueError("Entropic and fluctuating methods can only be created with `zero_centered=False`.")
+
+        #   Check or infer delta-equilibrium
+        if self.delta_equilibrium is not None:
+            #   Must be zero-centered
+            if self.delta_equilibrium:
+                if not self.zero_centered:
+                    raise ValueError("`delta_equilibrium=True` requires `zero_centered=True`!")
+                #   Must not be a cumulant-method
+                if self.method in (Method.MONOMIAL_CUMULANT, Method.CUMULANT):
+                    raise ValueError("Cannot create a cumulant-based method from a delta-equilibrium!")
+        else:
+            if self.zero_centered:
+                if self.method in (Method.CENTRAL_MOMENT, Method.MONOMIAL_CUMULANT, Method.CUMULANT):
+                    self.delta_equilibrium = False
+                else:
+                    self.delta_equilibrium = True
+            else:
+                self.delta_equilibrium = False
+
+        #   Check or infer collision space
+        if isinstance(self.collision_space_info, CollisionSpace):
+            self.collision_space_info = CollisionSpaceInfo(self.collision_space_info)
+
+        if self.collision_space_info is not None:
+            if (self.entropic or self.fluctuating) \
+                    and self.collision_space_info.collision_space != CollisionSpace.POPULATIONS:
+                #   Workaround until entropic method supports relaxation in subexpressions
+                #   and the problem with RNGs in the assignment collection has been solved
+                raise ValueError("Entropic and Fluctuating methods are only available in population space.")
+            elif not self.collision_space_info.collision_space.compatible(self.method):
+                raise ValueError("Given method is not compatible with given collision space.")
+        else:
+            if self.method in {Method.SRT, Method.TRT, Method.ENTROPIC_SRT,
+                               Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4}:
+                self.collision_space_info = CollisionSpaceInfo(CollisionSpace.POPULATIONS)
+            elif self.entropic or self.fluctuating:
+                self.collision_space_info = CollisionSpaceInfo(CollisionSpace.POPULATIONS)
+            elif self.method in {Method.MRT_RAW, Method.MRT}:
+                self.collision_space_info = CollisionSpaceInfo(CollisionSpace.RAW_MOMENTS)
+            elif self.method in {Method.CENTRAL_MOMENT}:
+                self.collision_space_info = CollisionSpaceInfo(CollisionSpace.CENTRAL_MOMENTS)
+            elif self.method in {Method.MONOMIAL_CUMULANT, Method.CUMULANT}:
+                self.collision_space_info = CollisionSpaceInfo(CollisionSpace.CUMULANTS)
+            else:
+                raise Exception(f"No default collision space is given for method {self.method}."
+                                "This is a bug; please report it to the developers.")
 
         #   for backwards compatibility
         kernel_type_to_streaming_pattern = {
@@ -547,16 +603,27 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
         rho_in = rho_in.center
 
     pre_simplification = lbm_optimisation.pre_simplification
-    if u_in is not None:
-        density_rhs = sum(lb_method.pre_collision_pdf_symbols) if rho_in is None else rho_in
-        eqs = [Assignment(cqc.zeroth_order_moment_symbol, density_rhs)]
-        eqs += [Assignment(u_sym, u_in[i]) for i, u_sym in enumerate(cqc.first_order_moment_symbols)]
-        eqs = AssignmentCollection(eqs, [])
-        collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=eqs,
-                                                      pre_simplification=pre_simplification)
+    if rho_in is not None or u_in is not None:
+        cqc = lb_method.conserved_quantity_computation
+        cqe = cqc.equilibrium_input_equations_from_pdfs(lb_method.pre_collision_pdf_symbols)
+        cqe_main_assignments = cqe.main_assignments_dict
 
-    elif u_in is None and rho_in is not None:
-        raise ValueError("When setting 'density_input' parameter, 'velocity_input' has to be specified as well.")
+        if rho_in is not None:
+            if u_in is None:
+                raise ValueError("When setting 'density_input' parameter, "
+                                 "'velocity_input' has to be specified as well.")
+            cqe_main_assignments[cqc.density_symbol] = rho_in
+            cqe_main_assignments[cqc.density_deviation_symbol] = rho_in - cqc.background_density
+
+        if u_in is not None:
+            for u_sym, u in zip(cqc.velocity_symbols, u_in):
+                cqe_main_assignments[u_sym] = u
+
+        cqe.set_main_assignments_from_dict(cqe_main_assignments)
+        cqe = cqe.new_without_unused_subexpressions()
+
+        collision_rule = lb_method.get_collision_rule(conserved_quantity_equations=cqe,
+                                                      pre_simplification=pre_simplification)
     else:
         collision_rule = lb_method.get_collision_rule(pre_simplification=pre_simplification)
 
@@ -616,21 +683,21 @@ def create_lb_method(lbm_config=None, **params):
 
     common_params = {
         'compressible': lbm_config.compressible,
+        'zero_centered': lbm_config.zero_centered,
+        'delta_equilibrium': lbm_config.delta_equilibrium,
         'equilibrium_order': lbm_config.equilibrium_order,
         'force_model': lbm_config.force_model,
-        'maxwellian_moments': lbm_config.maxwellian_moments,
+        'continuous_equilibrium': lbm_config.continuous_equilibrium,
         'c_s_sq': lbm_config.c_s_sq,
-        'moment_transform_class': lbm_config.moment_transform_class,
-        'central_moment_transform_class': lbm_config.central_moment_transform_class,
+        'collision_space_info': lbm_config.collision_space_info,
     }
 
     cumulant_params = {
-        'equilibrium_order': lbm_config.equilibrium_order,
+        'zero_centered': lbm_config.zero_centered,
         'force_model': lbm_config.force_model,
         'c_s_sq': lbm_config.c_s_sq,
         'galilean_correction': lbm_config.galilean_correction,
-        'central_moment_transform_class': lbm_config.central_moment_transform_class,
-        'cumulant_transform_class': lbm_config.cumulant_transform_class,
+        'collision_space_info': lbm_config.collision_space_info,
     }
 
     if lbm_config.method == Method.SRT:
@@ -647,7 +714,7 @@ def create_lb_method(lbm_config=None, **params):
                                        nested_moments=lbm_config.nested_moments, **common_params)
     elif lbm_config.method == Method.MRT_RAW:
         method = create_mrt_raw(lbm_config.stencil, relaxation_rates, **common_params)
-    elif lbm_config.method in [Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4]:
+    elif lbm_config.method in (Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4):
         if lbm_config.stencil.D == 2 and lbm_config.stencil.Q == 9:
             dim = 2
         elif lbm_config.stencil.D == 3 and lbm_config.stencil.Q == 27:
@@ -678,38 +745,6 @@ def create_lb_method(lbm_config=None, **params):
         method.set_conserved_moments_relaxation_rate(relaxation_rates[0])
 
     return method
-
-
-def create_lb_method_from_existing(method, modification_function):
-    """Creates a new method based on an existing method by modifying its collision table.
-
-    Args:
-        method: old method
-        modification_function: function receiving (moment, equilibrium_value, relaxation_rate) as arguments,
-                               i.e. one row of the relaxation table, returning a modified version
-    """
-    compressible = method.conserved_quantity_computation.compressible
-    if isinstance(method, CenteredCumulantBasedLbMethod):
-        rr_dict = OrderedDict()
-        relaxation_table = (modification_function(m, eq, rr)
-                            for m, eq, rr in
-                            zip(method.cumulants, method.cumulant_equilibrium_values, method.relaxation_rates))
-
-        for cumulant, eq_value, rr in relaxation_table:
-            cumulant = sp.sympify(cumulant)
-            rr_dict[cumulant] = RelaxationInfo(eq_value, rr)
-
-        return CenteredCumulantBasedLbMethod(method.stencil, rr_dict,
-                                             method.conserved_quantity_computation,
-                                             method.force_model,
-                                             galilean_correction=method.galilean_correction,
-                                             central_moment_transform_class=method.central_moment_transform_class,
-                                             cumulant_transform_class=method.cumulant_transform_class)
-    else:
-        relaxation_table = (modification_function(m, eq, rr)
-                            for m, eq, rr in
-                            zip(method.moments, method.moment_equilibrium_values, method.relaxation_rates))
-        return create_generic_mrt(method.stencil, relaxation_table, compressible, method.force_model)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

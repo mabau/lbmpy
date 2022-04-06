@@ -1,6 +1,6 @@
-**********************
-Maxwellian Equilibrium
-**********************
+*******************************
+Maxwellian Equilibrium (Legacy)
+*******************************
 
 .. automodule:: lbmpy.maxwellian_equilibrium
     :members:

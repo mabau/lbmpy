@@ -1,18 +1,20 @@
 from pystencils.simp.simplifications import sympy_cse
 import sympy as sp
+from collections import OrderedDict
 from warnings import warn, filterwarnings
 
 from pystencils import Assignment, AssignmentCollection
 from pystencils.simp.assignment_collection import SymbolGen
 from pystencils.stencil import have_same_entries
 from pystencils.cache import disk_cache
+from pystencils.sympyextensions import is_constant
 
 from lbmpy.enums import Stencil
 from lbmpy.stencils import LBStencil
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
 
-from lbmpy.moments import (moments_up_to_order, get_order,
+from lbmpy.moments import (moments_up_to_order, get_order, moment_matrix,
                            monomial_to_polynomial_transformation_matrix,
                            moment_sort_key, exponent_tuple_sort_key,
                            exponent_to_polynomial_representation, extract_monomials, MOMENT_SYMBOLS,
@@ -122,21 +124,27 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
     which can be specified by constructor argument. This allows the selection of the most efficient transformation
     for a given setup.
 
-    Args:
+    Parameters:
         stencil: see :class:`lbmpy.stencils.LBStencil`
-        cumulant_to_relaxation_info_dict: a dictionary mapping cumulants in either tuple or polynomial formulation
-                                          to a RelaxationInfo, which consists of the corresponding equilibrium cumulant
-                                          and a relaxation rate
+        equilibrium: Instance of :class:`lbmpy.equilibrium.AbstractEquilibrium`, defining the equilibrium distribution
+                     used by this method.
+        relaxation_dict: a dictionary mapping cumulants in either tuple or polynomial formulation
+                         to their relaxation rate.
         conserved_quantity_computation: instance of :class:`lbmpy.methods.AbstractConservedQuantityComputation`.
-                                    This determines how conserved quantities are computed, and defines
-                                    the symbols used in the equilibrium moments like e.g. density and velocity
-        force_model: force model instance, or None if no forcing terms are required
+                                        This determines how conserved quantities are computed, and defines
+                                        the symbols used in the equilibrium moments like e.g. density and velocity.
+        force_model: Instance of :class:`lbmpy.forcemodels.AbstractForceModel`, or None if no forcing terms are required
+        zero_centered: Determines the PDF storage format, regular or centered around the equilibrium's
+                       background distribution.
         galilean_correction: if set to True the galilean_correction is applied to a D3Q27 cumulant method
-        central_moment_transform_class: transform class to get from PDF space to the central moment space
+        central_moment_transform_class: transformation class to transform PDFs to central moment space (subclass of 
+                                        :class:`lbmpy.moment_transforms.AbstractCentralMomentTransform`)
         cumulant_transform_class: transform class to get from the central moment space to the cumulant space
     """
 
-    def __init__(self, stencil, cumulant_to_relaxation_info_dict, conserved_quantity_computation, force_model=None,
+    def __init__(self, stencil, equilibrium, relaxation_dict,
+                 conserved_quantity_computation=None,
+                 force_model=None, zero_centered=False,
                  galilean_correction=False,
                  central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix,
                  cumulant_transform_class=CentralMomentsToCumulantsByGeneratingFunc):
@@ -150,12 +158,14 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
                     or isinstance(force_model, Luo)), "Given force model currently not supported."
 
         for m in moments_up_to_order(1, dim=self.dim):
-            if exponent_to_polynomial_representation(m) not in cumulant_to_relaxation_info_dict.keys():
+            if exponent_to_polynomial_representation(m) not in relaxation_dict.keys():
                 raise ValueError(f'No relaxation info given for conserved cumulant {m}!')
 
-        self._cumulant_to_relaxation_info_dict = cumulant_to_relaxation_info_dict
-        self._conserved_quantity_computation = conserved_quantity_computation
+        self._equilibrium = equilibrium
+        self._relaxation_dict = OrderedDict(relaxation_dict)
+        self._cqc = conserved_quantity_computation
         self._force_model = force_model
+        self._zero_centered = zero_centered
         self._weights = None
         self._galilean_correction = galilean_correction
 
@@ -163,7 +173,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
             if not have_same_entries(stencil, LBStencil(Stencil.D3Q27)):
                 raise ValueError("Galilean Correction only available for D3Q27 stencil")
 
-            if not contains_corrected_polynomials(cumulant_to_relaxation_info_dict):
+            if not contains_corrected_polynomials(relaxation_dict):
                 raise ValueError("For the galilean correction, all three polynomial cumulants"
                                  "(x^2 - y^2), (x^2 - z^2) and (x^2 + y^2 + z^2) must be present!")
 
@@ -177,62 +187,98 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
             self.force_model_rr_override = True
 
     @property
-    def central_moment_transform_class(self):
-        return self._central_moment_transform_class
-
-    @property
-    def cumulants(self):
-        return tuple(self._cumulant_to_relaxation_info_dict.keys())
-
-    @property
-    def cumulant_equilibrium_values(self):
-        return tuple([e.equilibrium_value for e in self._cumulant_to_relaxation_info_dict.values()])
-
-    @property
-    def cumulant_transform_class(self):
-        return self._cumulant_transform_class
-
-    @property
-    def first_order_equilibrium_moment_symbols(self, ):
-        return self._conserved_quantity_computation.first_order_moment_symbols
-
-    @property
     def force_model(self):
+        """Force model employed by this method."""
         return self._force_model
 
     @property
-    def galilean_correction(self):
-        return self._galilean_correction
+    def relaxation_info_dict(self):
+        """Dictionary mapping this method's cumulants to their relaxation rates and equilibrium values.
+        Beware: Changes to this dictionary are not reflected in the method. For changing relaxation rates,
+        use `relaxation_rate_dict` instead."""
+        return OrderedDict({m: RelaxationInfo(v, rr)
+                            for (m, rr), v in zip(self._relaxation_dict.items(), self.cumulant_equilibrium_values)})
 
     @property
-    def relaxation_info_dict(self):
-        return self._cumulant_to_relaxation_info_dict
+    def conserved_quantity_computation(self):
+        """Returns an instance of class :class:`lbmpy.methods.AbstractConservedQuantityComputation`"""
+        return self._cqc
+
+    @property
+    def equilibrium_distribution(self):
+        """Returns this method's equilibrium distribution (see :class:`lbmpy.equilibrium.AbstractEquilibrium`"""
+        return self._equilibrium
+
+    @property
+    def central_moment_transform_class(self):
+        """The transform class (subclass of :class:`lbmpy.moment_transforms.AbstractCentralMomentTransform` defining the
+        transformation of populations to central moment space."""
+        return self._central_moment_transform_class
+
+    @property
+    def cumulant_transform_class(self):
+        """The transform class defining the transform from central moment to cumulant space."""
+        return self._cumulant_transform_class
+
+    @property
+    def cumulants(self):
+        """Cumulants relaxed by this method."""
+        return tuple(self._relaxation_dict.keys())
+
+    @property
+    def cumulant_equilibrium_values(self):
+        """Equilibrium values of this method's :attr:`cumulants`."""
+        cumulants = self.cumulants
+        equilibria = list(self._equilibrium.cumulants(cumulants, rescale=True))
+
+        for i, c in enumerate(cumulants):
+            if get_order(c) == 0:
+                equilibria[i] = self.zeroth_order_equilibrium_moment_symbol
+            elif get_order(c) == 1:
+                equilibria[i] = sp.Integer(0)
+        return tuple(equilibria)
 
     @property
     def relaxation_rates(self):
-        return tuple([e.relaxation_rate for e in self._cumulant_to_relaxation_info_dict.values()])
+        """Relaxation rates for this method's :attr:`cumulants`."""
+        return tuple(self._relaxation_dict.values())
+
+    @property
+    def relaxation_rate_dict(self):
+        """Dictionary mapping cumulants to relaxation rates. Changes are reflected by the method."""
+        return self._relaxation_dict
 
     @property
     def zeroth_order_equilibrium_moment_symbol(self, ):
-        return self._conserved_quantity_computation.zeroth_order_moment_symbol
+        """Returns a symbol referring to the zeroth-order moment of this method's equilibrium distribution,
+        which is the area under it's curve
+        (see :attr:`lbmpy.equilibrium.AbstractEquilibrium.zeroth_order_moment_symbol`)."""
+        return self._equilibrium.zeroth_order_moment_symbol
+
+    @property
+    def first_order_equilibrium_moment_symbols(self, ):
+        """Returns a vector of symbols referring to the first-order moment of this method's equilibrium distribution,
+        which is its mean value. (see :attr:`lbmpy.equilibrium.AbstractEquilibrium.first_order_moment_symbols`)."""
+        return self._equilibrium.first_order_moment_symbols
+
+    @property
+    def galilean_correction(self):
+        """Whether or not the gallilean correction is included in the collision equations."""
+        return self._galilean_correction
 
     def set_zeroth_moment_relaxation_rate(self, relaxation_rate):
         e = sp.Rational(1, 1)
-        prev_entry = self._cumulant_to_relaxation_info_dict[e]
-        new_entry = RelaxationInfo(prev_entry[0], relaxation_rate)
-        self._cumulant_to_relaxation_info_dict[e] = new_entry
+        self._relaxation_dict[e] = relaxation_rate
 
     def set_first_moment_relaxation_rate(self, relaxation_rate):
         if self.force_model_rr_override:
             warn("Overwriting first-order relaxation rates governed by CenteredCumulantForceModel "
                  "might break your forcing scheme.")
         for e in MOMENT_SYMBOLS[:self.dim]:
-            assert e in self._cumulant_to_relaxation_info_dict, \
+            assert e in self._relaxation_dict, \
                 "First cumulants are not relaxed separately by this method"
         for e in MOMENT_SYMBOLS[:self.dim]:
-            prev_entry = self._cumulant_to_relaxation_info_dict[e]
-            new_entry = RelaxationInfo(prev_entry[0], relaxation_rate)
-            self._cumulant_to_relaxation_info_dict[e] = new_entry
+            self._relaxation_dict[e] = relaxation_rate
 
     def set_conserved_moments_relaxation_rate(self, relaxation_rate):
         self.set_zeroth_moment_relaxation_rate(relaxation_rate)
@@ -245,22 +291,39 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         self._force_model = force_model
 
     def _repr_html_(self):
-        table = """
+        def stylized_bool(b):
+            return "&#10003;" if b else "&#10007;"
+
+        html = f"""
         <table style="border:none; width: 100%">
-            <tr {nb}>
-                <th {nb} >Central Moment / Cumulant</th>
-                <th {nb} >Eq. Value </th>
-                <th {nb} >Relaxation Rate</th>
+            <tr>
+                <th colspan="3" style="text-align: left">
+                    Cumulant-Based Method
+                </th>
+                <td>Stencil: {self.stencil.name}</td>
+                <td>Zero-Centered Storage: {stylized_bool(self._zero_centered)}</td>
+                <td>Force Model: {"None" if self._force_model is None else type(self._force_model).__name__}</td>
             </tr>
-            {content}
         </table>
         """
-        content = ""
-        for cumulant, (eq_value, rr) in self._cumulant_to_relaxation_info_dict.items():
+
+        html += self._equilibrium._repr_html_()
+
+        html += """
+        <table style="border:none; width: 100%">
+            <tr> <th colspan="3" style="text-align: left"> Relaxation Info </th> </tr>
+            <tr>
+                <th>Cumulant</th>
+                <th>Eq. Value </th>
+                <th>Relaxation Rate</th>
+            </tr>
+        """
+
+        for cumulant, (eq_value, rr) in self.relaxation_info_dict.items():
             vals = {
-                'rr': f"${sp.latex(rr)}$",
-                'cumulant': f"${sp.latex(cumulant)}$",
-                'eq_value': f"${sp.latex(eq_value)}$",
+                'rr': sp.latex(rr),
+                'cumulant': sp.latex(cumulant),
+                'eq_value': sp.latex(eq_value),
                 'nb': 'style="border:none"',
             }
             order = get_order(cumulant)
@@ -268,19 +331,16 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
                 vals['cumulant'] += ' (central moment)'
                 if order == 1 and self.force_model_rr_override:
                     vals['rr'] += ' (overridden by force model)'
-            content += """<tr {nb}>
-                            <td {nb}>{cumulant}</td>
-                            <td {nb}>{eq_value}</td>
-                            <td {nb}>{rr}</td>
+            html += """<tr {nb}>
+                            <td {nb}>${cumulant}$</td>
+                            <td {nb}>${eq_value}$</td>
+                            <td {nb}>${rr}$</td>
                          </tr>\n""".format(**vals)
-        return table.format(content=content, nb='style="border:none"')
+
+        html += "</table>"
+        return html
 
     #   ----------------------- Overridden Abstract Members --------------------------
-
-    @property
-    def conserved_quantity_computation(self):
-        """Returns an instance of class :class:`lbmpy.methods.AbstractConservedQuantityComputation`"""
-        return self._conserved_quantity_computation
 
     @property
     def weights(self):
@@ -308,8 +368,8 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
                                      determines if also subexpressions to calculate conserved quantities should be
                                      plugged into the main assignments
         """
-        r_info_dict = {c: RelaxationInfo(info.equilibrium_value, 1)
-                       for c, info in self._cumulant_to_relaxation_info_dict.items()}
+        r_info_dict = {c: RelaxationInfo(info.equilibrium_value, sp.Integer(1))
+                       for c, info in self.relaxation_info_dict.items()}
         ac = self._centered_cumulant_collision_rule(
             r_info_dict, conserved_quantity_equations, pre_simplification, include_galilean_correction=False)
         if not subexpressions:
@@ -329,7 +389,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         """Returns an LbmCollisionRule i.e. an equation collection with a reference to the method.
         This collision rule defines the collision operator."""
         return self._centered_cumulant_collision_rule(
-            self._cumulant_to_relaxation_info_dict, conserved_quantity_equations, pre_simplification, True,
+            self.relaxation_info_dict, conserved_quantity_equations, pre_simplification, True,
             symbolic_relaxation_rates=True)
 
     #   ------------------------------- Internals --------------------------------------------
@@ -339,21 +399,27 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         cqe = conserved_quantity_equations
 
         if cqe is None:
-            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f, False)
+            cqe = self._cqc.equilibrium_input_equations_from_pdfs(f, False)
 
         return cqe.bound_symbols
 
     def _compute_weights(self):
-        defaults = self._conserved_quantity_computation.default_values
-        cqe = AssignmentCollection([Assignment(s, e) for s, e in defaults.items()])
-        eq_ac = self.get_equilibrium(cqe, subexpressions=False, keep_cqc_subexpressions=False)
+        bg = self.equilibrium_distribution.background_distribution
+        assert bg is not None, "Could not compute weights, since no background distribution is given."
+        if bg.discrete_populations is not None:
+            #   Compute lattice weights as the discrete populations of the background distribution ...
+            weights = bg.discrete_populations
+        else:
+            #   or, if those are not available, by moment matching.
+            moments = self.cumulants
+            mm_inv = moment_matrix(moments, self.stencil).inv()
+            bg_moments = bg.moments(moments)
+            weights = (mm_inv * sp.Matrix(bg_moments)).expand()
 
-        weights = []
-        for eq in eq_ac.main_assignments:
-            value = eq.rhs.expand()
-            assert len(value.atoms(sp.Symbol)) == 0, "Failed to compute weights"
-            weights.append(value)
-        return weights
+        for w in weights:
+            assert is_constant(w)
+
+        return [w for w in weights]
 
     def _centered_cumulant_collision_rule(self, cumulant_to_relaxation_info_dict,
                                           conserved_quantity_equations=None,
@@ -383,11 +449,19 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
             relaxation_info_dict = cumulant_to_relaxation_info_dict
 
         if cqe is None:
-            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f, False)
+            cqe = self._cqc.equilibrium_input_equations_from_pdfs(f, False)
 
         forcing_subexpressions = AssignmentCollection([])
         if self._force_model is not None:
             forcing_subexpressions = AssignmentCollection(self._force_model.subs_dict_force)
+
+        #   See if a background shift is necessary
+        if self._zero_centered:
+            assert not self._equilibrium.deviation_only
+            background_distribution = self._equilibrium.background_distribution
+            assert background_distribution is not None
+        else:
+            background_distribution = None
 
         #   1) Extract Monomial Cumulants for the higher-order polynomials
         polynomial_cumulants = relaxation_info_dict.keys()
@@ -407,7 +481,8 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
 
         #   3) Get Forward Transformation from PDFs to central moments
         pdfs_to_k_transform = self._central_moment_transform_class(
-            stencil, None, density, velocity, moment_exponents=central_moments, conserved_quantity_equations=cqe)
+            stencil, None, density, velocity, moment_exponents=central_moments, conserved_quantity_equations=cqe,
+            background_distribution=background_distribution)
         pdfs_to_k_eqs = cached_forward_transform(
             pdfs_to_k_transform, f, simplification=pre_simplification, return_monomials=True)
 

@@ -46,6 +46,12 @@ class AbstractCentralMomentTransform(AbstractMomentTransform):
 
         assert len(self.moment_polynomials) == self.q, 'Number of moments must match stencil'
 
+    def _cm_background_shift(self, central_moments):
+        if self.background_distribution is not None:
+            shift = self.background_distribution.central_moments(central_moments, self.equilibrium_velocity)
+        else:
+            shift = (0,) * self.q
+        return sp.Matrix(shift)
 # end class AbstractRawMomentTransform
 
 
@@ -87,12 +93,14 @@ class PdfsToCentralMomentsByMatrix(AbstractCentralMomentTransform):
             assert len(self.moment_exponents) == self.q, "Could not derive invertible monomial transform." \
                 f"Expected {self.q} monomials, but got {len(self.moment_exponents)}."
             km = moment_matrix(self.moment_exponents, self.stencil, shift_velocity=self.equilibrium_velocity)
+            background_shift = self._cm_background_shift(self.moment_exponents)
             pre_collision_moments = self.pre_collision_monomial_symbols
         else:
             km = self.forward_matrix
+            background_shift = self._cm_background_shift(self.moment_polynomials)
             pre_collision_moments = self.pre_collision_symbols
 
-        f_to_k_vec = km * sp.Matrix(pdf_symbols)
+        f_to_k_vec = km * sp.Matrix(pdf_symbols) + background_shift
         main_assignments = [Assignment(k, eq) for k, eq in zip(pre_collision_moments, f_to_k_vec)]
 
         symbol_gen = SymbolGen(subexpression_base)
@@ -126,16 +134,23 @@ class PdfsToCentralMomentsByMatrix(AbstractCentralMomentTransform):
             mm_inv = moment_matrix(self.moment_exponents, self.stencil).inv()
             shift_inv = set_up_shift_matrix(self.moment_exponents, self.stencil, self.equilibrium_velocity).inv()
             km_inv = mm_inv * shift_inv
+            background_shift = self._cm_background_shift(self.moment_exponents)
             post_collision_moments = self.post_collision_monomial_symbols
         else:
             km_inv = self.backward_matrix
+            background_shift = self._cm_background_shift(self.moment_polynomials)
             post_collision_moments = self.post_collision_symbols
 
-        m_to_f_vec = km_inv * sp.Matrix(post_collision_moments)
+        symbol_gen = SymbolGen(subexpression_base)
+
+        subexpressions = [Assignment(xi, m - s)
+                          for xi, m, s in zip(symbol_gen, post_collision_moments, background_shift)]
+
+        m_to_f_vec = km_inv * sp.Matrix([s.lhs for s in subexpressions])
         main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, m_to_f_vec)]
 
-        symbol_gen = SymbolGen(subexpression_base)
-        ac = AssignmentCollection(main_assignments, subexpression_symbol_generator=symbol_gen)
+        ac = AssignmentCollection(main_assignments, subexpressions=subexpressions, 
+                                  subexpression_symbol_generator=symbol_gen)
 
         if simplification:
             ac = simplification.apply(ac)
@@ -227,7 +242,7 @@ class FastCentralMomentTransform(AbstractCentralMomentTransform):
             return sp.Symbol(f"partial_{monomial_symbol_base}_{fixed_str}_e_{exp_str}")
 
         partial_sums_dict = dict()
-        monomial_moment_eqs = []
+        monomial_eqs = []
 
         def collect_partial_sums(exponents, dimension=0, fixed_directions=tuple()):
             if dimension == self.dim:
@@ -246,7 +261,7 @@ class FastCentralMomentTransform(AbstractCentralMomentTransform):
 
                 if dimension == 0:
                     lhs_symbol = sq_sym(monomial_symbol_base, exponents)
-                    monomial_moment_eqs.append(Assignment(lhs_symbol, summation))
+                    monomial_eqs.append(Assignment(lhs_symbol, summation))
                 else:
                     lhs_symbol = _partial_kappa_symbol(fixed_directions, exponents[dimension:])
                     partial_sums_dict[lhs_symbol] = summation
@@ -258,10 +273,12 @@ class FastCentralMomentTransform(AbstractCentralMomentTransform):
         subexpressions = [Assignment(lhs, rhs) for lhs, rhs in partial_sums_dict.items()]
 
         if return_monomials:
-            main_assignments = monomial_moment_eqs
+            shift = self._cm_background_shift(self.moment_exponents)
+            main_assignments = [Assignment(a.lhs, a.rhs + s) for a, s in zip(monomial_eqs, shift)]
         else:
-            subexpressions += monomial_moment_eqs
+            subexpressions += monomial_eqs
             moment_eqs = self.mono_to_poly_matrix * sp.Matrix(self.pre_collision_monomial_symbols)
+            moment_eqs += self._cm_background_shift(self.moment_polynomials)
             main_assignments = [Assignment(m, v) for m, v in zip(self.pre_collision_symbols, moment_eqs)]
 
         symbol_gen = SymbolGen(subexpression_base)
@@ -303,15 +320,25 @@ class FastCentralMomentTransform(AbstractCentralMomentTransform):
         post_collision_moments = self.post_collision_symbols
         post_collision_monomial_moments = self.post_collision_monomial_symbols
 
+        symbol_gen = SymbolGen(subexpression_base)
+
         subexpressions = []
         if not start_from_monomials:
-            monomial_eqs = self.poly_to_mono_matrix * sp.Matrix(post_collision_moments)
+            background_shift = self._cm_background_shift(self.moment_polynomials)
+            shift_equations = [Assignment(xi, m - s)
+                               for xi, m, s in zip(symbol_gen, post_collision_moments, background_shift)]
+            monomial_eqs = self.poly_to_mono_matrix * sp.Matrix([s.lhs for s in shift_equations])
+            subexpressions += shift_equations
             subexpressions += [Assignment(m, v) for m, v in zip(post_collision_monomial_moments, monomial_eqs)]
+        else:
+            background_shift = self._cm_background_shift(self.moment_exponents)
+            shift_equations = [Assignment(xi, m - s)
+                               for xi, m, s in zip(symbol_gen, post_collision_monomial_moments, background_shift)]
+            subexpressions += shift_equations
+            post_collision_monomial_moments = [s.lhs for s in shift_equations]
 
         raw_equations = self.inv_monomial_matrix * sp.Matrix(post_collision_monomial_moments)
         raw_equations = [Assignment(f, eq) for f, eq in zip(pdf_symbols, raw_equations)]
-
-        symbol_gen = SymbolGen(subexpression_base)
 
         ac = self._split_backward_equations(raw_equations, symbol_gen)
         ac.subexpressions = subexpressions + ac.subexpressions

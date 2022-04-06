@@ -2,7 +2,7 @@ import sympy as sp
 from collections import OrderedDict
 
 from pystencils import Assignment, AssignmentCollection
-from pystencils.sympyextensions import subs_additive
+from pystencils.sympyextensions import is_constant
 
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
@@ -35,74 +35,114 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
     equilibrium moment by a certain relaxation rate. These equilibrium moments can e.g. be determined by taking the
     equilibrium moments of the continuous Maxwellian.
 
-    Args:
+    Parameters:
         stencil: see :class:`lbmpy.stencils.LBStencil`
-        moment_to_relaxation_info_dict: a dictionary mapping moments in either tuple or polynomial formulation
-                                        to a RelaxationInfo, which consists of the corresponding equilibrium moment
-                                        and a relaxation rate
+        equilibrium: Instance of :class:`lbmpy.equilibrium.AbstractEquilibrium`, defining the equilibrium distribution
+                     used by this method.
+        relaxation_dict: a dictionary mapping moments in either tuple or polynomial formulation
+                         to their relaxation rate.
         conserved_quantity_computation: instance of :class:`lbmpy.methods.AbstractConservedQuantityComputation`.
                                         This determines how conserved quantities are computed, and defines
-                                        the symbols used in the equilibrium moments like e.g. density and velocity
-        force_model: force model instance, or None if no forcing terms are required
-        central_moment_transform_class: class to transform PDFs to the central moment space.
+                                        the symbols used in the equilibrium moments like e.g. density and velocity.
+        force_model: Instance of :class:`lbmpy.forcemodels.AbstractForceModel`, or None if no forcing terms are required
+        zero_centered: Determines the PDF storage format, regular or centered around the equilibrium's
+                       background distribution.
+        central_moment_transform_class: transformation class to transform PDFs to central moment space (subclass of 
+                                        :class:`lbmpy.moment_transforms.AbstractCentralMomentTransform`)
     """
 
-    def __init__(self, stencil, moment_to_relaxation_info_dict, conserved_quantity_computation=None, force_model=None,
+    def __init__(self, stencil, equilibrium, relaxation_dict,
+                 conserved_quantity_computation=None,
+                 force_model=None, zero_centered=False,
                  central_moment_transform_class=FastCentralMomentTransform):
         assert isinstance(conserved_quantity_computation, AbstractConservedQuantityComputation)
         super(CentralMomentBasedLbMethod, self).__init__(stencil)
 
+        self._equilibrium = equilibrium
+        self._relaxation_dict = OrderedDict(relaxation_dict)
+        self._cqc = conserved_quantity_computation
         self._force_model = force_model
-        self._moment_to_relaxation_info_dict = OrderedDict(moment_to_relaxation_info_dict.items())
-        self._conserved_quantity_computation = conserved_quantity_computation
+        self._zero_centered = zero_centered
         self._weights = None
         self._central_moment_transform_class = central_moment_transform_class
 
     @property
-    def central_moment_transform_class(self):
-        return self._central_moment_transform_class
-
-    @property
-    def moments(self):
-        return tuple(self._moment_to_relaxation_info_dict.keys())
-
-    @property
-    def moment_equilibrium_values(self):
-        return tuple([e.equilibrium_value for e in self._moment_to_relaxation_info_dict.values()])
-
-    @property
-    def first_order_equilibrium_moment_symbols(self, ):
-        return self._conserved_quantity_computation.first_order_moment_symbols
-
-    @property
     def force_model(self):
+        """Force model employed by this method."""
         return self._force_model
 
     @property
     def relaxation_info_dict(self):
-        return self._moment_to_relaxation_info_dict
+        """Dictionary mapping this method's moments to their relaxation rates and equilibrium values.
+        Beware: Changes to this dictionary are not reflected in the method. For changing relaxation rates,
+        use `relaxation_rate_dict` instead."""
+        return OrderedDict({m: RelaxationInfo(v, rr)
+                            for (m, rr), v in zip(self._relaxation_dict.items(), self.moment_equilibrium_values)})
+    
+    @property
+    def conserved_quantity_computation(self):
+        return self._cqc
+
+    @property
+    def equilibrium_distribution(self):
+        """Returns this method's equilibrium distribution (see :class:`lbmpy.equilibrium.AbstractEquilibrium`"""
+        return self._equilibrium
+    
+    @property
+    def central_moment_transform_class(self):
+        """The transform class (subclass of :class:`lbmpy.moment_transforms.AbstractCentralMomentTransform` defining the
+        transformation of populations to central moment space."""
+        return self._central_moment_transform_class
+
+    @property
+    def moments(self):
+        """Central moments relaxed by this method."""
+        return tuple(self._relaxation_dict.keys())
+
+    @property
+    def moment_equilibrium_values(self):
+        """Equilibrium values of this method's :attr:`moments`."""
+        return self._equilibrium.central_moments(self.moments)
 
     @property
     def relaxation_rates(self):
-        return tuple([e.relaxation_rate for e in self._moment_to_relaxation_info_dict.values()])
+        """Relaxation rates for this method's :attr:`moments`."""
+        return tuple(self._relaxation_dict.values())
+        
+    @property
+    def relaxation_rate_dict(self):
+        """Dictionary mapping moments to relaxation rates. Changes are reflected by the method."""
+        return self._relaxation_dict
 
     @property
     def zeroth_order_equilibrium_moment_symbol(self, ):
-        return self._conserved_quantity_computation.zeroth_order_moment_symbol
+        """Returns a symbol referring to the zeroth-order moment of this method's equilibrium distribution,
+        which is the area under it's curve
+        (see :attr:`lbmpy.equilibrium.AbstractEquilibrium.zeroth_order_moment_symbol`)."""
+        return self._equilibrium.zeroth_order_moment_symbol
+
+    @property
+    def first_order_equilibrium_moment_symbols(self, ):
+        """Returns a vector of symbols referring to the first-order moment of this method's equilibrium distribution,
+        which is its mean value. (see :attr:`lbmpy.equilibrium.AbstractEquilibrium.first_order_moment_symbols`)."""
+        return self._equilibrium.first_order_moment_symbols
+
+    @property
+    def weights(self):
+        """Returns a sequence of weights, one for each lattice direction"""
+        if self._weights is None:
+            self._weights = self._compute_weights()
+        return self._weights
 
     def set_zeroth_moment_relaxation_rate(self, relaxation_rate):
         e = sp.Rational(1, 1)
-        prev_entry = self._moment_to_relaxation_info_dict[e]
-        new_entry = RelaxationInfo(prev_entry[0], relaxation_rate)
-        self._moment_to_relaxation_info_dict[e] = new_entry
+        self._relaxation_dict[e] = relaxation_rate
 
     def set_first_moment_relaxation_rate(self, relaxation_rate):
         for e in MOMENT_SYMBOLS[:self.dim]:
-            assert e in self._moment_to_relaxation_info_dict, "First moments are not relaxed separately by this method"
+            assert e in self._relaxation_dict, "First moments are not relaxed separately by this method"
         for e in MOMENT_SYMBOLS[:self.dim]:
-            prev_entry = self._moment_to_relaxation_info_dict[e]
-            new_entry = RelaxationInfo(prev_entry[0], relaxation_rate)
-            self._moment_to_relaxation_info_dict[e] = new_entry
+            self._relaxation_dict[e] = relaxation_rate
 
     def set_conserved_moments_relaxation_rate(self, relaxation_rate):
         self.set_zeroth_moment_relaxation_rate(relaxation_rate)
@@ -128,48 +168,55 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
 
     def __getstate__(self):
         # Workaround for a bug in joblib
-        self._moment_to_relaxation_info_dict_to_pickle = [i for i in self._moment_to_relaxation_info_dict.items()]
+        self._moment_to_relaxation_info_dict_to_pickle = [i for i in self._relaxation_dict.items()]
         return self.__dict__
 
     def _repr_html_(self):
-        table = """
+        def stylized_bool(b):
+            return "&#10003;" if b else "&#10007;"
+
+        html = f"""
         <table style="border:none; width: 100%">
-            <tr {nb}>
-                <th {nb} >Central Moment</th>
-                <th {nb} >Eq. Value </th>
-                <th {nb} >Relaxation Rate</th>
+            <tr>
+                <th colspan="3" style="text-align: left">
+                    Central-Moment-Based Method
+                </th>
+                <td>Stencil: {self.stencil.name}</td>
+                <td>Zero-Centered Storage: {stylized_bool(self._zero_centered)}</td>
+                <td>Force Model: {"None" if self._force_model is None else type(self._force_model).__name__}</td>
             </tr>
-            {content}
         </table>
         """
-        content = ""
-        for moment, (eq_value, rr) in self._moment_to_relaxation_info_dict.items():
+
+        html += self._equilibrium._repr_html_()
+
+        html += """
+        <table style="border:none; width: 100%">
+            <tr> <th colspan="3" style="text-align: left"> Relaxation Info </th> </tr>
+            <tr>
+                <th>Central Moment</th>
+                <th>Eq. Value </th>
+                <th>Relaxation Rate</th>
+            </tr>
+        """
+
+        for moment, (eq_value, rr) in self.relaxation_info_dict.items():
             vals = {
-                'rr': f"${sp.latex(rr)}$",
-                'cumulant': f"${sp.latex(moment)}$",
-                'eq_value': f"${sp.latex(eq_value)}$",
+                'rr': sp.latex(rr),
+                'moment': sp.latex(moment),
+                'eq_value': sp.latex(eq_value),
                 'nb': 'style="border:none"',
             }
-            content += """<tr {nb}>
-                            <td {nb}>{cumulant}</td>
-                            <td {nb}>{eq_value}</td>
-                            <td {nb}>{rr}</td>
+            html += """<tr {nb}>
+                            <td {nb}>${moment}$</td>
+                            <td {nb}>${eq_value}$</td>
+                            <td {nb}>${rr}$</td>
                          </tr>\n""".format(**vals)
-        return table.format(content=content, nb='style="border:none"')
+
+        html += "</table>"
+        return html
 
     #   ----------------------- Overridden Abstract Members --------------------------
-
-    @property
-    def conserved_quantity_computation(self):
-        """Returns an instance of class :class:`lbmpy.methods.AbstractConservedQuantityComputation`"""
-        return self._conserved_quantity_computation
-
-    @property
-    def weights(self):
-        """Returns a sequence of weights, one for each lattice direction"""
-        if self._weights is None:
-            self._weights = self._compute_weights()
-        return self._weights
 
     def get_equilibrium(self, conserved_quantity_equations=None, subexpressions=False, pre_simplification=False,
                         keep_cqc_subexpressions=True, include_force_terms=False):
@@ -186,8 +233,8 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
                                      determines if also subexpressions to calculate conserved quantities should be
                                      plugged into the main assignments
         """
-        r_info_dict = {c: RelaxationInfo(info.equilibrium_value, 1)
-                       for c, info in self._moment_to_relaxation_info_dict.items()}
+        r_info_dict = {c: RelaxationInfo(info.equilibrium_value, sp.Integer(1))
+                       for c, info in self.relaxation_info_dict.items()}
         ac = self._central_moment_collision_rule(r_info_dict, conserved_quantity_equations, pre_simplification,
                                                  include_force_terms=include_force_terms,
                                                  symbolic_relaxation_rates=False)
@@ -207,7 +254,7 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
     def get_collision_rule(self, conserved_quantity_equations=None, pre_simplification=False):
         """Returns an LbmCollisionRule i.e. an equation collection with a reference to the method.
         This collision rule defines the collision operator."""
-        return self._central_moment_collision_rule(self._moment_to_relaxation_info_dict, conserved_quantity_equations,
+        return self._central_moment_collision_rule(self.relaxation_info_dict, conserved_quantity_equations,
                                                    pre_simplification, True, symbolic_relaxation_rates=True)
 
     #   ------------------------------- Internals --------------------------------------------
@@ -217,27 +264,26 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
         cqe = conserved_quantity_equations
 
         if cqe is None:
-            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f, False)
+            cqe = self._cqc.equilibrium_input_equations_from_pdfs(f, False)
 
         return cqe.bound_symbols
 
     def _compute_weights(self):
-        replacements = self._conserved_quantity_computation.default_values
-        ac = self.get_equilibrium(include_force_terms=False)
-        ac = ac.new_with_substitutions(replacements, substitute_on_lhs=False).new_without_subexpressions()
+        bg = self.equilibrium_distribution.background_distribution
+        assert bg is not None, "Could not compute weights, since no background distribution is given."
+        if bg.discrete_populations is not None:
+            #   Compute lattice weights as the discrete populations of the background distribution ...
+            weights = bg.discrete_populations
+        else:
+            #   or, if those are not available, by moment matching.
+            mm_inv = self.moment_matrix.inv()
+            bg_moments = bg.moments(self.moments)
+            weights = (mm_inv * sp.Matrix(bg_moments)).expand()
+        
+        for w in weights:
+            assert is_constant(w)
 
-        new_assignments = [Assignment(e.lhs,
-                                      subs_additive(e.rhs, sp.sympify(1), sum(self.pre_collision_pdf_symbols),
-                                                    required_match_replacement=1.0))
-                           for e in ac.main_assignments]
-        ac = ac.copy(new_assignments)
-
-        weights = []
-        for eq in ac.main_assignments:
-            value = eq.rhs.expand()
-            assert len(value.atoms(sp.Symbol)) == 0, "Failed to compute weights " + str(value)
-            weights.append(value)
-        return weights
+        return [w for w in weights]
 
     def _central_moment_collision_rule(self, moment_to_relaxation_info_dict,
                                        conserved_quantity_equations=None,
@@ -260,7 +306,7 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
             relaxation_info_dict = moment_to_relaxation_info_dict
 
         if cqe is None:
-            cqe = self._conserved_quantity_computation.equilibrium_input_equations_from_pdfs(f, False)
+            cqe = self._cqc.equilibrium_input_equations_from_pdfs(f, False)
 
         forcing_subexpressions = AssignmentCollection([])
         moment_space_forcing = False
@@ -271,9 +317,17 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
         else:
             include_force_terms = False
 
+        #   See if a background shift is necessary
+        if self._zero_centered and not self._equilibrium.deviation_only:
+            background_distribution = self._equilibrium.background_distribution
+            assert background_distribution is not None
+        else:
+            background_distribution = None
+
         #   1) Get Forward Transformation from PDFs to central moments
         pdfs_to_c_transform = self.central_moment_transform_class(
-            stencil, self.moments, density, velocity, conserved_quantity_equations=cqe)
+            stencil, self.moments, density, velocity, conserved_quantity_equations=cqe,
+            background_distribution=background_distribution)
         pdfs_to_c_eqs = pdfs_to_c_transform.forward_transform(f, simplification=pre_simplification)
 
         #   2) Collision

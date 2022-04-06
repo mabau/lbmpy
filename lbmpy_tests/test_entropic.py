@@ -14,7 +14,7 @@ def test_entropic_methods(method):
     sc_kbc = create_lid_driven_cavity((20, 20), method=method,
                                       relaxation_rates=[1.9999, sp.Symbol("omega_free")],
                                       entropic_newton_iterations=3, entropic=True, compressible=True,
-                                      force=(-1e-10, 0), force_model=ForceModel.LUO)
+                                      zero_centered=False, force=(-1e-10, 0), force_model=ForceModel.LUO)
 
     sc_kbc.run(1000)
     assert np.isfinite(np.max(sc_kbc.velocity[:, :]))

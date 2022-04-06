@@ -16,14 +16,14 @@ def test_entropic_methods():
     sc_kbc = create_lid_driven_cavity((20, 20), method=Method.TRT_KBC_N4,
                                       relaxation_rates=[1.9999, sp.Symbol("omega_free")],
                                       entropic_newton_iterations=3, entropic=True, compressible=True,
-                                      force=(-1e-10, 0), force_model=ForceModel.LUO)
+                                      zero_centered=False, force=(-1e-10, 0), force_model=ForceModel.LUO)
 
     sc_srt = create_lid_driven_cavity((40, 40), relaxation_rate=1.9999, lid_velocity=0.05, compressible=True,
-                                      force=(-1e-10, 0), force_model=ForceModel.LUO)
+                                      zero_centered=False, force=(-1e-10, 0), force_model=ForceModel.LUO)
 
     sc_entropic = create_lid_driven_cavity((40, 40), method=Method.ENTROPIC_SRT, relaxation_rate=1.9999,
-                                           lid_velocity=0.05, compressible=True, force=(-1e-10, 0),
-                                           force_model=ForceModel.LUO)
+                                           lid_velocity=0.05, compressible=True, zero_centered=False,
+                                           force=(-1e-10, 0), force_model=ForceModel.LUO)
 
     sc_srt.run(1000)
     sc_kbc.run(1000)

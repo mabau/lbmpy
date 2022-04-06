@@ -49,6 +49,7 @@ def _srt_trt_population_space_simplification(split_inner_loop):
     s.add(add_subexpressions_for_divisions)
     s.add(insert_constants)
     s.add(insert_aliases)
+    s.add(lambda ac: ac.new_without_unused_subexpressions())
     return s
 
 
@@ -57,6 +58,7 @@ def _mrt_population_space_simplification(split_inner_loop):
     s.add(subexpression_substitution_in_main_assignments)
     if split_inner_loop:
         s.add(create_lbm_split_groups)
+    s.add(lambda ac: ac.new_without_unused_subexpressions())
     return s
 
 

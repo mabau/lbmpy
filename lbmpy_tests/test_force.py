@@ -1,6 +1,7 @@
 import pytest
 
 import numpy as np
+from numpy.testing import assert_allclose
 import sympy as sp
 import pystencils as ps
 from pystencils import Target
@@ -16,16 +17,11 @@ from lbmpy.updatekernels import create_stream_pull_with_output_kernel
 force_models = [f for f in ForceModel if f is not ForceModel.CUMULANT]
 
 
-@pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT])
+@pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT, Method.MRT])
+@pytest.mark.parametrize("zero_centered", [False, True])
 @pytest.mark.parametrize("force_model", force_models)
 @pytest.mark.parametrize("omega", [0.5, 1.5])
-def test_total_momentum(method_enum, force_model, omega):
-    # for the EDM force model this test case not work. However it is successfully used in test_entropic_model
-    # Any attempt to adapted the EDM force model so it fullfills the test case did result in a failure in the
-    # entropic test case. Note also that the test runs for MRT and EMD
-    if force_model == ForceModel.EDM:
-        pytest.skip()
-
+def test_total_momentum(method_enum, zero_centered, force_model, omega):
     L = (16, 16)
     stencil = LBStencil(Stencil.D2Q9)
     F = (2e-4, -3e-4)
@@ -37,7 +33,8 @@ def test_total_momentum(method_enum, force_model, omega):
     u = dh.add_array('u', values_per_cell=stencil.D)
 
     lbm_config = LBMConfig(method=method_enum, stencil=stencil, relaxation_rate=omega,
-                           compressible=True, force_model=force_model, force=F, streaming_pattern='pull')
+                           compressible=True, zero_centered=zero_centered,
+                           force_model=force_model, force=F, streaming_pattern='pull')
     lbm_opt = LBMOptimisation(symbolic_field=src)
 
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
@@ -74,7 +71,7 @@ def test_total_momentum(method_enum, force_model, omega):
     time_loop(t)
     dh.run_kernel(getter_kernel)
     total = np.sum(dh.gather_array(u.name), axis=(0, 1))
-    assert np.allclose(total / np.prod(L) / F / t, 1)
+    assert_allclose(total / np.prod(L) / F / t, 1)
 
 
 @pytest.mark.parametrize("force_model", force_models)
@@ -192,7 +189,7 @@ def test_literature(force_model, stencil, method):
     subs_dict = lb_method.subs_dict_relxation_rate
     force_term = sp.simplify(lb_method.force_model(lb_method).subs(subs_dict))
     u = sp.Matrix(lb_method.first_order_equilibrium_moment_symbols)
-    rho = lb_method.conserved_quantity_computation.zeroth_order_moment_symbol
+    rho = lb_method.conserved_quantity_computation.density_symbol
 
     # see silva2020 for nomenclature
     F = sp.Matrix(F)

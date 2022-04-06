@@ -2,6 +2,8 @@ import pytest
 import sympy as sp
 from dataclasses import replace
 
+from lbmpy.enums import CollisionSpace
+from lbmpy.methods import CollisionSpaceInfo
 from lbmpy.creationfunctions import create_lb_method, create_lb_collision_rule, LBMConfig, LBMOptimisation
 from lbmpy.enums import Method, ForceModel, Stencil
 from lbmpy.moments import (
@@ -9,7 +11,9 @@ from lbmpy.moments import (
     exponent_tuple_sort_key)
 from lbmpy.stencils import LBStencil
 
+from lbmpy.methods.creationfunctions import create_srt
 from lbmpy.methods.default_moment_sets import mrt_orthogonal_modes_literature
+from lbmpy.maxwellian_equilibrium import get_weights
 
 from lbmpy.moment_transforms import (
     PdfsToMomentsByMatrixTransform, PdfsToMomentsByChimeraTransform
@@ -92,13 +96,13 @@ def test_population_and_moment_space_equivalence(setup: tuple):
     rr = [*[0] * conserved_moments, *sp.symbols(f'omega_:{stencil.Q - conserved_moments}')]
     lbm_config = LBMConfig(stencil=stencil, method=method, relaxation_rates=rr,
                            nested_moments=nested_moments, force_model=fmodel, force=force,
-                           weighted=True, compressible=True, moment_transform_class=PdfsToMomentsByChimeraTransform)
+                           weighted=True, compressible=True, collision_space_info=CollisionSpaceInfo(CollisionSpace.RAW_MOMENTS))
 
     lbm_opt = LBMOptimisation(cse_global=False, cse_pdfs=False, pre_simplification=True, simplification=False)
 
     lb_method_moment_space = create_lb_method(lbm_config=lbm_config)
 
-    lbm_config = replace(lbm_config, moment_transform_class=None)
+    lbm_config = replace(lbm_config, collision_space_info=CollisionSpaceInfo(CollisionSpace.POPULATIONS))
     lb_method_pdf_space = create_lb_method(lbm_config=lbm_config)
 
     rho = lb_method_moment_space.zeroth_order_equilibrium_moment_symbol
@@ -114,3 +118,117 @@ def test_population_and_moment_space_equivalence(setup: tuple):
     for a, b in zip(cr_moment_space.main_assignments, cr_pdf_space.main_assignments):
         diff = (a.rhs - b.rhs).expand()
         assert diff == 0, f"Mismatch between population- and moment-space equations in PDFs {a.lhs}, {b.lhs}"
+
+
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19])
+@pytest.mark.parametrize('compressible', [True, False])
+def test_full_and_delta_equilibrium_equivalence(stencil, compressible):
+    stencil = LBStencil(stencil)
+    zero_centered = True
+    omega = sp.Symbol('omega')
+
+    rho = sp.Symbol("rho")
+    rho_background = sp.Integer(1)
+    delta_rho = sp.Symbol("delta_rho")
+    
+    subs = { delta_rho : rho - rho_background }
+    eqs = []
+
+    for delta_eq in [False, True]:
+        method = create_srt(stencil, omega, continuous_equilibrium=True, compressible=compressible,
+                            zero_centered=zero_centered, delta_equilibrium=delta_eq, equilibrium_order=None,
+                            collision_space_info=CollisionSpaceInfo(CollisionSpace.RAW_MOMENTS))
+        eq = method.get_equilibrium_terms()
+        eqs.append(eq.subs(subs))
+
+    assert (eqs[0] - eqs[1]).expand() == sp.Matrix((0,) * stencil.Q)
+
+
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19])
+@pytest.mark.parametrize('compressible', [True, False])
+@pytest.mark.longrun
+def test_full_and_delta_population_space_equivalence(stencil, compressible):
+    stencil = LBStencil(stencil)
+    zero_centered = True
+    omega = sp.Symbol('omega')
+
+    rho = sp.Symbol("rho")
+    rho_background = sp.Integer(1)
+    delta_rho = sp.Symbol("delta_rho")
+    
+    subs = { delta_rho : rho - rho_background }
+    eqs = []
+
+    for delta_eq in [False, True]:
+        method = create_srt(stencil, omega, continuous_equilibrium=True, compressible=compressible,
+                            zero_centered=zero_centered, delta_equilibrium=delta_eq, equilibrium_order=None,
+                            collision_space_info=CollisionSpaceInfo(CollisionSpace.RAW_MOMENTS))
+        eq = method.get_collision_rule().new_without_subexpressions()
+        eq = sp.Matrix([a.rhs for a in eq])
+        eqs.append(eq.subs(subs))
+
+    assert (eqs[0] - eqs[1]).expand() == sp.Matrix((0,) * stencil.Q)
+
+
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19])
+@pytest.mark.parametrize('compressible', [True, False])
+@pytest.mark.parametrize('delta_eq', [True, False])
+def test_zero_centering_equilibrium_equivalence(stencil, compressible, delta_eq):
+    stencil = LBStencil(stencil)
+    omega = sp.Symbol('omega')
+
+    weights = sp.Matrix(get_weights(stencil))
+
+    rho = sp.Symbol("rho")
+    rho_background = sp.Integer(1)
+    delta_rho = sp.Symbol("delta_rho")
+    
+    subs = { delta_rho : rho - rho_background }
+    eqs = []
+
+    for zero_centered in [False, True]:
+        method = create_srt(stencil, omega, continuous_equilibrium=True, compressible=compressible,
+                            zero_centered=zero_centered, delta_equilibrium=delta_eq and zero_centered,
+                            equilibrium_order=None, 
+                            collision_space_info=CollisionSpaceInfo(CollisionSpace.RAW_MOMENTS))
+        eq = method.get_equilibrium_terms()
+        eqs.append(eq.subs(subs))
+
+    assert (eqs[0] - eqs[1]).expand() == weights
+
+
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19])
+@pytest.mark.parametrize('compressible', [True, False])
+@pytest.mark.parametrize('delta_eq', [True, False])
+@pytest.mark.longrun
+def test_zero_centering_population_space_equivalence(stencil, compressible, delta_eq):
+    stencil = LBStencil(stencil)
+    omega = sp.Symbol('omega')
+
+    weights = sp.Matrix(get_weights(stencil))
+
+    rho = sp.Symbol("rho")
+    rho_background = sp.Integer(1)
+    delta_rho = sp.Symbol("delta_rho")
+
+    delta_f = sp.symbols(f"delta_f_:{stencil.Q}")
+    
+    subs = { delta_rho : rho - rho_background }
+    eqs = []
+
+    for zero_centered in [False, True]:
+        method = create_srt(stencil, omega, continuous_equilibrium=True, compressible=compressible,
+                            zero_centered=zero_centered, delta_equilibrium=delta_eq and zero_centered,
+                            equilibrium_order=None,
+                            collision_space_info=CollisionSpaceInfo(CollisionSpace.RAW_MOMENTS))
+        eq = method.get_collision_rule().new_without_subexpressions()
+        eq = sp.Matrix([a.rhs for a in eq])
+
+        if zero_centered:
+            eq = eq.subs({f : df for f, df in zip(method.pre_collision_pdf_symbols, delta_f)})
+        else:
+            eq = eq.subs({f : w + df for f, df, w in zip(method.pre_collision_pdf_symbols, delta_f, weights)})
+
+        eqs.append(eq.subs(subs))
+
+    assert (eqs[0] - eqs[1]).expand() == weights

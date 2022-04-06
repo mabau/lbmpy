@@ -94,6 +94,6 @@ class EntropicEquilibriumSRT(AbstractLbMethod):
 def create_srt_entropic(stencil, relaxation_rate, force_model, compressible):
     if not compressible:
         raise NotImplementedError("entropic-srt only implemented for compressible models")
-    density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
+    density_velocity_computation = DensityVelocityComputation(stencil, compressible, not compressible, force_model)
 
     return EntropicEquilibriumSRT(stencil, relaxation_rate, force_model, density_velocity_computation)

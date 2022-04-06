@@ -123,7 +123,7 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
         ch_methods.append(ch_method)
 
         lbm_config = LBMConfig(lb_method=ch_method, kernel_type='collide_only', density_input=c(i),
-                               velocity_input=u.center_vector, compressible=True)
+                               velocity_input=u.center_vector, compressible=True, zero_centered=False)
         lbm_opt = LBMOptimisation(symbolic_field=pdf_field[i])
         ch_update_rule = create_lb_update_rule(lbm_config=lbm_config,
                                                lbm_optimisation=lbm_opt)
@@ -137,7 +137,7 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
         ch_method = ch_methods[i]
 
         lbm_config = LBMConfig(lb_method=ch_method, kernel_type='stream_pull_only',
-                               temporary_field_name=pdf_dst_field[i].name)
+                               temporary_field_name=pdf_dst_field[i].name, zero_centered=False)
         lbm_opt = LBMOptimisation(symbolic_field=pdf_field[i])
         ch_update_rule = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
@@ -164,13 +164,14 @@ def create_model(domain_size, num_phases, coeff_a, coeff_epsilon, gabd, alpha=1,
         getter_kernel = create_kernel(output_assign).compile()
         getter_kernels.append(getter_kernel)
 
-    lbm_config = LBMConfig(kernel_type='collide_only', relaxation_rate=1.0, force=force, compressible=True)
+    lbm_config = LBMConfig(kernel_type='collide_only', relaxation_rate=1.0, force=force,
+                           compressible=True, zero_centered=False)
     lbm_opt = LBMOptimisation(symbolic_field=pdf_hydro_field)
     collide_assign = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
     collide_kernel = create_kernel(collide_assign).compile()
 
     lbm_config = LBMConfig(kernel_type='stream_pull_only', temporary_field_name=pdf_hydro_dst_field.name,
-                           output={"density": rho, "velocity": u})
+                           zero_centered=False, output={"density": rho, "velocity": u})
     lbm_opt = LBMOptimisation(symbolic_field=pdf_hydro_field)
     stream_assign = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
