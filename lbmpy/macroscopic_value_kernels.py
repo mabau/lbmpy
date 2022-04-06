@@ -251,8 +251,8 @@ def create_advanced_velocity_setter_collision_rule(method, velocity_field: Field
         LB collision rule
     """
     cqc = method.conserved_quantity_computation
-    density_symbol = cqc.defined_symbols(order=0)[1]
-    velocity_symbols = cqc.defined_symbols(order=1)[1]
+    density_symbol = cqc.density_symbol
+    velocity_symbols = cqc.velocity_symbols
 
     # density is computed from pdfs
     eq_input_from_pdfs = cqc.equilibrium_input_equations_from_pdfs(

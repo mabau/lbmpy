@@ -9,7 +9,7 @@ import sympy as sp
 import math
 
 from lbmpy.enums import Stencil, Method
-from lbmpy.methods.creationfunctions import RelaxationInfo, create_srt, create_trt, create_trt_kbc, \
+from lbmpy.methods import RelaxationInfo, create_srt, create_trt, create_trt_kbc, \
     create_with_default_polynomial_cumulants
 from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
 from lbmpy.methods.centeredcumulant.centeredcumulantmethod import CenteredCumulantBasedLbMethod
@@ -21,16 +21,17 @@ from lbmpy.stencils import LBStencil
 def __change_relaxation_rate_of_conserved_moments(method, new_relaxation_rate=sp.Symbol("test_omega")):
     conserved_moments = (sp.Rational(1, 1),) + MOMENT_SYMBOLS[:method.dim]
 
-    rr_dict = copy(method.relaxation_info_dict)
+    rr_dict = copy(method.relaxation_rate_dict)
     for conserved_moment in conserved_moments:
-        prev = rr_dict[conserved_moment]
-        rr_dict[conserved_moment] = RelaxationInfo(prev.equilibrium_value, new_relaxation_rate)
+        rr_dict[conserved_moment] = new_relaxation_rate
 
     if isinstance(method, MomentBasedLbMethod):
-        changed_method = MomentBasedLbMethod(method.stencil, rr_dict, method.conserved_quantity_computation,
+        changed_method = MomentBasedLbMethod(method.stencil, method.equilibrium_distribution, rr_dict, 
+                                             method.conserved_quantity_computation,
                                              force_model=method.force_model)
     elif isinstance(method, CenteredCumulantBasedLbMethod):
-        changed_method = CenteredCumulantBasedLbMethod(method.stencil, rr_dict, method.conserved_quantity_computation,
+        changed_method = CenteredCumulantBasedLbMethod(method.stencil, method.equilibrium_distribution, rr_dict,
+                                                       method.conserved_quantity_computation,
                                                        force_model=method.force_model)
     else:
         raise ValueError("Not a moment or cumulant-based method")
@@ -86,7 +87,7 @@ def test_cumulant():
 def test_srt():
     stencil = LBStencil(Stencil.D3Q27)
     original_method = create_srt(stencil, sp.Symbol("omega"), compressible=True,
-                                 maxwellian_moments=True)
+                                 continuous_equilibrium=True)
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
     check_method_equivalence(original_method, changed_method, True, use_numeric_subs=True)
@@ -96,7 +97,7 @@ def test_srt():
 def test_srt_short():
     stencil = LBStencil(Stencil.D2Q9)
     original_method = create_srt(stencil, sp.Symbol("omega"), compressible=True,
-                                 maxwellian_moments=True)
+                                 continuous_equilibrium=True)
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
     check_method_equivalence(original_method, changed_method, True, use_numeric_subs=False)
@@ -109,7 +110,7 @@ def test_srt_short():
 def test_trt(stencil_name, continuous_moments):
     stencil = LBStencil(stencil_name)
     original_method = create_trt(stencil, sp.Symbol("omega1"), sp.Symbol("omega2"),
-                                 maxwellian_moments=continuous_moments)
+                                 continuous_equilibrium=continuous_moments)
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
     check_method_equivalence(original_method, changed_method, True)
@@ -122,7 +123,7 @@ def test_trt_kbc(method_name):
     method_nr = method_name.name[-1]
     original_method = create_trt_kbc(dim, sp.Symbol("omega1"), sp.Symbol("omega2"),
                                      method_name='KBC-N' + method_nr,
-                                     maxwellian_moments=False)
+                                     continuous_equilibrium=False)
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
     check_method_equivalence(original_method, changed_method, True)
     check_method_equivalence(original_method, changed_method, False)
@@ -135,7 +136,7 @@ def test_trt_kbc_long(method_name):
     method_nr = method_name.name[-1]
     original_method = create_trt_kbc(dim, sp.Symbol("omega1"), sp.Symbol("omega2"),
                                      method_name='KBC-N' + method_nr,
-                                     maxwellian_moments=False)
+                                     continuous_equilibrium=False)
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
     check_method_equivalence(original_method, changed_method, True)
     check_method_equivalence(original_method, changed_method, False)

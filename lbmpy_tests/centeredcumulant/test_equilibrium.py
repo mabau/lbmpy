@@ -1,5 +1,5 @@
 from lbmpy.creationfunctions import LBMConfig
-from lbmpy.enums import Method, Stencil
+from lbmpy.enums import Method, Stencil, CollisionSpace
 from lbmpy.maxwellian_equilibrium import generate_equilibrium_by_matching_moments
 from lbmpy.moments import extract_monomials
 from lbmpy.stencils import LBStencil
@@ -9,6 +9,7 @@ import sympy as sp
 from pystencils.simp import AssignmentCollection
 from pystencils import Assignment
 from lbmpy.creationfunctions import create_lb_method
+from lbmpy.methods import CollisionSpaceInfo
 from lbmpy.moment_transforms import (
     FastCentralMomentTransform,
     PdfsToCentralMomentsByMatrix,
@@ -32,8 +33,9 @@ reference_equilibria = dict()
                                           PdfsToCentralMomentsByShiftMatrix])
 def test_equilibrium_pdfs(stencil_name, cm_transform):
     stencil = LBStencil(stencil_name)
-    lbm_config = LBMConfig(stencil=stencil, method=Method.CUMULANT,
-                           central_moment_transform_class=cm_transform)
+    cspace = CollisionSpaceInfo(CollisionSpace.CUMULANTS, central_moment_transform_class=cm_transform)
+    lbm_config = LBMConfig(stencil=stencil, method=Method.CUMULANT, compressible=True, zero_centered=False,
+                           collision_space_info=cspace)
 
     c_lb_method = create_lb_method(lbm_config=lbm_config)
     rho = c_lb_method.zeroth_order_equilibrium_moment_symbol

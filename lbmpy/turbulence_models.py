@@ -44,10 +44,11 @@ def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_fie
         raise ValueError("For the smagorinsky model the shear relaxation rate has to be a symbol or it has to be "
                          "assigned to a single equation in the assignment list")
     f_neq = sp.Matrix(method.pre_collision_pdf_symbols) - method.get_equilibrium_terms()
+    equilibrium = method.equilibrium_distribution
 
     tau_0 = sp.Symbol("tau_0_")
     second_order_neq_moments = sp.Symbol("Pi")
-    rho = method.zeroth_order_equilibrium_moment_symbol if method.conserved_quantity_computation.compressible else 1
+    rho = equilibrium.density if equilibrium.compressible else equilibrium.background_density
     adapted_omega = sp.Symbol("smagorinsky_omega")
 
     collision_rule = collision_rule.new_with_substitutions({omega_s: adapted_omega}, substitute_on_lhs=False)

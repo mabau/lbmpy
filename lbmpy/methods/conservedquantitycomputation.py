@@ -1,6 +1,6 @@
 import abc
-from collections import OrderedDict
 
+from warnings import warn
 import sympy as sp
 
 from pystencils import Assignment, AssignmentCollection, Field
@@ -48,7 +48,7 @@ class AbstractConservedQuantityComputation(abc.ABC):
         """
 
     @abc.abstractmethod
-    def equilibrium_input_equations_from_pdfs(self, pdfs):
+    def equilibrium_input_equations_from_pdfs(self, pdfs, **kwargs):
         """
         Returns an equation collection that defines all necessary quantities to compute the equilibrium as functions
         of the pdfs.
@@ -59,7 +59,7 @@ class AbstractConservedQuantityComputation(abc.ABC):
         """
 
     @abc.abstractmethod
-    def output_equations_from_pdfs(self, pdfs, output_quantity_names_to_symbols):
+    def output_equations_from_pdfs(self, pdfs, output_quantity_names_to_symbols, **kwargs):
         """
         Returns an equation collection that defines conserved quantities for output. These conserved quantities might
         be slightly different that the ones used as input for the equilibrium e.g. due to a force model.
@@ -82,130 +82,259 @@ class AbstractConservedQuantityComputation(abc.ABC):
 
 
 class DensityVelocityComputation(AbstractConservedQuantityComputation):
-    def __init__(self, stencil, compressible, force_model=None,
-                 zeroth_order_moment_symbol=sp.Symbol("rho"),
-                 first_order_moment_symbols=sp.symbols("u_:3"),
-                 second_order_moment_symbols=sp.symbols("p_:9")):
+    r"""
+    This class emits equations for in- and output of the conserved quantities of regular
+    hydrodynamic lattice Boltzmann methods, which are density and velocity. The following symbolic
+    quantities are manages by this class:
+
+    - Density :math:`\rho`, background density :math:`\rho_0` (typically set to :math:`1`) and the
+      density deviation :math:`\delta \rho`. They are connected through :math:`\rho = \rho_0 + \delta\rho`.
+    - Velocity :math:`\mathbf{u} = (u_0, u_1, u_2)`.
+
+    Furthermore, this class provides output functionality for the second-order moment tensor :math:`p`.
+
+    Parameters:
+        stencil: see :class:`lbmpy.stencils.LBStencil`
+        compressible: `True` indicates the usage of a compressible equilibrium 
+                        (see :class:`lbmpy.equilibrium.ContinuousHydrodynamicMaxwellian`),
+                        and sets the reference density to :math:`\rho`.
+                        `False` indicates an incompressible equilibrium, using :math:`\rho` as
+                        reference density.
+        zero_centered: Indicates whether or not PDFs are stored in regular or zero-centered format.
+        force_model: Employed force model. See :mod:`lbmpy.forcemodels`.
+    """
+    
+    def __init__(self, stencil, compressible, zero_centered, force_model=None,
+                 background_density=sp.Integer(1),
+                 density_symbol=sp.Symbol("rho"),
+                 density_deviation_symbol=sp.Symbol("delta_rho"),
+                 velocity_symbols=sp.symbols("u_:3"),
+                 c_s_sq=sp.Symbol("c_s")**2,
+                 second_order_moment_symbols=sp.symbols("p_:9"),
+                 zeroth_order_moment_symbol=None,
+                 first_order_moment_symbols=None):
+        if zeroth_order_moment_symbol is not None:
+            warn("Usage of parameter 'zeroth_order_moment_symbol' is deprecated."
+                 " Use 'density_symbol' or 'density_deviation_symbol' instead.")
+            density_symbol = zeroth_order_moment_symbol
+
+        if first_order_moment_symbols is not None:
+            warn("Usage of parameter 'first_order_moment_symbols' is deprecated."
+                 " Use 'velocity_symbols' instead.")
+            velocity_symbols = first_order_moment_symbols
+
         dim = stencil.D
         self._stencil = stencil
         self._compressible = compressible
-        self._forceModel = force_model
-        self._symbolOrder0 = zeroth_order_moment_symbol
-        self._symbolsOrder1 = first_order_moment_symbols[:dim]
-        self._symbolsOrder2 = second_order_moment_symbols[:(dim * dim)]
+        self._zero_centered = zero_centered
+        self._force_model = force_model
+        self._background_density = background_density
+        self._density_symbol = density_symbol
+        self._density_deviation_symbol = density_deviation_symbol
+        self._velocity_symbols = velocity_symbols[:dim]
+        self._second_order_moment_symbols = second_order_moment_symbols[:(dim * dim)]
+        self._c_s_sq = c_s_sq
 
     @property
     def conserved_quantities(self):
         return {'density': 1,
+                'density_deviation': 1,
                 'velocity': self._stencil.D}
 
     @property
     def compressible(self):
+        """Indicates whether a compressible or incompressible equilibrium is used."""
         return self._compressible
 
     def defined_symbols(self, order='all'):
         if order == 'all':
-            return {'density': self._symbolOrder0,
-                    'velocity': self._symbolsOrder1}
+            return {'density': self._density_symbol,
+                    'density_deviation': self._density_deviation_symbol,
+                    'velocity': self._velocity_symbols}
         elif order == 0:
-            return 'density', self._symbolOrder0
+            return {'density': self._density_symbol,
+                    'density_deviation': self._density_deviation_symbol, }
         elif order == 1:
-            return 'velocity', self._symbolsOrder1
+            return {'velocity': self._velocity_symbols}
         else:
-            return None
+            return dict()
 
     @property
     def zero_centered_pdfs(self):
-        return not self._compressible
+        """Whether regular or zero-centered storage is employed."""
+        return self._zero_centered
 
     @property
     def zeroth_order_moment_symbol(self):
-        return self._symbolOrder0
+        """Symbol corresponding to the zeroth-order moment of the stored PDFs, 
+        i.e. `density_deviation_symbol` if zero-centered, else `density_symbol`."""
+        warn("Usage of 'zeroth_order_moment_symbol' is deprecated."
+             "Use 'density_symbol' or 'density_deviation_symbol' instead.")
+        # to be consistent with previous behaviour, this method returns `density_symbol` for non-zero-centered methods,
+        # and `density_deviation_symbol` for zero-centered methods
+        return self._density_deviation_symbol if self.zero_centered_pdfs else self._density_symbol
 
     @property
     def first_order_moment_symbols(self):
-        return self._symbolsOrder1
+        """Symbol corresponding to the first-order moment vector of the stored PDFs, 
+        divided by the reference density."""
+        warn("Usage of 'first_order_moment_symbols' is deprecated. Use 'velocity_symbols' instead.")
+        return self._velocity_symbols
+
+    @property
+    def density_symbol(self):
+        """Symbol for the density."""
+        return self._density_symbol
+
+    @property
+    def density_deviation_symbol(self):
+        """Symbol for the density deviation."""
+        return self._density_deviation_symbol
+
+    @property
+    def background_density(self):
+        """Symbol or value of the background density."""
+        return self._background_density
+
+    @property
+    def velocity_symbols(self):
+        """Symbols for the velocity."""
+        return self._velocity_symbols
+
+    @property
+    def force_model(self):
+        return self._force_model
+
+    def set_force_model(self, force_model):
+        self._force_model = force_model
 
     @property
     def default_values(self):
-        result = {self._symbolOrder0: 1}
-        for s in self._symbolsOrder1:
+        result = {self._density_symbol: 1, self._density_deviation_symbol: 0}
+        for s in self._velocity_symbols:
             result[s] = 0
         return result
 
     def equilibrium_input_equations_from_pdfs(self, pdfs, force_substitution=True):
-        dim = self._stencil.D
-        eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs, self._symbolOrder0,
-                                                                  self._symbolsOrder1[:dim])
-        if self._compressible:
-            eq_coll = divide_first_order_moments_by_rho(eq_coll, dim)
+        #   Compute moments from stored PDFs.
+        #   If storage is zero_centered, this yields the density_deviation, else density as zeroth moment.
+        zeroth_moment_symbol = self._density_deviation_symbol if self.zero_centered_pdfs else self._density_symbol
+        reference_density = self._density_symbol if self.compressible else self._background_density
+        ac = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs, zeroth_moment_symbol,
+                                                             self._velocity_symbols)
 
-        if self._forceModel is not None:
-            eq_coll = apply_force_model_shift(self._forceModel.equilibrium_velocity_shift,
-                                              dim, eq_coll, self._compressible)
+        main_assignments_dict = ac.main_assignments_dict
+
+        #   If zero_centered, rho must still be computed, else delta_rho
+        if self.zero_centered_pdfs:
+            main_assignments_dict[self._density_symbol] = self._background_density + self._density_deviation_symbol
+        else:
+            main_assignments_dict[self._density_deviation_symbol] = self._density_symbol - self._background_density
+
+        #   If compressible, velocities must be divided by rho
+        for u in self._velocity_symbols:
+            main_assignments_dict[u] /= reference_density
+
+        #   If force model is present, apply force model shift
+        if self._force_model is not None:
+            velocity_shifts = self._force_model.equilibrium_velocity_shift(reference_density)
+            for u, s in zip(self._velocity_symbols, velocity_shifts):
+                main_assignments_dict[u] += s
+
             if force_substitution:
-                eq_coll = add_symbolic_force_substitutions(eq_coll, self._forceModel._subs_dict_force)
-        return eq_coll
+                ac = add_symbolic_force_substitutions(ac, self._force_model._subs_dict_force)
+
+        ac.set_main_assignments_from_dict(main_assignments_dict)
+        ac.topological_sort()
+        return ac
 
     def equilibrium_input_equations_from_init_values(self, density=1, velocity=(0, 0, 0), force_substitution=True):
         dim = self._stencil.D
-        zeroth_order_moment = density if self._compressible else density - sp.Rational(1, 1)
-        first_order_moments = velocity[:dim]
+        density_deviation = self._density_symbol - self._background_density
+        velocity = velocity[:dim]
         vel_offset = [0] * dim
+        reference_density = self._density_symbol if self.compressible else self._background_density
 
-        if self._compressible:
-            if self._forceModel is not None:
-                vel_offset = self._forceModel.macroscopic_velocity_shift(zeroth_order_moment)
-        else:
-            if self._forceModel is not None:
-                vel_offset = self._forceModel.macroscopic_velocity_shift(sp.Rational(1, 1))
-        eqs = [Assignment(self._symbolOrder0, zeroth_order_moment)]
+        if self._force_model is not None:
+            vel_offset = self._force_model.macroscopic_velocity_shift(reference_density)
 
-        first_order_moments = [a - b for a, b in zip(first_order_moments, vel_offset)]
-        eqs += [Assignment(l, r) for l, r in zip(self._symbolsOrder1, first_order_moments)]
+        eqs = [Assignment(self._density_symbol, density),
+               Assignment(self._density_deviation_symbol, density_deviation)]
+
+        velocity_eqs = [u - o for u, o in zip(velocity, vel_offset)]
+        eqs += [Assignment(l, r) for l, r in zip(self._velocity_symbols, velocity_eqs)]
 
         result = AssignmentCollection(eqs, [])
 
-        if self._forceModel is not None and force_substitution:
-            result = add_symbolic_force_substitutions(result, self._forceModel._subs_dict_force)
+        if self._force_model is not None and force_substitution:
+            result = add_symbolic_force_substitutions(result, self._force_model._subs_dict_force)
 
         return result
 
     def output_equations_from_pdfs(self, pdfs, output_quantity_names_to_symbols, force_substitution=True):
         dim = self._stencil.D
 
+        zeroth_moment_symbol = self._density_deviation_symbol if self.zero_centered_pdfs else self._density_symbol
+        first_moment_symbols = sp.symbols(f'momdensity_:{dim}')
+        reference_density = self._density_symbol if self.compressible else self._background_density
         ac = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
-                                                             self._symbolOrder0, self._symbolsOrder1,
-                                                             self._symbolsOrder2)
+                                                             zeroth_moment_symbol, first_moment_symbols,
+                                                             self._second_order_moment_symbols)
 
-        if self._compressible:
-            ac = divide_first_order_moments_by_rho(ac, dim)
+        eqs = {**ac.main_assignments_dict, **ac.subexpressions_dict}
+
+        #   If zero_centered, rho must still be computed, else delta_rho
+        if self.zero_centered_pdfs:
+            eqs[self._density_symbol] = self._background_density + self._density_deviation_symbol
+            dim = self._stencil.D
+            for j in range(dim):
+                #   Diagonal entries are shifted by c_s^2
+                eqs[self._second_order_moment_symbols[dim * j + j]] += self._c_s_sq
         else:
-            ac = add_density_offset(ac)
+            eqs[self._density_deviation_symbol] = self._density_symbol - self._background_density
 
-        if self._forceModel is not None:
-            ac = apply_force_model_shift(self._forceModel.macroscopic_velocity_shift, dim, ac, self._compressible)
+        #   If compressible, velocities must be divided by rho
+        for m, u in zip(first_moment_symbols, self._velocity_symbols):
+            eqs[u] = m / reference_density
+
+        #   If force model is present, apply force model shift
+        mom_density_shifts = [0] * dim
+        if self._force_model is not None:
+            velocity_shifts = self._force_model.macroscopic_velocity_shift(reference_density)
+            for u, s in zip(self._velocity_symbols, velocity_shifts):
+                eqs[u] += s
+
+            mom_density_shifts = self._force_model.macroscopic_momentum_density_shift()
 
         main_assignments = []
-        eqs = OrderedDict([(eq.lhs, eq.rhs) for eq in ac.all_assignments])
 
         if 'density' in output_quantity_names_to_symbols:
             density_output_symbol = output_quantity_names_to_symbols['density']
             if isinstance(density_output_symbol, Field):
                 density_output_symbol = density_output_symbol.center
-            if density_output_symbol != self._symbolOrder0:
-                main_assignments.append(Assignment(density_output_symbol, self._symbolOrder0))
+            if density_output_symbol != self._density_symbol:
+                main_assignments.append(Assignment(density_output_symbol, self._density_symbol))
             else:
-                main_assignments.append(Assignment(self._symbolOrder0, eqs[self._symbolOrder0]))
-                del eqs[self._symbolOrder0]
+                main_assignments.append(Assignment(self._density_symbol, eqs[self._density_symbol]))
+                del eqs[self._density_symbol]
+        if 'density_deviation' in output_quantity_names_to_symbols:
+            density_deviation_output_symbol = output_quantity_names_to_symbols['density_deviation']
+            if isinstance(density_deviation_output_symbol, Field):
+                density_deviation_output_symbol = density_deviation_output_symbol.center
+            if density_deviation_output_symbol != self._density_deviation_symbol:
+                main_assignments.append(Assignment(density_deviation_output_symbol, self._density_deviation_symbol))
+            else:
+                main_assignments.append(Assignment(self._density_deviation_symbol,
+                                        eqs[self._density_deviation_symbol]))
+                del eqs[self._density_deviation_symbol]
         if 'velocity' in output_quantity_names_to_symbols:
             vel_output_symbols = output_quantity_names_to_symbols['velocity']
             if isinstance(vel_output_symbols, Field):
                 vel_output_symbols = vel_output_symbols.center_vector
-            if tuple(vel_output_symbols) != tuple(self._symbolsOrder1):
-                main_assignments += [Assignment(a, b) for a, b in zip(vel_output_symbols, self._symbolsOrder1)]
+            if tuple(vel_output_symbols) != tuple(self._velocity_symbols):
+                main_assignments += [Assignment(a, b) for a, b in zip(vel_output_symbols, self._velocity_symbols)]
             else:
-                for u_i in self._symbolsOrder1:
+                for u_i in self._velocity_symbols:
                     main_assignments.append(Assignment(u_i, eqs[u_i]))
                     del eqs[u_i]
         if 'momentum_density' in output_quantity_names_to_symbols:
@@ -215,15 +344,8 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             # Is not optimal when velocity and momentum_density are calculated together,
             # but this is usually not the case
             momentum_density_output_symbols = output_quantity_names_to_symbols['momentum_density']
-            mom_density_eq_coll = get_equations_for_zeroth_and_first_order_moment(self._stencil, pdfs,
-                                                                                  self._symbolOrder0,
-                                                                                  self._symbolsOrder1)
-            if self._forceModel is not None:
-                mom_density_eq_coll = apply_force_model_shift(self._forceModel.macroscopic_momentum_density_shift, dim,
-                                                              mom_density_eq_coll, self._compressible)
-
-            for sym, val in zip(momentum_density_output_symbols, mom_density_eq_coll.main_assignments[1:]):
-                main_assignments.append(Assignment(sym, val.rhs))
+            for sym, m, s in zip(momentum_density_output_symbols, first_moment_symbols, mom_density_shifts):
+                main_assignments.append(Assignment(sym, m + s))
         if 'moment0' in output_quantity_names_to_symbols:
             moment0_output_symbol = output_quantity_names_to_symbols['moment0']
             if isinstance(moment0_output_symbol, Field):
@@ -240,12 +362,14 @@ class DensityVelocityComputation(AbstractConservedQuantityComputation):
             if isinstance(moment2_output_symbol, Field):
                 moment2_output_symbol = moment2_output_symbol.center_vector
             for i, p in enumerate(moment2_output_symbol):
-                main_assignments.append(Assignment(p, eqs[self._symbolsOrder2[i]]))
-                del eqs[self._symbolsOrder2[i]]
+                main_assignments.append(Assignment(p, eqs[self._second_order_moment_symbols[i]]))
+                del eqs[self._second_order_moment_symbols[i]]
 
-        ac = ac.copy(main_assignments, [Assignment(a, b) for a, b in eqs.items()])
-        if self._forceModel is not None and force_substitution:
-            ac = add_symbolic_force_substitutions(ac, self._forceModel._subs_dict_force)
+        ac = AssignmentCollection(main_assignments, eqs)
+        if self._force_model is not None and force_substitution:
+            ac = add_symbolic_force_substitutions(ac, self._force_model._subs_dict_force)
+
+        ac.topological_sort()
 
         return ac.new_without_unused_subexpressions()
 

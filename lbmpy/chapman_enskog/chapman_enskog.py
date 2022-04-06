@@ -21,8 +21,8 @@ class ChapmanEnskogAnalysis:
         cqc = method.conserved_quantity_computation
         self._method = method
         self._moment_cache = LbMethodEqMoments(method)
-        self.rho = cqc.defined_symbols(order=0)[1]
-        self.u = cqc.defined_symbols(order=1)[1]
+        self.rho = cqc.density_symbol
+        self.u = cqc.velocity_symbols
         self.t = sp.Symbol("t")
         self.epsilon = sp.Symbol("epsilon")
 

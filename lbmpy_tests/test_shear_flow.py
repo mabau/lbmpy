@@ -62,7 +62,9 @@ t_max = 2000
 
 @pytest.mark.parametrize('target', (ps.Target.CPU, ps.Target.GPU))
 @pytest.mark.parametrize('stencil_name', (Stencil.D2Q9, Stencil.D3Q19))
-def test_shear_flow(target, stencil_name):
+@pytest.mark.parametrize('zero_centered', [True, False])
+def test_shear_flow(target, stencil_name, zero_centered):
+
     # Cuda
     if target == ps.Target.GPU:
         pytest.importorskip("pycuda")
@@ -91,7 +93,8 @@ def test_shear_flow(target, stencil_name):
 
     # LB Setup
     lbm_config = LBMConfig(stencil=stencil, relaxation_rate=omega, method=Method.TRT,
-                           compressible=True, kernel_type='collide_only')
+                           compressible=True, zero_centered=zero_centered,
+                           kernel_type='collide_only')
     lbm_opt = LBMOptimisation(symbolic_field=src)
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 

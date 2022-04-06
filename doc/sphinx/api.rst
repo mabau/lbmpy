@@ -6,10 +6,10 @@ API Reference
 
    scenarios.rst
    enums.rst
-   kernelcreation.rst
-   methodcreation.rst
    stencils.rst
+   kernelcreation.rst
    methods.rst
+   equilibrium.rst
    moment_transforms.rst
    maxwellian_equilibrium.rst
    continuous_distribution_measures.rst

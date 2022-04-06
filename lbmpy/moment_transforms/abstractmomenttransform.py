@@ -31,6 +31,7 @@ class AbstractMomentTransform:
                  moment_exponents=None,
                  moment_polynomials=None,
                  conserved_quantity_equations=None,
+                 background_distribution=None,
                  pre_collision_symbol_base=None,
                  post_collision_symbol_base=None,
                  pre_collision_monomial_symbol_base=None,
@@ -45,6 +46,10 @@ class AbstractMomentTransform:
             moment_polynomials=None: Polynomial basis of the collision space
             conserved_quantity_equations: Optionally, an assignment collection computing the conserved quantities
                                           (typically density and velocity) from pre-collision populations
+            background_distribution: If not `None`, zero-centered storage of the populations is assumed and the 
+                                     moments of the passed distribution (instance of 
+                                     `lbmpy.equilibrium.AbstractEquilibrium`) are included in the transform equations.
+
         """
         if moment_exponents is not None and moment_polynomials is not None:
             raise ValueError("Both moment_exponents and moment_polynomials were given. Pass only one of them!")
@@ -66,6 +71,8 @@ class AbstractMomentTransform:
         self.cqe = conserved_quantity_equations
         self.equilibrium_density = equilibrium_density
         self.equilibrium_velocity = equilibrium_velocity
+
+        self.background_distribution = background_distribution
 
         self.base_pre = pre_collision_symbol_base
         self.base_post = post_collision_symbol_base

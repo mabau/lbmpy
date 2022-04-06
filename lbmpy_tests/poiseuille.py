@@ -36,7 +36,7 @@ def poiseuille_flow(z, H, ext_force_density, dyn_visc):
     return ext_force_density * 1. / (2 * dyn_visc) * (H**2.0 / 4.0 - z**2.0)
 
 
-def poiseuille_channel(target, stencil_name):
+def poiseuille_channel(target, stencil_name, **kwargs):
     # physical parameters
     rho_0 = 1.2  # density
     eta = 0.2  # kinematic viscosity
@@ -67,9 +67,11 @@ def poiseuille_channel(target, stencil_name):
 
     # LB Setup
     lbm_config = LBMConfig(stencil=lb_stencil, relaxation_rate=omega, method=Method.TRT,
-                           compressible=True, force_model=ForceModel.GUO,
+                           compressible=True,
+                           force_model=ForceModel.GUO,
                            force=tuple([ext_force_density] + [0] * (lb_stencil.D - 1)),
-                           kernel_type='collide_only')
+                           kernel_type='collide_only',
+                           **kwargs)
 
     lbm_opt = LBMOptimisation(symbolic_field=src)
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)

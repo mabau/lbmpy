@@ -11,7 +11,7 @@ from lbmpy.scenarios import create_lid_driven_cavity
 @pytest.mark.parametrize('method_enum', [Method.SRT, Method.CENTRAL_MOMENT, Method.CUMULANT])
 def test_creation(method_enum, double_precision):
     """Simple test that makes sure that only float variables are created"""
-    lbm_config = LBMConfig(method=method_enum, relaxation_rate=1.5)
+    lbm_config = LBMConfig(method=method_enum, relaxation_rate=1.5, compressible=True)
     config = ps.CreateKernelConfig(data_type="float64" if double_precision else "float32")
     func = create_lb_function(lbm_config=lbm_config, config=config)
     code = ps.get_code_str(func)
@@ -27,7 +27,7 @@ def test_creation(method_enum, double_precision):
 @pytest.mark.parametrize('double_precision', [False, True])
 @pytest.mark.parametrize('method_enum', [Method.SRT, Method.CENTRAL_MOMENT, Method.CUMULANT])
 def test_scenario(method_enum, double_precision):
-    lbm_config = LBMConfig(method=method_enum, relaxation_rate=1.5)
+    lbm_config = LBMConfig(method=method_enum, relaxation_rate=1.5, compressible=True)
     config = ps.CreateKernelConfig(data_type="double" if double_precision else "float32")
     sc = create_lid_driven_cavity((16, 16, 8), lbm_config=lbm_config, config=config)
     sc.run(1)

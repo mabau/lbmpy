@@ -31,12 +31,12 @@ def test_central_moment_ldc():
 def test_central_moment_class():
     stencil = LBStencil(Stencil.D2Q9)
     lbm_config = LBMConfig(stencil=stencil, method=Method.CENTRAL_MOMENT, relaxation_rates=[1.2, 1.3, 1.4, 1.5],
-                           equilibrium_order=4, compressible=True)
+                           equilibrium_order=4, compressible=True, zero_centered=True)
 
     method = create_lb_method(lbm_config=lbm_config)
 
     lbm_config = LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.2,
-                           equilibrium_order=4, compressible=True)
+                           equilibrium_order=4, compressible=True, zero_centered=True)
     srt = create_lb_method(lbm_config=lbm_config)
 
     rho = method.zeroth_order_equilibrium_moment_symbol
@@ -51,8 +51,8 @@ def test_central_moment_class():
     default_moments = [item for sublist in default_moments for item in sublist]
 
     assert method.central_moment_transform_class == PdfsToCentralMomentsByShiftMatrix
-    assert method.conserved_quantity_computation.zeroth_order_moment_symbol == rho
-    assert method.conserved_quantity_computation.first_order_moment_symbols == u
+    assert method.conserved_quantity_computation.density_symbol == rho
+    assert method.conserved_quantity_computation.velocity_symbols == u
     assert method.moment_equilibrium_values == eq
 
     assert method.force_model is None
@@ -86,11 +86,13 @@ def test_central_moment_class():
 
     assert get_weights(stencil) == method.weights
 
+    cqc = method.conserved_quantity_computation
+    subs = {cqc.density_deviation_symbol : cqc.density_symbol - cqc.background_density}
+
     eq_terms_central = method.get_equilibrium_terms()
     eq_terms_srt = srt.get_equilibrium_terms()
 
-    for i in range(len(stencil)):
-        assert sp.simplify(eq_terms_central[i] - eq_terms_srt[i]) == 0
+    assert (eq_terms_central - eq_terms_srt).subs(subs).expand() == sp.Matrix((0,) * stencil.Q)
 
     method = create_lb_method(lbm_config=LBMConfig(stencil=LBStencil(Stencil.D2Q9), method=Method.CENTRAL_MOMENT,
                                                    relaxation_rates=[1.7, 1.8, 1.2, 1.3, 1.4], equilibrium_order=4,

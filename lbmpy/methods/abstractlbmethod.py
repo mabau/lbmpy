@@ -26,11 +26,12 @@ class AbstractLbMethod(abc.ABC):
 
     @property
     def stencil(self):
-        """Discrete set of velocities, represented as nested tuple"""
+        """Discrete set of velocities, represented by :class:`lbmpy.stencils.LBStencil`"""
         return self._stencil
 
     @property
     def dim(self):
+        """The method's spatial dimensionality"""
         return len(self.stencil[0])
 
     @property
@@ -52,9 +53,9 @@ class AbstractLbMethod(abc.ABC):
     def relaxation_matrix(self):
         """Returns a qxq diagonal matrix which contains the relaxation rate for each moment on the diagonal"""
         d = sp.zeros(len(self.relaxation_rates))
-        for i in range(0, len(self.relaxation_rates)):
+        for i, w in enumerate(self.relaxation_rates):
             # note that 0.0 is converted to sp.Zero here. It is not possible to prevent this.
-            d[i, i] = self.relaxation_rates[i]
+            d[i, i] = w
         return d
 
     @property
@@ -74,10 +75,12 @@ class AbstractLbMethod(abc.ABC):
 
     # ------------------------- Abstract Methods & Properties ----------------------------------------------------------
 
+    @property
     @abc.abstractmethod
     def conserved_quantity_computation(self):
         """Returns an instance of class :class:`lbmpy.methods.AbstractConservedQuantityComputation`"""
 
+    @property
     @abc.abstractmethod
     def weights(self):
         """Returns a sequence of weights, one for each lattice direction"""

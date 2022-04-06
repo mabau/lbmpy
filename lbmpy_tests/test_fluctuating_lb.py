@@ -80,15 +80,15 @@ def get_fluctuating_lb(size=None, kT=None,
         'force', values_per_cell=stencil.D, layout='f', gpu=target == Target.GPU)
 
     # Method setup
-    method = create_mrt_orthogonal(
-        stencil=stencil,
-        compressible=True,
-        weighted=True,
-        relaxation_rates=rr_getter,
-        force_model=Guo(force=force_field.center_vector))
+    lbm_config = LBMConfig(stencil=stencil, method=Method.MRT, compressible=True,
+                           weighted=True, zero_centered=False, relaxation_rates=rr_getter,
+                           force_model=Guo(force=force_field.center_vector),
+                           fluctuating={'temperature': kT},
+                           kernel_type='collide_only')
 
-    lbm_config = LBMConfig(lb_method=method, fluctuating={'temperature': kT},
-                           compressible=True, kernel_type='collide_only')
+    lb_method = create_lb_method(lbm_config=lbm_config)
+    lbm_config.lb_method = lb_method
+    
     lbm_opt = LBMOptimisation(symbolic_field=src, cse_global=True)
     collision_rule = create_lb_collision_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
@@ -257,7 +257,8 @@ def test_vectorization(assume_aligned, assume_inner_stride_one, assume_sufficien
     lbm_config = LBMConfig(lb_method=method, fluctuating={'temperature': sp.Symbol("kT"),
                                                           'rng_node': PhiloxTwoDoubles,
                                                           'block_offsets': (0, 0)},
-                           compressible=True, stencil=method.stencil, kernel_type='collide_only')
+                           compressible=True, zero_centered=False, 
+                           stencil=method.stencil, kernel_type='collide_only')
     lbm_opt = LBMOptimisation(cse_global=True)
 
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
