@@ -1,7 +1,7 @@
 import sympy as sp
 
 from lbmpy.relaxationrates import get_shear_relaxation_rate
-from lbmpy.utils import frobenius_norm, second_order_moment_tensor
+from lbmpy.utils import extract_shear_relaxation_rate, frobenius_norm, second_order_moment_tensor
 from pystencils import Assignment
 
 
@@ -31,14 +31,7 @@ def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_fie
     """
     method = collision_rule.method
     omega_s = get_shear_relaxation_rate(method)
-
-    found_symbolic_shear_relaxation = True
-    if isinstance(omega_s, float) or isinstance(omega_s, int):
-        found_symbolic_shear_relaxation = False
-        for eq in collision_rule.all_assignments:
-            if eq.rhs == omega_s:
-                found_symbolic_shear_relaxation = True
-                omega_s = eq.lhs
+    omega_s, found_symbolic_shear_relaxation = extract_shear_relaxation_rate(collision_rule, omega_s)
 
     if not found_symbolic_shear_relaxation:
         raise ValueError("For the smagorinsky model the shear relaxation rate has to be a symbol or it has to be "

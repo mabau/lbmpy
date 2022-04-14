@@ -63,6 +63,7 @@ import lbmpy.forcemodels as forcemodels
 import lbmpy.methods.centeredcumulant.force_model as cumulant_force_model
 from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
+from lbmpy.non_newtonian_models import add_cassons_model, CassonsParameters
 from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_central_moment,
                            create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.creationfunctions import CollisionSpaceInfo
@@ -224,6 +225,11 @@ class LBMConfig:
     """
     set to Smagorinsky constant to activate turbulence model, ``omega_output_field`` can be set to
     write out adapted relaxation rates. If set to `True`, 0.12 is used as default smagorinsky constant.
+    """
+    cassons: CassonsParameters = False
+    """
+    Adds the Cassons model according to https://doi.org/10.1007/s10955-005-8415-x
+    The parameters are set with the ``CassonsParameters`` dataclass.
     """
     fluctuating: dict = False
     """
@@ -628,8 +634,8 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
         collision_rule = lb_method.get_collision_rule(pre_simplification=pre_simplification)
 
     if lbm_config.entropic:
-        if lbm_config.smagorinsky:
-            raise ValueError("Choose either entropic or smagorinsky")
+        if lbm_config.smagorinsky or lbm_config.cassons:
+            raise ValueError("Choose either entropic, smagorinsky or cassons")
         if lbm_config.entropic_newton_iterations:
             if isinstance(lbm_config.entropic_newton_iterations, bool):
                 iterations = 3
@@ -640,11 +646,17 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
         else:
             collision_rule = add_entropy_condition(collision_rule, omega_output_field=lbm_config.omega_output_field)
     elif lbm_config.smagorinsky:
+        if lbm_config.cassons:
+            raise ValueError("Cassons model can not be combined with Smagorinsky model")
         smagorinsky_constant = 0.12 if lbm_config.smagorinsky is True else lbm_config.smagorinsky
         collision_rule = add_smagorinsky_model(collision_rule, smagorinsky_constant,
                                                omega_output_field=lbm_config.omega_output_field)
         if 'split_groups' in collision_rule.simplification_hints:
             collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
+
+    elif lbm_config.cassons:
+        collision_rule = add_cassons_model(collision_rule, parameter=lbm_config.cassons,
+                                           omega_output_field=lbm_config.omega_output_field)
 
     if lbm_config.output:
         cqc = lb_method.conserved_quantity_computation

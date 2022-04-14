@@ -91,7 +91,7 @@ def test_advanced_initialization():
     init_vel[:, height // 3: height // 3 * 2, 0] = -velocity_magnitude
     # small random y velocity component
     init_vel[:, :, 1] = 0.1 * velocity_magnitude * np.random.rand(width, height)
-    shear_flow_scenario = create_fully_periodic_flow(initial_velocity=init_vel, relaxation_rate=1.95)
+    shear_flow_scenario = create_fully_periodic_flow(initial_velocity=init_vel, relaxation_rate=1.99)
     with pytest.raises(ValueError) as e:
         shear_flow_scenario.run_iterative_initialization(max_steps=20000, check_residuum_after=500)
     assert 'did not converge' in str(e.value)
