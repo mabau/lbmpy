@@ -18,6 +18,7 @@ You can open the notebooks directly to play around with the code examples.
     /notebooks/08_tutorial_shanchen_twophase.ipynb
     /notebooks/09_tutorial_shanchen_twocomponent.ipynb
     /notebooks/10_tutorial_conservative_allen_cahn_two_phase.ipynb
+    /notebooks/11_tutorial_Non_Newtonian_Flow.ipynb
     /notebooks/demo_stencils.ipynb
     /notebooks/demo_create_method_from_scratch.ipynb
     /notebooks/demo_moments_cumulants_and_maxwellian_equilibrium.ipynb

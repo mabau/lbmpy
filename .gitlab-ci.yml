@@ -131,7 +131,7 @@ minimal-windows:
     - env
     - pip list
     - python -c "import numpy"
-    - py.test -v -n $NUM_CORES -m "not (notebook or longrun)"
+    - py.test -v -m "not (notebook or longrun)"
 
 minimal-sympy-master:
   stage: test
