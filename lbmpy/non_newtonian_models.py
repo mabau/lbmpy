@@ -58,7 +58,7 @@ def add_cassons_model(collision_rule, parameter: CassonsParameters, omega_output
 
     # rhs of equation 14 in https://doi.org/10.1007/s10955-005-8415-x
     # Note that C_2 / C_4 = 3 for all configurations thus we directly insert it here
-    eq14 = one / (one - theta) * (one + sp.sqrt(theta * (one + rho / eta * sp.Rational(3, 2) * (one - theta))))
+    eq14 = one / (one - theta) * (one + sp.sqrt(theta * (one + rho / eta * sp.Rational(1, 6) * (one - theta))))
 
     new_omega = one / tau
     omega_cond = sp.Piecewise((omega_min, new_omega < omega_min), (omega_max, new_omega > omega_max), (new_omega, True))
