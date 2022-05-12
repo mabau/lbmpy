@@ -10,10 +10,11 @@ from lbmpy.boundaries import NoSlip
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import create_lb_update_rule, create_stream_pull_with_output_kernel, LBMConfig,\
     LBMOptimisation
-from lbmpy.enums import Stencil, Method, ForceModel
+from lbmpy.enums import Method, ForceModel
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
 from lbmpy.stencils import LBStencil
 
+from pystencils import CreateKernelConfig
 import pystencils as ps
 
 
@@ -78,7 +79,7 @@ def poiseuille_channel(target, stencil_name, **kwargs):
 
     stream = create_stream_pull_with_output_kernel(collision.method, src, dst, {'velocity': u})
 
-    config = ps.CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
+    config = CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
 
     stream_kernel = ps.create_kernel(stream, config=config).compile()
     collision_kernel = ps.create_kernel(collision, config=config).compile()

@@ -244,11 +244,15 @@ def test_point_force(target=Target.CPU):
                                force_pos[1], force_pos[2]] = np.zeros(3)
 
 
-@pytest.mark.skipif(not get_supported_instruction_sets(), reason="No vector instruction sets supported")
-@pytest.mark.parametrize('assume_aligned', (True, False))
-@pytest.mark.parametrize('assume_inner_stride_one', (True, False))
-@pytest.mark.parametrize('assume_sufficient_line_padding', (True, False))
-def test_vectorization(assume_aligned, assume_inner_stride_one, assume_sufficient_line_padding):
+# @pytest.mark.skipif(not get_supported_instruction_sets(), reason="No vector instruction sets supported")
+# @pytest.mark.parametrize('assume_aligned', (True, False))
+# @pytest.mark.parametrize('assume_inner_stride_one', (True, False))
+# @pytest.mark.parametrize('assume_sufficient_line_padding', (True, False))
+def test_vectorization():
+    assume_aligned = True
+    assume_inner_stride_one = True
+    assume_sufficient_line_padding = True
+
     method = create_mrt_orthogonal(
         stencil=LBStencil(Stencil.D2Q9),
         compressible=True,

@@ -1,7 +1,6 @@
 import pytest
 
 import numpy as np
-import sympy as sp
 
 from pystencils import CreateKernelConfig, Target
 
@@ -12,6 +11,7 @@ from lbmpy.maxwellian_equilibrium import get_weights
 from lbmpy.scenarios import create_fully_periodic_flow
 
 from numpy.testing import assert_allclose
+
 
 @pytest.mark.parametrize('method', [Method.SRT, Method.MRT, Method.CENTRAL_MOMENT, Method.CUMULANT])
 @pytest.mark.parametrize('delta_equilibrium', [False, True])

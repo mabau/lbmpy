@@ -4,6 +4,8 @@ import tempfile
 import runpy
 import sys
 import warnings
+import platform
+
 import nbformat
 from nbconvert import PythonExporter
 import sympy
@@ -59,6 +61,9 @@ except ImportError:
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/benchmark"),
                        os.path.join(SCRIPT_FOLDER,
                                     "lbmpy_tests/full_scenarios/kida_vortex_flow/scenario_kida_vortex_flow.py")]
+
+if platform.system().lower() == 'windows':
+    collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_quicktests.py")]
 
 sver = sympy.__version__.split(".")
 if int(sver[0]) == 1 and int(sver[1]) < 2:

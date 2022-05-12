@@ -109,7 +109,7 @@ class Flux(Boundary):
                     a[i] *= a[i].args[0]
                 assignments.append(ps.Assignment(a[i], fac * val[i]))
             if len(assignments) > 0:
-                conditional = ps.astnodes.Conditional(ps.data_types.type_all_numbers(c, "int"),
+                conditional = ps.astnodes.Conditional(c,
                                                       ps.astnodes.Block(assignments),
                                                       conditional)
         return [conditional]
