@@ -36,7 +36,8 @@ def test_simple(target):
     if target == Target.GPU:
         dh.all_to_gpu()
 
-    lbm_config = LBMConfig(stencil=LBStencil(Stencil.D2Q9), compressible=False, zero_centered=False, delta_equilibrium=False, relaxation_rate=1.8)
+    lbm_config = LBMConfig(stencil=LBStencil(Stencil.D2Q9), compressible=False, zero_centered=False,
+                           delta_equilibrium=False, relaxation_rate=1.8)
     config = CreateKernelConfig(target=target)
 
     lb_func = create_lb_function(lbm_config=lbm_config, config=config)

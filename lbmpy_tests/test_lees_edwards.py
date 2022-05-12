@@ -80,9 +80,8 @@ def test_lees_edwards():
     points_up = sp.Symbol('points_up')
     points_down = sp.Symbol('points_down')
 
-    u_p = sp.Piecewise((1, sp.And(ps.data_types.type_all_numbers(counters[1] <= 1, 'int'), points_down)),
-                       (-1, sp.And(ps.data_types.type_all_numbers(counters[1] >= src.shape[1] - 2, 'int'),
-                                   points_up)), (0, True)) * shear_velocity
+    u_p = sp.Piecewise((1, sp.And(counters[1] <= 1, points_down)),
+                       (-1, sp.And(counters[1] >= src.shape[1] - 2, points_up)), (0, True)) * shear_velocity
 
     lbm_config = LBMConfig(stencil=stencil, relaxation_rate=omega, compressible=True,
                            velocity_input=u.center_vector + sp.Matrix([u_p, 0]), density_input=rho,

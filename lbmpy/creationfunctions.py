@@ -77,9 +77,9 @@ from lbmpy.stencils import LBStencil
 from lbmpy.turbulence_models import add_smagorinsky_model
 from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
 from lbmpy.advanced_streaming.utility import Timestep, get_accessor
-from pystencils import create_kernel, CreateKernelConfig
+from pystencils import CreateKernelConfig, create_kernel
 from pystencils.cache import disk_cache_no_fallback
-from pystencils.data_types import collate_types
+from pystencils.typing import collate_types
 from pystencils.field import Field
 from pystencils.simp import sympy_cse, SimplificationStrategy
 # needed for the docstring
@@ -549,7 +549,7 @@ def create_lb_update_rule(collision_rule=None, lbm_config=None, lbm_optimisation
 
     lb_method = collision_rule.method
 
-    field_data_type = config.data_type
+    field_data_type = config.data_type[lbm_config.field_name].numpy_dtype
     q = collision_rule.method.stencil.Q
 
     if lbm_optimisation.symbolic_field is not None:
@@ -768,6 +768,7 @@ def update_with_default_parameters(params, opt_params=None, lbm_config=None, lbm
         config_params = {k: v for k, v in opt_params.items() if k in pystencils_config_params}
     else:
         config_params = {}
+
     if 'double_precision' in config_params:
         if config_params['double_precision']:
             config_params['data_type'] = 'float64'

@@ -1,6 +1,7 @@
 import functools
 from copy import deepcopy
 from lbmpy.simplificationfactory import create_simplification_strategy
+from pystencils import create_kernel, CreateKernelConfig
 from pystencils.field import Field, get_layout_of_array
 from pystencils.enums import Target
 
@@ -131,16 +132,8 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
 
     eqs = cqc.output_equations_from_pdfs(pdf_symbols, output_mapping).all_assignments
 
-    if target == Target.CPU:
-        import pystencils.cpu as cpu
-        kernel = cpu.make_python_function(cpu.create_kernel(
-            eqs, ghost_layers=ghost_layers, iteration_slice=iteration_slice))
-    elif target == Target.GPU:
-        import pystencils.gpucuda as gpu
-        kernel = gpu.make_python_function(gpu.create_cuda_kernel(
-            eqs, ghost_layers=ghost_layers, iteration_slice=iteration_slice))
-    else:
-        raise ValueError("Unknown target '%s'. Possible targets are `Target.CPU` and `Target.GPU`" % (target,))
+    config = CreateKernelConfig(target=target, ghost_layers=ghost_layers, iteration_slice=iteration_slice)
+    kernel = create_kernel(eqs, config=config).compile()
 
     def getter(pdfs, **kwargs):
         if pdf_arr is not None:
@@ -216,16 +209,9 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
     substitutions = {sym: write_accesses[i] for i, sym in enumerate(lb_method.post_collision_pdf_symbols)}
     eq = eq.new_with_substitutions(substitutions).all_assignments
 
-    if target == Target.CPU:
-        import pystencils.cpu as cpu
-        kernel = cpu.make_python_function(cpu.create_kernel(eq))
-        kernel = functools.partial(kernel, **fixed_kernel_parameters)
-    elif target == Target.GPU:
-        import pystencils.gpucuda as gpu
-        kernel = gpu.make_python_function(gpu.create_cuda_kernel(eq))
-        kernel = functools.partial(kernel, **fixed_kernel_parameters)
-    else:
-        raise ValueError("Unknown target '%s'. Possible targets are `Target.CPU` and `Target.GPU`" % (target,))
+    config = CreateKernelConfig(target=target)
+    kernel = create_kernel(eq, config=config).compile()
+    kernel = functools.partial(kernel, **fixed_kernel_parameters)
 
     def setter(pdfs, **kwargs):
         if pdf_arr is not None:

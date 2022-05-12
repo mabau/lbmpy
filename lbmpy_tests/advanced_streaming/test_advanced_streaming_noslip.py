@@ -11,7 +11,7 @@ from lbmpy.stencils import LBStencil
 import pystencils as ps
 
 from pystencils.boundaries.createindexlist import numpy_data_type_for_boundary_object
-from pystencils.data_types import TypedSymbol, create_type
+from pystencils.typing import TypedSymbol, create_type
 from pystencils.field import Field, FieldType
 
 import pytest

@@ -2,7 +2,7 @@ import numpy as np
 import sympy as sp
 import pystencils as ps
 
-from pystencils.data_types import TypedSymbol, create_type
+from pystencils.typing import TypedSymbol, create_type
 from pystencils.backends.cbackend import CustomCodeNode
 
 from lbmpy.advanced_streaming.utility import get_accessor, inverse_dir_index, is_inplace, Timestep
@@ -39,7 +39,7 @@ class BetweenTimestepsIndexing:
     #   =============================
 
     def __init__(self, pdf_field, stencil, prev_timestep=Timestep.BOTH, streaming_pattern='pull',
-                 index_dtype=np.int64, offsets_dtype=np.int64):
+                 index_dtype=np.int32, offsets_dtype=np.int32):
         if prev_timestep == Timestep.BOTH and is_inplace(streaming_pattern):
             raise ValueError('Cannot create index arrays for both kinds of timesteps for inplace streaming pattern '
                              + streaming_pattern)
@@ -213,9 +213,9 @@ class NeighbourOffsetArrays(CustomCodeNode):
 
     @staticmethod
     def _offset_symbols(dim):
-        return [TypedSymbol(f"neighbour_offset_{d}", create_type(np.int64)) for d in ['x', 'y', 'z'][:dim]]
+        return [TypedSymbol(f"neighbour_offset_{d}", create_type(np.int32)) for d in ['x', 'y', 'z'][:dim]]
 
-    def __init__(self, stencil, offsets_dtype=np.int64):
+    def __init__(self, stencil, offsets_dtype=np.int32):
         offsets_dtype = create_type(offsets_dtype)
         dim = len(stencil[0])
 
@@ -242,9 +242,9 @@ class MirroredStencilDirections(CustomCodeNode):
     @staticmethod
     def _mirrored_symbol(mirror_axis):
         axis = ['x', 'y', 'z']
-        return TypedSymbol(f"{axis[mirror_axis]}_axis_mirrored_stencil_dir", create_type(np.int64))
+        return TypedSymbol(f"{axis[mirror_axis]}_axis_mirrored_stencil_dir", create_type(np.int32))
 
-    def __init__(self, stencil, mirror_axis, dtype=np.int64):
+    def __init__(self, stencil, mirror_axis, dtype=np.int32):
         offsets_dtype = create_type(dtype)
 
         mirrored_stencil_symbol = MirroredStencilDirections._mirrored_symbol(mirror_axis)

@@ -5,7 +5,7 @@ from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
 from pystencils.simp.assignment_collection import AssignmentCollection
 from pystencils import Assignment, Field
 from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
-from pystencils.data_types import create_type
+from pystencils.typing import create_type
 from pystencils.sympyextensions import get_symmetric_part
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.advanced_streaming.indexing import NeighbourOffsetArrays, MirroredStencilDirections

@@ -1,12 +1,12 @@
 import math
 import sympy as sp
 
-from pystencils import Assignment
+from pystencils.astnodes import SympyAssignment
 
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 from pystencils.boundaries.boundaryconditions import Boundary
 
-from pystencils.data_types import TypedSymbol
+from pystencils.typing import TypedSymbol
 
 
 class ContactAngle(Boundary):
@@ -36,21 +36,21 @@ class ContactAngle(Boundary):
 
         if field.index_dimensions == 0:
             if math.isclose(90, self._contact_angle, abs_tol=1e-5):
-                return [Assignment(field.center, field[neighbor])]
+                return [SympyAssignment(field.center, field[neighbor])]
 
             dist = TypedSymbol("h", self._data_type)
             angle = TypedSymbol("a", self._data_type)
             tmp = TypedSymbol("tmp", self._data_type)
 
-            result = [Assignment(tmp, sum([x * x for x in neighbor])), Assignment(dist, 0.5 * sp.sqrt(tmp)),
-                      Assignment(angle, math.cos(math.radians(self._contact_angle)))]
+            result = [SympyAssignment(tmp, sum([x * x for x in neighbor])), SympyAssignment(dist, 0.5 * sp.sqrt(tmp)),
+                      SympyAssignment(angle, math.cos(math.radians(self._contact_angle)))]
 
             var = - dist * (4.0 / self._interface_width) * angle
             tmp = 1 + var
             else_branch = (tmp - sp.sqrt(tmp * tmp - 4 * var * field[neighbor])) / var - field[neighbor]
             update = sp.Piecewise((field[neighbor], dist < 0.001), (else_branch, True))
 
-            result.append(Assignment(field.center, update))
+            result.append(SympyAssignment(field.center, update))
             return result
         else:
             raise NotImplementedError("Contact angle only implemented for phase-fields which have a single "

@@ -6,7 +6,6 @@ from lbmpy.advanced_streaming.utility import Timestep, get_accessor
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 from pystencils.assignment import Assignment
 from pystencils.astnodes import Block, Conditional, LoopOverCoordinate, SympyAssignment
-from pystencils.data_types import type_all_numbers
 from pystencils.simp.assignment_collection import AssignmentCollection
 from pystencils.simp.simplifications import sympy_cse_on_assignment_list
 from pystencils.stencil import inverse_direction
@@ -48,14 +47,14 @@ def border_conditions(direction, field, ghost_layers=1):
     border_condition = sp.Eq(loop_ctr, gl if val < 0 else field.shape[idx] - gl - 1)
 
     if ghost_layers == 0:
-        return type_all_numbers(border_condition, loop_ctr.dtype)
+        return border_condition
     else:
         other_min = [sp.Ge(c, gl)
                      for c in loop_ctrs if c != loop_ctr]
         other_max = [sp.Lt(c, field.shape[i] - gl)
                      for i, c in enumerate(loop_ctrs) if c != loop_ctr]
         result = sp.And(border_condition, *other_min, *other_max)
-        return type_all_numbers(result, loop_ctr.dtype)
+        return result
 
 
 def boundary_conditional(boundary, direction, streaming_pattern, prev_timestep, lb_method, output_field, cse=False):
