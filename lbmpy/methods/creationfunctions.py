@@ -658,11 +658,11 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
         for group in nested_moments:
             for moment in group:
                 if get_order(moment) <= 1:
-                    result[moment] = sp.Number(0)
+                    result[moment] = 0.0
                 elif is_shear_moment(moment, dim):
                     result[moment] = relaxation_rates[0]
                 else:
-                    result[moment] = sp.Number(1)
+                    result[moment] = 1.0
 
     # if relaxation rate for each moment is specified they are all used
     if len(relaxation_rates) == number_of_moments:
@@ -687,7 +687,7 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
                 next_rr = False
                 for moment in group:
                     if get_order(moment) <= 1:
-                        result[moment] = sp.Number(0)
+                        result[moment] = 0.0
                     elif is_shear_moment(moment, dim):
                         result[moment] = shear_rr
                     elif is_bulk_moment(moment, dim):

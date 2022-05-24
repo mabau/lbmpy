@@ -7,6 +7,7 @@ from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 from pystencils.boundaries.boundaryconditions import Boundary
 
 from pystencils.typing import TypedSymbol
+from pystencils.typing import CastFunc
 
 
 class ContactAngle(Boundary):
@@ -42,7 +43,8 @@ class ContactAngle(Boundary):
             angle = TypedSymbol("a", self._data_type)
             tmp = TypedSymbol("tmp", self._data_type)
 
-            result = [SympyAssignment(tmp, sum([x * x for x in neighbor])), SympyAssignment(dist, 0.5 * sp.sqrt(tmp)),
+            result = [SympyAssignment(tmp, CastFunc(sum([x * x for x in neighbor]), self._data_type)),
+                      SympyAssignment(dist, 0.5 * sp.sqrt(tmp)),
                       SympyAssignment(angle, math.cos(math.radians(self._contact_angle)))]
 
             var = - dist * (4.0 / self._interface_width) * angle

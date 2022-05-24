@@ -359,6 +359,10 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
         subexpressions += c_post_to_pdfs_eqs.subexpressions
         main_assignments = c_post_to_pdfs_eqs.main_assignments
 
+        simplification_hints = cqe.simplification_hints.copy()
+        simplification_hints.update(self._cqc.defined_symbols())
+        simplification_hints['relaxation_rates'] = [rr for rr in self.relaxation_rates]
+
         #   5) Maybe add forcing terms.
         if include_force_terms and not moment_space_forcing:
             force_model_terms = self._force_model(self)
@@ -368,5 +372,6 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
             subexpressions += force_subexpressions
             main_assignments = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
                                 for eq, force_term_symbol in zip(main_assignments, force_term_symbols)]
+            simplification_hints['force_terms'] = force_term_symbols
 
         return LbmCollisionRule(self, main_assignments, subexpressions)

@@ -531,6 +531,10 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
         subexpressions += k_post_to_pdfs_eqs.subexpressions
         main_assignments = k_post_to_pdfs_eqs.main_assignments
 
+        simplification_hints = cqe.simplification_hints.copy()
+        simplification_hints.update(self._cqc.defined_symbols())
+        simplification_hints['relaxation_rates'] = [rr for rr in self.relaxation_rates]
+
         #   8) Maybe add forcing terms if CenteredCumulantForceModel was not used
         if self._force_model is not None and \
                 not isinstance(self._force_model, CenteredCumulantForceModel) and include_force_terms:
@@ -541,6 +545,7 @@ class CenteredCumulantBasedLbMethod(AbstractLbMethod):
             subexpressions += force_subexpressions
             main_assignments = [Assignment(eq.lhs, eq.rhs + force_term_symbol)
                                 for eq, force_term_symbol in zip(main_assignments, force_term_symbols)]
+            simplification_hints['force_terms'] = force_term_symbols
 
         #   Aaaaaand we're done.
-        return LbmCollisionRule(self, main_assignments, subexpressions)
+        return LbmCollisionRule(self, main_assignments, subexpressions, simplification_hints)
