@@ -66,6 +66,7 @@ def _moment_space_simplification(split_inner_loop):
     s = SimplificationStrategy()
     s.add(insert_constants)
     s.add(insert_aliases)
-    # s.add(insert_constants)
+    if split_inner_loop:
+        s.add(create_lbm_split_groups)
     s.add(lambda ac: ac.new_without_unused_subexpressions())
     return s

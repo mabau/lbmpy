@@ -119,12 +119,6 @@ class Method(Enum):
     To get the entropic method also *entropic* needs to be set to `True`. 
     There are four KBC methods available in lbmpy. The naming is according to :cite:`karlin2015entropic`
     """
-    ENTROPIC_SRT = auto()
-    """
-    See :func:`lbmpy.methods.create_srt_entropic`,
-    An entropic version of the isothermal lattice Boltzmann method with the simplicity and 
-    computational efficiency of the standard lattice Boltzmann model. For details see :cite:`Ansumali2003`
-    """
     CUMULANT = auto()
     """
     See :func:`lbmpy.methods.create_with_default_polynomial_cumulants`
@@ -172,8 +166,7 @@ class CollisionSpace(Enum):
         """Determines if the given `lbmpy.enums.Method` is compatible with this collision space."""
         compat_dict = {
             CollisionSpace.POPULATIONS: {Method.SRT, Method.TRT, Method.MRT_RAW, Method.MRT,
-                                         Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4,
-                                         Method.ENTROPIC_SRT},
+                                         Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4},
             CollisionSpace.RAW_MOMENTS: {Method.SRT, Method.TRT, Method.MRT_RAW, Method.MRT},
             CollisionSpace.CENTRAL_MOMENTS: {Method.CENTRAL_MOMENT},
             CollisionSpace.CUMULANTS: {Method.MONOMIAL_CUMULANT, Method.CUMULANT}

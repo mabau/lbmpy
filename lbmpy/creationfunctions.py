@@ -73,7 +73,6 @@ from lbmpy.methods.creationfunctions import CollisionSpaceInfo
 from lbmpy.methods.creationfunctions import (
     create_with_monomial_cumulants, create_with_polynomial_cumulants, create_with_default_polynomial_cumulants)
 from lbmpy.methods.momentbased.entropic import add_entropy_condition, add_iterative_entropy_condition
-from lbmpy.methods.momentbased.entropic_eq_srt import create_srt_entropic
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import LBStencil
@@ -375,7 +374,7 @@ class LBMConfig:
             elif not self.collision_space_info.collision_space.compatible(self.method):
                 raise ValueError("Given method is not compatible with given collision space.")
         else:
-            if self.method in {Method.SRT, Method.TRT, Method.ENTROPIC_SRT,
+            if self.method in {Method.SRT, Method.TRT,
                                Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4}:
                 self.collision_space_info = CollisionSpaceInfo(CollisionSpace.POPULATIONS)
             elif self.entropic or self.fluctuating:
@@ -572,7 +571,6 @@ def create_lb_update_rule(collision_rule=None, lbm_config=None, lbm_optimisation
         dst_field = src_field.new_field_with_different_name(lbm_config.temporary_field_name)
 
     kernel_type = lbm_config.kernel_type
-    update_rule = None
     if kernel_type == 'stream_pull_only':
         update_rule = create_stream_pull_with_output_kernel(lb_method, src_field, dst_field, lbm_config.output)
     else:
@@ -607,7 +605,6 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
         lb_method = create_lb_method(lbm_config)
 
     cqc = lb_method.conserved_quantity_computation
-
     rho_in = lbm_config.density_input
     u_in = lbm_config.velocity_input
 
@@ -618,7 +615,6 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
 
     pre_simplification = lbm_optimisation.pre_simplification
     if rho_in is not None or u_in is not None:
-        cqc = lb_method.conserved_quantity_computation
         cqe = cqc.equilibrium_input_equations_from_pdfs(lb_method.pre_collision_pdf_symbols)
         cqe_main_assignments = cqe.main_assignments_dict
 
@@ -667,7 +663,6 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
                                            omega_output_field=lbm_config.omega_output_field)
 
     if lbm_config.output:
-        cqc = lb_method.conserved_quantity_computation
         output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, lbm_config.output)
         collision_rule = collision_rule.new_merged(output_eqs)
 
@@ -744,9 +739,6 @@ def create_lb_method(lbm_config=None, **params):
             raise NotImplementedError("KBC type TRT methods can only be constructed for D2Q9 and D3Q27 stencils")
         method_nr = lbm_config.method.name[-1]
         method = create_trt_kbc(dim, relaxation_rates[0], relaxation_rates[1], 'KBC-N' + method_nr, **common_params)
-    elif lbm_config.method == Method.ENTROPIC_SRT:
-        method = create_srt_entropic(lbm_config.stencil, relaxation_rates[0], lbm_config.force_model,
-                                     lbm_config.compressible)
     elif lbm_config.method == Method.CUMULANT:
         if lbm_config.nested_moments is not None:
             method = create_with_polynomial_cumulants(
