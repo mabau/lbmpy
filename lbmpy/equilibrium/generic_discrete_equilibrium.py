@@ -47,6 +47,10 @@ class GenericDiscreteEquilibrium(AbstractEquilibrium):
                  deviation_only=False):
         super().__init__(dim=stencil.D)
 
+        if len(equilibrium_pdfs) != stencil.Q:
+            raise ValueError(f"Wrong number of PDFs."
+                             f"On the {stencil} stencil, exactly {stencil.Q} populations must be passed!")
+
         self._stencil = stencil
         self._pdfs = tuple(equilibrium_pdfs)
         self._zeroth_order_moment_symbol = zeroth_order_moment_symbol
