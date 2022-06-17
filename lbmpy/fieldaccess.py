@@ -14,6 +14,8 @@ __all__ = ['PdfFieldAccessor', 'CollideOnlyInplaceAccessor', 'StreamPullTwoField
            'AAEvenTimeStepAccessor', 'AAOddTimeStepAccessor',
            'PeriodicTwoFieldsAccessor', 'StreamPushTwoFieldsAccessor',
            'EsoTwistEvenTimeStepAccessor', 'EsoTwistOddTimeStepAccessor',
+           'EsoPullEvenTimeStepAccessor', 'EsoPullOddTimeStepAccessor',
+           'EsoPushEvenTimeStepAccessor', 'EsoPushOddTimeStepAccessor',
            'visualize_pdf_field_accessor', 'visualize_field_mapping']
 
 
@@ -140,7 +142,7 @@ class AAEvenTimeStepAccessor(PdfFieldAccessor):
 
     @staticmethod
     def write(field, stencil):
-        return [field(stencil.index(inverse_direction(d))) for d in stencil]
+        return [field(stencil.inverse_index(d)) for d in stencil]
 
 
 class AAOddTimeStepAccessor(PdfFieldAccessor):
@@ -148,37 +150,11 @@ class AAOddTimeStepAccessor(PdfFieldAccessor):
 
     @staticmethod
     def read(field, stencil):
-        res = []
-        for i, d in enumerate(stencil):
-            inv_dir = inverse_direction(d)
-            field_access = field[inv_dir](stencil.index(inv_dir))
-            res.append(field_access)
-        return res
+        return [field[inverse_direction(d)](stencil.inverse_index(d)) for i, d in enumerate(stencil)]
 
     @staticmethod
     def write(field, stencil):
         return [field[d](i) for i, d in enumerate(stencil)]
-
-
-class EsoTwistOddTimeStepAccessor(PdfFieldAccessor):
-    is_inplace = True
-
-    @staticmethod
-    def read(field, stencil):
-        result = []
-        for direction in stencil:
-            inv_dir = inverse_direction(direction)
-            spatial_offset = tuple(max(e, 0) for e in inv_dir)
-            result.append(field[spatial_offset](stencil.index(inv_dir)))
-        return result
-
-    @staticmethod
-    def write(field, stencil):
-        result = []
-        for i, direction in enumerate(stencil):
-            spatial_offset = tuple(max(e, 0) for e in direction)
-            result.append(field[spatial_offset](i))
-        return result
 
 
 class EsoTwistEvenTimeStepAccessor(PdfFieldAccessor):
@@ -186,19 +162,157 @@ class EsoTwistEvenTimeStepAccessor(PdfFieldAccessor):
 
     @staticmethod
     def read(field, stencil):
-        result = []
-        for i, direction in enumerate(stencil):
-            spatial_offset = tuple(max(-e, 0) for e in direction)
-            result.append(field[spatial_offset](i))
+        return [field[tuple(max(-e, 0) for e in d)](i) for i, d in enumerate(stencil)]
+
+    @staticmethod
+    def write(field, stencil):
+        return [field[tuple(max(e, 0) for e in d)](stencil.inverse_index(d)) for d in stencil]
+
+
+class EsoTwistOddTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
+    @staticmethod
+    def read(field, stencil):
+        return [field[tuple(max(e, 0) for e in inverse_direction(d))](stencil.inverse_index(d)) for d in stencil]
+
+    @staticmethod
+    def write(field, stencil):
+        return [field[tuple(max(e, 0) for e in d)](i) for i, d in enumerate(stencil)]
+
+
+class EsoPullEvenTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
+    @staticmethod
+    def read(field, stencil):
+        lehmann_stencil = _get_lehmann_stencil(stencil)
+        center_cell = tuple([0] * stencil.D)
+        result = [field.center]
+        for i, d in enumerate(stencil):
+            if i == 0:
+                continue
+            if lehmann_stencil.index(d) % 2 == 0:
+                result.append(field[inverse_direction(d)](i))
+            else:
+                result.append(field[center_cell](i))
         return result
 
     @staticmethod
     def write(field, stencil):
-        result = []
-        for direction in stencil:
-            inv_dir = inverse_direction(direction)
-            spatial_offset = tuple(max(e, 0) for e in direction)
-            result.append(field[spatial_offset](stencil.index(inv_dir)))
+        lehmann_stencil = _get_lehmann_stencil(stencil)
+        center_cell = tuple([0] * stencil.D)
+        result = [field.center]
+        for i, d in enumerate(stencil):
+            if i == 0:
+                continue
+            if lehmann_stencil.index(d) % 2 == 0:
+                result.append(field[center_cell](stencil.inverse_index(d)))
+            else:
+                result.append(field[d](stencil.inverse_index(d)))
+
+        return result
+
+
+class EsoPullOddTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
+    @staticmethod
+    def read(field, stencil):
+        lehmann_stencil = _get_lehmann_stencil(stencil)
+        center_cell = tuple([0] * stencil.D)
+        result = [field.center]
+        for i, d in enumerate(stencil):
+            if i == 0:
+                continue
+            if lehmann_stencil.index(d) % 2 == 0:
+                result.append(field[inverse_direction(d)](stencil.inverse_index(d)))
+            else:
+                result.append(field[center_cell](stencil.inverse_index(d)))
+        return result
+
+    @staticmethod
+    def write(field, stencil):
+        lehmann_stencil = _get_lehmann_stencil(stencil)
+        center_cell = tuple([0] * stencil.D)
+        result = [field.center]
+        for i, d in enumerate(stencil):
+            if i == 0:
+                continue
+            if lehmann_stencil.index(d) % 2 == 0:
+                result.append(field[center_cell](i))
+            else:
+                result.append(field[d](i))
+
+        return result
+
+
+class EsoPushEvenTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
+    @staticmethod
+    def read(field, stencil):
+        lehmann_stencil = _get_lehmann_stencil(stencil)
+        center_cell = tuple([0] * stencil.D)
+        result = [field.center]
+        for i, d in enumerate(stencil):
+            if i == 0:
+                continue
+            if lehmann_stencil.index(d) % 2 == 0:
+                result.append(field[center_cell](stencil.inverse_index(d)))
+            else:
+                result.append(field[inverse_direction(d)](stencil.inverse_index(d)))
+
+        return result
+
+    @staticmethod
+    def write(field, stencil):
+        lehmann_stencil = _get_lehmann_stencil(stencil)
+        center_cell = tuple([0] * stencil.D)
+        result = [field.center]
+        for i, d in enumerate(stencil):
+            if i == 0:
+                continue
+            if lehmann_stencil.index(d) % 2 == 0:
+                result.append(field[d](i))
+            else:
+                result.append(field[center_cell](i))
+
+        return result
+
+
+class EsoPushOddTimeStepAccessor(PdfFieldAccessor):
+    is_inplace = True
+
+    @staticmethod
+    def read(field, stencil):
+        lehmann_stencil = _get_lehmann_stencil(stencil)
+        center_cell = tuple([0] * stencil.D)
+        result = [field.center]
+        for i, d in enumerate(stencil):
+            inv_dir = inverse_direction(d)
+            if i == 0:
+                continue
+            if lehmann_stencil.index(d) % 2 == 0:
+                result.append(field[center_cell](i))
+            else:
+                result.append(field[inv_dir](i))
+
+        return result
+
+    @staticmethod
+    def write(field, stencil):
+        lehmann_stencil = _get_lehmann_stencil(stencil)
+        center_cell = tuple([0] * stencil.D)
+        result = [field.center]
+        for i, d in enumerate(stencil):
+            if i == 0:
+                continue
+            if lehmann_stencil.index(d) % 2 == 0:
+                result.append(field[d](stencil.inverse_index(d)))
+            else:
+                result.append(field[center_cell](stencil.inverse_index(d)))
+
         return result
 
 
@@ -250,3 +364,25 @@ def visualize_pdf_field_accessor(pdf_field_accessor, title=True, read_plot_param
     if title:
         ax_left.set_title("Read")
         ax_right.set_title("Write")
+
+# -------------------------------------------- Helpers -----------------------------------------------------------
+
+
+def _get_lehmann_stencil(stencil):
+    """
+    EsoPull and EsoPush streaming is only simple to implement with a specific stencil ordering, that comes from
+    "High Performance Free Surface LBM on GPUs" by moritz lehmann
+
+    Args:
+        stencil: lattice Boltzmann stencil
+    """
+    if stencil.Q == 9:
+        return LBStencil(Stencil.D2Q9, ordering="lehmann")
+    elif stencil.Q == 15:
+        return LBStencil(Stencil.D3Q15, ordering="lehmann")
+    elif stencil.Q == 19:
+        return LBStencil(Stencil.D3Q19, ordering="lehmann")
+    elif stencil.Q == 27:
+        return LBStencil(Stencil.D3Q27, ordering="lehmann")
+    else:
+        ValueError("EsoPull or EsoPush is only available for D2Q9, D3Q15, D3Q19 and D3Q27 stencil")

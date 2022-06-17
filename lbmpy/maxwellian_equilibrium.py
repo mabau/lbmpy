@@ -12,6 +12,7 @@ In particular, the continuous and discrete Maxwellians are now represented by
 import warnings
 
 import sympy as sp
+from sympy.core.numbers import Zero
 
 from pystencils.cache import disk_cache
 from pystencils.sympyextensions import remove_higher_order_terms
@@ -37,7 +38,7 @@ get_weights.weights = {
         2: sp.Rational(1, 36),
     },
     7: {
-        0: sp.simplify(0.0),
+        0: Zero(),
         1: sp.Rational(1, 6),
     },
     15: {

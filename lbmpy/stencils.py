@@ -56,6 +56,10 @@ class LBStencil:
             raise ValueError("The stencil you have created is not valid. "
                              "It probably contains elements with different lengths")
 
+        if len(set(self._stencil_entries)) < len(self._stencil_entries):
+            raise ValueError("The stencil you have created is not valid. "
+                             "It contains duplicated elements")
+
         self._ordering = ordering
         self._dim = len(self._stencil_entries[0])
         self._q = len(self._stencil_entries)
@@ -87,8 +91,14 @@ class LBStencil:
     def plot(self, slice=False, **kwargs):
         ps.stencil.plot(stencil=self._stencil_entries, slice=slice, **kwargs)
 
-    def index(self, index):
-        return self._stencil_entries.index(index)
+    def index(self, direction):
+        assert len(direction) == self.D, "direction must match stencil.D"
+        return self._stencil_entries.index(direction)
+
+    def inverse_index(self, direction):
+        assert len(direction) == self.D, "direction must match stencil.D"
+        direction = ps.stencil.inverse_direction(direction)
+        return self._stencil_entries.index(direction)
 
     def __getitem__(self, index):
         return self._stencil_entries[index]
@@ -112,6 +122,7 @@ class LBStencil:
         table = """
         <table style="border:none; width: 100%">
             <tr {nb}>
+                <th {nb} >Nr.</th>
                 <th {nb} >Direction Name</th>
                 <th {nb} >Direction </th>
             </tr>
@@ -119,13 +130,15 @@ class LBStencil:
         </table>
         """
         content = ""
-        for direction in self._stencil_entries:
+        for i, direction in enumerate(self._stencil_entries):
             vals = {
+                'nr': sp.latex(i),
                 'name': sp.latex(ps.stencil.offset_to_direction_string(direction)),
                 'entry': sp.latex(direction),
                 'nb': 'style="border:none"'
             }
             content += """<tr {nb}>
+                            <td {nb}>${nr}$</td>
                             <td {nb}>${name}$</td>
                             <td {nb}>${entry}$</td>
                          </tr>\n""".format(**vals)
@@ -147,7 +160,11 @@ def _predefined_stencils(stencil: str, ordering: str):
             'uk': ((0, 0),
                    (1, 0), (-1, 0), (0, 1), (0, -1),
                    (1, 1), (-1, -1), (-1, 1), (1, -1),
-                   )
+                   ),
+            'lehmann': ((0, 0),
+                        (1, 0), (-1, 0), (0, 1), (0, -1),
+                        (1, 1), (-1, -1), (1, -1), (-1, 1),
+                        )
         },
         'D2V17': {
             'walberla': (
@@ -170,6 +187,7 @@ def _predefined_stencils(stencil: str, ordering: str):
                          (0, 1, 0), (0, -1, 0),
                          (-1, 0, 0), (1, 0, 0),
                          (0, 0, 1), (0, 0, -1))
+
         },
         'D3Q15': {
             'walberla':
@@ -181,6 +199,10 @@ def _predefined_stencils(stencil: str, ordering: str):
                          (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
                          (1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1),
                          (1, 1, -1), (-1, 1, -1), (1, -1, -1), (-1, -1, -1)),
+            'lehmann': ((0, 0, 0),
+                        (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                        (1, 1, 1), (-1, -1, -1), (1, 1, -1), (-1, -1, 1),
+                        (1, -1, 1), (-1, 1, -1), (-1, 1, 1), (1, -1, -1)),
         },
         'D3Q19': {
             'walberla': ((0, 0, 0),
@@ -188,21 +210,26 @@ def _predefined_stencils(stencil: str, ordering: str):
                          (-1, 1, 0), (1, 1, 0), (-1, -1, 0), (1, -1, 0),
                          (0, 1, 1), (0, -1, 1), (-1, 0, 1), (1, 0, 1),
                          (0, 1, -1), (0, -1, -1), (-1, 0, -1), (1, 0, -1)),
+            'counterclockwise': ((0, 0, 0),
+                                 (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                                 (1, 1, 0), (-1, -1, 0), (1, 0, 1), (-1, 0, -1),
+                                 (0, 1, 1), (0, -1, -1), (1, -1, 0), (-1, 1, 0),
+                                 (1, 0, -1), (-1, 0, 1), (0, 1, -1), (0, -1, 1)),
             'braunschweig': ((0, 0, 0),
-                             (1, 0, 0), (-1, 0, 0),
-                             (0, 1, 0), (0, -1, 0),
-                             (0, 0, 1), (0, 0, -1),
-                             (1, 1, 0), (-1, -1, 0),
-                             (1, -1, 0), (-1, 1, 0),
-                             (1, 0, 1), (-1, 0, -1),
-                             (1, 0, -1), (-1, 0, 1),
-                             (0, 1, 1), (0, -1, -1),
-                             (0, 1, -1), (0, -1, 1)),
+                             (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                             (1, 1, 0), (-1, -1, 0), (1, -1, 0), (-1, 1, 0),
+                             (1, 0, 1), (-1, 0, -1), (1, 0, -1), (-1, 0, 1),
+                             (0, 1, 1), (0, -1, -1), (0, 1, -1), (0, -1, 1)),
             'premnath': ((0, 0, 0),
                          (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
                          (1, 1, 0), (-1, 1, 0), (1, -1, 0), (-1, -1, 0),
                          (1, 0, 1), (-1, 0, 1), (1, 0, -1), (-1, 0, -1),
                          (0, 1, 1), (0, -1, 1), (0, 1, -1), (0, -1, -1)),
+            'lehmann': ((0, 0, 0),
+                        (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                        (1, 1, 0), (-1, -1, 0), (1, 0, 1), (-1, 0, -1),
+                        (0, 1, 1), (0, -1, -1), (1, -1, 0), (-1, 1, 0),
+                        (1, 0, -1), (-1, 0, 1), (0, 1, -1), (0, -1, 1)),
         },
         'D3Q27': {
             'walberla': ((0, 0, 0),
@@ -226,6 +253,13 @@ def _predefined_stencils(stencil: str, ordering: str):
                         (1, 1, 0), (-1, 1, 0), (1, -1, 0), (-1, -1, 0),
                         (1, 0, 1), (-1, 0, 1), (1, 0, -1), (-1, 0, -1), (0, 1, 1), (0, -1, 1), (0, 1, -1),
                         (0, -1, -1)),
+            'lehmann': ((0, 0, 0),
+                        (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                        (1, 1, 0), (-1, -1, 0), (1, 0, 1), (-1, 0, -1),
+                        (0, 1, 1), (0, -1, -1), (1, -1, 0), (-1, 1, 0),
+                        (1, 0, -1), (-1, 0, 1), (0, 1, -1), (0, -1, 1),
+                        (1, 1, 1), (-1, -1, -1), (1, 1, -1), (-1, -1, 1), (1, -1, 1), (-1, 1, -1), (-1, 1, 1),
+                        (1, -1, -1)),
         }
     }
 
