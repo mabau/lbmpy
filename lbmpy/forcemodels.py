@@ -91,7 +91,9 @@ import sympy as sp
 
 from pystencils.sympyextensions import scalar_product
 
-from lbmpy.maxwellian_equilibrium import get_equilibrium_values_of_maxwell_boltzmann_function
+from lbmpy.maxwellian_equilibrium import (
+    discrete_maxwellian_equilibrium, get_equilibrium_values_of_maxwell_boltzmann_function
+)
 from lbmpy.moments import (
     MOMENT_SYMBOLS, exponent_tuple_sort_key, exponents_to_polynomial_representations,
     extract_monomials, moment_sort_key,
@@ -304,14 +306,15 @@ class He(AbstractForceModel):
         super(He, self).__init__(force)
 
     def forcing_terms(self, lb_method):
-        rho = lb_method.zeroth_order_equilibrium_moment_symbol
         u = sp.Matrix(lb_method.first_order_equilibrium_moment_symbols)
         force = sp.Matrix(self.symbolic_force_vector)
 
         cs_sq = sp.Rational(1, 3)  # squared speed of sound
         # eq. 6.31 in the LB book by Krüger et al. shows that the equilibrium terms are devided by rho.
         # This is done here with subs({rho: 1}) to be consistent with compressible and incompressible force models
-        eq_terms = lb_method.get_equilibrium_terms().subs({rho: 1})
+        cqc = lb_method.conserved_quantity_computation
+        eq_terms = discrete_maxwellian_equilibrium(lb_method.stencil, rho=sp.Integer(1),
+                                                   u=cqc.velocity_symbols, c_s_sq=sp.Rational(1, 3))
 
         result = []
         for direction, eq in zip(lb_method.stencil, eq_terms):
