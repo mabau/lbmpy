@@ -43,8 +43,10 @@ def test_total_momentum(method_enum, zero_centered, force_model, omega):
 
     collision_kernel = ps.create_kernel(collision, config=config).compile()
 
+    fluid_density = 1.1
+
     def init():
-        dh.fill(ρ.name, 1)
+        dh.fill(ρ.name, fluid_density)
         dh.fill(u.name, 0)
 
         setter = macroscopic_values_setter(collision.method, velocity=(0,) * dh.dim,
@@ -70,8 +72,13 @@ def test_total_momentum(method_enum, zero_centered, force_model, omega):
     init()
     time_loop(t)
     dh.run_kernel(getter_kernel)
+
+    #   Check that density did not change
+    assert_allclose(dh.gather_array(ρ.name), fluid_density)
+
+    #   Check for correct velocity
     total = np.sum(dh.gather_array(u.name), axis=(0, 1))
-    assert_allclose(total / np.prod(L) / F / t, 1)
+    assert_allclose(total / np.prod(L) / F * fluid_density / t, 1)
 
 
 @pytest.mark.parametrize("force_model", force_models)
