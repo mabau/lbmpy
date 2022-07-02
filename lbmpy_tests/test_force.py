@@ -275,7 +275,7 @@ def test_modes_central_moment(force_model, compressible):
     F = list(sp.symbols(f"F_:{stencil.D}"))
 
     lbm_config = LBMConfig(method=Method.CENTRAL_MOMENT, stencil=stencil, relaxation_rate=omega_s,
-                           compressible=True, force_model=force_model, force=tuple(F))
+                           compressible=compressible, force_model=force_model, force=tuple(F))
     method = create_lb_method(lbm_config=lbm_config)
 
     subs_dict = method.subs_dict_relxation_rate

@@ -52,7 +52,8 @@ def test_lbm_vectorization(instruction_set, aligned_and_padding, nontemporal, do
     ldc2_ref.run(time_steps)
 
     lbm_config = LBMConfig(relaxation_rate=relaxation_rate)
-    config = ps.CreateKernelConfig(data_type="double" if double_precision else "float32",
+    config = ps.CreateKernelConfig(data_type="float64" if double_precision else "float32",
+                                   default_number_float="float64" if double_precision else "float32",
                                    cpu_vectorize_info=vectorization_options)
     lbm_opt_split = LBMOptimisation(cse_global=True, split=True)
     lbm_opt = LBMOptimisation(cse_global=True, split=False)

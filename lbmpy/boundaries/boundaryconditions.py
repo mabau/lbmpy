@@ -626,6 +626,8 @@ class DiffusionDirichlet(LbBoundary):
         return [LbmWeightInfo(lb_method, self._data_type)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        assert lb_method.conserved_quantity_computation.zero_centered_pdfs is False, \
+            "DiffusionDirichlet only works for methods with normal pdfs storage -> set zero_centered=False"
         weight_info = LbmWeightInfo(lb_method, self._data_type)
         w_dir = weight_info.weight_of_direction(dir_symbol, lb_method)
         return [Assignment(f_in(inv_dir[dir_symbol]),

@@ -38,7 +38,7 @@ def test_steady_state_silva_paper_comparison():
     eps, tau, lambda_plus, f = sp.symbols("epsilon tau Lambda f")
 
     lbm_config = LBMConfig(stencil=LBStencil(Stencil.D3Q19), compressible=False, relaxation_rate=1 / tau,
-                           continuous_equilibrium=False)
+                           continuous_equilibrium=False, zero_centered=False)
     method = create_lb_method(lbm_config=lbm_config)
     analysis = SteadyStateChapmanEnskogAnalysis(method)
 
