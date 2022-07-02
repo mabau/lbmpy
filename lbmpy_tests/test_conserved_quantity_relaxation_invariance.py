@@ -9,7 +9,7 @@ import sympy as sp
 import math
 
 from lbmpy.enums import Stencil, Method
-from lbmpy.methods import RelaxationInfo, create_srt, create_trt, create_trt_kbc, \
+from lbmpy.methods import create_srt, create_trt, create_trt_kbc, \
     create_with_default_polynomial_cumulants
 from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
 from lbmpy.methods.centeredcumulant.centeredcumulantmethod import CenteredCumulantBasedLbMethod
@@ -32,7 +32,8 @@ def __change_relaxation_rate_of_conserved_moments(method, new_relaxation_rate=sp
     elif isinstance(method, CenteredCumulantBasedLbMethod):
         changed_method = CenteredCumulantBasedLbMethod(method.stencil, method.equilibrium_distribution, rr_dict,
                                                        method.conserved_quantity_computation,
-                                                       force_model=method.force_model)
+                                                       force_model=method.force_model,
+                                                       zero_centered=True)
     else:
         raise ValueError("Not a moment or cumulant-based method")
 

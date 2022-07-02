@@ -445,12 +445,16 @@ class EDM(AbstractForceModel):
 
     def __call__(self, lb_method):
         cqc = lb_method.conserved_quantity_computation
-        rho = cqc.density_symbol if cqc.compressible else 1
+        reference_density = cqc.density_symbol if cqc.compressible else 1
+        rho = cqc.density_symbol
+        delta_rho = cqc.density_deviation_symbol
+        rho_0 = cqc.background_density
         u = cqc.velocity_symbols
 
         equilibrium_terms = lb_method.get_equilibrium_terms()
+        equilibrium_terms = equilibrium_terms.subs({delta_rho: rho - rho_0})
 
-        shifted_u = (u_i + f_i / rho for u_i, f_i in zip(u, self._force))
+        shifted_u = (u_i + f_i / reference_density for u_i, f_i in zip(u, self._force))
         shifted_eq = equilibrium_terms.subs({u_i: su_i for u_i, su_i in zip(u, shifted_u)})
         return shifted_eq - equilibrium_terms
 

@@ -31,7 +31,8 @@ def test_diffusion_boundary():
     dh.add_array('pdfs', values_per_cell=stencil.Q)
     dh.fill("pdfs", 0.0, ghost_layers=True)
 
-    lbm_config = LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.8, compressible=True)
+    lbm_config = LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.8,
+                           compressible=True, zero_centered=False)
     method = create_lb_method(lbm_config=lbm_config)
 
     # Boundary Handling
@@ -103,6 +104,7 @@ def test_diffusion():
 
     # Lattice Boltzmann method
     lbm_config = LBMConfig(stencil=stencil, method=Method.MRT, relaxation_rates=[1, 1.5, 1, 1.5, 1],
+                           zero_centered=False,
                            velocity_input=vel_field, output={'density': con_field}, compressible=True,
                            weighted=True, kernel_type='stream_pull_collide')
 
