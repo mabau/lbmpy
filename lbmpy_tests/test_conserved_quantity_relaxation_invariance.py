@@ -12,7 +12,7 @@ from lbmpy.enums import Stencil, Method
 from lbmpy.methods import create_srt, create_trt, create_trt_kbc, \
     create_with_default_polynomial_cumulants
 from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
-from lbmpy.methods.centeredcumulant.centeredcumulantmethod import CenteredCumulantBasedLbMethod
+from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 from lbmpy.moments import MOMENT_SYMBOLS
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import LBStencil
@@ -29,8 +29,8 @@ def __change_relaxation_rate_of_conserved_moments(method, new_relaxation_rate=sp
         changed_method = MomentBasedLbMethod(method.stencil, method.equilibrium_distribution, rr_dict, 
                                              method.conserved_quantity_computation,
                                              force_model=method.force_model)
-    elif isinstance(method, CenteredCumulantBasedLbMethod):
-        changed_method = CenteredCumulantBasedLbMethod(method.stencil, method.equilibrium_distribution, rr_dict,
+    elif isinstance(method, CumulantBasedLbMethod):
+        changed_method = CumulantBasedLbMethod(method.stencil, method.equilibrium_distribution, rr_dict,
                                                        method.conserved_quantity_computation,
                                                        force_model=method.force_model,
                                                        zero_centered=True)

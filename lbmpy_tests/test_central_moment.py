@@ -10,7 +10,7 @@ from lbmpy.methods.creationfunctions import cascaded_moment_sets_literature
 from lbmpy.scenarios import create_lid_driven_cavity
 from lbmpy.stencils import LBStencil
 
-from lbmpy.moment_transforms import PdfsToCentralMomentsByShiftMatrix
+from lbmpy.moment_transforms import BinomialChimeraTransform
 
 
 def test_central_moment_ldc():
@@ -50,7 +50,7 @@ def test_central_moment_class():
     default_moments = cascaded_moment_sets_literature(stencil)
     default_moments = [item for sublist in default_moments for item in sublist]
 
-    assert method.central_moment_transform_class == PdfsToCentralMomentsByShiftMatrix
+    assert method.central_moment_transform_class == BinomialChimeraTransform
     assert method.conserved_quantity_computation.density_symbol == rho
     assert method.conserved_quantity_computation.velocity_symbols == u
     assert method.moment_equilibrium_values == eq

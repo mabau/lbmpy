@@ -21,6 +21,12 @@ POST_COLLISION_MONOMIAL_CENTRAL_MOMENT = 'kappa_post'
 PRE_COLLISION_CENTRAL_MOMENT = 'K'
 POST_COLLISION_CENTRAL_MOMENT = 'K_post'
 
+PRE_COLLISION_MONOMIAL_CUMULANT = 'c'
+POST_COLLISION_MONOMIAL_CUMULANT = 'c_post'
+
+PRE_COLLISION_CUMULANT = 'C'
+POST_COLLISION_CUMULANT = 'C_post'
+
 
 class AbstractMomentTransform:
     r"""Abstract Base Class for classes providing transformations between moment spaces."""

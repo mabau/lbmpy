@@ -159,7 +159,7 @@ class CollisionSpace(Enum):
     """
     Cumulant space, meaning relaxation is applied to a set of linearly independent, polynomial cumulants of the
     discrete population vector. Default for `lbmpy.enums.Method.CUMULANT` and `lbmpy.enums.Method.MONOMIAL_CUMULANT`.
-    Results in the creation of an instance of :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod`.
+    Results in the creation of an instance of :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod`.
     """
 
     def compatible(self, method: Method):
@@ -208,10 +208,6 @@ class ForceModel(Enum):
     KUPERSHTOKH = auto()
     """
     See :class:`lbmpy.forcemodels.EDM`
-    """
-    CUMULANT = auto()
-    """
-    See :class:`lbmpy.methods.centeredcumulant.CenteredCumulantForceModel`
     """
     HE = auto()
     """

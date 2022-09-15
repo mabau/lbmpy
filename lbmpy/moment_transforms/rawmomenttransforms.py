@@ -1,8 +1,10 @@
+from functools import partial
 import sympy as sp
 
 from pystencils import Assignment, AssignmentCollection
 from pystencils.simp import (
-    SimplificationStrategy, add_subexpressions_for_divisions, add_subexpressions_for_constants)
+    SimplificationStrategy, add_subexpressions_for_divisions, add_subexpressions_for_constants,
+    insert_aliases, insert_constants)
 from pystencils.simp.assignment_collection import SymbolGen
 
 from lbmpy.moments import (
@@ -174,11 +176,13 @@ class PdfsToMomentsByMatrixTransform(AbstractRawMomentTransform):
     def _default_simplification(self):
         forward_simp = SimplificationStrategy()
         # forward_simp.add(substitute_moments_in_conserved_quantity_equations)
+        forward_simp.add(insert_aliases)
         forward_simp.add(add_subexpressions_for_divisions)
 
         from lbmpy.methods.momentbased.momentbasedsimplifications import split_pdf_main_assignments_by_symmetry
 
         backward_simp = SimplificationStrategy()
+        backward_simp.add(insert_aliases)
         backward_simp.add(split_pdf_main_assignments_by_symmetry)
         backward_simp.add(add_subexpressions_for_constants)
 
@@ -269,7 +273,7 @@ class PdfsToMomentsByChimeraTransform(AbstractRawMomentTransform):
         If simplification is enabled, the absorbed conserved quantity equations are - if possible -
         rewritten using the monomial symbols. If the conserved quantities originate somewhere else
         than in the lower-order moments (like from an external field), they are not affected by this
-        simplification.
+        simplification. Furthermore, aliases and constants are propagated in the chimera equations.
 
         Args:
             pdf_symbols: List of symbols that represent the pre-collision populations
@@ -417,11 +421,18 @@ class PdfsToMomentsByChimeraTransform(AbstractRawMomentTransform):
             split_pdf_main_assignments_by_symmetry
         )
 
+        cq = (self.equilibrium_density,) + self.equilibrium_velocity
+        fw_skip = cq + self.pre_collision_monomial_symbols
+
         forward_simp = SimplificationStrategy()
         forward_simp.add(substitute_moments_in_conserved_quantity_equations)
-        forward_simp.add(add_subexpressions_for_divisions)
+        forward_simp.add(partial(insert_aliases, skip=fw_skip))
+        forward_simp.add(partial(insert_constants, skip=fw_skip))
+
+        bw_skip = self.post_collision_monomial_symbols
 
         backward_simp = SimplificationStrategy()
+        backward_simp.add(partial(insert_aliases, skip=bw_skip))
         backward_simp.add(split_pdf_main_assignments_by_symmetry)
         backward_simp.add(add_subexpressions_for_constants)
 

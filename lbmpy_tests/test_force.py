@@ -9,19 +9,24 @@ from pystencils import Target
 from lbmpy.creationfunctions import create_lb_method, create_lb_update_rule, LBMConfig, LBMOptimisation
 from lbmpy.enums import Stencil, Method, ForceModel
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter, macroscopic_values_getter
-from lbmpy.moments import is_bulk_moment
+from lbmpy.moments import (is_bulk_moment, moments_up_to_component_order,
+                           exponents_to_polynomial_representations, exponent_tuple_sort_key)
 from lbmpy.stencils import LBStencil
 from lbmpy.updatekernels import create_stream_pull_with_output_kernel
 
 # all force models available are defined in the ForceModel enum, but Cumulant is not a "real" force model
-force_models = [f for f in ForceModel if f is not ForceModel.CUMULANT]
+force_models = [f for f in ForceModel]
 
 
-@pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT, Method.MRT])
+@pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT, Method.MRT, Method.CUMULANT])
 @pytest.mark.parametrize("zero_centered", [False, True])
 @pytest.mark.parametrize("force_model", force_models)
 @pytest.mark.parametrize("omega", [0.5, 1.5])
 def test_total_momentum(method_enum, zero_centered, force_model, omega):
+    if method_enum == Method.CUMULANT and \
+            force_model not in (ForceModel.SIMPLE, ForceModel.LUO, ForceModel.GUO, ForceModel.HE):
+        return True
+
     L = (16, 16)
     stencil = LBStencil(Stencil.D2Q9)
     F = (2e-4, -3e-4)
@@ -279,7 +284,7 @@ def test_modes_central_moment(force_model, compressible):
     method = create_lb_method(lbm_config=lbm_config)
 
     subs_dict = method.subs_dict_relxation_rate
-    force_moments = method.force_model.moment_space_forcing(method)
+    force_moments = method.force_model.central_moment_space_forcing(method)
     force_moments = force_moments.subs(subs_dict)
 
     # The mass mode should be zero
@@ -287,6 +292,34 @@ def test_modes_central_moment(force_model, compressible):
 
     # The momentum moments should contain the force
     assert list(force_moments[1:stencil.D + 1]) == F
+
+
+@pytest.mark.parametrize("force_model", force_models)
+@pytest.mark.parametrize("compressible", [True, False])
+def test_symmetric_forcing_equivalence(force_model, compressible):
+    stencil = LBStencil(Stencil.D2Q9)
+    omega_s = sp.Symbol("omega_s")
+    F = list(sp.symbols(f"F_:{stencil.D}"))
+
+    moments = moments_up_to_component_order(2, dim=2)
+    moments = sorted(moments, key=exponent_tuple_sort_key)
+    moment_polys = exponents_to_polynomial_representations(moments)
+
+    lbm_config = LBMConfig(method=Method.CENTRAL_MOMENT, stencil=stencil, relaxation_rate=omega_s,
+                           nested_moments=moment_polys, compressible=True, force_model=force_model, force=tuple(F))
+    method = create_lb_method(lbm_config=lbm_config)
+    if not method.force_model.has_symmetric_central_moment_forcing:
+        return True
+
+    subs_dict = method.subs_dict_relxation_rate
+    force_moments = method.force_model.central_moment_space_forcing(method)
+    force_moments = force_moments.subs(subs_dict)
+
+    force_before, force_after = method.force_model.symmetric_central_moment_forcing(method, moments)
+    d = method.relaxation_matrix
+    eye = sp.eye(stencil.Q)
+    force_combined = (eye - d) @ force_before + force_after
+    assert (force_moments - force_combined).expand() == sp.Matrix([0] * stencil.Q)
 
 
 @pytest.mark.parametrize("stencil", [Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
@@ -380,7 +413,8 @@ def _check_modes(stencil, force_model, compressible):
                            - (2 + lambda_b) * sp.Matrix(u).dot(F)) == 0
 
         # All other moments should be zero
-        assert list(force_moments[stencil.D + 1 + num_stresses:]) == [0] * (len(stencil) - (stencil.D + 1 + num_stresses))
+        assert list(force_moments[stencil.D + 1 + num_stresses:]) == [0] * \
+            (len(stencil) - (stencil.D + 1 + num_stresses))
     elif force_model == ForceModel.SIMPLE:
         # All other moments should be zero
         assert list(force_moments[stencil.D + 1:]) == [0] * (len(stencil) - (stencil.D + 1))

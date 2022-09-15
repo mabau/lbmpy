@@ -13,7 +13,8 @@ from lbmpy.methods import CollisionSpaceInfo
 from lbmpy.moment_transforms import (
     FastCentralMomentTransform,
     PdfsToCentralMomentsByMatrix,
-    PdfsToCentralMomentsByShiftMatrix)
+    PdfsToCentralMomentsByShiftMatrix,
+    BinomialChimeraTransform)
 
 sympy_numeric_version = [int(x, 10) for x in sp.__version__.split('.')]
 if len(sympy_numeric_version) < 3:
@@ -30,7 +31,8 @@ reference_equilibria = dict()
 @pytest.mark.parametrize('stencil_name', [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize('cm_transform', [PdfsToCentralMomentsByMatrix,
                                           FastCentralMomentTransform,
-                                          PdfsToCentralMomentsByShiftMatrix])
+                                          PdfsToCentralMomentsByShiftMatrix,
+                                          BinomialChimeraTransform])
 def test_equilibrium_pdfs(stencil_name, cm_transform):
     stencil = LBStencil(stencil_name)
     cspace = CollisionSpaceInfo(CollisionSpace.CUMULANTS, central_moment_transform_class=cm_transform)

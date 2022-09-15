@@ -4,10 +4,12 @@ All of these transformations operate on :class:`pystencils.AssignmentCollection`
 simplification hints, which are set by the MomentBasedLbMethod.
 """
 import sympy as sp
+from itertools import product
 
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 from pystencils import Assignment, AssignmentCollection
 from pystencils.stencil import inverse_direction
+from pystencils.simp.subexpression_insertion import insert_subexpressions, is_constant
 from pystencils.sympyextensions import extract_most_common_factor, replace_second_order_products, subs_additive
 
 from collections import defaultdict
@@ -317,6 +319,45 @@ def split_pdf_main_assignments_by_symmetry(ac: AssignmentCollection):
     main_assignments = [Assignment(lhs, rhs) for lhs, rhs in asm_dict.items()]
     return ac.copy(main_assignments=main_assignments, subexpressions=subexpressions)
 
+
+def insert_pure_products(ac, symbols, **kwargs):
+    """Inserts any subexpression whose RHS is a product containing exclusively factors
+    from the given sequence of symbols."""
+    def callback(exp):
+        rhs = exp.rhs
+        if isinstance(rhs, sp.Symbol) and rhs in symbols:
+            return True
+        elif isinstance(rhs, sp.Mul):
+            if all((is_constant(arg) or (arg in symbols)) for arg in rhs.args):
+                return True
+        return False
+
+    return insert_subexpressions(ac, callback, **kwargs)
+
+
+def insert_conserved_quantity_products(cr, **kwargs):
+    from lbmpy.moments import statistical_quantity_symbol as sq_sym
+    from lbmpy.moment_transforms import PRE_COLLISION_MONOMIAL_RAW_MOMENT as m
+    
+    rho = cr.method.zeroth_order_equilibrium_moment_symbol
+    u = cr.method.first_order_equilibrium_moment_symbols
+    m000 = sq_sym(m, (0,) * cr.method.dim)
+    symbols = (rho, m000) + u
+
+    return insert_pure_products(cr, symbols)
+
+
+def insert_half_force(cr, **kwargs):
+    fmodel = cr.method.force_model
+    if not fmodel:
+        return cr
+    force = fmodel.symbolic_force_vector
+    force_exprs = set(c * f / 2 for c, f in product((1, -1), force))
+
+    def callback(expr):
+        return expr.rhs in force_exprs
+
+    return insert_subexpressions(cr, callback, **kwargs)
 
 # -------------------------------------- Helper Functions --------------------------------------------------------------
 
