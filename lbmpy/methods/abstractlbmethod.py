@@ -98,17 +98,17 @@ class AbstractLbMethod(abc.ABC):
 
     # -------------------------------- Helper Functions ----------------------------------------------------------------
 
-    def _generate_symbolic_relaxation_matrix(self):
+    def _generate_symbolic_relaxation_matrix(self, relaxation_rates=None):
         """
         This function replaces the numbers in the relaxation matrix with symbols in this case, and returns also
         the subexpressions, that assign the number to the newly introduced symbol
         """
-        rr = [self.relaxation_matrix[i, i] for i in range(self.relaxation_matrix.rows)]
+        rr = relaxation_rates if relaxation_rates is not None else self.relaxation_rates
         unique_relaxation_rates = set()
         subexpressions = {}
         for relaxation_rate in rr:
+            relaxation_rate = sp.sympify(relaxation_rate)
             if relaxation_rate not in unique_relaxation_rates:
-                relaxation_rate = sp.sympify(relaxation_rate)
                 # special treatment for zero, sp.Zero would be an integer ..
                 if isinstance(relaxation_rate, Zero):
                     relaxation_rate = 0.0

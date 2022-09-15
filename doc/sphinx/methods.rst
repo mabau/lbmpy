@@ -97,7 +97,7 @@ Class
 Cumulant-based methods
 ======================
 
-These methods are represented by instances of :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` and will derive
+These methods are represented by instances of :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` and will derive
 collision equations in cumulant space.
 
 Creation Functions
@@ -105,25 +105,17 @@ Creation Functions
 
 The following factory functions create cumulant-based methods using the regular continuous hydrodynamic maxwellian equilibrium.
 
-.. autofunction:: lbmpy.methods.create_with_polynomial_cumulants
+.. autofunction:: lbmpy.methods.create_cumulant
 
 .. autofunction:: lbmpy.methods.create_with_monomial_cumulants
 
 .. autofunction:: lbmpy.methods.create_with_default_polynomial_cumulants
 
-.. autofunction:: lbmpy.methods.create_centered_cumulant_model
-
-
-Utility
--------
-
-.. autoclass:: lbmpy.methods.centeredcumulant.CenteredCumulantForceModel
-    :members:
 
 Class
 -----
 
-.. autoclass:: lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod
+.. autoclass:: lbmpy.methods.cumulantbased.CumulantBasedLbMethod
     :members:
 
 

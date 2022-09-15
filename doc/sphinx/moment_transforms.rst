@@ -241,6 +241,9 @@ Central Moment Space Transforms
 .. autoclass:: lbmpy.moment_transforms.PdfsToCentralMomentsByMatrix
     :members:
 
+.. autoclass:: lbmpy.moment_transforms.BinomialChimeraTransform
+    :members:
+
 .. autoclass:: lbmpy.moment_transforms.FastCentralMomentTransform
     :members:
 
@@ -250,6 +253,6 @@ Central Moment Space Transforms
 Cumulant Space Transforms
 -------------------------
 
-.. autoclass:: lbmpy.methods.centeredcumulant.cumulant_transform.CentralMomentsToCumulantsByGeneratingFunc
+.. autoclass:: lbmpy.moment_transforms.CentralMomentsToCumulantsByGeneratingFunc
     :members:
 

@@ -6,7 +6,7 @@ from pystencils.sympyextensions import is_constant
 
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
-from lbmpy.moment_transforms import FastCentralMomentTransform
+from lbmpy.moment_transforms import BinomialChimeraTransform
 
 from lbmpy.moments import MOMENT_SYMBOLS, moment_matrix, set_up_shift_matrix
 
@@ -54,7 +54,7 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
     def __init__(self, stencil, equilibrium, relaxation_dict,
                  conserved_quantity_computation=None,
                  force_model=None, zero_centered=False,
-                 central_moment_transform_class=FastCentralMomentTransform):
+                 central_moment_transform_class=BinomialChimeraTransform):
         assert isinstance(conserved_quantity_computation, AbstractConservedQuantityComputation)
         super(CentralMomentBasedLbMethod, self).__init__(stencil)
 
@@ -102,7 +102,7 @@ class CentralMomentBasedLbMethod(AbstractLbMethod):
     @property
     def moment_equilibrium_values(self):
         """Equilibrium values of this method's :attr:`moments`."""
-        return self._equilibrium.central_moments(self.moments)
+        return self._equilibrium.central_moments(self.moments, self.first_order_equilibrium_moment_symbols)
 
     @property
     def relaxation_rates(self):

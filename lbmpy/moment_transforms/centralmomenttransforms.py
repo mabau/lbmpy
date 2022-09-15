@@ -1,14 +1,16 @@
+from functools import partial
 import sympy as sp
 
 from pystencils import Assignment, AssignmentCollection
 from pystencils.simp import (
-    SimplificationStrategy, add_subexpressions_for_divisions, add_subexpressions_for_constants)
+    SimplificationStrategy, add_subexpressions_for_constants)
 from pystencils.simp.assignment_collection import SymbolGen
 from pystencils.sympyextensions import subs_additive, fast_subs
 
 from lbmpy.moments import (
     moment_matrix, monomial_to_polynomial_transformation_matrix,
     set_up_shift_matrix, contained_moments, moments_up_to_order,
+    moments_of_order,
     central_moment_reduced_monomial_to_polynomial_matrix)
 
 from lbmpy.moments import statistical_quantity_symbol as sq_sym
@@ -149,7 +151,7 @@ class PdfsToCentralMomentsByMatrix(AbstractCentralMomentTransform):
         m_to_f_vec = km_inv * sp.Matrix([s.lhs for s in subexpressions])
         main_assignments = [Assignment(f, eq) for f, eq in zip(pdf_symbols, m_to_f_vec)]
 
-        ac = AssignmentCollection(main_assignments, subexpressions=subexpressions, 
+        ac = AssignmentCollection(main_assignments, subexpressions=subexpressions,
                                   subexpression_symbol_generator=symbol_gen)
 
         if simplification:
@@ -159,9 +161,326 @@ class PdfsToCentralMomentsByMatrix(AbstractCentralMomentTransform):
     @property
     def _default_simplification(self):
         simplification = SimplificationStrategy()
-        simplification.add(add_subexpressions_for_divisions)
         return simplification
 # end class PdfsToCentralMomentsByMatrix
+
+
+class BinomialChimeraTransform(AbstractCentralMomentTransform):
+    """Transform from populations to central moments using a chimera transform implementing the binomial expansion."""
+
+    def __init__(self, stencil, moment_polynomials,
+                 equilibrium_density,
+                 equilibrium_velocity,
+                 conserved_quantity_equations=None,
+                 **kwargs):
+        super(BinomialChimeraTransform, self).__init__(
+            stencil, moment_polynomials, equilibrium_density, equilibrium_velocity,
+            conserved_quantity_equations=conserved_quantity_equations, **kwargs)
+
+        #   Potentially, de-aliasing is required
+        if len(self.moment_exponents) != self.q:
+            P, m_reduced = central_moment_reduced_monomial_to_polynomial_matrix(self.moment_polynomials,
+                                                                                self.stencil,
+                                                                                velocity_symbols=equilibrium_velocity)
+            self.mono_to_poly_matrix = P
+            self.moment_exponents = m_reduced
+        else:
+            self.mono_to_poly_matrix = monomial_to_polynomial_transformation_matrix(self.moment_exponents,
+                                                                                    self.moment_polynomials)
+
+        if 'moment_exponents' in kwargs:
+            del kwargs['moment_exponents']
+
+        self.raw_moment_transform = PdfsToMomentsByChimeraTransform(
+            stencil, None, equilibrium_density, equilibrium_velocity,
+            conserved_quantity_equations=conserved_quantity_equations,
+            moment_exponents=self.moment_exponents,
+            **kwargs)
+
+        self.poly_to_mono_matrix = self.mono_to_poly_matrix.inv()
+
+    @property
+    def absorbs_conserved_quantity_equations(self):
+        return True
+
+    def forward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_f_to_k',
+                          return_monomials=False):
+        r"""Returns equations for polynomial central moments, computed from pre-collision populations
+        through a cascade of three steps.
+
+        First, the monomial raw moment vector :math:`\mathbf{m}` is computed using the raw-moment
+        chimera transform (see `lbmpy.moment_transforms.PdfsToMomentsByChimeraTransform`).
+
+        Second, we obtain monomial central moments from monomial raw moments using the binomial
+        chimera transform:
+
+        .. math::
+
+            \kappa_{ab|\gamma} &:= \sum_{c = 0}^{\gamma} \binom{\gamma}{c} v_z^{\gamma - c} m_{abc} \\
+            \kappa_{a|\beta\gamma} &:= \sum_{b = 0}^{\beta} \binom{\beta}{b} v_z^{\beta - b} \kappa_{ab|\gamma} \\
+            \kappa_{\alpha\beta\gamma} &:=
+                \sum_{a = 0}^{\alpha} \binom{\alpha}{a} v_z^{\alpha - a} \kappa_{a|\beta\gamma} \\
+
+        Lastly, the polynomial central moments are computed using the polynomialization matrix
+        as :math:`\mathbf{K} = P \mathbf{\kappa}`.
+
+        **Conserved Quantity Equations**
+
+        If given, this transform absorbs the conserved quantity equations and simplifies them
+        using the raw moment equations, if simplification is enabled.
+
+        **Simplification**
+
+        If simplification is enabled, the absorbed conserved quantity equations are - if possible - 
+        rewritten using the monomial symbols. If the conserved quantities originate somewhere else
+        than in the lower-order moments (like from an external field), they are not affected by this
+        simplification.
+
+        The raw moment chimera transform is simplified by propagation of aliases.
+
+        The equations of the binomial chimera transform are simplified by expressing conserved raw moments
+        in terms of the conserved quantities, and subsequent propagation of aliases, constants, and any
+        expressions that are purely products of conserved quantities.
+
+        **De-Aliasing**
+
+        If more than :math:`q` monomial moments are extracted from the polynomial set, they
+        are de-aliased and reduced to a set of only :math:`q` moments using the same rules
+        as for raw moments. For polynomialization, a special reduced matrix :math:`\tilde{P}`
+        is used, which is computed using `lbmpy.moments.central_moment_reduced_monomial_to_polynomial_matrix`.
+
+
+        Args:
+            pdf_symbols: List of symbols that represent the pre-collision populations
+            simplification: Simplification specification. See :class:`AbstractMomentTransform`
+            subexpression_base: The base name used for any subexpressions of the transformation.
+            return_monomials: Return equations for monomial moments. Use only when specifying 
+                              ``moment_exponents`` in constructor!
+
+        """
+        simplification = self._get_simp_strategy(simplification, 'forward')
+
+        mono_raw_moment_base = self.raw_moment_transform.mono_base_pre
+        mono_central_moment_base = self.mono_base_pre
+
+        mono_cm_symbols = self.pre_collision_monomial_symbols
+
+        rm_ac = self.raw_moment_transform.forward_transform(pdf_symbols, simplification=False, return_monomials=True)
+        cq_symbols_to_moments = self.raw_moment_transform.get_cq_to_moment_symbols_dict(mono_raw_moment_base)
+
+        chim = self.BinomialChimera(tuple(-u for u in self.equilibrium_velocity),
+                                    mono_raw_moment_base, mono_central_moment_base)
+        chim_ac = chim(self.moment_exponents)
+
+        cq_subs = dict()
+        if simplification:
+            from lbmpy.methods.momentbased.momentbasedsimplifications import (
+                substitute_moments_in_conserved_quantity_equations)
+            rm_ac = substitute_moments_in_conserved_quantity_equations(rm_ac)
+
+            #   Compute replacements for conserved moments in terms of the CQE
+            rm_asm_dict = rm_ac.main_assignments_dict
+            for cq_sym, moment_sym in cq_symbols_to_moments.items():
+                cq_eq = rm_asm_dict[cq_sym]
+                solutions = sp.solve(cq_eq - cq_sym, moment_sym)
+                if len(solutions) > 0:
+                    cq_subs[moment_sym] = solutions[0]
+
+            chim_ac = chim_ac.new_with_substitutions(cq_subs, substitute_on_lhs=False)
+
+            fo_kappas = [sq_sym(mono_central_moment_base, es) for es in moments_of_order(1, dim=self.stencil.D)]
+            ac_filtered = chim_ac.new_filtered(fo_kappas).new_without_subexpressions()
+            chim_asm_dict = chim_ac.main_assignments_dict
+            for asm in ac_filtered.main_assignments:
+                chim_asm_dict[asm.lhs] = asm.rhs
+            chim_ac.set_main_assignments_from_dict(chim_asm_dict)
+
+        subexpressions = rm_ac.all_assignments + chim_ac.subexpressions
+
+        if return_monomials:
+            main_assignments = chim_ac.main_assignments
+        else:
+            subexpressions += chim_ac.main_assignments
+            poly_eqs = self.mono_to_poly_matrix * sp.Matrix(mono_cm_symbols)
+            main_assignments = [Assignment(m, v) for m, v in zip(self.pre_collision_symbols, poly_eqs)]
+
+        symbol_gen = SymbolGen(subexpression_base)
+        ac = AssignmentCollection(main_assignments=main_assignments, subexpressions=subexpressions,
+                                  subexpression_symbol_generator=symbol_gen)
+
+        if simplification:
+            ac = simplification.apply(ac)
+        return ac
+
+    def backward_transform(self, pdf_symbols, simplification=True, subexpression_base='sub_k_to_f',
+                           start_from_monomials=False):
+        r"""Returns an assignment collection containing equations for post-collision populations, 
+        expressed in terms of the post-collision polynomial central moments by three steps.
+
+        The post-collision monomial central moments :math:`\mathbf{\kappa}_{\mathrm{post}}` are first 
+        obtained from the polynomials through multiplication with :math:`P^{-1}`.
+
+        Afterward, monomial post-collision raw moments are obtained from monomial central moments using the binomial
+        chimera transform:
+
+        .. math::
+
+            m^{\ast}_{ab|\gamma} &:= \sum_{c = 0}^{\gamma} \binom{\gamma}{c} v_z^{\gamma - c} \kappa^{\ast}_{abc} \\
+            m^{\ast}_{a|\beta\gamma} &:= \sum_{b = 0}^{\beta} \binom{\beta}{b} v_z^{\beta - b} m^{\ast}_{ab|\gamma} \\
+            m^{\ast}_{\alpha\beta\gamma} &:=
+                \sum_{a = 0}^{\alpha} \binom{\alpha}{a} v_z^{\alpha - a} m^{\ast}_{a|\beta\gamma} \\
+
+        Finally, the monomial raw moment transformation 
+        matrix :math:`M_r` provided by :func:`lbmpy.moments.moment_matrix` 
+        is inverted and used to compute the pre-collision moments as 
+        :math:`\mathbf{f}_{\mathrm{post}} = M_r^{-1} \cdot \mathbf{m}_{\mathrm{post}}`.
+
+        **De-Aliasing**: 
+
+        See `PdfsToCentralMomentsByShiftMatrix.forward_transform`.
+
+        **Simplifications**
+
+        If simplification is enabled, the inverse shift matrix equations are simplified by recursively 
+        inserting lower-order moments into equations for higher-order moments. To this end, these equations 
+        are factored recursively by the velocity symbols.
+
+        The equations of the binomial chimera transform are simplified by propagation of aliases.
+
+        Further, the equations for populations :math:`f_i` and :math:`f_{\bar{i}}` 
+        of opposite stencil directions :math:`\mathbf{c}_i` and :math:`\mathbf{c}_{\bar{i}} = - \mathbf{c}_i`
+        are split into their symmetric and antisymmetric parts :math:`f_i^{\mathrm{sym}}, f_i^{\mathrm{anti}}`, such
+        that
+
+        .. math::
+
+            f_i = f_i^{\mathrm{sym}} + f_i^{\mathrm{anti}}
+
+            f_{\bar{i}} = f_i^{\mathrm{sym}} - f_i^{\mathrm{anti}}
+
+
+        Args:
+            pdf_symbols: List of symbols that represent the post-collision populations
+            simplification: Simplification specification. See :class:`AbstractMomentTransform`
+            subexpression_base: The base name used for any subexpressions of the transformation.
+            start_from_monomials: Return equations for monomial moments. Use only when specifying 
+                                  ``moment_exponents`` in constructor!
+        """
+        simplification = self._get_simp_strategy(simplification, 'backward')
+
+        mono_cm_symbols = self.post_collision_monomial_symbols
+
+        subexpressions = []
+        if not start_from_monomials:
+            mono_eqs = self.poly_to_mono_matrix * sp.Matrix(self.post_collision_symbols)
+            subexpressions += [Assignment(cm, v) for cm, v in zip(mono_cm_symbols, mono_eqs)]
+
+        mono_raw_moment_base = self.raw_moment_transform.mono_base_post
+        mono_central_moment_base = self.mono_base_post
+
+        chim = self.BinomialChimera(self.equilibrium_velocity, mono_central_moment_base, mono_raw_moment_base)
+        chim_ac = chim(self.moment_exponents)
+
+        if simplification:
+            from pystencils.simp import insert_aliases
+            chim_ac = insert_aliases(chim_ac)
+
+        subexpressions += chim_ac.all_assignments
+
+        rm_ac = self.raw_moment_transform.backward_transform(
+            pdf_symbols, simplification=False, start_from_monomials=True)
+        subexpressions += rm_ac.subexpressions
+
+        ac = rm_ac.copy(subexpressions=subexpressions)
+        if simplification:
+            ac = simplification.apply(ac)
+
+        return ac
+
+    #   ----------------------------- Private Members -----------------------------
+
+    class BinomialChimera:
+        def __init__(self, v, from_base, to_base):
+            self._v = v
+            self._from_base = from_base
+            self._to_base = to_base
+            self._chim_dict = None
+
+        def _chimera_symbol(self, fixed_directions, remaining_exponents):
+            if not fixed_directions:
+                return None
+
+            fixed_str = '_'.join(str(direction) for direction in fixed_directions)
+            exp_str = '_'.join(str(exp) for exp in remaining_exponents)
+            return sp.Symbol(f"chimera_{self._to_base}_{fixed_str}_e_{exp_str}")
+
+        @property
+        def chimera_assignments(self):
+            assert self._chim_dict is not None
+            return [Assignment(lhs, rhs) for lhs, rhs in self._chim_dict.items()]
+
+        def _derive(self, exponents, depth):
+            if depth == len(exponents):
+                return sq_sym(self._from_base, exponents)
+
+            v = self._v
+
+            fixed = exponents[:depth]
+            remaining = exponents[depth:]
+            chim_symb = self._chimera_symbol(fixed, remaining)
+            if chim_symb in self._chim_dict:
+                return chim_symb
+
+            choose = sp.binomial
+
+            alpha = exponents[depth]
+            s = sp.Integer(0)
+            for a in range(alpha + 1):
+                rec_exps = list(exponents)
+                rec_exps[depth] = a
+                s += choose(alpha, a) * v[depth] ** (alpha - a) * self._derive(rec_exps, depth + 1)
+
+            if chim_symb is not None:
+                self._chim_dict[chim_symb] = s
+                return chim_symb
+            else:
+                return Assignment(sq_sym(self._to_base, exponents), s)
+
+        def __call__(self, monos):
+            self._chim_dict = dict()
+            ac = []
+            for m in monos:
+                ac.append(self._derive(m, 0))
+            return AssignmentCollection(ac, self._chim_dict)
+
+    @property
+    def _default_simplification(self):
+        from pystencils.simp import insert_aliases, insert_constants
+        from lbmpy.methods.momentbased.momentbasedsimplifications import insert_pure_products
+
+        cq = (self.equilibrium_density,) + self.equilibrium_velocity
+        fw_skip = cq + self.raw_moment_transform.pre_collision_monomial_symbols + self.pre_collision_monomial_symbols
+
+        forward_simp = SimplificationStrategy()
+        forward_simp.add(partial(insert_pure_products, symbols=cq, skip=fw_skip))
+        forward_simp.add(partial(insert_aliases, skip=fw_skip))
+        forward_simp.add(partial(insert_constants, skip=fw_skip))
+
+        from lbmpy.methods.momentbased.momentbasedsimplifications import split_pdf_main_assignments_by_symmetry
+
+        bw_skip = self.raw_moment_transform.post_collision_monomial_symbols + self.post_collision_monomial_symbols
+
+        backward_simp = SimplificationStrategy()
+        backward_simp.add(partial(insert_aliases, skip=bw_skip))
+        backward_simp.add(split_pdf_main_assignments_by_symmetry)
+        backward_simp.add(add_subexpressions_for_constants)
+
+        return {
+            'forward': forward_simp,
+            'backward': backward_simp
+        }
+
+# end class PdfsToCentralMomentsByShiftMatrix
 
 
 class FastCentralMomentTransform(AbstractCentralMomentTransform):
@@ -351,10 +670,8 @@ class FastCentralMomentTransform(AbstractCentralMomentTransform):
     @property
     def _default_simplification(self):
         forward_simp = SimplificationStrategy()
-        forward_simp.add(add_subexpressions_for_divisions)
 
         backward_simp = SimplificationStrategy()
-        backward_simp.add(add_subexpressions_for_divisions)
         backward_simp.add(add_subexpressions_for_constants)
 
         return {
@@ -679,6 +996,7 @@ class PdfsToCentralMomentsByShiftMatrix(AbstractCentralMomentTransform):
         ac = rm_ac.copy(subexpressions=subexpressions)
         if simplification:
             ac = simplification.apply(ac)
+
         return ac
 
     #   ----------------------------- Private Members -----------------------------
@@ -724,7 +1042,6 @@ class PdfsToCentralMomentsByShiftMatrix(AbstractCentralMomentTransform):
     @property
     def _default_simplification(self):
         forward_simp = SimplificationStrategy()
-        forward_simp.add(add_subexpressions_for_divisions)
 
         from lbmpy.methods.momentbased.momentbasedsimplifications import split_pdf_main_assignments_by_symmetry
 

@@ -63,7 +63,6 @@ import sympy.core.numbers
 
 from lbmpy.enums import Stencil, Method, ForceModel, CollisionSpace
 import lbmpy.forcemodels as forcemodels
-import lbmpy.methods.centeredcumulant.force_model as cumulant_force_model
 from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
 from lbmpy.non_newtonian_models import add_cassons_model, CassonsParameters
@@ -71,7 +70,7 @@ from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_central
                            create_srt, create_trt, create_trt_kbc)
 from lbmpy.methods.creationfunctions import CollisionSpaceInfo
 from lbmpy.methods.creationfunctions import (
-    create_with_monomial_cumulants, create_with_polynomial_cumulants, create_with_default_polynomial_cumulants)
+    create_with_monomial_cumulants, create_cumulant, create_with_default_polynomial_cumulants)
 from lbmpy.methods.momentbased.entropic import add_entropy_condition, add_iterative_entropy_condition
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.simplificationfactory import create_simplification_strategy
@@ -86,6 +85,7 @@ from pystencils.field import Field
 from pystencils.simp import sympy_cse, SimplificationStrategy
 # needed for the docstring
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule, AbstractLbMethod
+from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 
 # Filter out JobLib warnings. They are not usefull for use:
 # https://github.com/joblib/joblib/issues/683
@@ -195,7 +195,7 @@ class LBMConfig:
     galilean_correction: bool = False
     """
     Special correction for D3Q27 cumulant LBMs. For Details see
-    :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
+    :mod:`lbmpy.methods.cumulantbased.galilean_correction`
     """
     collision_space_info: CollisionSpaceInfo = None
     """
@@ -412,8 +412,7 @@ class LBMConfig:
                 force_not_zero = True
 
         if self.force_model is None and force_not_zero:
-            self.force_model = cumulant_force_model.CenteredCumulantForceModel(self.force[:self.stencil.D]) \
-                if self.method == Method.CUMULANT else forcemodels.Guo(self.force[:self.stencil.D])
+            self.force_model = forcemodels.Guo(self.force[:self.stencil.D])
 
         force_model_dict = {
             'simple': forcemodels.Simple,
@@ -424,7 +423,6 @@ class LBMConfig:
             'silva': forcemodels.Buick,
             'edm': forcemodels.EDM,
             'kupershtokh': forcemodels.EDM,
-            'cumulant': cumulant_force_model.CenteredCumulantForceModel,
             'he': forcemodels.He,
             'shanchen': forcemodels.ShanChen
         }
@@ -453,10 +451,13 @@ class LBMOptimisation:
     """
     Run common subexpression elimination after all other simplifications have been executed.
     """
-    simplification: Union[str, bool] = 'auto'
+    simplification: Union[str, bool, SimplificationStrategy] = 'auto'
     """
-    Simplifications applied during the derivation of the collision rule. For details
-    see :func:`lbmpy.simplificationfactory.create_simplification_strategy`
+    Simplifications applied during the derivation of the collision rule. If ``True`` or ``'auto'``,
+    a default simplification strategy is selected according to the type of the method;
+    see :func:`lbmpy.simplificationfactory.create_simplification_strategy`.
+    If ``False``, no simplification is applied.
+    Otherwise, the given simplification strategy will be applied.
     """
     pre_simplification: bool = True
     """
@@ -637,6 +638,10 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
     else:
         collision_rule = lb_method.get_collision_rule(pre_simplification=pre_simplification)
 
+    if lbm_config.galilean_correction:
+        from lbmpy.methods.cumulantbased import add_galilean_correction
+        collision_rule = add_galilean_correction(collision_rule)
+
     if lbm_config.entropic:
         if lbm_config.smagorinsky or lbm_config.cassons:
             raise ValueError("Choose either entropic, smagorinsky or cassons")
@@ -666,13 +671,17 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
         output_eqs = cqc.output_equations_from_pdfs(lb_method.pre_collision_pdf_symbols, lbm_config.output)
         collision_rule = collision_rule.new_merged(output_eqs)
 
-    if lbm_optimisation.simplification == 'auto':
+    if lbm_optimisation.simplification is True or lbm_optimisation.simplification == 'auto':
         simplification = create_simplification_strategy(lb_method, split_inner_loop=lbm_optimisation.split)
     elif callable(lbm_optimisation.simplification):
         simplification = lbm_optimisation.simplification
     else:
         simplification = SimplificationStrategy()
     collision_rule = simplification(collision_rule)
+
+    if isinstance(collision_rule.method, CumulantBasedLbMethod):
+        from lbmpy.methods.cumulantbased.cumulant_simplifications import check_for_logarithms
+        check_for_logarithms(collision_rule)
 
     if lbm_config.fluctuating:
         add_fluctuations_to_collision_rule(collision_rule, **lbm_config.fluctuating)
@@ -712,7 +721,6 @@ def create_lb_method(lbm_config=None, **params):
         'zero_centered': lbm_config.zero_centered,
         'force_model': lbm_config.force_model,
         'c_s_sq': lbm_config.c_s_sq,
-        'galilean_correction': lbm_config.galilean_correction,
         'collision_space_info': lbm_config.collision_space_info,
     }
 
@@ -741,7 +749,7 @@ def create_lb_method(lbm_config=None, **params):
         method = create_trt_kbc(dim, relaxation_rates[0], relaxation_rates[1], 'KBC-N' + method_nr, **common_params)
     elif lbm_config.method == Method.CUMULANT:
         if lbm_config.nested_moments is not None:
-            method = create_with_polynomial_cumulants(
+            method = create_cumulant(
                 lbm_config.stencil, relaxation_rates, lbm_config.nested_moments, **cumulant_params)
         else:
             method = create_with_default_polynomial_cumulants(lbm_config.stencil, relaxation_rates, **cumulant_params)
@@ -757,7 +765,7 @@ def create_lb_method(lbm_config=None, **params):
     if lbm_config.entropic:
         method.set_conserved_moments_relaxation_rate(relaxation_rates[0])
 
-    lbm_config.method = method
+    lbm_config.lb_method = method
     return method
 
 

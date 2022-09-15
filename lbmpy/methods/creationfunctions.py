@@ -14,15 +14,15 @@ from lbmpy.equilibrium import ContinuousHydrodynamicMaxwellian, DiscreteHydrodyn
 
 from lbmpy.methods.default_moment_sets import cascaded_moment_sets_literature
 
-from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
-from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
+from lbmpy.moment_transforms import CentralMomentsToCumulantsByGeneratingFunc
 
-from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
+from .conservedquantitycomputation import DensityVelocityComputation
 
-from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
-from lbmpy.methods.momentbased.centralmomentbasedmethod import CentralMomentBasedLbMethod
+from .momentbased.momentbasedmethod import MomentBasedLbMethod
+from .momentbased.centralmomentbasedmethod import CentralMomentBasedLbMethod
+from .cumulantbased import CumulantBasedLbMethod
 from lbmpy.moment_transforms import (
-    AbstractMomentTransform, PdfsToCentralMomentsByShiftMatrix, PdfsToMomentsByChimeraTransform)
+    AbstractMomentTransform, BinomialChimeraTransform, PdfsToMomentsByChimeraTransform)
 from lbmpy.moment_transforms.rawmomenttransforms import AbstractRawMomentTransform
 from lbmpy.moment_transforms.centralmomenttransforms import AbstractCentralMomentTransform
 
@@ -58,14 +58,14 @@ class CollisionSpaceInfo:
     """
     Python class that determines how PDFs are transformed to central moment space. If left as 'None', this parameter
     will be inferred from `collision_space`, defaulting to 
-    :class:`lbmpy.moment_transforms.PdfsToCentralMomentsByShiftMatrix`
+    :class:`lbmpy.moment_transforms.BinomialChimeraTransform`
     if `CollisionSpace.CENTRAL_MOMENTS` or `CollisionSpace.CUMULANTS` is given, or `None` otherwise.
     """
     cumulant_transform_class: Type[AbstractMomentTransform] = None
     """
     Python class that determines how central moments are transformed to cumulant space. If left as 'None', this 
     parameter will be inferred from `collision_space`, defaulting to 
-    :class:`lbmpy.methods.centeredcumulant.cumulant_transform.CentralMomentsToCumulantsByGeneratingFunc`
+    :class:`lbmpy.moment_transforms.CentralMomentsToCumulantsByGeneratingFunc`
     if `CollisionSpace.CUMULANTS` is given, or `None` otherwise.
     """
 
@@ -74,7 +74,7 @@ class CollisionSpaceInfo:
             self.raw_moment_transform_class = PdfsToMomentsByChimeraTransform
         if self.collision_space in (CollisionSpace.CENTRAL_MOMENTS, CollisionSpace.CUMULANTS) \
                 and self.central_moment_transform_class is None:
-            self.central_moment_transform_class = PdfsToCentralMomentsByShiftMatrix
+            self.central_moment_transform_class = BinomialChimeraTransform
         if self.collision_space == CollisionSpace.CUMULANTS and self.cumulant_transform_class is None:
             self.cumulant_transform_class = CentralMomentsToCumulantsByGeneratingFunc
 
@@ -212,9 +212,10 @@ def create_from_equilibrium(stencil, equilibrium, conserved_quantity_computation
                                           force_model=force_model, zero_centered=zero_centered,
                                           central_moment_transform_class=cspace.central_moment_transform_class)
     elif cspace.collision_space == CollisionSpace.CUMULANTS:
-        raise NotImplementedError("Creating a cumulant method from general equilibria is not supported yet.")
-        # return CenteredCumulantBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
-        #                                      force_model=force_model, zero_centered=zero_centered)
+        return CumulantBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
+                                     force_model=force_model, zero_centered=zero_centered,
+                                     central_moment_transform_class=cspace.central_moment_transform_class,
+                                     cumulant_transform_class=cspace.cumulant_transform_class)
 
 
 # ------------------------------------ SRT / TRT/ MRT Creators ---------------------------------------------------------
@@ -239,7 +240,7 @@ def create_srt(stencil, relaxation_rate, continuous_equilibrium=True, **kwargs):
         :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
     continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
-    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.POPULATIONS))
+    check_and_set_mrt_space(CollisionSpace.POPULATIONS)
     moments = get_default_moment_set_for_stencil(stencil)
     rr_dict = OrderedDict([(m, relaxation_rate) for m in moments])
     if continuous_equilibrium:
@@ -268,7 +269,7 @@ def create_trt(stencil, relaxation_rate_even_moments, relaxation_rate_odd_moment
         :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
     continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
-    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.POPULATIONS))
+    check_and_set_mrt_space(CollisionSpace.POPULATIONS)
     moments = get_default_moment_set_for_stencil(stencil)
     rr_dict = OrderedDict([(m, relaxation_rate_even_moments if is_even(m) else relaxation_rate_odd_moments)
                            for m in moments])
@@ -321,7 +322,7 @@ def create_mrt_raw(stencil, relaxation_rates, continuous_equilibrium=True, **kwa
         :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
     continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
-    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.RAW_MOMENTS))
+    check_and_set_mrt_space(CollisionSpace.RAW_MOMENTS)
     moments = get_default_moment_set_for_stencil(stencil)
     nested_moments = [(c,) for c in moments]
     rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D)
@@ -349,7 +350,11 @@ def create_central_moment(stencil, relaxation_rates, nested_moments=None,
         :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` instance
     """
     continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
+
     kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.CENTRAL_MOMENTS))
+    if kwargs['collision_space_info'].collision_space != CollisionSpace.CENTRAL_MOMENTS:
+        raise ValueError("Central moment-based methods can only be derived in central moment space.")
+
     if nested_moments and not isinstance(nested_moments[0], list):
         nested_moments = list(sort_moments_into_groups_of_same_order(nested_moments).values())
         second_order_moments = nested_moments[2]
@@ -392,7 +397,7 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
                         used to compute the equilibrium moments.
     """
     continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
-    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.POPULATIONS))
+    check_and_set_mrt_space(CollisionSpace.POPULATIONS)
 
     def product(iterable):
         return reduce(operator.mul, iterable, 1)
@@ -473,7 +478,7 @@ def create_mrt_orthogonal(stencil, relaxation_rates, continuous_equilibrium=True
                         raw moments except for the separation of the shear and bulk viscosity.
     """
     continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
-    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.RAW_MOMENTS))
+    check_and_set_mrt_space(CollisionSpace.RAW_MOMENTS)
 
     if weighted:
         weights = get_weights(stencil, sp.Rational(1, 3))
@@ -514,58 +519,8 @@ def create_mrt_orthogonal(stencil, relaxation_rates, continuous_equilibrium=True
 
 # ----------------------------------------- Cumulant method creators ---------------------------------------------------
 
-
-def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=None,
-                                   zero_centered=True,
-                                   c_s_sq=sp.Rational(1, 3),
-                                   galilean_correction=False,
-                                   collision_space_info=CollisionSpaceInfo(CollisionSpace.CUMULANTS)):
-    r"""Creates a cumulant lattice Boltzmann model.
-
-    Args:
-        stencil: instance of :class:`lbmpy.stencils.LBStencil`
-        cumulant_to_rr_dict: dict that has as many entries as the stencil. Each cumulant, which can be
-                             represented by an exponent tuple or in polynomial form is mapped to a relaxation rate.
-                             See :func:`lbmpy.methods.default_moment_sets.cascaded_moment_sets_literature`
-        force_model: force model used for the collision. For cumulant LB method a good choice is
-                     `lbmpy.methods.centeredcumulant.CenteredCumulantForceModel`
-        zero_centered: If `True`, the zero-centered storage format for PDFs is used, storing only their deviation from 
-                       the background distribution (given by the lattice weights).
-        c_s_sq: Speed of sound squared
-        galilean_correction: special correction for D3Q27 cumulant collisions. See Appendix H in
-                             :cite:`geier2015`. Implemented in :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
-        central_moment_transform_class: Class which defines the transformation to the central moment space
-                                        (see :mod:`lbmpy.moment_transforms`)
-        cumulant_transform_class: Class which defines the transformation from the central moment space to the
-                                  cumulant space (see :mod:`lbmpy.methods.centeredcumulant.cumulant_transform`)
-
-    Returns:
-        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
-    """
-
-    assert len(cumulant_to_rr_dict) == stencil.Q, \
-        "The number of moments has to be equal to the number of stencil entries"
-    assert collision_space_info.collision_space == CollisionSpace.CUMULANTS
-
-    # CQC
-    cqc = DensityVelocityComputation(stencil, True, zero_centered, force_model=force_model, c_s_sq=c_s_sq)
-
-    equilibrium = ContinuousHydrodynamicMaxwellian(dim=stencil.D, compressible=True,
-                                                   deviation_only=False,
-                                                   order=None,
-                                                   c_s_sq=c_s_sq)
-
-    cspace = collision_space_info
-    return CenteredCumulantBasedLbMethod(stencil, equilibrium, cumulant_to_rr_dict,
-                                         conserved_quantity_computation=cqc, force_model=force_model,
-                                         zero_centered=zero_centered,
-                                         galilean_correction=galilean_correction,
-                                         central_moment_transform_class=cspace.central_moment_transform_class,
-                                         cumulant_transform_class=cspace.cumulant_transform_class)
-
-
-def create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups, **kwargs):
-    r"""Creates a cumulant lattice Boltzmann model based on a default polynomial set.
+def create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs):
+    r"""Creates a cumulant-based lattice Boltzmann method.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
@@ -576,17 +531,24 @@ def create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups,
                           that the force is applied correctly to the momentum groups
         cumulant_groups: Nested sequence of polynomial expressions defining the cumulants to be relaxed. All cumulants 
                          within one group are relaxed with the same relaxation rate.
-        kwargs: See :func:`create_centered_cumulant_model`
+        kwargs: See :func:`create_with_continuous_maxwellian_equilibrium`
 
     Returns:
-        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+        :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` instance
     """
     cumulant_to_rr_dict = _get_relaxation_info_dict(relaxation_rates, cumulant_groups, stencil.D)
-    return create_centered_cumulant_model(stencil, cumulant_to_rr_dict, **kwargs)
+    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.CUMULANTS))
+
+    if kwargs['collision_space_info'].collision_space != CollisionSpace.CUMULANTS:
+        raise ValueError("Cumulant-based methods can only be derived in cumulant space.")
+
+    return create_with_continuous_maxwellian_equilibrium(stencil, cumulant_to_rr_dict, 
+                                                         compressible=True, delta_equilibrium=False,
+                                                         **kwargs)
 
 
 def create_with_monomial_cumulants(stencil, relaxation_rates, **kwargs):
-    r"""Creates a cumulant lattice Boltzmann model based on a default polinomial set.
+    r"""Creates a cumulant lattice Boltzmann model using the given stencil's canonical monomial cumulants.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
@@ -595,29 +557,28 @@ def create_with_monomial_cumulants(stencil, relaxation_rates, **kwargs):
                           used for determine the viscosity of the simulation. All other cumulants are relaxed with one.
                           If a cumulant force model is provided the first order cumulants are relaxed with two to ensure
                           that the force is applied correctly to the momentum groups
-        kwargs: See :func:`create_centered_cumulant_model`
+        kwargs: See :func:`create_cumulant`
 
     Returns:
-        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+        :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` instance
     """
     # Get monomial moments
     cumulants = get_default_moment_set_for_stencil(stencil)
     cumulant_groups = [(c,) for c in cumulants]
-
-    return create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups, **kwargs)
+    return create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs)
 
 
 def create_with_default_polynomial_cumulants(stencil, relaxation_rates, **kwargs):
-    r"""Creates a cumulant lattice Boltzmann model based on a default polynomial set.
+    r"""Creates a cumulant lattice Boltzmann model based on the default polynomial set of :cite:`geier2015`.
 
-    Args: See :func:`create_with_polynomial_cumulants`.
+    Args: See :func:`create_cumulant`.
 
     Returns:
-        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+        :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` instance
     """
     # Get polynomial groups
     cumulant_groups = cascaded_moment_sets_literature(stencil)
-    return create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups, **kwargs)
+    return create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs)
 
 
 def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
@@ -704,6 +665,14 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
                              "relaxed with 0. The last possibility is to specify a relaxation rate for each moment, "
                              "including conserved moments")
     return result
+
+
+def check_and_set_mrt_space(default, **kwargs):
+    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(default))
+
+    if kwargs['collision_space_info'].collision_space not in (CollisionSpace.RAW_MOMENTS, CollisionSpace.POPULATIONS):
+        raise ValueError("Raw moment-based methods can only be derived in population or raw moment space.")
+
 # ----------------------------------------- Comparison view for notebooks ----------------------------------------------
 
 
