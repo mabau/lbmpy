@@ -43,7 +43,7 @@ def factor_relaxation_rates(cr: LbmCollisionRule):
     """
     sh = cr.simplification_hints
     assert 'relaxation_rates' in sh, "Needs simplification hint 'relaxation_rates': Sequence of relaxation rates"
-    if len(sh['relaxation_rates']) > 19:  # heuristics, works well if there is a small number of relaxation rates
+    if len(set(sh['relaxation_rates'])) > 19:  # heuristics, works well if there is a small number of relaxation rates
         return cr
 
     relaxation_rates = sp.Matrix(sh['relaxation_rates']).atoms(sp.Symbol)
@@ -385,10 +385,15 @@ def __get_common_quadratic_and_constant_terms(cr: LbmCollisionRule):
         t = t.subs({ft: 0 for ft in sh['force_terms']})
 
     weight = t
+    weight = weight.subs(sh['density_deviation'], 1)
+    weight = weight.subs(sh['density'], 1)
 
     for u in sh['velocity']:
         weight = weight.subs(u, 0)
-    weight = weight / sh['density']
+    # weight = weight / sh['density']
     if weight == 0:
         return None
+
+    # t = t.subs(sh['density_deviation'], 0)
+
     return t / weight
