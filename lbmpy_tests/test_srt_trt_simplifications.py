@@ -31,18 +31,32 @@ def check_method(method, limits_default, limits_cse):
     assert ops_cse['divs'] <= limits_cse[2]
 
 
-def test_simplifications_srt_d2q9_incompressible():
+def test_simplifications_srt_d2q9_incompressible_regular():
     omega = sp.symbols('omega')
     method = create_srt(LBStencil(Stencil.D2Q9), omega, compressible=False,
-                        equilibrium_order=2)
-    check_method(method, [53, 46, 0], [57, 38, 0])
+                        zero_centered=False, equilibrium_order=2)
+    check_method(method, [53, 46, 0], [53, 38, 0])
 
 
-def test_simplifications_srt_d2q9_compressible():
+def test_simplifications_srt_d2q9_incompressible_zc():
+    omega = sp.symbols('omega')
+    method = create_srt(LBStencil(Stencil.D2Q9), omega, compressible=False,
+                        zero_centered=True, delta_equilibrium=True, equilibrium_order=2)
+    check_method(method, [53, 46, 0], [53, 38, 0])
+
+
+def test_simplifications_srt_d2q9_compressible_regular():
     omega = sp.symbols('omega')
     method = create_srt(LBStencil(Stencil.D2Q9), omega, compressible=True,
                         equilibrium_order=2)
     check_method(method, [53, 58, 1], [53, 42, 1])
+
+
+def test_simplifications_srt_d2q9_compressible_zc():
+    omega = sp.symbols('omega')
+    method = create_srt(LBStencil(Stencil.D2Q9), omega, compressible=True,
+                        zero_centered=True, delta_equilibrium=True, equilibrium_order=2)
+    check_method(method, [54, 58, 1], [54, 42, 1])
 
 
 def test_simplifications_trt_d2q9_incompressible():
