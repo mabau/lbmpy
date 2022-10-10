@@ -77,7 +77,7 @@ def check_method_equivalence(m1, m2, do_simplifications, use_numeric_subs=False)
 @pytest.mark.longrun
 def test_cumulant():
     stencil = LBStencil(Stencil.D2Q9)
-    original_method = create_with_default_polynomial_cumulants(stencil, [sp.Symbol("omega")])
+    original_method = create_with_default_polynomial_cumulants(stencil, [sp.Symbol("omega")], zero_centered=True)
     changed_method = __change_relaxation_rate_of_conserved_moments(original_method)
 
     check_method_equivalence(original_method, changed_method, True, use_numeric_subs=True)

@@ -1,26 +1,8 @@
-from warnings import warn
-
 import pystencils as ps
 from pystencils.stencil import have_same_entries
 from lbmpy.enums import Stencil
 
 import sympy as sp
-
-
-def get_stencil(name, ordering='walberla'):
-    """
-    Stencils are tuples of discrete velocities. They are commonly labeled in the 'DxQy' notation, where d is the
-    dimension (length of the velocity tuples) and y is number of discrete velocities.
-
-    Args:
-        name: DxQy notation
-        ordering: the LBM literature does not use a common order of the discrete velocities, therefore here
-                  different common orderings are available. All orderings lead to the same method, it just has
-                  to be used consistently. Here more orderings are available to compare intermediate results with
-                  the literature.
-    """
-    warn("This function is deprecated. Please use LBStencil directly.", DeprecationWarning)
-    return LBStencil(name, ordering=ordering)
 
 
 class LBStencil:

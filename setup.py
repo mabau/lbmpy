@@ -89,7 +89,7 @@ setup(name='lbmpy',
       author_email='cs10-codegen@fau.de',
       url='https://i10git.cs.fau.de/pycodegen/lbmpy/',
       packages=['lbmpy'] + ['lbmpy.' + s for s in find_packages('lbmpy')],
-      install_requires=[f'pystencils>=0.4.0,<={major_version}', 'sympy>=1.5.1,<=1.10.1', 'numpy>=1.11.0'],
+      install_requires=[f'pystencils>=0.4.0,<={major_version}', 'sympy>=1.5.1,<=1.11.1', 'numpy>=1.11.0'],
       package_data={'lbmpy': ['phasefield/simplex_projection.pyx', 'phasefield/simplex_projection.c']},
       ext_modules=cython_extensions("lbmpy.phasefield.simplex_projection"),
       classifiers=[
