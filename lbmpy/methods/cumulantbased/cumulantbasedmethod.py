@@ -38,7 +38,6 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         force_model: Instance of :class:`lbmpy.forcemodels.AbstractForceModel`, or None if no forcing terms are required
         zero_centered: Determines the PDF storage format, regular or centered around the equilibrium's
                        background distribution.
-        galilean_correction: if set to True the galilean_correction is applied to a D3Q27 cumulant method
         central_moment_transform_class: transformation class to transform PDFs to central moment space (subclass of 
                                         :class:`lbmpy.moment_transforms.AbstractCentralMomentTransform`)
         cumulant_transform_class: transform class to get from the central moment space to the cumulant space
