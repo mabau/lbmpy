@@ -25,4 +25,5 @@ You can open the notebooks directly to play around with the code examples.
     /notebooks/demo_moments_cumulants_and_maxwellian_equilibrium.ipynb
     /notebooks/demo_automatic_chapman_enskog_analysis.ipynb
     /notebooks/demo_thermalized_lbm.ipynb
+    /notebooks/demo_shallow_water_lbm.ipynb
     /notebooks/demo_theoretical_background_generic_equilibrium_construction.ipynb
