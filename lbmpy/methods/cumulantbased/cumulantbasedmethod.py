@@ -1,9 +1,11 @@
 import sympy as sp
 from collections import OrderedDict
+from typing import Set
 from warnings import filterwarnings
 
 from pystencils import Assignment, AssignmentCollection
 from pystencils.sympyextensions import is_constant
+from pystencils.simp import apply_to_all_assignments
 
 from lbmpy.methods.abstractlbmethod import AbstractLbMethod, LbmCollisionRule, RelaxationInfo
 from lbmpy.methods.conservedquantitycomputation import AbstractConservedQuantityComputation
@@ -210,10 +212,11 @@ class CumulantBasedLbMethod(AbstractLbMethod):
         assert len(weights) == len(self.stencil)
         self._weights = weights
 
-    def get_equilibrium(self, conserved_quantity_equations=None, subexpressions=False, pre_simplification=False,
-                        keep_cqc_subexpressions=True, include_force_terms=False):
+    def get_equilibrium(self, conserved_quantity_equations: AssignmentCollection = None, subexpressions: bool = False,
+                        pre_simplification: bool = False, keep_cqc_subexpressions: bool = True,
+                        include_force_terms: bool = False) -> LbmCollisionRule:
         """Returns equation collection, to compute equilibrium values.
-        The equations have the post collision symbols as left hand sides and are
+        The equations have the post collision symbols as left-hand sides and are
         functions of the conserved quantities
 
         Args:
@@ -224,39 +227,46 @@ class CumulantBasedLbMethod(AbstractLbMethod):
             keep_cqc_subexpressions: if equilibrium is returned without subexpressions keep_cqc_subexpressions
                                      determines if also subexpressions to calculate conserved quantities should be
                                      plugged into the main assignments
+            include_force_terms: if set to True the equilibrium is shifted by forcing terms coming from the force model
+                                 of the method.
         """
-        r_info_dict = {c: RelaxationInfo(info.equilibrium_value, sp.Integer(1))
-                       for c, info in self.relaxation_info_dict.items()}
-        ac = self._centered_cumulant_collision_rule(
-            r_info_dict, conserved_quantity_equations, pre_simplification,
-            include_force_terms=include_force_terms, symbolic_relaxation_rates=False)
+        r_info_dict = OrderedDict({c: RelaxationInfo(info.equilibrium_value, sp.Integer(1))
+                                   for c, info in self.relaxation_info_dict.items()})
+        ac = self._centered_cumulant_collision_rule(cumulant_to_relaxation_info_dict=r_info_dict,
+                                                    conserved_quantity_equations=conserved_quantity_equations,
+                                                    pre_simplification=pre_simplification,
+                                                    include_force_terms=include_force_terms,
+                                                    symbolic_relaxation_rates=False)
 
-        # from .cumulant_simplifications import insert_logs
-        # ac = insert_logs(ac)
+        expand_all_assignments = apply_to_all_assignments(sp.expand)
 
         if not subexpressions:
             if keep_cqc_subexpressions:
                 bs = self._bound_symbols_cqc(conserved_quantity_equations)
-                return ac.new_without_subexpressions(subexpressions_to_keep=bs)
+                ac = expand_all_assignments(ac.new_without_subexpressions(subexpressions_to_keep=bs))
+                return ac.new_without_unused_subexpressions()
             else:
-                return ac.new_without_subexpressions()
+                ac = expand_all_assignments(ac.new_without_subexpressions())
+                return ac.new_without_unused_subexpressions()
         else:
-            return ac
+            return ac.new_without_unused_subexpressions()
 
-    def get_equilibrium_terms(self):
+    def get_equilibrium_terms(self) -> sp.Matrix:
         equilibrium = self.get_equilibrium()
         return sp.Matrix([eq.rhs for eq in equilibrium.main_assignments])
 
-    def get_collision_rule(self, conserved_quantity_equations=None, pre_simplification=False):
+    def get_collision_rule(self, conserved_quantity_equations: AssignmentCollection = None,
+                           pre_simplification: bool = False) -> AssignmentCollection:
         """Returns an LbmCollisionRule i.e. an equation collection with a reference to the method.
         This collision rule defines the collision operator."""
-        return self._centered_cumulant_collision_rule(
-            self.relaxation_info_dict, conserved_quantity_equations, pre_simplification, True,
-            symbolic_relaxation_rates=True)
+        return self._centered_cumulant_collision_rule(cumulant_to_relaxation_info_dict=self.relaxation_info_dict,
+                                                      conserved_quantity_equations=conserved_quantity_equations,
+                                                      pre_simplification=pre_simplification,
+                                                      include_force_terms=True, symbolic_relaxation_rates=True)
 
     #   ------------------------------- Internals --------------------------------------------
 
-    def _bound_symbols_cqc(self, conserved_quantity_equations=None):
+    def _bound_symbols_cqc(self, conserved_quantity_equations: AssignmentCollection = None) -> Set[sp.Symbol]:
         f = self.pre_collision_pdf_symbols
         cqe = conserved_quantity_equations
 
@@ -283,11 +293,11 @@ class CumulantBasedLbMethod(AbstractLbMethod):
 
         return [w for w in weights]
 
-    def _centered_cumulant_collision_rule(self, cumulant_to_relaxation_info_dict,
-                                          conserved_quantity_equations=None,
-                                          pre_simplification=False,
-                                          include_force_terms=False,
-                                          symbolic_relaxation_rates=False):
+    def _centered_cumulant_collision_rule(self, cumulant_to_relaxation_info_dict: OrderedDict,
+                                          conserved_quantity_equations: AssignmentCollection = None,
+                                          pre_simplification: bool = False,
+                                          include_force_terms: bool = False,
+                                          symbolic_relaxation_rates: bool = False) -> LbmCollisionRule:
 
         # Filter out JobLib warnings. They are not usefull for use:
         # https://github.com/joblib/joblib/issues/683

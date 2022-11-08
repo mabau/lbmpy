@@ -5,6 +5,7 @@ import sympy as sp
 from sympy.core.numbers import Zero
 
 from pystencils import Assignment, AssignmentCollection
+from lbmpy.stencils import LBStencil
 
 RelaxationInfo = namedtuple('RelaxationInfo', ['equilibrium_value', 'relaxation_rate'])
 
@@ -21,7 +22,7 @@ class LbmCollisionRule(AssignmentCollection):
 class AbstractLbMethod(abc.ABC):
     """Abstract base class for all LBM methods."""
 
-    def __init__(self, stencil):
+    def __init__(self, stencil: LBStencil):
         self._stencil = stencil
 
     @property
@@ -32,17 +33,17 @@ class AbstractLbMethod(abc.ABC):
     @property
     def dim(self):
         """The method's spatial dimensionality"""
-        return len(self.stencil[0])
+        return self._stencil.D
 
     @property
     def pre_collision_pdf_symbols(self):
         """Tuple of symbols representing the pdf values before collision"""
-        return sp.symbols(f"f_:{len(self.stencil)}")
+        return sp.symbols(f"f_:{self._stencil.Q}")
 
     @property
     def post_collision_pdf_symbols(self):
         """Tuple of symbols representing the pdf values after collision"""
-        return sp.symbols(f"d_:{len(self.stencil)}")
+        return sp.symbols(f"d_:{self._stencil.Q}")
 
     @property
     @abc.abstractmethod
@@ -69,7 +70,7 @@ class AbstractLbMethod(abc.ABC):
     def subs_dict_relxation_rate(self):
         """returns a dictonary which maps the replaced numerical relaxation rates to its original numerical value"""
         result = dict()
-        for i in range(len(self.stencil)):
+        for i in range(self._stencil.Q):
             result[self.symbolic_relaxation_matrix[i, i]] = self.relaxation_matrix[i, i]
         return result
 
