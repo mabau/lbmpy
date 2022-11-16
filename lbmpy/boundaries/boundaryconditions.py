@@ -140,7 +140,10 @@ class FreeSlip(LbBoundary):
                              "the normal direction is not defined for this class")
 
         if normal_direction:
-            self.mirror_axis = normal_direction.index(*[dir for dir in normal_direction if dir != 0])
+            normal_direction = tuple([int(n) for n in normal_direction])
+            assert all([n in [-1, 0, 1] for n in normal_direction]), \
+                "Only -1, 0 and 1 allowed for defining the normal direction"
+            self.mirror_axis = normal_direction.index(*[d for d in normal_direction if d != 0])
 
         self.normal_direction = normal_direction
         self.dim = len(stencil[0])
@@ -369,7 +372,9 @@ class SimpleExtrapolationOutflow(LbBoundary):
         if name is None:
             name = f"Simple Outflow: {offset_to_direction_string(normal_direction)}"
 
-        self.normal_direction = normal_direction
+        self.normal_direction = tuple([int(n) for n in normal_direction])
+        assert all([n in [-1, 0, 1] for n in self.normal_direction]), \
+            "Only -1, 0 and 1 allowed for defining the normal direction"
         super(SimpleExtrapolationOutflow, self).__init__(name)
 
     def get_additional_code_nodes(self, lb_method):
@@ -436,7 +441,9 @@ class ExtrapolationOutflow(LbBoundary):
         if name is None:
             name = f"Outflow: {offset_to_direction_string(normal_direction)}"
 
-        self.normal_direction = normal_direction
+        self.normal_direction = tuple([int(n) for n in normal_direction])
+        assert all([n in [-1, 0, 1] for n in self.normal_direction]), \
+            "Only -1, 0 and 1 allowed for defining the normal direction"
         self.streaming_pattern = streaming_pattern
         self.zeroth_timestep = zeroth_timestep
         self.dx = sp.Number(dx)
