@@ -11,9 +11,21 @@ from lbmpy.stencils import LBStencil
 from pystencils.rng import PhiloxTwoDoubles
 
 import pytest
+from pystencils import get_code_str
 from pystencils.backends.simd_instruction_sets import get_supported_instruction_sets, get_vector_instruction_set
 from pystencils.cpu.cpujit import get_compiler_config
 from pystencils.enums import Target
+
+
+def _skip_instruction_sets_windows(instruction_sets):
+    if get_compiler_config()['os'] == 'windows':
+        # skip instruction sets supported by the CPU but not by the compiler
+        if 'avx' in instruction_sets and ('/arch:avx2' not in get_compiler_config()['flags'].lower()
+                                          and '/arch:avx512' not in get_compiler_config()['flags'].lower()):
+            instruction_sets.remove('avx')
+        if 'avx512' in instruction_sets and '/arch:avx512' not in get_compiler_config()['flags'].lower():
+            instruction_sets.remove('avx512')
+    return instruction_sets
 
 
 def single_component_maxwell(x1, x2, kT, mass):
@@ -80,15 +92,15 @@ def get_fluctuating_lb(size=None, kT=None,
         'force', values_per_cell=stencil.D, layout='f', gpu=target == Target.GPU)
 
     # Method setup
-    method = create_mrt_orthogonal(
-        stencil=stencil,
-        compressible=True,
-        weighted=True,
-        relaxation_rates=rr_getter,
-        force_model=Guo(force=force_field.center_vector))
+    lbm_config = LBMConfig(stencil=stencil, method=Method.MRT, compressible=True,
+                           weighted=True, zero_centered=False, relaxation_rates=rr_getter,
+                           force_model=Guo(force=force_field.center_vector),
+                           fluctuating={'temperature': kT},
+                           kernel_type='collide_only')
 
-    lbm_config = LBMConfig(lb_method=method, fluctuating={'temperature': kT},
-                           compressible=True, kernel_type='collide_only')
+    lb_method = create_lb_method(lbm_config=lbm_config)
+    lbm_config.lb_method = lb_method
+    
     lbm_opt = LBMOptimisation(symbolic_field=src, cse_global=True)
     collision_rule = create_lb_collision_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
@@ -99,7 +111,7 @@ def get_fluctuating_lb(size=None, kT=None,
     stream = create_stream_pull_with_output_kernel(collision.method, src, dst,
                                                    {'density': rho, 'velocity': u})
 
-    config = ps.CreateKernelConfig(cpu_openmp=True, target=dh.default_target)
+    config = ps.CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
 
     # Compile kernels
     stream_kernel = ps.create_kernel(stream, config=config).compile()
@@ -245,47 +257,91 @@ def test_point_force(target=Target.CPU):
 
 
 @pytest.mark.skipif(not get_supported_instruction_sets(), reason="No vector instruction sets supported")
+@pytest.mark.parametrize('data_type', ("float32", "float64"))
 @pytest.mark.parametrize('assume_aligned', (True, False))
 @pytest.mark.parametrize('assume_inner_stride_one', (True, False))
 @pytest.mark.parametrize('assume_sufficient_line_padding', (True, False))
-def test_vectorization(assume_aligned, assume_inner_stride_one, assume_sufficient_line_padding):
+def test_vectorization(data_type, assume_aligned, assume_inner_stride_one, assume_sufficient_line_padding):
+    stencil = LBStencil(Stencil.D3Q19)
+    pdfs, pdfs_tmp = ps.fields(f"pdfs({stencil.Q}), pdfs_tmp({stencil.Q}): {data_type}[3D]", layout='fzyx')
+
     method = create_mrt_orthogonal(
-        stencil=LBStencil(Stencil.D2Q9),
+        stencil=stencil,
         compressible=True,
         weighted=True,
         relaxation_rates=rr_getter)
+
+    rng_node = ps.rng.PhiloxTwoDoubles if data_type == "float64" else ps.rng.PhiloxFourFloats
     lbm_config = LBMConfig(lb_method=method, fluctuating={'temperature': sp.Symbol("kT"),
-                                                          'rng_node': PhiloxTwoDoubles,
-                                                          'block_offsets': (0, 0)},
-                           compressible=True, stencil=method.stencil, kernel_type='collide_only')
-    lbm_opt = LBMOptimisation(cse_global=True)
+                                                          'rng_node': rng_node,
+                                                          'block_offsets': tuple([0] * stencil.D)},
+                           compressible=True, zero_centered=False, 
+                           stencil=method.stencil, kernel_type='collide_only')
+    lbm_opt = LBMOptimisation(cse_global=True, symbolic_field=pdfs, symbolic_temporary_field=pdfs_tmp)
 
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
-    instruction_sets = get_supported_instruction_sets()
-    if get_compiler_config()['os'] == 'windows':
-        # skip instruction sets supported by the CPU but not by the compiler
-        if 'avx' in instruction_sets and ('/arch:avx2' not in get_compiler_config()['flags'].lower()
-                                          and '/arch:avx512' not in get_compiler_config()['flags'].lower()):
-            instruction_sets.remove('avx')
-        if 'avx512' in instruction_sets and '/arch:avx512' not in get_compiler_config()['flags'].lower():
-            instruction_sets.remove('avx512')
+    instruction_sets = _skip_instruction_sets_windows(get_supported_instruction_sets())
     instruction_set = instruction_sets[-1]
 
-    config = ps.CreateKernelConfig(cpu_openmp=False,
+    config = ps.CreateKernelConfig(target=Target.CPU,
+                                   data_type=data_type, default_number_float=data_type,
                                    cpu_vectorize_info={'instruction_set': instruction_set,
                                                        'assume_aligned': assume_aligned,
                                                        'assume_inner_stride_one': assume_inner_stride_one,
                                                        'assume_sufficient_line_padding': assume_sufficient_line_padding,
-                                                       },
-                                   target=Target.CPU)
+                                                       }
+                                   )
 
-    if not assume_inner_stride_one and 'storeS' not in get_vector_instruction_set('double', instruction_set):
+    if not assume_inner_stride_one and 'storeS' not in get_vector_instruction_set(data_type, instruction_set):
         with pytest.warns(UserWarning) as warn:
-            code = ps.create_kernel(collision, config=config)
+            ast = ps.create_kernel(collision, config=config)
             assert 'Could not vectorize loop' in warn[0].message.args[0]
     else:
         with pytest.warns(None) as warn:
-            code = ps.create_kernel(collision, config=config)
+            ast = ps.create_kernel(collision, config=config)
             assert len(warn) == 0
-    code.compile()
+    ast.compile()
+    code = get_code_str(ast)
+    print(code)
+
+
+@pytest.mark.parametrize('data_type', ("float32", "float64"))
+@pytest.mark.parametrize('assume_aligned', (True, False))
+@pytest.mark.parametrize('assume_inner_stride_one', (True, False))
+@pytest.mark.parametrize('assume_sufficient_line_padding', (True, False))
+def test_fluctuating_lb_issue_188_wlb(data_type, assume_aligned,
+                                      assume_inner_stride_one, assume_sufficient_line_padding):
+    stencil = LBStencil(Stencil.D3Q19)
+    temperature = sp.symbols("temperature")
+    pdfs, pdfs_tmp = ps.fields(f"pdfs({stencil.Q}), pdfs_tmp({stencil.Q}): {data_type}[3D]", layout='fzyx')
+
+    rng_node = ps.rng.PhiloxTwoDoubles if data_type == "float64" else ps.rng.PhiloxFourFloats
+    fluctuating = {'temperature': temperature,
+                   'block_offsets': 'walberla',
+                   'rng_node': rng_node}
+
+    lbm_config = LBMConfig(stencil=stencil, method=Method.MRT, compressible=True,
+                           weighted=True, zero_centered=False, relaxation_rate=1.4,
+                           fluctuating=fluctuating)
+    lbm_opt = LBMOptimisation(symbolic_field=pdfs, symbolic_temporary_field=pdfs_tmp, cse_global=True)
+
+    up = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
+
+    cpu_vectorize_info = {'instruction_set': 'avx', 'assume_inner_stride_one': True, 'assume_aligned': True}
+    config = ps.CreateKernelConfig(target=ps.Target.CPU, data_type=data_type, default_number_float=data_type,
+                                   cpu_vectorize_info=cpu_vectorize_info)
+
+    ast = create_kernel(up, config=config)
+    code = ps.get_code_str(ast)
+
+    # print(code)
+
+    if data_type == "float32":
+        assert "0.5f" in code
+        assert "_mm256_mul_ps" in code
+        assert "_mm256_sqrt_ps" in code
+    else:
+        assert "0.5f" not in code
+        assert "_mm256_mul_pd" in code
+        assert "_mm256_sqrt_pd" in code

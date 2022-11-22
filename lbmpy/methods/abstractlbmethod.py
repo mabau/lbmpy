@@ -5,6 +5,7 @@ import sympy as sp
 from sympy.core.numbers import Zero
 
 from pystencils import Assignment, AssignmentCollection
+from lbmpy.stencils import LBStencil
 
 RelaxationInfo = namedtuple('RelaxationInfo', ['equilibrium_value', 'relaxation_rate'])
 
@@ -21,27 +22,28 @@ class LbmCollisionRule(AssignmentCollection):
 class AbstractLbMethod(abc.ABC):
     """Abstract base class for all LBM methods."""
 
-    def __init__(self, stencil):
+    def __init__(self, stencil: LBStencil):
         self._stencil = stencil
 
     @property
     def stencil(self):
-        """Discrete set of velocities, represented as nested tuple"""
+        """Discrete set of velocities, represented by :class:`lbmpy.stencils.LBStencil`"""
         return self._stencil
 
     @property
     def dim(self):
-        return len(self.stencil[0])
+        """The method's spatial dimensionality"""
+        return self._stencil.D
 
     @property
     def pre_collision_pdf_symbols(self):
         """Tuple of symbols representing the pdf values before collision"""
-        return sp.symbols(f"f_:{len(self.stencil)}")
+        return sp.symbols(f"f_:{self._stencil.Q}")
 
     @property
     def post_collision_pdf_symbols(self):
         """Tuple of symbols representing the pdf values after collision"""
-        return sp.symbols(f"d_:{len(self.stencil)}")
+        return sp.symbols(f"d_:{self._stencil.Q}")
 
     @property
     @abc.abstractmethod
@@ -52,9 +54,9 @@ class AbstractLbMethod(abc.ABC):
     def relaxation_matrix(self):
         """Returns a qxq diagonal matrix which contains the relaxation rate for each moment on the diagonal"""
         d = sp.zeros(len(self.relaxation_rates))
-        for i in range(0, len(self.relaxation_rates)):
+        for i, w in enumerate(self.relaxation_rates):
             # note that 0.0 is converted to sp.Zero here. It is not possible to prevent this.
-            d[i, i] = self.relaxation_rates[i]
+            d[i, i] = w
         return d
 
     @property
@@ -68,16 +70,18 @@ class AbstractLbMethod(abc.ABC):
     def subs_dict_relxation_rate(self):
         """returns a dictonary which maps the replaced numerical relaxation rates to its original numerical value"""
         result = dict()
-        for i in range(len(self.stencil)):
+        for i in range(self._stencil.Q):
             result[self.symbolic_relaxation_matrix[i, i]] = self.relaxation_matrix[i, i]
         return result
 
     # ------------------------- Abstract Methods & Properties ----------------------------------------------------------
 
+    @property
     @abc.abstractmethod
     def conserved_quantity_computation(self):
         """Returns an instance of class :class:`lbmpy.methods.AbstractConservedQuantityComputation`"""
 
+    @property
     @abc.abstractmethod
     def weights(self):
         """Returns a sequence of weights, one for each lattice direction"""
@@ -95,17 +99,17 @@ class AbstractLbMethod(abc.ABC):
 
     # -------------------------------- Helper Functions ----------------------------------------------------------------
 
-    def _generate_symbolic_relaxation_matrix(self):
+    def _generate_symbolic_relaxation_matrix(self, relaxation_rates=None):
         """
         This function replaces the numbers in the relaxation matrix with symbols in this case, and returns also
         the subexpressions, that assign the number to the newly introduced symbol
         """
-        rr = [self.relaxation_matrix[i, i] for i in range(self.relaxation_matrix.rows)]
+        rr = relaxation_rates if relaxation_rates is not None else self.relaxation_rates
         unique_relaxation_rates = set()
         subexpressions = {}
         for relaxation_rate in rr:
+            relaxation_rate = sp.sympify(relaxation_rate)
             if relaxation_rate not in unique_relaxation_rates:
-                relaxation_rate = sp.sympify(relaxation_rate)
                 # special treatment for zero, sp.Zero would be an integer ..
                 if isinstance(relaxation_rate, Zero):
                     relaxation_rate = 0.0

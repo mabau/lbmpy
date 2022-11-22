@@ -26,7 +26,7 @@ def test_srt(continuous_eq, stencil):
     print(f"Analysing {stencil}, ContMaxwellianConstruction {continuous_eq}")
 
     lbm_config = LBMConfig(stencil=LBStencil(stencil), method=Method.SRT, compressible=True,
-                           relaxation_rate=omega, maxwellian_moments=continuous_eq)
+                           zero_centered=False, relaxation_rate=omega, continuous_equilibrium=continuous_eq)
     method = create_lb_method(lbm_config=lbm_config)
     analysis = ChapmanEnskogAnalysis(method)
     omega_value = analysis.relaxation_rate_from_kinematic_viscosity(1)[omega]
@@ -38,7 +38,7 @@ def test_steady_state_silva_paper_comparison():
     eps, tau, lambda_plus, f = sp.symbols("epsilon tau Lambda f")
 
     lbm_config = LBMConfig(stencil=LBStencil(Stencil.D3Q19), compressible=False, relaxation_rate=1 / tau,
-                           maxwellian_moments=False)
+                           continuous_equilibrium=False, zero_centered=False)
     method = create_lb_method(lbm_config=lbm_config)
     analysis = SteadyStateChapmanEnskogAnalysis(method)
 
@@ -147,7 +147,7 @@ def test_steady_state_silva_paper_comparison():
 def test_higher_order_moment_computation():
     """In chapman_enskog_higher_order.py there are some functions to generalize the std Chapman Enskog expansion
     These are not used by the Chapman Enskog class yet."""
-    method = create_lb_method(lbm_config=LBMConfig(stencil=LBStencil(Stencil.D2Q9),
+    method = create_lb_method(lbm_config=LBMConfig(stencil=LBStencil(Stencil.D2Q9), zero_centered=False,
                                                    method=Method.TRT, compressible=False))
     mom_comp = LbMethodEqMoments(method)
     dim = method.dim

@@ -56,10 +56,8 @@ class LatticeBoltzmannStep:
         lbm_config, lbm_optimisation, config = update_with_default_parameters(method_parameters, optimization,
                                                                               lbm_config, lbm_optimisation, config)
 
-        # the parallel datahandling understands only numpy datatypes. Strings lead to an error.
-        field_dtype = np.float64
-        if config.data_type == 'float' or config.data_type == 'float32':
-            field_dtype = np.float32
+        # the parallel datahandling understands only numpy datatypes. Strings lead to an errors
+        field_dtype = config.data_type.default_factory().numpy_dtype
 
         if lbm_kernel:
             q = lbm_kernel.method.stencil.Q

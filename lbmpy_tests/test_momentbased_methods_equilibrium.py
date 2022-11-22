@@ -18,12 +18,14 @@ from lbmpy.stencils import LBStencil
 def check_for_matching_equilibrium(method_name, stencil, compressibility):
     omega = sp.Symbol("omega")
     if method_name == Method.SRT:
-        method = create_srt(stencil, omega, compressible=compressibility, equilibrium_order=2)
+        method = create_srt(stencil, omega, compressible=compressibility,
+                            continuous_equilibrium=False, equilibrium_order=2)
     elif method_name == Method.TRT:
-        method = create_trt(stencil, omega, omega, compressible=compressibility, equilibrium_order=2)
+        method = create_trt(stencil, omega, omega, compressible=compressibility,
+                            continuous_equilibrium=False, equilibrium_order=2)
     elif method_name == Method.MRT:
-        method = create_mrt_orthogonal(stencil, [omega] * stencil.Q, weighted=False, compressible=compressibility,
-                                       equilibrium_order=2)
+        method = create_mrt_orthogonal(stencil, [omega] * stencil.Q, continuous_equilibrium=False,
+                                       weighted=False, compressible=compressibility, equilibrium_order=2)
     else:
         raise ValueError("Unknown method")
 
@@ -50,7 +52,7 @@ def test_relaxation_rate_setter():
 
     lbm_config_1 = LBMConfig(method=Method.SRT, stencil=LBStencil(Stencil.D2Q9), relaxation_rates=[o3])
     lbm_config_2 = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D2Q9), relaxation_rates=[o3, o3, o3, o3])
-    lbm_config_3 = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D2Q9),
+    lbm_config_3 = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D2Q9), zero_centered=False,
                              relaxation_rates=[o3] * 9, entropic=True)
 
     method = create_lb_method(lbm_config=lbm_config_1)
@@ -69,28 +71,28 @@ def test_mrt_orthogonal():
     m_ref = {}
 
     moments = mrt_orthogonal_modes_literature(LBStencil(Stencil.D2Q9), True)
-    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D2Q9), maxwellian_moments=True,
+    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D2Q9), continuous_equilibrium=True,
                            nested_moments=moments)
     m = create_lb_method(lbm_config=lbm_config)
     assert m.is_weighted_orthogonal
     m_ref[(Stencil.D2Q9, True)] = m
 
     moments = mrt_orthogonal_modes_literature(LBStencil(Stencil.D3Q15), True)
-    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q15), maxwellian_moments=True,
+    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q15), continuous_equilibrium=True,
                            nested_moments=moments)
     m = create_lb_method(lbm_config=lbm_config)
     assert m.is_weighted_orthogonal
     m_ref[(Stencil.D3Q15, True)] = m
 
     moments = mrt_orthogonal_modes_literature(LBStencil(Stencil.D3Q19), True)
-    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q19), maxwellian_moments=True,
+    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q19), continuous_equilibrium=True,
                            nested_moments=moments)
     m = create_lb_method(lbm_config=lbm_config)
     assert m.is_weighted_orthogonal
     m_ref[(Stencil.D3Q19, True)] = m
 
     moments = mrt_orthogonal_modes_literature(LBStencil(Stencil.D3Q27), False)
-    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q27), maxwellian_moments=True,
+    lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(Stencil.D3Q27), continuous_equilibrium=True,
                            nested_moments=moments)
     m = create_lb_method(lbm_config=lbm_config)
     assert m.is_orthogonal
@@ -98,7 +100,7 @@ def test_mrt_orthogonal():
 
     for weighted in [True, False]:
         for stencil in [Stencil.D2Q9, Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27]:
-            lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(stencil), maxwellian_moments=True,
+            lbm_config = LBMConfig(method=Method.MRT, stencil=LBStencil(stencil), continuous_equilibrium=True,
                                    weighted=weighted)
             m = create_lb_method(lbm_config=lbm_config)
             if weighted:
@@ -115,6 +117,6 @@ def test_mrt_orthogonal():
                 bulk_moments_lit = set([mom for mom in ref.moments if is_bulk_moment(mom, ref.dim)])
                 shear_moments_lit = set([mom for mom in ref.moments if is_shear_moment(mom, ref.dim)])
 
-                if stencil != stencil.D3Q27:  # this one uses a different linear combination in literature
+                if stencil != Stencil.D3Q27:  # this one uses a different linear combination in literature
                     assert shear_moments == shear_moments_lit
                 assert bulk_moments == bulk_moments_lit

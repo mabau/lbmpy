@@ -36,7 +36,8 @@ def test_simple(target):
     if target == Target.GPU:
         dh.all_to_gpu()
 
-    lbm_config = LBMConfig(stencil=LBStencil(Stencil.D2Q9), compressible=False, relaxation_rate=1.8)
+    lbm_config = LBMConfig(stencil=LBStencil(Stencil.D2Q9), compressible=False, zero_centered=False,
+                           delta_equilibrium=False, relaxation_rate=1.8)
     config = CreateKernelConfig(target=target)
 
     lb_func = create_lb_function(lbm_config=lbm_config, config=config)
@@ -378,7 +379,7 @@ def test_free_slip_equivalence():
 
 
 def test_exotic_boundaries():
-    step = LatticeBoltzmannStep((50, 50), relaxation_rate=1.8, compressible=False, periodicity=False)
+    step = LatticeBoltzmannStep((50, 50), relaxation_rate=1.8, compressible=False, zero_centered=True, periodicity=False)
     add_box_boundary(step.boundary_handling, NeumannByCopy())
     step.boundary_handling.set_boundary(StreamInConstant(0), make_slice[0, :])
     step.run(100)

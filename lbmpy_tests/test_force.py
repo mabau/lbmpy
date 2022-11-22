@@ -1,6 +1,7 @@
 import pytest
 
 import numpy as np
+from numpy.testing import assert_allclose
 import sympy as sp
 import pystencils as ps
 from pystencils import Target
@@ -8,23 +9,23 @@ from pystencils import Target
 from lbmpy.creationfunctions import create_lb_method, create_lb_update_rule, LBMConfig, LBMOptimisation
 from lbmpy.enums import Stencil, Method, ForceModel
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter, macroscopic_values_getter
-from lbmpy.moments import is_bulk_moment
+from lbmpy.moments import (is_bulk_moment, moments_up_to_component_order,
+                           exponents_to_polynomial_representations, exponent_tuple_sort_key)
 from lbmpy.stencils import LBStencil
 from lbmpy.updatekernels import create_stream_pull_with_output_kernel
 
 # all force models available are defined in the ForceModel enum, but Cumulant is not a "real" force model
-force_models = [f for f in ForceModel if f is not ForceModel.CUMULANT]
+force_models = [f for f in ForceModel]
 
 
-@pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT])
+@pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT, Method.MRT, Method.CUMULANT])
+@pytest.mark.parametrize("zero_centered", [False, True])
 @pytest.mark.parametrize("force_model", force_models)
 @pytest.mark.parametrize("omega", [0.5, 1.5])
-def test_total_momentum(method_enum, force_model, omega):
-    # for the EDM force model this test case not work. However it is successfully used in test_entropic_model
-    # Any attempt to adapted the EDM force model so it fullfills the test case did result in a failure in the
-    # entropic test case. Note also that the test runs for MRT and EMD
-    if force_model == ForceModel.EDM:
-        pytest.skip()
+def test_total_momentum(method_enum, zero_centered, force_model, omega):
+    if method_enum == Method.CUMULANT and \
+            force_model not in (ForceModel.SIMPLE, ForceModel.LUO, ForceModel.GUO, ForceModel.HE):
+        return True
 
     L = (16, 16)
     stencil = LBStencil(Stencil.D2Q9)
@@ -37,17 +38,20 @@ def test_total_momentum(method_enum, force_model, omega):
     u = dh.add_array('u', values_per_cell=stencil.D)
 
     lbm_config = LBMConfig(method=method_enum, stencil=stencil, relaxation_rate=omega,
-                           compressible=True, force_model=force_model, force=F, streaming_pattern='pull')
+                           compressible=True, zero_centered=zero_centered,
+                           force_model=force_model, force=F, streaming_pattern='pull')
     lbm_opt = LBMOptimisation(symbolic_field=src)
 
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
-    config = ps.CreateKernelConfig(cpu_openmp=True, target=dh.default_target)
+    config = ps.CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
 
     collision_kernel = ps.create_kernel(collision, config=config).compile()
 
+    fluid_density = 1.1
+
     def init():
-        dh.fill(ρ.name, 1)
+        dh.fill(ρ.name, fluid_density)
         dh.fill(u.name, 0)
 
         setter = macroscopic_values_setter(collision.method, velocity=(0,) * dh.dim,
@@ -73,8 +77,13 @@ def test_total_momentum(method_enum, force_model, omega):
     init()
     time_loop(t)
     dh.run_kernel(getter_kernel)
+
+    #   Check that density did not change
+    assert_allclose(dh.gather_array(ρ.name), fluid_density)
+
+    #   Check for correct velocity
     total = np.sum(dh.gather_array(u.name), axis=(0, 1))
-    assert np.allclose(total / np.prod(L) / F / t, 1)
+    assert_allclose(total / np.prod(L) / F * fluid_density / t, 1)
 
 
 @pytest.mark.parametrize("force_model", force_models)
@@ -192,7 +201,7 @@ def test_literature(force_model, stencil, method):
     subs_dict = lb_method.subs_dict_relxation_rate
     force_term = sp.simplify(lb_method.force_model(lb_method).subs(subs_dict))
     u = sp.Matrix(lb_method.first_order_equilibrium_moment_symbols)
-    rho = lb_method.conserved_quantity_computation.zeroth_order_moment_symbol
+    rho = lb_method.conserved_quantity_computation.density_symbol
 
     # see silva2020 for nomenclature
     F = sp.Matrix(F)
@@ -271,11 +280,11 @@ def test_modes_central_moment(force_model, compressible):
     F = list(sp.symbols(f"F_:{stencil.D}"))
 
     lbm_config = LBMConfig(method=Method.CENTRAL_MOMENT, stencil=stencil, relaxation_rate=omega_s,
-                           compressible=True, force_model=force_model, force=tuple(F))
+                           compressible=compressible, force_model=force_model, force=tuple(F))
     method = create_lb_method(lbm_config=lbm_config)
 
     subs_dict = method.subs_dict_relxation_rate
-    force_moments = method.force_model.moment_space_forcing(method)
+    force_moments = method.force_model.central_moment_space_forcing(method)
     force_moments = force_moments.subs(subs_dict)
 
     # The mass mode should be zero
@@ -283,6 +292,34 @@ def test_modes_central_moment(force_model, compressible):
 
     # The momentum moments should contain the force
     assert list(force_moments[1:stencil.D + 1]) == F
+
+
+@pytest.mark.parametrize("force_model", force_models)
+@pytest.mark.parametrize("compressible", [True, False])
+def test_symmetric_forcing_equivalence(force_model, compressible):
+    stencil = LBStencil(Stencil.D2Q9)
+    omega_s = sp.Symbol("omega_s")
+    F = list(sp.symbols(f"F_:{stencil.D}"))
+
+    moments = moments_up_to_component_order(2, dim=2)
+    moments = sorted(moments, key=exponent_tuple_sort_key)
+    moment_polys = exponents_to_polynomial_representations(moments)
+
+    lbm_config = LBMConfig(method=Method.CENTRAL_MOMENT, stencil=stencil, relaxation_rate=omega_s,
+                           nested_moments=moment_polys, compressible=True, force_model=force_model, force=tuple(F))
+    method = create_lb_method(lbm_config=lbm_config)
+    if not method.force_model.has_symmetric_central_moment_forcing:
+        return True
+
+    subs_dict = method.subs_dict_relxation_rate
+    force_moments = method.force_model.central_moment_space_forcing(method)
+    force_moments = force_moments.subs(subs_dict)
+
+    force_before, force_after = method.force_model.symmetric_central_moment_forcing(method, moments)
+    d = method.relaxation_matrix
+    eye = sp.eye(stencil.Q)
+    force_combined = (eye - d) @ force_before + force_after
+    assert (force_moments - force_combined).expand() == sp.Matrix([0] * stencil.Q)
 
 
 @pytest.mark.parametrize("stencil", [Stencil.D3Q15, Stencil.D3Q19, Stencil.D3Q27])
@@ -376,7 +413,8 @@ def _check_modes(stencil, force_model, compressible):
                            - (2 + lambda_b) * sp.Matrix(u).dot(F)) == 0
 
         # All other moments should be zero
-        assert list(force_moments[stencil.D + 1 + num_stresses:]) == [0] * (len(stencil) - (stencil.D + 1 + num_stresses))
+        assert list(force_moments[stencil.D + 1 + num_stresses:]) == [0] * \
+            (len(stencil) - (stencil.D + 1 + num_stresses))
     elif force_model == ForceModel.SIMPLE:
         # All other moments should be zero
         assert list(force_moments[stencil.D + 1:]) == [0] * (len(stencil) - (stencil.D + 1))

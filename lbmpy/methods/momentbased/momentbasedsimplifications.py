@@ -4,10 +4,12 @@ All of these transformations operate on :class:`pystencils.AssignmentCollection`
 simplification hints, which are set by the MomentBasedLbMethod.
 """
 import sympy as sp
+from itertools import product
 
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 from pystencils import Assignment, AssignmentCollection
 from pystencils.stencil import inverse_direction
+from pystencils.simp.subexpression_insertion import insert_subexpressions, is_constant
 from pystencils.sympyextensions import extract_most_common_factor, replace_second_order_products, subs_additive
 
 from collections import defaultdict
@@ -41,7 +43,7 @@ def factor_relaxation_rates(cr: LbmCollisionRule):
     """
     sh = cr.simplification_hints
     assert 'relaxation_rates' in sh, "Needs simplification hint 'relaxation_rates': Sequence of relaxation rates"
-    if len(sh['relaxation_rates']) > 19:  # heuristics, works well if there is a small number of relaxation rates
+    if len(set(sh['relaxation_rates'])) > 19:  # heuristics, works well if there is a small number of relaxation rates
         return cr
 
     relaxation_rates = sp.Matrix(sh['relaxation_rates']).atoms(sp.Symbol)
@@ -202,6 +204,7 @@ def cse_in_opposing_directions(cr: LbmCollisionRule):
 
                 found_subexpressions, new_terms = sp.cse(handled_terms, symbols=replacement_symbol_generator,
                                                          order='None', optimizations=[])
+
                 substitutions += [Assignment(f[0], f[1]) for f in found_subexpressions]
 
                 update_rules = [Assignment(ur.lhs, ur.rhs.subs(relaxation_rate * old_term, new_coefficient * new_term))
@@ -247,14 +250,14 @@ def substitute_moments_in_conserved_quantity_equations(ac: AssignmentCollection)
 
     for cq_sym, moment_sym in cq_symbols_to_moments.items():
         moment_eq = reduced_assignments[moment_sym]
-        assert moment_eq.count(cq_sym) == 0, "Expressing conserved quantity " \
-            f"{cq_sym} using moment {moment_sym} would introduce a circular dependency."
+        assert moment_eq.count(cq_sym) == 0, f"Expressing conserved quantity {cq_sym} using moment {moment_sym} " \
+                                             "would introduce a circular dependency."
         cq_eq = subs_additive(reduced_assignments[cq_sym], moment_sym, moment_eq)
         if cq_sym in main_asm_dict:
             main_asm_dict[cq_sym] = cq_eq
         else:
             assert moment_sym in subexp_dict, f"Cannot express subexpression {cq_sym}" \
-                f" using main assignment {moment_sym}!"
+                                              f" using main assignment {moment_sym}!"
             subexp_dict[cq_sym] = cq_eq
 
     main_assignments = [Assignment(lhs, rhs) for lhs, rhs in main_asm_dict.items()]
@@ -316,6 +319,46 @@ def split_pdf_main_assignments_by_symmetry(ac: AssignmentCollection):
     main_assignments = [Assignment(lhs, rhs) for lhs, rhs in asm_dict.items()]
     return ac.copy(main_assignments=main_assignments, subexpressions=subexpressions)
 
+
+def insert_pure_products(ac, symbols, **kwargs):
+    """Inserts any subexpression whose RHS is a product containing exclusively factors
+    from the given sequence of symbols."""
+    def callback(exp):
+        rhs = exp.rhs
+        if isinstance(rhs, sp.Symbol) and rhs in symbols:
+            return True
+        elif isinstance(rhs, sp.Mul):
+            if all((is_constant(arg) or (arg in symbols)) for arg in rhs.args):
+                return True
+        return False
+
+    return insert_subexpressions(ac, callback, **kwargs)
+
+
+def insert_conserved_quantity_products(cr, **kwargs):
+    from lbmpy.moments import statistical_quantity_symbol as sq_sym
+    from lbmpy.moment_transforms import PRE_COLLISION_MONOMIAL_RAW_MOMENT as m
+    
+    rho = cr.method.zeroth_order_equilibrium_moment_symbol
+    u = cr.method.first_order_equilibrium_moment_symbols
+    m000 = sq_sym(m, (0,) * cr.method.dim)
+    symbols = (rho, m000) + u
+
+    return insert_pure_products(cr, symbols)
+
+
+def insert_half_force(cr, **kwargs):
+    fmodel = cr.method.force_model
+    if not fmodel:
+        return cr
+    force = fmodel.symbolic_force_vector
+    force_exprs = set(c * f / 2 for c, f in product((1, -1), force))
+
+    def callback(expr):
+        return expr.rhs in force_exprs
+
+    return insert_subexpressions(cr, callback, **kwargs)
+
 # -------------------------------------- Helper Functions --------------------------------------------------------------
 
 
@@ -342,10 +385,15 @@ def __get_common_quadratic_and_constant_terms(cr: LbmCollisionRule):
         t = t.subs({ft: 0 for ft in sh['force_terms']})
 
     weight = t
+    weight = weight.subs(sh['density_deviation'], 1)
+    weight = weight.subs(sh['density'], 1)
 
     for u in sh['velocity']:
         weight = weight.subs(u, 0)
-    weight = weight / sh['density']
+    # weight = weight / sh['density']
     if weight == 0:
         return None
+
+    # t = t.subs(sh['density_deviation'], 0)
+
     return t / weight

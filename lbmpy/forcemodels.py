@@ -91,10 +91,12 @@ import sympy as sp
 
 from pystencils.sympyextensions import scalar_product
 
-from lbmpy.maxwellian_equilibrium import get_equilibrium_values_of_maxwell_boltzmann_function
+from lbmpy.maxwellian_equilibrium import (
+    discrete_maxwellian_equilibrium, get_equilibrium_values_of_maxwell_boltzmann_function
+)
 from lbmpy.moments import (
     MOMENT_SYMBOLS, exponent_tuple_sort_key, exponents_to_polynomial_representations,
-    extract_monomials, moment_sort_key,
+    extract_monomials, moment_sort_key, moment_matrix,
     monomial_to_polynomial_transformation_matrix, set_up_shift_matrix)
 
 FORCE_SYMBOLS = sp.symbols("F_x, F_y, F_z")
@@ -129,6 +131,7 @@ class AbstractForceModel(abc.ABC):
         # central moment space
         self.has_moment_space_forcing = hasattr(self, "moment_space_forcing")
         self.has_central_moment_space_forcing = hasattr(self, "central_moment_space_forcing")
+        self.has_symmetric_central_moment_forcing = hasattr(self, "symmetric_central_moment_forcing")
 
     def __call__(self, lb_method):
         r"""
@@ -199,6 +202,13 @@ class Simple(AbstractForceModel):
         moments = (lb_method.moment_matrix * sp.Matrix(self(lb_method))).expand()
         return lb_method.shift_matrix * moments
 
+    def symmetric_central_moment_forcing(self, lb_method, central_moments):
+        u = lb_method.first_order_equilibrium_moment_symbols
+        cm_matrix = moment_matrix(central_moments, lb_method.stencil, shift_velocity=u)
+        before = sp.Matrix([0] * lb_method.stencil.Q)
+        after = cm_matrix @ sp.Matrix(self(lb_method))
+        return before, after
+
 
 class Luo(AbstractForceModel):
     r"""Force model by Luo :cite:`luo1993lattice`.
@@ -229,6 +239,13 @@ class Luo(AbstractForceModel):
     def central_moment_space_forcing(self, lb_method):
         moments = lb_method.moment_matrix * self(lb_method)
         return (lb_method.shift_matrix * moments).expand()
+
+    def symmetric_central_moment_forcing(self, lb_method, central_moments):
+        u = lb_method.first_order_equilibrium_moment_symbols
+        cm_matrix = moment_matrix(central_moments, lb_method.stencil, shift_velocity=u)
+        before = sp.Matrix([0] * lb_method.stencil.Q)
+        after = (cm_matrix @ sp.Matrix(self(lb_method))).expand()
+        return before, after
 
 
 class Guo(AbstractForceModel):
@@ -267,6 +284,12 @@ class Guo(AbstractForceModel):
 
         return central_moments
 
+    def symmetric_central_moment_forcing(self, lb_method, central_moments):
+        luo = Luo(self.symbolic_force_vector)
+        _, force_cms = luo.symmetric_central_moment_forcing(lb_method, central_moments)
+        force_cms = sp.Rational(1, 2) * force_cms
+        return force_cms, force_cms
+
     def equilibrium_velocity_shift(self, density):
         return default_velocity_shift(density, self.symbolic_force_vector)
 
@@ -304,14 +327,15 @@ class He(AbstractForceModel):
         super(He, self).__init__(force)
 
     def forcing_terms(self, lb_method):
-        rho = lb_method.zeroth_order_equilibrium_moment_symbol
         u = sp.Matrix(lb_method.first_order_equilibrium_moment_symbols)
         force = sp.Matrix(self.symbolic_force_vector)
 
         cs_sq = sp.Rational(1, 3)  # squared speed of sound
         # eq. 6.31 in the LB book by Krüger et al. shows that the equilibrium terms are devided by rho.
         # This is done here with subs({rho: 1}) to be consistent with compressible and incompressible force models
-        eq_terms = lb_method.get_equilibrium_terms().subs({rho: 1})
+        cqc = lb_method.conserved_quantity_computation
+        eq_terms = discrete_maxwellian_equilibrium(lb_method.stencil, rho=sp.Integer(1),
+                                                   u=cqc.velocity_symbols, c_s_sq=sp.Rational(1, 3))
 
         result = []
         for direction, eq in zip(lb_method.stencil, eq_terms):
@@ -321,14 +345,14 @@ class He(AbstractForceModel):
 
         return sp.Matrix(result)
 
-    def continuous_force_raw_moments(self, lb_method):
+    def continuous_force_raw_moments(self, lb_method, moments=None):
         rho = lb_method.zeroth_order_equilibrium_moment_symbol
         u = lb_method.first_order_equilibrium_moment_symbols
         dim = lb_method.dim
         c_s_sq = sp.Rational(1, 3)
         force = sp.Matrix(self.symbolic_force_vector)
 
-        moment_polynomials = lb_method.moments
+        moment_polynomials = lb_method.moments if moments is None else moments
         moment_exponents = sorted(extract_monomials(moment_polynomials), key=exponent_tuple_sort_key)
         moment_monomials = exponents_to_polynomial_representations(moment_exponents)
         extended_monomials = set()
@@ -351,10 +375,12 @@ class He(AbstractForceModel):
         polynomial_force_moments = mono_to_poly_matrix * sp.Matrix(monomial_force_moments)
         return polynomial_force_moments
 
-    def continuous_force_central_moments(self, lb_method):
-        raw_moments = self.continuous_force_raw_moments(lb_method)
+    def continuous_force_central_moments(self, lb_method, moments=None):
+        if moments is None:
+            moments = lb_method.moments
+        raw_moments = self.continuous_force_raw_moments(lb_method, moments=moments)
         u = lb_method.first_order_equilibrium_moment_symbols
-        shift_matrix = set_up_shift_matrix(lb_method.moments, lb_method.stencil, velocity_symbols=u)
+        shift_matrix = set_up_shift_matrix(moments, lb_method.stencil, velocity_symbols=u)
         return (shift_matrix * raw_moments).expand()
 
     def __call__(self, lb_method):
@@ -380,6 +406,11 @@ class He(AbstractForceModel):
         central_moments = self.continuous_force_central_moments(lb_method)
         central_moments = (correction_factor * central_moments).expand()
         return central_moments
+
+    def symmetric_central_moment_forcing(self, lb_method, central_moments):
+        central_moments = exponents_to_polynomial_representations(central_moments)
+        force_cms = sp.Rational(1, 2) * self.continuous_force_central_moments(lb_method, moments=central_moments)
+        return force_cms, force_cms
 
     def equilibrium_velocity_shift(self, density):
         return default_velocity_shift(density, self.symbolic_force_vector)
@@ -442,12 +473,16 @@ class EDM(AbstractForceModel):
 
     def __call__(self, lb_method):
         cqc = lb_method.conserved_quantity_computation
-        rho = cqc.zeroth_order_moment_symbol if cqc.compressible else 1
-        u = cqc.first_order_moment_symbols
+        reference_density = cqc.density_symbol if cqc.compressible else 1
+        rho = cqc.density_symbol
+        delta_rho = cqc.density_deviation_symbol
+        rho_0 = cqc.background_density
+        u = cqc.velocity_symbols
 
         equilibrium_terms = lb_method.get_equilibrium_terms()
+        equilibrium_terms = equilibrium_terms.subs({delta_rho: rho - rho_0})
 
-        shifted_u = (u_i + f_i / rho for u_i, f_i in zip(u, self._force))
+        shifted_u = (u_i + f_i / reference_density for u_i, f_i in zip(u, self._force))
         shifted_eq = equilibrium_terms.subs({u_i: su_i for u_i, su_i in zip(u, shifted_u)})
         return shifted_eq - equilibrium_terms
 
@@ -471,8 +506,8 @@ class ShanChen(AbstractForceModel):
     def forcing_terms(self, lb_method):
         q = len(lb_method.stencil)
         cqc = lb_method.conserved_quantity_computation
-        rho = cqc.zeroth_order_moment_symbol if cqc.compressible else 1
-        u = cqc.first_order_moment_symbols
+        rho = cqc.density_symbol if cqc.compressible else 1
+        u = cqc.velocity_symbols
 
         F = sp.Matrix(self.symbolic_force_vector)
         uf = sp.Matrix(u).dot(F)

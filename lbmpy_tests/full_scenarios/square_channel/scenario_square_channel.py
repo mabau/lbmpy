@@ -26,7 +26,7 @@ defaultParameters = {
     'quadratic': True,
     're': 10,
     'compressible': True,
-    'maxwellian_moments': False,
+    'continuous_equilibrium': False,
     'equilibrium_order': 2,
     'force_model': ForceModel.GUO,
     'c_s_sq': 1 / 3,
@@ -119,7 +119,7 @@ def run(convergence_check_interval=1000, convergence_threshold=1e-12, plot_resul
     params['relaxation_rates'] = [omega, relaxation_rate_from_magic_number(omega, 3 / 16)]
 
     stencil = params['stencil']
-    viscosity_factor = 1 / 2 if stencil == LBStencil(Stencil.D3Q15) and params['maxwellian_moments'] else 1 / 3
+    viscosity_factor = 1 / 2 if stencil == LBStencil(Stencil.D3Q15) and params['continuous_equilibrium'] else 1 / 3
 
     print("Running size %d quadratic %d analyticInit %d " %
           (square_size, quadratic, analytic_initial_velocity) + str(params))
@@ -209,7 +209,7 @@ def run(convergence_check_interval=1000, convergence_threshold=1e-12, plot_resul
 def parameter_filter(p):
     if p.cumulant and p.compressible:
         return None
-    if p.cumulant and not p.maxwellian_moments:
+    if p.cumulant and not p.continuous_equilibrium:
         return None
     if p.cumulant and p.stencil == LBStencil(Stencil.D3Q15):
         return None
@@ -238,7 +238,7 @@ def small_study():
         ('stencil', [LBStencil(Stencil.D3Q19)]),
         ('compressible', [True]),
         ('quadratic', [True, False]),
-        ('maxwellian_moments', [False, True]),
+        ('continuous_equilibrium', [False, True]),
     ]
     convergence_study = common_degrees_of_freedom.copy()
     convergence_study += [('square_size', [15, 25, 35, 45, 53])]
@@ -263,7 +263,7 @@ def create_full_parameter_study():
         ('method', [Method.SRT, Method.TRT]),
         ('equilibrium_order', [2, 3]),
         ('quadratic', [True, False]),
-        ('maxwellian_moments', [False, True]),
+        ('continuous_equilibrium', [False, True]),
         ('use_mean_for_reynolds', [True, False]),
     ]
 
@@ -296,7 +296,7 @@ def d3q15_cs_sq_half_study():
         ('equilibrium_order', [2, 3]),
         ('stencil', [LBStencil(Stencil.D3Q15)]),
         ('quadratic', [True, ]),
-        ('maxwellian_moments', [True, ]),
+        ('continuous_equilibrium', [True, ]),
         ('c_s_sq', [1 / 3]),
         ('square_size', [45, 85]),
     ]
@@ -316,7 +316,7 @@ def d3q27_study():
         ('method', [Method.SRT]),
         ('equilibrium_order', [2]),
         ('stencil', [LBStencil(Stencil.D3Q27)]),
-        ('maxwellian_moments', [True, ]),
+        ('continuous_equilibrium', [True, ]),
         ('c_s_sq', [1 / 3]),
         ('square_size', [15, 25, 35, 45, 53, 85, 135]),
         ('use_mean_for_reynolds', [False]),
@@ -329,7 +329,7 @@ def test_square_channel():
     res = run(convergence_check_interval=1000, convergence_threshold=1e-5, plot_result=False, lambda_plus_sq=4 / 25,
               re=10, square_size=53, quadratic=True, analytic_initial_velocity=False, reynolds_nr_accuracy=None,
               force_model=ForceModel.BUICK, stencil=LBStencil(Stencil.D3Q19),
-              maxwellian_moments=False, equilibrium_order=2, compressible=True)
+              continuous_equilibrium=False, equilibrium_order=2, compressible=True)
 
     assert 1e-5 < res['normalized_spurious_vel_max'] < 1.2e-5
 
@@ -337,7 +337,7 @@ def test_square_channel():
     res = run(convergence_check_interval=1000, convergence_threshold=1e-5, plot_result=False, lambda_plus_sq=4 / 25,
               re=10, square_size=53, quadratic=True, analytic_initial_velocity=False, reynolds_nr_accuracy=None,
               force_model=ForceModel.BUICK, stencil=LBStencil(Stencil.D3Q19),
-              maxwellian_moments=True, equilibrium_order=2, compressible=False)
+              continuous_equilibrium=True, equilibrium_order=2, compressible=False)
 
     assert res['normalized_spurious_vel_max'] < 1e-14
 

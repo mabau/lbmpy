@@ -11,8 +11,8 @@ from lbmpy.stencils import LBStencil
 def test_moment_comparison_table():
     pytest.importorskip('ipy_table')
 
-    lbm_config_new = LBMConfig(stencil=LBStencil(Stencil.D3Q19), maxwellian_moments=True)
-    lbm_config_old = LBMConfig(stencil=LBStencil(Stencil.D3Q19), maxwellian_moments=False)
+    lbm_config_new = LBMConfig(stencil=LBStencil(Stencil.D3Q19), continuous_equilibrium=True)
+    lbm_config_old = LBMConfig(stencil=LBStencil(Stencil.D3Q19), continuous_equilibrium=False)
 
     new = create_lb_method(lbm_config=lbm_config_new)
     old = create_lb_method(lbm_config=lbm_config_old)

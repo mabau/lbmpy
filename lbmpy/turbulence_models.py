@@ -1,19 +1,8 @@
 import sympy as sp
 
 from lbmpy.relaxationrates import get_shear_relaxation_rate
+from lbmpy.utils import extract_shear_relaxation_rate, frobenius_norm, second_order_moment_tensor
 from pystencils import Assignment
-
-
-def second_order_moment_tensor(function_values, stencil):
-    """Returns (D x D) Matrix of second order moments of the given function where D is the dimension"""
-    assert len(function_values) == stencil.Q
-    return sp.Matrix(stencil.D, stencil.D, lambda i, j: sum(c[i] * c[j] * f for f, c in zip(function_values, stencil)))
-
-
-def frobenius_norm(matrix, factor=1):
-    """Computes the Frobenius norm of a matrix defined as the square root of the sum of squared matrix elements
-    The optional factor is added inside the square root"""
-    return sp.sqrt(sum(i * i for i in matrix) * factor)
 
 
 def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_field=None):
@@ -42,23 +31,17 @@ def add_smagorinsky_model(collision_rule, smagorinsky_constant, omega_output_fie
     """
     method = collision_rule.method
     omega_s = get_shear_relaxation_rate(method)
-
-    found_symbolic_shear_relaxation = True
-    if isinstance(omega_s, float) or isinstance(omega_s, int):
-        found_symbolic_shear_relaxation = False
-        for eq in collision_rule.all_assignments:
-            if eq.rhs == omega_s:
-                found_symbolic_shear_relaxation = True
-                omega_s = eq.lhs
+    omega_s, found_symbolic_shear_relaxation = extract_shear_relaxation_rate(collision_rule, omega_s)
 
     if not found_symbolic_shear_relaxation:
         raise ValueError("For the smagorinsky model the shear relaxation rate has to be a symbol or it has to be "
                          "assigned to a single equation in the assignment list")
     f_neq = sp.Matrix(method.pre_collision_pdf_symbols) - method.get_equilibrium_terms()
+    equilibrium = method.equilibrium_distribution
 
     tau_0 = sp.Symbol("tau_0_")
     second_order_neq_moments = sp.Symbol("Pi")
-    rho = method.zeroth_order_equilibrium_moment_symbol if method.conserved_quantity_computation.compressible else 1
+    rho = equilibrium.density if equilibrium.compressible else equilibrium.background_density
     adapted_omega = sp.Symbol("smagorinsky_omega")
 
     collision_rule = collision_rule.new_with_substitutions({omega_s: adapted_omega}, substitute_on_lhs=False)

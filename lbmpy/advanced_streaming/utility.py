@@ -4,7 +4,11 @@ from lbmpy.fieldaccess import PdfFieldAccessor, \
     AAEvenTimeStepAccessor, \
     AAOddTimeStepAccessor, \
     EsoTwistEvenTimeStepAccessor, \
-    EsoTwistOddTimeStepAccessor
+    EsoTwistOddTimeStepAccessor, \
+    EsoPullEvenTimeStepAccessor, \
+    EsoPullOddTimeStepAccessor, \
+    EsoPushEvenTimeStepAccessor, \
+    EsoPushOddTimeStepAccessor
 
 import numpy as np
 import pystencils as ps
@@ -33,20 +37,24 @@ class Timestep(IntEnum):
             return 'Both'
 
 
-streaming_patterns = ['push', 'pull', 'aa', 'esotwist']
+streaming_patterns = ['push', 'pull', 'aa', 'esotwist', 'esopull', 'esopush']
 
 even_accessors = {
     'pull': StreamPullTwoFieldsAccessor,
     'push': StreamPushTwoFieldsAccessor,
     'aa': AAEvenTimeStepAccessor,
-    'esotwist': EsoTwistEvenTimeStepAccessor
+    'esotwist': EsoTwistEvenTimeStepAccessor,
+    'esopull': EsoPullEvenTimeStepAccessor,
+    'esopush': EsoPushEvenTimeStepAccessor
 }
 
 odd_accessors = {
     'pull': StreamPullTwoFieldsAccessor,
     'push': StreamPushTwoFieldsAccessor,
     'aa': AAOddTimeStepAccessor,
-    'esotwist': EsoTwistOddTimeStepAccessor
+    'esotwist': EsoTwistOddTimeStepAccessor,
+    'esopull': EsoPullOddTimeStepAccessor,
+    'esopush': EsoPushOddTimeStepAccessor
 }
 
 
@@ -65,7 +73,7 @@ def is_inplace(streaming_pattern):
     if streaming_pattern not in streaming_patterns:
         raise ValueError('Invalid streaming pattern', streaming_pattern)
 
-    return streaming_pattern in ['aa', 'esotwist']
+    return streaming_pattern in ['aa', 'esotwist', 'esopull', 'esopush']
 
 
 def get_timesteps(streaming_pattern):

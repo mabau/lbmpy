@@ -1,12 +1,18 @@
 """
-This module contains the continuous Maxwell-Boltzmann equilibrium and its discrete polynomial approximation, often
-used to formulate lattice-Boltzmann methods for hydrodynamics.
+This module contains a functional interface to the continuous Maxwell-Boltzmann equilibrium and its discrete 
+polynomial approximation, often used to formulate lattice-Boltzmann methods for hydrodynamics.
 Additionally functions are provided to compute moments and cumulants of these distributions.
+
+The functionality of this module has mostly been replaced by the :mod:`lbmpy.equilibrium` module.
+In particular, the continuous and discrete Maxwellians are now represented by 
+:class:`lbmpy.equilibrium.ContinuousHydrodynamicMaxwellian` and
+:class:`lbmpy.equilibrium.DiscreteHydrodynamicMaxwellian`.
 """
 
 import warnings
 
 import sympy as sp
+from sympy.core.numbers import Zero
 
 from pystencils.cache import disk_cache
 from pystencils.sympyextensions import remove_higher_order_terms
@@ -32,7 +38,7 @@ get_weights.weights = {
         2: sp.Rational(1, 36),
     },
     7: {
-        0: sp.simplify(0.0),
+        0: Zero(),
         1: sp.Rational(1, 6),
     },
     15: {
@@ -211,7 +217,7 @@ def get_moments_of_discrete_maxwellian_equilibrium(stencil, moments,
 
 
 def compressible_to_incompressible_moment_value(term, rho, u):
-    """Compressible to incompressible equilibrium moments
+    """**[DEPRECATED]** Compressible to incompressible equilibrium moments
 
     Transforms so-called compressible equilibrium moments (as obtained from the continuous Maxwellian) by
     removing the density factor in all monomials where velocity components are multiplied to the density.
@@ -229,6 +235,8 @@ def compressible_to_incompressible_moment_value(term, rho, u):
     Returns:
         incompressible equilibrium value
     """
+    warnings.warn("Usage of `compressible_to_incompressible_moment_value` is deprecated,"
+                  " and the method will be removed soon.")
     term = sp.sympify(term)
     term = term.expand()
     if term.func != sp.Add:

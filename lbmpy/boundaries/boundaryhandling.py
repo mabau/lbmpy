@@ -4,7 +4,7 @@ from lbmpy.advanced_streaming.indexing import BetweenTimestepsIndexing
 from lbmpy.advanced_streaming.utility import is_inplace, Timestep, AccessPdfValues
 from pystencils import Field, Assignment, TypedSymbol, create_kernel
 from pystencils.stencil import inverse_direction
-from pystencils import Target
+from pystencils import CreateKernelConfig, Target
 from pystencils.boundaries import BoundaryHandling
 from pystencils.boundaries.createindexlist import numpy_data_type_for_boundary_object
 from pystencils.backends.cbackend import CustomCodeNode
@@ -18,7 +18,7 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
     """
 
     def __init__(self, lb_method, data_handling, pdf_field_name, streaming_pattern='pull',
-                 name="boundary_handling", flag_interface=None, target=Target.CPU, openmp=True):
+                 name="boundary_handling", flag_interface=None, target=Target.CPU, openmp=False):
         self._lb_method = lb_method
         self._streaming_pattern = streaming_pattern
         self._inplace = is_inplace(streaming_pattern)
@@ -185,7 +185,7 @@ def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, 
                                              target=Target.CPU, **kernel_creation_args):
 
     indexing = BetweenTimestepsIndexing(
-        pdf_field, lb_method.stencil, prev_timestep, streaming_pattern, np.int64, np.int64)
+        pdf_field, lb_method.stencil, prev_timestep, streaming_pattern, np.int32, np.int32)
 
     f_out, f_in = indexing.proxy_fields
     dir_symbol = indexing.dir_symbol
@@ -198,7 +198,10 @@ def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, 
     elements = [Assignment(dir_symbol, index_field[0]('dir'))]
     elements += boundary_assignments.all_assignments
 
-    kernel = create_kernel(elements, index_fields=[index_field], target=target, **kernel_creation_args)
+    config = CreateKernelConfig(index_fields=[index_field], target=target, default_number_int="int32",
+                                skip_independence_check=True, **kernel_creation_args)
+
+    kernel = create_kernel(elements, config=config)
 
     #   Code Elements ahead of the loop
     index_arrs_node = indexing.create_code_node()

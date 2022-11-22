@@ -166,7 +166,7 @@ def create_full_parameter_study():
                             'compressible': comp,
                             'relaxation_rates': ["omega", str(relaxation_rate_from_magic_number(sp.Symbol("omega")))],
                             'equilibrium_order': eqOrder,
-                            'maxwellian_moments': mbEq,
+                            'continuous_equilibrium': mbEq,
                             'optimization': {'target': Target.CPU, 'split': True, 'cse_pdfs': True}}
                            for method in ('srt', 'trt')
                            for stencil in ('D3Q19', 'D3Q27')
@@ -178,20 +178,20 @@ def create_full_parameter_study():
                {'method': 'mrt3', 'relaxation_rates': ["omega", 1, 1], 'equilibrium_order': 2},
                {'method': 'mrt3', 'relaxation_rates': ["omega", 1, 1], 'equilibrium_order': 3},
                {'method': 'mrt3', 'cumulant': True, 'relaxation_rates': ["omega", 1, 1],  # cumulant
-                'maxwellian_moments': True, 'equilibrium_order': 3,
+                'continuous_equilibrium': True, 'equilibrium_order': 3,
                 'optimization': {'cse_global': True}},
                {'method': 'trt-kbc-n4', 'relaxation_rates': ["omega", "omega_f"], 'entropic': True,  # entropic order 2
-                'maxwellian_moments': True, 'equilibrium_order': 2},
+                'continuous_equilibrium': True, 'equilibrium_order': 2},
                {'method': 'trt-kbc-n4', 'relaxation_rates': ["omega", "omega_f"], 'entropic': True,  # entropic order 3
-                'maxwellian_moments': True, 'equilibrium_order': 3},
+                'continuous_equilibrium': True, 'equilibrium_order': 3},
 
                # entropic cumulant:
                {'method': 'trt-kbc-n4', 'relaxation_rates': ["omega", "omega_f"], 'entropic': True,
-                'cumulant': True, 'maxwellian_moments': True, 'equilibrium_order': 3},
+                'cumulant': True, 'continuous_equilibrium': True, 'equilibrium_order': 3},
                {'method': 'trt-kbc-n2', 'relaxation_rates': ["omega", "omega_f"], 'entropic': True,
-                'cumulant': True, 'maxwellian_moments': True, 'equilibrium_order': 3},
+                'cumulant': True, 'continuous_equilibrium': True, 'equilibrium_order': 3},
                {'method': 'mrt3', 'relaxation_rates': ["omega", "omega_f", "omega_f"], 'entropic': True,
-                'cumulant': True, 'maxwellian_moments': True, 'equilibrium_order': 3},
+                'cumulant': True, 'continuous_equilibrium': True, 'equilibrium_order': 3},
                ]
 
     parameter_study = ParameterStudy(run, database_connector="shear_wave_db")
@@ -226,4 +226,4 @@ def test_shear_wave():
         "optimization": {"target": Target.GPU}
     }
     run(32, nu=1e-2, equilibrium_order=2, method='srt', y_size=1, periodicity_in_kernel=True,
-        relaxation_rates=[sp.Symbol("omega"), 5, 5], maxwellian_moments=True, **params)
+        relaxation_rates=[sp.Symbol("omega"), 5, 5], continuous_equilibrium=True, **params)

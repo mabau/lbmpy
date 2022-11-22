@@ -119,12 +119,6 @@ class Method(Enum):
     To get the entropic method also *entropic* needs to be set to `True`. 
     There are four KBC methods available in lbmpy. The naming is according to :cite:`karlin2015entropic`
     """
-    ENTROPIC_SRT = auto()
-    """
-    See :func:`lbmpy.methods.create_srt_entropic`,
-    An entropic version of the isothermal lattice Boltzmann method with the simplicity and 
-    computational efficiency of the standard lattice Boltzmann model. For details see :cite:`Ansumali2003`
-    """
     CUMULANT = auto()
     """
     See :func:`lbmpy.methods.create_with_default_polynomial_cumulants`
@@ -137,6 +131,48 @@ class Method(Enum):
     Cumulant-based LB method which relaxes monomial cumulants.
     For details on the method see :cite:`geier2015` and :cite:`Coreixas2019`
     """
+
+
+class CollisionSpace(Enum):
+    """
+    The CollisionSpace enumeration lists all possible spaces for collision to occur in.
+    """
+    POPULATIONS = auto()
+    """
+    Population space, meaning post-collision populations are obtained directly by relaxation of linear combinations of
+    pre-collision populations. Default for `lbmpy.enums.Method.SRT` and `lbmpy.enums.Method.TRT`.
+    Results in the creation of an instance of :class:`lbmpy.methods.momentbased.MomentBasedLbMethod`.
+    """
+    RAW_MOMENTS = auto()
+    """
+    Raw moment space, meaning relaxation is applied to a set of linearly independent, polynomial raw moments of the 
+    discrete population vector. Default for `lbmpy.enums.Method.MRT`.
+    Results in the creation of an instance of :class:`lbmpy.methods.momentbased.MomentBasedLbMethod`.
+    """
+    CENTRAL_MOMENTS = auto()
+    """
+    Central moment space, meaning relaxation is applied to a set of linearly independent, polynomial central moments 
+    of the discrete population vector. Default for `lbmpy.enums.Method.CENTRAL_MOMENT`.
+    Results in the creation of an instance of :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod`.
+    """
+    CUMULANTS = auto()
+    """
+    Cumulant space, meaning relaxation is applied to a set of linearly independent, polynomial cumulants of the
+    discrete population vector. Default for `lbmpy.enums.Method.CUMULANT` and `lbmpy.enums.Method.MONOMIAL_CUMULANT`.
+    Results in the creation of an instance of :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod`.
+    """
+
+    def compatible(self, method: Method):
+        """Determines if the given `lbmpy.enums.Method` is compatible with this collision space."""
+        compat_dict = {
+            CollisionSpace.POPULATIONS: {Method.SRT, Method.TRT, Method.MRT_RAW, Method.MRT,
+                                         Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4},
+            CollisionSpace.RAW_MOMENTS: {Method.SRT, Method.TRT, Method.MRT_RAW, Method.MRT},
+            CollisionSpace.CENTRAL_MOMENTS: {Method.CENTRAL_MOMENT},
+            CollisionSpace.CUMULANTS: {Method.MONOMIAL_CUMULANT, Method.CUMULANT}
+        }
+
+        return method in compat_dict[self]
 
 
 class ForceModel(Enum):
@@ -172,10 +208,6 @@ class ForceModel(Enum):
     KUPERSHTOKH = auto()
     """
     See :class:`lbmpy.forcemodels.EDM`
-    """
-    CUMULANT = auto()
-    """
-    See :class:`lbmpy.methods.centeredcumulant.CenteredCumulantForceModel`
     """
     HE = auto()
     """

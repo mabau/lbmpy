@@ -10,10 +10,11 @@ from lbmpy.boundaries import NoSlip
 from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
 from lbmpy.creationfunctions import create_lb_update_rule, create_stream_pull_with_output_kernel, LBMConfig,\
     LBMOptimisation
-from lbmpy.enums import Stencil, Method, ForceModel
+from lbmpy.enums import Method, ForceModel
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
 from lbmpy.stencils import LBStencil
 
+from pystencils import CreateKernelConfig
 import pystencils as ps
 
 
@@ -36,7 +37,7 @@ def poiseuille_flow(z, H, ext_force_density, dyn_visc):
     return ext_force_density * 1. / (2 * dyn_visc) * (H**2.0 / 4.0 - z**2.0)
 
 
-def poiseuille_channel(target, stencil_name):
+def poiseuille_channel(target, stencil_name, **kwargs):
     # physical parameters
     rho_0 = 1.2  # density
     eta = 0.2  # kinematic viscosity
@@ -67,16 +68,18 @@ def poiseuille_channel(target, stencil_name):
 
     # LB Setup
     lbm_config = LBMConfig(stencil=lb_stencil, relaxation_rate=omega, method=Method.TRT,
-                           compressible=True, force_model=ForceModel.GUO,
+                           compressible=True,
+                           force_model=ForceModel.GUO,
                            force=tuple([ext_force_density] + [0] * (lb_stencil.D - 1)),
-                           kernel_type='collide_only')
+                           kernel_type='collide_only',
+                           **kwargs)
 
     lbm_opt = LBMOptimisation(symbolic_field=src)
     collision = create_lb_update_rule(lbm_config=lbm_config, lbm_optimisation=lbm_opt)
 
     stream = create_stream_pull_with_output_kernel(collision.method, src, dst, {'velocity': u})
 
-    config = ps.CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
+    config = CreateKernelConfig(cpu_openmp=False, target=dh.default_target)
 
     stream_kernel = ps.create_kernel(stream, config=config).compile()
     collision_kernel = ps.create_kernel(collision, config=config).compile()

@@ -18,7 +18,7 @@ from pystencils.slicing import slice_from_direction, get_slice_before_ghost_laye
 
 def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
     if galilean_correction and stencil.Q != 27:
-        return True
+        pytest.skip()
 
     target = Target.GPU
     streaming_pattern = 'aa'
@@ -37,6 +37,7 @@ def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
     sphere_radius = L_LU // 2
 
     lbm_config = LBMConfig(stencil=stencil, method=Method.CUMULANT, relaxation_rate=omega_v,
+                           compressible=True,
                            galilean_correction=galilean_correction)
 
     lbm_opt = LBMOptimisation(pre_simplification=True)

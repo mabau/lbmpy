@@ -1,3 +1,7 @@
+from warnings import warn
+from dataclasses import dataclass
+from typing import Type
+
 import itertools
 import operator
 from collections import OrderedDict
@@ -5,189 +9,185 @@ from functools import reduce
 
 import sympy as sp
 
-from lbmpy.maxwellian_equilibrium import (
-    compressible_to_incompressible_moment_value, get_equilibrium_values_of_maxwell_boltzmann_function,
-    get_moments_of_discrete_maxwellian_equilibrium, get_weights)
+from lbmpy.maxwellian_equilibrium import get_weights
+from lbmpy.equilibrium import ContinuousHydrodynamicMaxwellian, DiscreteHydrodynamicMaxwellian
 
-from lbmpy.methods.abstractlbmethod import RelaxationInfo
 from lbmpy.methods.default_moment_sets import cascaded_moment_sets_literature
 
-from lbmpy.methods.centeredcumulant import CenteredCumulantBasedLbMethod
-from lbmpy.methods.centeredcumulant.cumulant_transform import CentralMomentsToCumulantsByGeneratingFunc
+from lbmpy.moment_transforms import CentralMomentsToCumulantsByGeneratingFunc
 
-from lbmpy.methods.conservedquantitycomputation import DensityVelocityComputation
+from .conservedquantitycomputation import DensityVelocityComputation
 
-from lbmpy.methods.momentbased.momentbasedmethod import MomentBasedLbMethod
-from lbmpy.methods.momentbased.centralmomentbasedmethod import CentralMomentBasedLbMethod
-from lbmpy.moment_transforms import PdfsToCentralMomentsByShiftMatrix, PdfsToMomentsByChimeraTransform
+from .momentbased.momentbasedmethod import MomentBasedLbMethod
+from .momentbased.centralmomentbasedmethod import CentralMomentBasedLbMethod
+from .cumulantbased import CumulantBasedLbMethod
+from lbmpy.moment_transforms import (
+    AbstractMomentTransform, BinomialChimeraTransform, PdfsToMomentsByChimeraTransform)
+from lbmpy.moment_transforms.rawmomenttransforms import AbstractRawMomentTransform
+from lbmpy.moment_transforms.centralmomenttransforms import AbstractCentralMomentTransform
 
 from lbmpy.moments import (
-    MOMENT_SYMBOLS, discrete_moment, exponents_to_polynomial_representations,
+    MOMENT_SYMBOLS, exponents_to_polynomial_representations,
     get_default_moment_set_for_stencil, gram_schmidt, is_even, moments_of_order,
     moments_up_to_component_order, sort_moments_into_groups_of_same_order,
-    is_bulk_moment, is_shear_moment, get_order, set_up_shift_matrix)
+    is_bulk_moment, is_shear_moment, get_order)
 
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
-from lbmpy.enums import Stencil
+from lbmpy.enums import Stencil, CollisionSpace
 from lbmpy.stencils import LBStencil
 from pystencils.sympyextensions import common_denominator
 
 
-def create_with_discrete_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,
-                                               force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3),
-                                               central_moment_space=False,
-                                               moment_transform_class=None,
-                                               central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix):
-    r"""Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate.
+@dataclass
+class CollisionSpaceInfo:
+    """
+    This class encapsulates necessary details about a method's collision space.
+    """
+    collision_space: CollisionSpace
+    """
+    The method's collision space.
+    """
+    raw_moment_transform_class: Type[AbstractRawMomentTransform] = None
+    """
+    Python class that determines how PDFs are transformed to raw moment space. If left as 'None', this parameter
+    will be inferred from `collision_space`, defaulting to 
+    :class:`lbmpy.moment_transforms.PdfsToMomentsByChimeraTransform`
+    if `CollisionSpace.RAW_MOMENTS` is given, or `None` otherwise.
+    """
+    central_moment_transform_class: Type[AbstractCentralMomentTransform] = None
+    """
+    Python class that determines how PDFs are transformed to central moment space. If left as 'None', this parameter
+    will be inferred from `collision_space`, defaulting to 
+    :class:`lbmpy.moment_transforms.BinomialChimeraTransform`
+    if `CollisionSpace.CENTRAL_MOMENTS` or `CollisionSpace.CUMULANTS` is given, or `None` otherwise.
+    """
+    cumulant_transform_class: Type[AbstractMomentTransform] = None
+    """
+    Python class that determines how central moments are transformed to cumulant space. If left as 'None', this 
+    parameter will be inferred from `collision_space`, defaulting to 
+    :class:`lbmpy.moment_transforms.CentralMomentsToCumulantsByGeneratingFunc`
+    if `CollisionSpace.CUMULANTS` is given, or `None` otherwise.
+    """
 
-    These moments are relaxed against the moments of the discrete Maxwellian distribution.
+    def __post_init__(self):
+        if self.collision_space == CollisionSpace.RAW_MOMENTS and self.raw_moment_transform_class is None:
+            self.raw_moment_transform_class = PdfsToMomentsByChimeraTransform
+        if self.collision_space in (CollisionSpace.CENTRAL_MOMENTS, CollisionSpace.CUMULANTS) \
+                and self.central_moment_transform_class is None:
+            self.central_moment_transform_class = BinomialChimeraTransform
+        if self.collision_space == CollisionSpace.CUMULANTS and self.cumulant_transform_class is None:
+            self.cumulant_transform_class = CentralMomentsToCumulantsByGeneratingFunc
+
+
+def create_with_discrete_maxwellian_equilibrium(stencil, moment_to_relaxation_rate_dict,
+                                                compressible=False, zero_centered=False, delta_equilibrium=False,
+                                                force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3),
+                                                **kwargs):
+    r"""Creates a moment-based LBM by taking a dictionary of moments with corresponding relaxation rates.
+
+    These moments are relaxed against the moments of the discrete Maxwellian distribution
+    (see :class:`lbmpy.equilibrium.DiscreteHydrodynamicMaxwellian`).
+
+    Internally, this method calls :func:`lbmpy.methods.create_from_equilibrium`.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStenil`
         moment_to_relaxation_rate_dict: dict that has as many entries as the stencil. Each moment, which can be
                                         represented by an exponent tuple or in polynomial form
                                         (see `lbmpy.moments`), is mapped to a relaxation rate.
-        compressible: incompressible LBM methods split the density into :math:`\rho = \rho_0 + \Delta \rho`
-                      where :math:`\rho_0` is chosen as one, and the first moment of the pdfs is :math:`\Delta \rho` .
-                      This approximates the incompressible Navier-Stokes equations better than the standard
-                      compressible model.
-        force_model: force model instance, or None if no external forces
+        compressible: If `False`, the incompressible equilibrium formulation is used to better approximate the
+                      incompressible Navier-Stokes equations. Otherwise, the default textbook equilibrium is used.
+        zero_centered: If `True`, the zero-centered storage format for PDFs is used, storing only their deviation from
+                       the background distribution (given by the lattice weights).
+        delta_equilibrium: Takes effect only if zero-centered storage is used. If `True`, the equilibrium distribution
+                           is also given only as its deviation from the background distribution.
+        force_model: instance of :class:`lbmpy.forcemodels.AbstractForceModel`, or None if no external forces are 
+                     present.
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
         c_s_sq: Speed of sound squared
-        central_moment_space: If set to True, an instance of 
-                              :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` is returned, 
-                              and the the collision will be performed in the central moment space.
-        moment_transform_class: Class implementing the transform from populations to moment space.
-        central_moment_transform_class: Class implementing the transform from populations to central moment space.
+        kwargs: See :func:`lbmpy.methods.create_from_equilibrium`
 
     Returns:
-        Instance of either :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` or 
-        :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` 
+        Instance of a subclass of :class:`lbmpy.methods.AbstractLbMethod`.
     """
-    mom_to_rr_dict = OrderedDict(moment_to_relaxation_rate_dict)
-    assert len(mom_to_rr_dict) == stencil.Q, \
-        "The number of moments has to be the same as the number of stencil entries"
-
-    density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
-
-    moments = tuple(mom_to_rr_dict.keys())
-    eq_values = get_moments_of_discrete_maxwellian_equilibrium(stencil, moments,
-                                                               c_s_sq=c_s_sq, compressible=compressible,
-                                                               order=equilibrium_order)
-    if central_moment_space:
-        N = set_up_shift_matrix(moments, stencil)
-        eq_values = sp.simplify(N * sp.Matrix(eq_values))
-
-    rr_dict = OrderedDict([(mom, RelaxationInfo(eq_mom, rr))
-                           for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
-
-    if central_moment_space:
-        return CentralMomentBasedLbMethod(stencil, rr_dict, density_velocity_computation,
-                                          force_model, central_moment_transform_class)
-    else:
-        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model, moment_transform_class)
+    cqc = DensityVelocityComputation(stencil, compressible, zero_centered, force_model=force_model, c_s_sq=c_s_sq)
+    equilibrium = DiscreteHydrodynamicMaxwellian(stencil, compressible=compressible,
+                                                 deviation_only=delta_equilibrium,
+                                                 order=equilibrium_order,
+                                                 c_s_sq=c_s_sq)
+    return create_from_equilibrium(stencil, equilibrium, cqc, moment_to_relaxation_rate_dict,
+                                   zero_centered=zero_centered, force_model=force_model, **kwargs)
 
 
-def create_with_continuous_maxwellian_eq_moments(stencil, moment_to_relaxation_rate_dict, compressible=False,
-                                                 force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3),
-                                                 central_moment_space=False,
-                                                 moment_transform_class=None,
-                                                 central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix):
+def create_with_continuous_maxwellian_equilibrium(stencil, moment_to_relaxation_rate_dict,
+                                                  compressible=False, zero_centered=False, delta_equilibrium=False,
+                                                  force_model=None, equilibrium_order=2, c_s_sq=sp.Rational(1, 3),
+                                                  **kwargs):
     r"""
-    Creates a moment-based LBM by taking a list of moments with corresponding relaxation rate. These moments are
-    relaxed against the moments of the continuous Maxwellian distribution.
-    For parameter description see :func:`lbmpy.methods.create_with_discrete_maxwellian_eq_moments`.
-    By using the continuous Maxwellian we automatically get a compressible model.
+    Creates a moment-based LBM by taking a dictionary of moments with corresponding relaxation rates. 
+    These moments are relaxed against the moments of the continuous Maxwellian distribution
+    (see :class:`lbmpy.equilibrium.ContinuousHydrodynamicMaxwellian`).
+
+    Internally, this method calls :func:`lbmpy.methods.create_from_equilibrium`.
 
     Args:
-        stencil: instance of :class:`lbmpy.stencils.LBStencil`
+        stencil: instance of :class:`lbmpy.stencils.LBStenil`
         moment_to_relaxation_rate_dict: dict that has as many entries as the stencil. Each moment, which can be
                                         represented by an exponent tuple or in polynomial form
                                         (see `lbmpy.moments`), is mapped to a relaxation rate.
-        compressible: incompressible LBM methods split the density into :math:`\rho = \rho_0 + \Delta \rho`
-                      where :math:`\rho_0` is chosen as one, and the first moment of the pdfs is :math:`\Delta \rho` .
-                      This approximates the incompressible Navier-Stokes equations better than the standard
-                      compressible model.
-        force_model: force model instance, or None if no external forces
+        compressible: If `False`, the incompressible equilibrium formulation is used to better approximate the
+                      incompressible Navier-Stokes equations. Otherwise, the default textbook equilibrium is used.
+        zero_centered: If `True`, the zero-centered storage format for PDFs is used, storing only their deviation from 
+                       the background distribution (given by the lattice weights).
+        delta_equilibrium: Takes effect only if zero-centered storage is used. If `True`, the equilibrium 
+                           distribution is also given only as its deviation from the background distribution.
+        force_model: Instance of :class:`lbmpy.forcemodels.AbstractForceModel`, or None if no external forces 
+                     are present.
         equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
         c_s_sq: Speed of sound squared
-        central_moment_space: If set to True, an instance of 
-                              :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` is returned, 
-                              and the the collision will be performed in the central moment space.
-        moment_transform_class: Class implementing the transform from populations to moment space.
-        central_moment_transform_class: Class implementing the transform from populations to central moment space.
+        kwargs: See :func:`lbmpy.methods.create_from_equilibrium`
 
     Returns:
-        Instance of either :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` or 
-        :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` 
+        Instance of a subclass of :class:`lbmpy.methods.AbstractLbMethod`.
     """
-    mom_to_rr_dict = OrderedDict(moment_to_relaxation_rate_dict)
-    assert len(mom_to_rr_dict) == stencil.Q, "The number of moments has to be equal to the number of stencil entries"
-    dim = stencil.D
-    density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
-    moments = tuple(mom_to_rr_dict.keys())
-
-    if compressible and central_moment_space:
-        eq_values = get_equilibrium_values_of_maxwell_boltzmann_function(moments, dim, c_s_sq=c_s_sq,
-                                                                         order=equilibrium_order,
-                                                                         space="central moment")
-    else:
-        eq_values = get_equilibrium_values_of_maxwell_boltzmann_function(moments, dim, c_s_sq=c_s_sq,
-                                                                         order=equilibrium_order, space="moment")
-
-    if not compressible:
-        rho = density_velocity_computation.defined_symbols(order=0)[1]
-        u = density_velocity_computation.defined_symbols(order=1)[1]
-        eq_values = [compressible_to_incompressible_moment_value(em, rho, u) for em in eq_values]
-        if central_moment_space:
-            N = set_up_shift_matrix(moments, stencil)
-            eq_values = sp.simplify(N * sp.Matrix(eq_values))
-
-    rr_dict = OrderedDict([(mom, RelaxationInfo(eq_mom, rr))
-                           for mom, rr, eq_mom in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values(), eq_values)])
-
-    if central_moment_space:
-        return CentralMomentBasedLbMethod(stencil, rr_dict, density_velocity_computation,
-                                          force_model, central_moment_transform_class)
-    else:
-        return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model, moment_transform_class)
+    cqc = DensityVelocityComputation(stencil, compressible, zero_centered, force_model=force_model, c_s_sq=c_s_sq)
+    equilibrium = ContinuousHydrodynamicMaxwellian(dim=stencil.D, compressible=compressible,
+                                                   deviation_only=delta_equilibrium,
+                                                   order=equilibrium_order,
+                                                   c_s_sq=c_s_sq)
+    return create_from_equilibrium(stencil, equilibrium, cqc, moment_to_relaxation_rate_dict,
+                                   zero_centered=zero_centered, force_model=force_model, **kwargs)
 
 
-def create_generic_mrt(stencil, moment_eq_value_relaxation_rate_tuples, compressible=False,
-                       force_model=None, moment_transform_class=PdfsToMomentsByChimeraTransform):
+def create_from_equilibrium(stencil, equilibrium, conserved_quantity_computation,
+                            moment_to_relaxation_rate_dict,
+                            collision_space_info=CollisionSpaceInfo(CollisionSpace.POPULATIONS),
+                            zero_centered=False, force_model=None):
     r"""
-    Creates a generic moment-based LB method.
+    Creates a lattice Boltzmann method in either population, moment, or central moment space, from a given
+    discrete velocity set and equilibrium distribution. 
+
+    This function takes a stencil, an equilibrium distribution, an appropriate conserved quantity computation
+    instance, a dictionary mapping moment polynomials to their relaxation rates, and a collision space info
+    determining the desired collision space. It returns a method instance relaxing the given moments against
+    their equilibrium values computed from the given distribution, in the given collision space.
 
     Args:
-        stencil: instance of :class:`lbmpy.stencils.LBStencil`
-        moment_eq_value_relaxation_rate_tuples: sequence of tuples containing (moment, equilibrium value, relax. rate)
-        compressible: compressibility, determines calculation of velocity for force models
-        force_model: see create_with_discrete_maxwellian_eq_moments
-        moment_transform_class: class to define the transformation to the moment space
-    """
-    density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
-
-    rr_dict = OrderedDict()
-    for moment, eq_value, rr in moment_eq_value_relaxation_rate_tuples:
-        moment = sp.sympify(moment)
-        rr_dict[moment] = RelaxationInfo(eq_value, rr)
-    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model, moment_transform_class)
-
-
-def create_from_equilibrium(stencil, equilibrium, moment_to_relaxation_rate_dict,
-                            compressible=False, force_model=None,
-                            moment_transform_class=PdfsToMomentsByChimeraTransform):
-    r"""
-    Creates a moment-based LB method using a given equilibrium distribution function
-
-    Args:
-        stencil: instance of :class:`lbmpy.stencils.LBStencil`
-        equilibrium: list of equilibrium terms, dependent on rho and u, one for each stencil direction
-        moment_to_relaxation_rate_dict: relaxation rate for each moment, or a symbol/float if all should relaxed with
-                                        the same rate
-        compressible: see create_with_discrete_maxwellian_eq_moments
-        force_model: see create_with_discrete_maxwellian_eq_moments
-        moment_transform_class: class to define the transformation to the moment space
+        stencil: Instance of :class:`lbmpy.stencils.LBStencil`
+        equilibrium: Instance of a subclass of :class:`lbmpy.equilibrium.AbstractEquilibrium`.
+        conserved_quantity_computation: Instance of a subclass of 
+                                        :class:`lbmpy.methods.AbstractConservedQuantityComputation`,
+                                        which must provide equations for the conserved quantities used in
+                                        the equilibrium.
+        moment_to_relaxation_rate_dict: Dictionary mapping moment polynomials to relaxation rates.
+        collision_space_info: Instance of :class:`CollisionSpaceInfo`, defining the method's desired collision space
+                              and the manner of transformation to this space. Cumulant-based methods are not supported
+                              yet.
+        zero_centered: Whether or not the zero-centered storage format should be used. If `True`, the given equilibrium
+                       must either be a deviation-only formulation, or must provide a background distribution for PDFs
+                       to be centered around.
+        force_model: Instance of :class:`lbmpy.forcemodels.AbstractForceModel`, or None if no external forces are
+                     present.
     """
     if any(isinstance(moment_to_relaxation_rate_dict, t) for t in (sp.Symbol, float, int)):
         moment_to_relaxation_rate_dict = {m: moment_to_relaxation_rate_dict
@@ -195,39 +195,62 @@ def create_from_equilibrium(stencil, equilibrium, moment_to_relaxation_rate_dict
 
     mom_to_rr_dict = OrderedDict(moment_to_relaxation_rate_dict)
     assert len(mom_to_rr_dict) == stencil.Q, "The number of moments has to be equal to the number of stencil entries"
-    density_velocity_computation = DensityVelocityComputation(stencil, compressible, force_model)
 
-    rr_dict = OrderedDict([(mom, RelaxationInfo(discrete_moment(equilibrium, mom, stencil).expand(), rr))
-                           for mom, rr in zip(mom_to_rr_dict.keys(), mom_to_rr_dict.values())])
-    return MomentBasedLbMethod(stencil, rr_dict, density_velocity_computation, force_model, moment_transform_class)
+    cqc = conserved_quantity_computation
+    cspace = collision_space_info
+
+    if cspace.collision_space == CollisionSpace.POPULATIONS:
+        return MomentBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
+                                   force_model=force_model, zero_centered=zero_centered,
+                                   moment_transform_class=None)
+    elif cspace.collision_space == CollisionSpace.RAW_MOMENTS:
+        return MomentBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
+                                   force_model=force_model, zero_centered=zero_centered,
+                                   moment_transform_class=cspace.raw_moment_transform_class)
+    elif cspace.collision_space == CollisionSpace.CENTRAL_MOMENTS:
+        return CentralMomentBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
+                                          force_model=force_model, zero_centered=zero_centered,
+                                          central_moment_transform_class=cspace.central_moment_transform_class)
+    elif cspace.collision_space == CollisionSpace.CUMULANTS:
+        return CumulantBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
+                                     force_model=force_model, zero_centered=zero_centered,
+                                     central_moment_transform_class=cspace.central_moment_transform_class,
+                                     cumulant_transform_class=cspace.cumulant_transform_class)
 
 
 # ------------------------------------ SRT / TRT/ MRT Creators ---------------------------------------------------------
 
 
-def create_srt(stencil, relaxation_rate, maxwellian_moments=False, **kwargs):
+def create_srt(stencil, relaxation_rate, continuous_equilibrium=True, **kwargs):
     r"""Creates a single relaxation time (SRT) lattice Boltzmann model also known as BGK model.
+
+    Internally calls either :func:`create_with_discrete_maxwellian_equilibrium`
+    or :func:`create_with_continuous_maxwellian_equilibrium`, depending on the value of `continuous_equilibrium`.
+
+    If not specified otherwise, collision equations will be derived in population space.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
         relaxation_rate: relaxation rate (inverse of the relaxation time)
                         usually called :math:`\omega` in LBM literature
-        maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
+        continuous_equilibrium: determines if the discrete or continuous maxwellian equilibrium is
                         used to compute the equilibrium moments
 
     Returns:
         :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
+    continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
+    check_and_set_mrt_space(CollisionSpace.POPULATIONS)
     moments = get_default_moment_set_for_stencil(stencil)
     rr_dict = OrderedDict([(m, relaxation_rate) for m in moments])
-    if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
+    if continuous_equilibrium:
+        return create_with_continuous_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
     else:
-        return create_with_discrete_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
+        return create_with_discrete_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
 
 
 def create_trt(stencil, relaxation_rate_even_moments, relaxation_rate_odd_moments,
-               maxwellian_moments=False, **kwargs):
+               continuous_equilibrium=True, **kwargs):
     """
     Creates a two relaxation time (TRT) lattice Boltzmann model, where even and odd moments are relaxed differently.
     In the SRT model the exact wall position of no-slip boundaries depends on the viscosity, the TRT method does not
@@ -236,14 +259,24 @@ def create_trt(stencil, relaxation_rate_even_moments, relaxation_rate_odd_moment
     Parameters are similar to :func:`lbmpy.methods.create_srt`, but instead of one relaxation rate there are
     two relaxation rates: one for even moments (determines viscosity) and one for odd moments.
     If unsure how to choose the odd relaxation rate, use the function :func:`lbmpy.methods.create_trt_with_magic_number`
+
+    Internally calls either :func:`create_with_discrete_maxwellian_equilibrium`
+    or :func:`create_with_continuous_maxwellian_equilibrium`, depending on the value of `continuous_equilibrium`.
+
+    If not specified otherwise, collision equations will be derived in population space.
+
+    Returns:
+        :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
+    continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
+    check_and_set_mrt_space(CollisionSpace.POPULATIONS)
     moments = get_default_moment_set_for_stencil(stencil)
     rr_dict = OrderedDict([(m, relaxation_rate_even_moments if is_even(m) else relaxation_rate_odd_moments)
                            for m in moments])
-    if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
+    if continuous_equilibrium:
+        return create_with_continuous_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
     else:
-        return create_with_discrete_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
+        return create_with_discrete_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
 
 
 def create_trt_with_magic_number(stencil, relaxation_rate, magic_number=sp.Rational(3, 16), **kwargs):
@@ -251,6 +284,11 @@ def create_trt_with_magic_number(stencil, relaxation_rate, magic_number=sp.Ratio
     Creates a two relaxation time (TRT) lattice Boltzmann method, where the relaxation time for odd moments is
     determines from the even moment relaxation time and a "magic number".
     For possible parameters see :func:`lbmpy.methods.create_trt`
+
+    Internally calls either :func:`create_with_discrete_maxwellian_equilibrium`
+    or :func:`create_with_continuous_maxwellian_equilibrium`, depending on the value of `continuous_equilibrium`.
+
+    If not specified otherwise, collision equations will be derived in population space.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
@@ -266,41 +304,57 @@ def create_trt_with_magic_number(stencil, relaxation_rate, magic_number=sp.Ratio
                       relaxation_rate_odd_moments=rr_odd, **kwargs)
 
 
-def create_mrt_raw(stencil, relaxation_rates, maxwellian_moments=False, **kwargs):
+def create_mrt_raw(stencil, relaxation_rates, continuous_equilibrium=True, **kwargs):
     r"""
     Creates a MRT method using non-orthogonalized moments.
+
+    Internally calls either :func:`create_with_discrete_maxwellian_equilibrium`
+    or :func:`create_with_continuous_maxwellian_equilibrium`, depending on the value of `continuous_equilibrium`.
+
+    If not specified otherwise, collision equations will be derived in raw moment space.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
         relaxation_rates: relaxation rates (inverse of the relaxation times) for each moment
-        maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
+        continuous_equilibrium: determines if the discrete or continuous maxwellian equilibrium is
                         used to compute the equilibrium moments.
     Returns:
         :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
+    continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
+    check_and_set_mrt_space(CollisionSpace.RAW_MOMENTS)
     moments = get_default_moment_set_for_stencil(stencil)
     nested_moments = [(c,) for c in moments]
     rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D)
-    if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
+    if continuous_equilibrium:
+        return create_with_continuous_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
     else:
-        return create_with_discrete_maxwellian_eq_moments(stencil, rr_dict, **kwargs)
+        return create_with_discrete_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
 
 
 def create_central_moment(stencil, relaxation_rates, nested_moments=None,
-                          maxwellian_moments=False, **kwargs):
+                          continuous_equilibrium=True, **kwargs):
     r"""
     Creates moment based LB method where the collision takes place in the central moment space.
+
+    Internally calls either :func:`create_with_discrete_maxwellian_equilibrium`
+    or :func:`create_with_continuous_maxwellian_equilibrium`, depending on the value of `continuous_equilibrium`.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
         relaxation_rates: relaxation rates (inverse of the relaxation times) for each moment
         nested_moments: a list of lists of modes, grouped by common relaxation times.
-        maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
+        continuous_equilibrium: determines if the discrete or continuous maxwellian equilibrium is
                         used to compute the equilibrium moments.
     Returns:
         :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` instance
     """
+    continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
+
+    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.CENTRAL_MOMENTS))
+    if kwargs['collision_space_info'].collision_space != CollisionSpace.CENTRAL_MOMENTS:
+        raise ValueError("Central moment-based methods can only be derived in central moment space.")
+
     if nested_moments and not isinstance(nested_moments[0], list):
         nested_moments = list(sort_moments_into_groups_of_same_order(nested_moments).values())
         second_order_moments = nested_moments[2]
@@ -315,18 +369,23 @@ def create_central_moment(stencil, relaxation_rates, nested_moments=None,
 
     rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D)
 
-    if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil, rr_dict, central_moment_space=True, **kwargs)
+    if continuous_equilibrium:
+        return create_with_continuous_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
     else:
-        return create_with_discrete_maxwellian_eq_moments(stencil, rr_dict, central_moment_space=True, **kwargs)
+        return create_with_discrete_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
 
 
 def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, method_name='KBC-N4',
-                   maxwellian_moments=False, **kwargs):
+                   continuous_equilibrium=True, **kwargs):
     """
     Creates a method with two relaxation rates, one for lower order moments which determines the viscosity and
     one for higher order moments. In entropic models this second relaxation rate is chosen subject to an entropy
     condition. Which moments are relaxed by which rate is determined by the method_name
+
+    Internally calls either :func:`create_with_discrete_maxwellian_equilibrium`
+    or :func:`create_with_continuous_maxwellian_equilibrium`, depending on the value of `continuous_equilibrium`.
+
+    If not specified otherwise, collision equations will be derived in population space.
 
     Args:
         dim: 2 or 3, leads to stencil D2Q9 or D3Q27
@@ -334,9 +393,11 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
         higher_order_relaxation_rate: relaxation rate for higher order moments
         method_name: string 'KBC-Nx' where x can be an number from 1 to 4, for details see
                     "Karlin 2015: Entropic multi relaxation lattice Boltzmann models for turbulent flows"
-        maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
+        continuous_equilibrium: determines if the discrete or continuous maxwellian equilibrium is
                         used to compute the equilibrium moments.
     """
+    continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
+    check_and_set_mrt_space(CollisionSpace.POPULATIONS)
 
     def product(iterable):
         return reduce(operator.mul, iterable, 1)
@@ -387,30 +448,38 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
     all_moments = rho + velocity + shear_part + rest_part
     moment_to_rr = OrderedDict((m, rr) for m, rr in zip(all_moments, relaxation_rates))
 
-    if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil, moment_to_rr, **kwargs)
+    if continuous_equilibrium:
+        return create_with_continuous_maxwellian_equilibrium(stencil, moment_to_rr, **kwargs)
     else:
-        return create_with_discrete_maxwellian_eq_moments(stencil, moment_to_rr, **kwargs)
+        return create_with_discrete_maxwellian_equilibrium(stencil, moment_to_rr, **kwargs)
 
 
-def create_mrt_orthogonal(stencil, relaxation_rates, maxwellian_moments=False, weighted=None,
+def create_mrt_orthogonal(stencil, relaxation_rates, continuous_equilibrium=True, weighted=None,
                           nested_moments=None, **kwargs):
     r"""
     Returns an orthogonal multi-relaxation time model for the stencils D2Q9, D3Q15, D3Q19 and D3Q27.
     These MRT methods are just one specific version - there are many MRT methods possible for all these stencils
     which differ by the linear combination of moments and the grouping into equal relaxation times.
-    To create a generic MRT method use `create_with_discrete_maxwellian_eq_moments`
+    To create a generic MRT method use `create_with_discrete_maxwellian_equilibrium`
+
+    Internally calls either :func:`create_with_discrete_maxwellian_equilibrium`
+    or :func:`create_with_continuous_maxwellian_equilibrium`, depending on the value of `continuous_equilibrium`.
+
+    If not specified otherwise, collision equations will be derived in raw moment space.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
         relaxation_rates: relaxation rates for the moments
-        maxwellian_moments: determines if the discrete or continuous maxwellian equilibrium is
+        continuous_equilibrium: determines if the discrete or continuous maxwellian equilibrium is
                                                used to compute the equilibrium moments
         weighted: whether to use weighted or unweighted orthogonality
         nested_moments: a list of lists of modes, grouped by common relaxation times. If this argument is not provided,
                         Gram-Schmidt orthogonalization of the default modes is performed. The default modes equal the
                         raw moments except for the separation of the shear and bulk viscosity.
     """
+    continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
+    check_and_set_mrt_space(CollisionSpace.RAW_MOMENTS)
+
     if weighted:
         weights = get_weights(stencil, sp.Rational(1, 3))
     else:
@@ -440,79 +509,18 @@ def create_mrt_orthogonal(stencil, relaxation_rates, maxwellian_moments=False, w
 
     moment_to_relaxation_rate_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D)
 
-    if maxwellian_moments:
-        return create_with_continuous_maxwellian_eq_moments(stencil,
-                                                            moment_to_relaxation_rate_dict, **kwargs)
+    if continuous_equilibrium:
+        return create_with_continuous_maxwellian_equilibrium(stencil,
+                                                             moment_to_relaxation_rate_dict, **kwargs)
     else:
-        return create_with_discrete_maxwellian_eq_moments(stencil,
-                                                          moment_to_relaxation_rate_dict, **kwargs)
+        return create_with_discrete_maxwellian_equilibrium(stencil,
+                                                           moment_to_relaxation_rate_dict, **kwargs)
 
 
 # ----------------------------------------- Cumulant method creators ---------------------------------------------------
 
-
-def create_centered_cumulant_model(stencil, cumulant_to_rr_dict, force_model=None,
-                                   equilibrium_order=None, c_s_sq=sp.Rational(1, 3),
-                                   galilean_correction=False,
-                                   central_moment_transform_class=PdfsToCentralMomentsByShiftMatrix,
-                                   cumulant_transform_class=CentralMomentsToCumulantsByGeneratingFunc):
-    r"""Creates a cumulant lattice Boltzmann model.
-
-    Args:
-        stencil: instance of :class:`lbmpy.stencils.LBStencil`
-        cumulant_to_rr_dict: dict that has as many entries as the stencil. Each cumulant, which can be
-                             represented by an exponent tuple or in polynomial form is mapped to a relaxation rate.
-                             See :func:`lbmpy.methods.default_moment_sets.cascaded_moment_sets_literature`
-        force_model: force model used for the collision. For cumulant LB method a good choice is
-                     `lbmpy.methods.centeredcumulant.CenteredCumulantForceModel`
-        equilibrium_order: approximation order of macroscopic velocity :math:`\mathbf{u}` in the equilibrium
-        c_s_sq: Speed of sound squared
-        galilean_correction: special correction for D3Q27 cumulant collisions. See Appendix H in
-                             :cite:`geier2015`. Implemented in :mod:`lbmpy.methods.centeredcumulant.galilean_correction`
-        central_moment_transform_class: Class which defines the transformation to the central moment space
-                                        (see :mod:`lbmpy.moment_transforms`)
-        cumulant_transform_class: Class which defines the transformation from the central moment space to the
-                                  cumulant space (see :mod:`lbmpy.methods.centeredcumulant.cumulant_transform`)
-
-    Returns:
-        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
-    """
-
-    one = sp.Integer(1)
-
-    assert len(cumulant_to_rr_dict) == stencil.Q, \
-        "The number of moments has to be equal to the number of stencil entries"
-
-    # CQC
-    cqc = DensityVelocityComputation(stencil, True, force_model=force_model)
-    density_symbol = cqc.zeroth_order_moment_symbol
-    velocity_symbols = cqc.first_order_moment_symbols
-
-    #   Equilibrium Values
-    higher_order_polynomials = list(filter(lambda x: get_order(x) > 1, cumulant_to_rr_dict.keys()))
-
-    #   Lower Order Equilibria
-    cumulants_to_relaxation_info_dict = {one: RelaxationInfo(density_symbol, cumulant_to_rr_dict[one])}
-    for d in MOMENT_SYMBOLS[:stencil.D]:
-        cumulants_to_relaxation_info_dict[d] = RelaxationInfo(0, cumulant_to_rr_dict[d])
-
-    #   Polynomial Cumulant Equilibria
-    polynomial_equilibria = get_equilibrium_values_of_maxwell_boltzmann_function(
-        higher_order_polynomials, stencil.D, rho=density_symbol, u=velocity_symbols,
-        c_s_sq=c_s_sq, order=equilibrium_order, space="cumulant")
-    polynomial_equilibria = [density_symbol * v for v in polynomial_equilibria]
-
-    for i, c in enumerate(higher_order_polynomials):
-        cumulants_to_relaxation_info_dict[c] = RelaxationInfo(polynomial_equilibria[i], cumulant_to_rr_dict[c])
-
-    return CenteredCumulantBasedLbMethod(stencil, cumulants_to_relaxation_info_dict, cqc, force_model,
-                                         galilean_correction=galilean_correction,
-                                         central_moment_transform_class=central_moment_transform_class,
-                                         cumulant_transform_class=cumulant_transform_class)
-
-
-def create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups, **kwargs):
-    r"""Creates a cumulant lattice Boltzmann model based on a default polynomial set.
+def create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs):
+    r"""Creates a cumulant-based lattice Boltzmann method.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
@@ -523,17 +531,24 @@ def create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups,
                           that the force is applied correctly to the momentum groups
         cumulant_groups: Nested sequence of polynomial expressions defining the cumulants to be relaxed. All cumulants 
                          within one group are relaxed with the same relaxation rate.
-        kwargs: See :func:`create_centered_cumulant_model`
+        kwargs: See :func:`create_with_continuous_maxwellian_equilibrium`
 
     Returns:
-        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+        :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` instance
     """
     cumulant_to_rr_dict = _get_relaxation_info_dict(relaxation_rates, cumulant_groups, stencil.D)
-    return create_centered_cumulant_model(stencil, cumulant_to_rr_dict, **kwargs)
+    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.CUMULANTS))
+
+    if kwargs['collision_space_info'].collision_space != CollisionSpace.CUMULANTS:
+        raise ValueError("Cumulant-based methods can only be derived in cumulant space.")
+
+    return create_with_continuous_maxwellian_equilibrium(stencil, cumulant_to_rr_dict, 
+                                                         compressible=True, delta_equilibrium=False,
+                                                         **kwargs)
 
 
 def create_with_monomial_cumulants(stencil, relaxation_rates, **kwargs):
-    r"""Creates a cumulant lattice Boltzmann model based on a default polinomial set.
+    r"""Creates a cumulant lattice Boltzmann model using the given stencil's canonical monomial cumulants.
 
     Args:
         stencil: instance of :class:`lbmpy.stencils.LBStencil`
@@ -542,29 +557,28 @@ def create_with_monomial_cumulants(stencil, relaxation_rates, **kwargs):
                           used for determine the viscosity of the simulation. All other cumulants are relaxed with one.
                           If a cumulant force model is provided the first order cumulants are relaxed with two to ensure
                           that the force is applied correctly to the momentum groups
-        kwargs: See :func:`create_centered_cumulant_model`
+        kwargs: See :func:`create_cumulant`
 
     Returns:
-        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+        :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` instance
     """
     # Get monomial moments
     cumulants = get_default_moment_set_for_stencil(stencil)
     cumulant_groups = [(c,) for c in cumulants]
-
-    return create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups, **kwargs)
+    return create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs)
 
 
 def create_with_default_polynomial_cumulants(stencil, relaxation_rates, **kwargs):
-    r"""Creates a cumulant lattice Boltzmann model based on a default polynomial set.
+    r"""Creates a cumulant lattice Boltzmann model based on the default polynomial set of :cite:`geier2015`.
 
-    Args: See :func:`create_with_polynomial_cumulants`.
+    Args: See :func:`create_cumulant`.
 
     Returns:
-        :class:`lbmpy.methods.centeredcumulant.CenteredCumulantBasedLbMethod` instance
+        :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` instance
     """
     # Get polynomial groups
     cumulant_groups = cascaded_moment_sets_literature(stencil)
-    return create_with_polynomial_cumulants(stencil, relaxation_rates, cumulant_groups, **kwargs)
+    return create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs)
 
 
 def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
@@ -651,6 +665,14 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
                              "relaxed with 0. The last possibility is to specify a relaxation rate for each moment, "
                              "including conserved moments")
     return result
+
+
+def check_and_set_mrt_space(default, **kwargs):
+    kwargs.setdefault('collision_space_info', CollisionSpaceInfo(default))
+
+    if kwargs['collision_space_info'].collision_space not in (CollisionSpace.RAW_MOMENTS, CollisionSpace.POPULATIONS):
+        raise ValueError("Raw moment-based methods can only be derived in population or raw moment space.")
+
 # ----------------------------------------- Comparison view for notebooks ----------------------------------------------
 
 
@@ -700,3 +722,15 @@ def compare_moment_based_lb_methods(reference, other, show_deviations_only=False
         for col in range(4):
             ipy_table.set_cell_style(row_idx, col, color='#bbbbbb')
     return table_display
+
+# ----------------------------------------- Deprecation of Maxwellian Moments -----------------------------------------
+
+
+def _deprecate_maxwellian_moments(continuous_equilibrium, kwargs):
+    if 'maxwellian_moments' in kwargs:
+        warn("Argument 'maxwellian_moments' is deprecated and will be removed by version 0.5."
+             "Use `continuous_equilibrium` instead.",
+             stacklevel=2)
+        return kwargs['maxwellian_moments']
+    else:
+        return continuous_equilibrium

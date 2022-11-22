@@ -28,13 +28,37 @@ tests-and-coverage:
     - docker
     - cuda11
     - AVX
+  coverage: /Total coverage:\s\d+.\d+\%/
   artifacts:
     when: always
     paths:
       - coverage_report
     reports:
-      cobertura: coverage.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
       junit: report.xml
+
+# Normal test with longruns
+tests-and-coverage-with-longrun:
+  stage: test
+  when: manual
+  allow_failure: true
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
+  script:
+    # - pip install sympy --upgrade
+    - export NUM_CORES=$(nproc --all)
+    - mkdir -p ~/.config/matplotlib
+    - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
+    - mkdir public
+    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
+    - env
+    - pip list
+    - py.test -v -n $NUM_CORES
+  tags:
+    - docker
+    - cuda11
+    - AVX
 
 minimal-conda:
   stage: pretest
@@ -88,32 +112,6 @@ latest-python:
     reports:
       junit: report.xml
 
-# Nightly test  - runs "long run" jobs only
-test-longrun:
-  stage: test
-  only:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
-  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
-  script:
-    - env 
-    - pip list
-    - export NUM_CORES=$(nproc --all)
-    - mkdir -p ~/.config/matplotlib
-    - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
-    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
-    - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=. --junitxml=report.xml
-  tags:
-    - docker
-    - cuda11
-    - AVX
-  artifacts:
-    when: always
-    paths:
-      - coverage_report
-    reports:
-      junit: report.xml
-
 # Minimal tests in windows environment
 minimal-windows:
   stage: test
@@ -128,10 +126,9 @@ minimal-windows:
     - source /cygdrive/c/Users/build/Miniconda3/Scripts/activate
     - source activate pystencils
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
-    - env
-    - pip list
     - python -c "import numpy"
-    - py.test -v -n $NUM_CORES -m "not (notebook or longrun)"
+    - pip install sympy==1.9
+    - py.test -v -m "not (notebook or longrun)"
 
 minimal-sympy-master:
   stage: test
@@ -202,7 +199,7 @@ pycodegen-integration:
     - make -j $NUM_CORES MicroBenchmarkGpuLbm LbCodeGenerationExample
     - cd apps/benchmarks/UniformGridGPU
     - make -j $NUM_CORES
-    - cd ../UniformGridGenerated
+    - cd ../UniformGridCPU
     - make -j $NUM_CORES
 
   tags:

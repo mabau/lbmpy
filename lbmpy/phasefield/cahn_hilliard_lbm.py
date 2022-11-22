@@ -1,6 +1,8 @@
 import sympy as sp
 
 from lbmpy.maxwellian_equilibrium import get_weights
+from lbmpy.equilibrium import GenericDiscreteEquilibrium
+from lbmpy.methods import DensityVelocityComputation
 from lbmpy.methods.creationfunctions import create_from_equilibrium
 from pystencils.sympyextensions import kronecker_delta, multidimensional_sum
 
@@ -26,17 +28,21 @@ def cahn_hilliard_lb_method(stencil, mu, relaxation_rate=sp.Symbol("omega"), gam
         for r in multidimensional_sum(*args, dim=len(stencil[0])):
             yield r
 
-    op = sp.Symbol("rho")
-    v = sp.symbols(f"u_:{stencil.D}")
+    compressible = True
+    zero_centered = False
+    cqc = DensityVelocityComputation(stencil, compressible, zero_centered)
+    rho = cqc.density_symbol
+    v = cqc.velocity_symbols
 
-    equilibrium = []
+    equilibrium_terms = []
     for d, w in zip(stencil, weights):
         c_s = sp.sqrt(sp.Rational(1, 3))
         result = gamma * mu / (c_s ** 2)
-        result += op * sum(d[i] * v[i] for i, in s(1)) / (c_s ** 2)
-        result += op * sum(v[i] * v[j] * (d[i] * d[j] - c_s ** 2 * kd(i, j)) for i, j in s(2)) / (2 * c_s ** 4)
-        equilibrium.append(w * result)
+        result += rho * sum(d[i] * v[i] for i, in s(1)) / (c_s ** 2)
+        result += rho * sum(v[i] * v[j] * (d[i] * d[j] - c_s ** 2 * kd(i, j)) for i, j in s(2)) / (2 * c_s ** 4)
+        equilibrium_terms.append(w * result)
 
-    rho = sp.Symbol("rho")
-    equilibrium[0] = rho - sp.expand(sum(equilibrium[1:]))
-    return create_from_equilibrium(stencil, tuple(equilibrium), relaxation_rate, compressible=True)
+    equilibrium_terms[0] = rho - sp.expand(sum(equilibrium_terms[1:]))
+    equilibrium = GenericDiscreteEquilibrium(stencil, equilibrium_terms, rho, v, deviation_only=False)
+    
+    return create_from_equilibrium(stencil, equilibrium, cqc, relaxation_rate, zero_centered=zero_centered)

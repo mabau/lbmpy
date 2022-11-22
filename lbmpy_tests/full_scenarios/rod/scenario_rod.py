@@ -25,13 +25,13 @@ def rod_simulation(stencil_name, diameter, parallel=False, entropic=False, re=15
 
     if stencil_name == 'D3Q19_new':
         stencil = Stencil.D3Q19
-        maxwellian_moments = True
+        continuous_equilibrium = True
     elif stencil_name == 'D3Q19_old':
         stencil = Stencil.D3Q19
-        maxwellian_moments = False
+        continuous_equilibrium = False
     elif stencil_name == 'D3Q27':
         stencil = Stencil.D3Q27
-        maxwellian_moments = False
+        continuous_equilibrium = False
     else:
         raise ValueError("Unknown stencil name " + stencil_name)
     d = diameter
@@ -51,7 +51,7 @@ def rod_simulation(stencil_name, diameter, parallel=False, entropic=False, re=15
     omega = relaxation_rate_from_lattice_viscosity(lattice_viscosity)
 
     lbm_config = LBMConfig(stencil=LBStencil(stencil), compressible=True, method=Method.SRT, relaxation_rate=omega,
-                           entropic=entropic, maxwellian_moments=maxwellian_moments)
+                           entropic=entropic, continuous_equilibrium=continuous_equilibrium)
     kernel_params = {}
 
     print("ω=", omega)

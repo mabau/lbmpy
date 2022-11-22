@@ -1,6 +1,7 @@
 import functools
 from copy import deepcopy
 from lbmpy.simplificationfactory import create_simplification_strategy
+from pystencils import create_kernel, CreateKernelConfig
 from pystencils.field import Field, get_layout_of_array
 from pystencils.enums import Target
 
@@ -22,6 +23,12 @@ def pdf_initialization_assignments(lb_method, density, velocity, pdfs,
     else:
         raise ValueError("Invalid value of pdfs: A PDF field reference is required to derive "
                          + f"initialization assignments for streaming pattern {streaming_pattern}.")
+
+    if isinstance(density, Field):
+        density = density.center
+
+    if isinstance(velocity, Field):
+        velocity = velocity.center_vector
 
     cqc = lb_method.conserved_quantity_computation
     inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity, force_substitution=False)
@@ -125,16 +132,8 @@ def compile_macroscopic_values_getter(lb_method, output_quantities, pdf_arr=None
 
     eqs = cqc.output_equations_from_pdfs(pdf_symbols, output_mapping).all_assignments
 
-    if target == Target.CPU:
-        import pystencils.cpu as cpu
-        kernel = cpu.make_python_function(cpu.create_kernel(
-            eqs, ghost_layers=ghost_layers, iteration_slice=iteration_slice))
-    elif target == Target.GPU:
-        import pystencils.gpucuda as gpu
-        kernel = gpu.make_python_function(gpu.create_cuda_kernel(
-            eqs, ghost_layers=ghost_layers, iteration_slice=iteration_slice))
-    else:
-        raise ValueError("Unknown target '%s'. Possible targets are `Target.CPU` and `Target.GPU`" % (target,))
+    config = CreateKernelConfig(target=target, ghost_layers=ghost_layers, iteration_slice=iteration_slice)
+    kernel = create_kernel(eqs, config=config).compile()
 
     def getter(pdfs, **kwargs):
         if pdf_arr is not None:
@@ -210,16 +209,9 @@ def compile_macroscopic_values_setter(lb_method, quantities_to_set, pdf_arr=None
     substitutions = {sym: write_accesses[i] for i, sym in enumerate(lb_method.post_collision_pdf_symbols)}
     eq = eq.new_with_substitutions(substitutions).all_assignments
 
-    if target == Target.CPU:
-        import pystencils.cpu as cpu
-        kernel = cpu.make_python_function(cpu.create_kernel(eq))
-        kernel = functools.partial(kernel, **fixed_kernel_parameters)
-    elif target == Target.GPU:
-        import pystencils.gpucuda as gpu
-        kernel = gpu.make_python_function(gpu.create_cuda_kernel(eq))
-        kernel = functools.partial(kernel, **fixed_kernel_parameters)
-    else:
-        raise ValueError("Unknown target '%s'. Possible targets are `Target.CPU` and `Target.GPU`" % (target,))
+    config = CreateKernelConfig(target=target)
+    kernel = create_kernel(eq, config=config).compile()
+    kernel = functools.partial(kernel, **fixed_kernel_parameters)
 
     def setter(pdfs, **kwargs):
         if pdf_arr is not None:
@@ -245,8 +237,8 @@ def create_advanced_velocity_setter_collision_rule(method, velocity_field: Field
         LB collision rule
     """
     cqc = method.conserved_quantity_computation
-    density_symbol = cqc.defined_symbols(order=0)[1]
-    velocity_symbols = cqc.defined_symbols(order=1)[1]
+    density_symbol = cqc.density_symbol
+    velocity_symbols = cqc.velocity_symbols
 
     # density is computed from pdfs
     eq_input_from_pdfs = cqc.equilibrium_input_equations_from_pdfs(

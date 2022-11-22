@@ -5,7 +5,7 @@ from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
 from pystencils.simp.assignment_collection import AssignmentCollection
 from pystencils import Assignment, Field
 from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
-from pystencils.data_types import create_type
+from pystencils.typing import create_type
 from pystencils.sympyextensions import get_symmetric_part
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.advanced_streaming.indexing import NeighbourOffsetArrays, MirroredStencilDirections
@@ -140,7 +140,10 @@ class FreeSlip(LbBoundary):
                              "the normal direction is not defined for this class")
 
         if normal_direction:
-            self.mirror_axis = normal_direction.index(*[dir for dir in normal_direction if dir != 0])
+            normal_direction = tuple([int(n) for n in normal_direction])
+            assert all([n in [-1, 0, 1] for n in normal_direction]), \
+                "Only -1, 0 and 1 allowed for defining the normal direction"
+            self.mirror_axis = normal_direction.index(*[d for d in normal_direction if d != 0])
 
         self.normal_direction = normal_direction
         self.dim = len(stencil[0])
@@ -317,7 +320,7 @@ class UBB(LbBoundary):
             cqc = lb_method.conserved_quantity_computation
             shifted_vel_eqs = cqc.equilibrium_input_equations_from_init_values(velocity=velocity)
             shifted_vel_eqs = shifted_vel_eqs.new_without_subexpressions()
-            velocity = [eq.rhs for eq in shifted_vel_eqs.new_filtered(cqc.first_order_moment_symbols).main_assignments]
+            velocity = [eq.rhs for eq in shifted_vel_eqs.new_filtered(cqc.velocity_symbols).main_assignments]
 
         c_s_sq = sp.Rational(1, 3)
         weight_info = LbmWeightInfo(lb_method, data_type=self.data_type)
@@ -328,12 +331,12 @@ class UBB(LbBoundary):
         # Better alternative: in conserved value computation
         # rename what is currently called density to "virtual_density"
         # provide a new quantity density, which is constant in case of incompressible models
-        if not lb_method.conserved_quantity_computation.zero_centered_pdfs:
+        if lb_method.conserved_quantity_computation.compressible:
             cqc = lb_method.conserved_quantity_computation
             density_symbol = sp.Symbol("rho")
             pdf_field_accesses = [f_out(i) for i in range(len(lb_method.stencil))]
             density_equations = cqc.output_equations_from_pdfs(pdf_field_accesses, {'density': density_symbol})
-            density_symbol = lb_method.conserved_quantity_computation.defined_symbols()['density']
+            density_symbol = lb_method.conserved_quantity_computation.density_symbol
             result = density_equations.all_assignments
             result += [Assignment(f_in(inv_dir[dir_symbol]),
                                   f_out(dir_symbol) - vel_term * density_symbol)]
@@ -369,7 +372,9 @@ class SimpleExtrapolationOutflow(LbBoundary):
         if name is None:
             name = f"Simple Outflow: {offset_to_direction_string(normal_direction)}"
 
-        self.normal_direction = normal_direction
+        self.normal_direction = tuple([int(n) for n in normal_direction])
+        assert all([n in [-1, 0, 1] for n in self.normal_direction]), \
+            "Only -1, 0 and 1 allowed for defining the normal direction"
         super(SimpleExtrapolationOutflow, self).__init__(name)
 
     def get_additional_code_nodes(self, lb_method):
@@ -436,7 +441,9 @@ class ExtrapolationOutflow(LbBoundary):
         if name is None:
             name = f"Outflow: {offset_to_direction_string(normal_direction)}"
 
-        self.normal_direction = normal_direction
+        self.normal_direction = tuple([int(n) for n in normal_direction])
+        assert all([n in [-1, 0, 1] for n in self.normal_direction]), \
+            "Only -1, 0 and 1 allowed for defining the normal direction"
         self.streaming_pattern = streaming_pattern
         self.zeroth_timestep = zeroth_timestep
         self.dx = sp.Number(dx)
@@ -564,7 +571,7 @@ class FixedDensity(LbBoundary):
             return assignment_collection.copy(new_main_assignments)
 
         cqc = lb_method.conserved_quantity_computation
-        velocity = cqc.defined_symbols()['velocity']
+        velocity = cqc.velocity_symbols
         symmetric_eq = remove_asymmetric_part_of_main_assignments(lb_method.get_equilibrium(),
                                                                   degrees_of_freedom=velocity)
         substitutions = {sym: f_out(i) for i, sym in enumerate(lb_method.pre_collision_pdf_symbols)}
@@ -573,24 +580,26 @@ class FixedDensity(LbBoundary):
         simplification = create_simplification_strategy(lb_method)
         symmetric_eq = simplification(symmetric_eq)
 
-        density_symbol = cqc.defined_symbols()['density']
-
         density = self.density
         equilibrium_input = cqc.equilibrium_input_equations_from_init_values(density=density)
         equilibrium_input = equilibrium_input.new_without_subexpressions()
-        density_eq = equilibrium_input.main_assignments[0]
-        assert density_eq.lhs == density_symbol
-        transformed_density = density_eq.rhs
+        equilibrium_input = equilibrium_input.main_assignments_dict
+
+        subexpressions_dict = symmetric_eq.subexpressions_dict
+        subexpressions_dict[cqc.density_symbol] = equilibrium_input[cqc.density_symbol]
+        subexpressions_dict[cqc.density_deviation_symbol] = equilibrium_input[cqc.density_deviation_symbol]
 
         conditions = [(eq_i.rhs, sp.Equality(dir_symbol, i))
                       for i, eq_i in enumerate(symmetric_eq.main_assignments)] + [(0, True)]
         eq_component = sp.Piecewise(*conditions)
 
-        subexpressions = [Assignment(eq.lhs, transformed_density if eq.lhs == density_symbol else eq.rhs)
-                          for eq in symmetric_eq.subexpressions]
+        main_assignments = [Assignment(f_in(inv_dir[dir_symbol]), 2 * eq_component - f_out(dir_symbol))]
 
-        return subexpressions + [Assignment(f_in(inv_dir[dir_symbol]),
-                                            2 * eq_component - f_out(dir_symbol))]
+        ac = AssignmentCollection(main_assignments, subexpressions=subexpressions_dict)
+        ac = ac.new_without_unused_subexpressions()
+        ac.topological_sort()
+
+        return ac
 
 
 # end class FixedDensity
@@ -624,6 +633,8 @@ class DiffusionDirichlet(LbBoundary):
         return [LbmWeightInfo(lb_method, self._data_type)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        assert lb_method.conserved_quantity_computation.zero_centered_pdfs is False, \
+            "DiffusionDirichlet only works for methods with normal pdfs storage -> set zero_centered=False"
         weight_info = LbmWeightInfo(lb_method, self._data_type)
         w_dir = weight_info.weight_of_direction(dir_symbol, lb_method)
         return [Assignment(f_in(inv_dir[dir_symbol]),

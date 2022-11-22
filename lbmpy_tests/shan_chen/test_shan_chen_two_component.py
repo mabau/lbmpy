@@ -31,7 +31,7 @@ def test_shan_chen_two_component():
     weights = get_weights(stencil, c_s_sq=sp.Rational(1, 3))
 
     dim = stencil.D
-    dh = ps.create_data_handling((N, ) * dim, periodicity=True, default_target=ps.Target.CPU)
+    dh = ps.create_data_handling((N,) * dim, periodicity=True, default_target=ps.Target.CPU)
 
     src_a = dh.add_array('src_a', values_per_cell=stencil.Q)
     dst_a = dh.add_array_like('dst_a', 'src_a')
@@ -71,15 +71,16 @@ def test_shan_chen_two_component():
     ])
 
     # calculate the velocity without force correction
-    u_temp = ps.Assignment(u_bary.center_vector,
-                           (ρ_a.center * u_a.center_vector
-                            - f_a.center_vector / 2 + ρ_b.center * u_b.center_vector
-                            - f_b.center_vector / 2) / (ρ_a.center + ρ_b.center))
+    u_temp = ps.AssignmentCollection(ps.Assignment(u_bary.center_vector,
+                                                   (ρ_a.center * u_a.center_vector
+                                                    - f_a.center_vector / 2 + ρ_b.center * u_b.center_vector
+                                                    - f_b.center_vector / 2) / (ρ_a.center + ρ_b.center)))
 
     # add the force correction to the velocity
-    u_corr = ps.Assignment(u_bary.center_vector,
-                           u_bary.center_vector
-                           + (f_a.center_vector / 2 + f_b.center_vector / 2) / (ρ_a.center + ρ_b.center))
+    u_corr = ps.AssignmentCollection(ps.Assignment(u_bary.center_vector,
+                                                   u_bary.center_vector
+                                                   + (f_a.center_vector / 2 + f_b.center_vector / 2) / (
+                                                               ρ_a.center + ρ_b.center)))
 
     lbm_config_a = LBMConfig(stencil=stencil, relaxation_rate=omega_a, compressible=True,
                              velocity_input=u_bary, density_input=ρ_a, force_model=ForceModel.GUO,
@@ -150,7 +151,7 @@ def test_shan_chen_two_component():
 
         dh.swap(src_a.name, dst_a.name)
         dh.swap(src_b.name, dst_b.name)
-    
+
     # reference generated from https://github.com/lbm-principles-practice/code/blob/master/chapter9/shanchen.cpp with
     # const int nsteps = 1000;
     # const int noutput = 1000;
