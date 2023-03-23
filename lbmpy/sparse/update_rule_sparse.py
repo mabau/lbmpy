@@ -1,6 +1,10 @@
 from pystencils import Assignment, AssignmentCollection
 # noinspection PyProtectedMember
 from pystencils.field import Field, FieldType, compute_strides
+from lbmpy.advanced_streaming import Timestep, is_inplace
+from pystencils.stencil import inverse_direction
+from pystencils.simp import add_subexpressions_for_field_reads
+
 
 AC = AssignmentCollection
 
@@ -19,36 +23,66 @@ def create_symbolic_list(name, num_cells, values_per_cell, dtype, layout='AoS'):
     return Field(name, FieldType.CUSTOM, dtype, spatial_layout, shape, strides)
 
 
-def create_lb_update_rule_sparse(collision_rule, src, dst, idx, kernel_type='stream_pull_collide') -> AC:
+def create_lb_update_rule_sparse(collision_rule, lbm_config, src, idx, dst = None, inner_outer_split=False) -> AC:
     """Creates a update rule from a collision rule using compressed pdf storage and two (src/dst) arrays.
 
     Args:
         collision_rule: arbitrary collision rule, e.g. created with create_lb_collision_rule
         src: symbolic field to read from
-        dst: symbolic field to write to
         idx: symbolic index field
-        kernel_type: one of 'stream_pull_collide', 'collide_only' or 'stream_pull_only'
+        dst: symbolic field to write to
+        inner_outer_split: communication hiding, enables absolut access  with pull idx also on dst field
     Returns:
         update rule
     """
-    assert kernel_type in ('stream_pull_collide', 'collide_only', 'stream_pull_only')
+    assert lbm_config.kernel_type in ('stream_pull_collide', 'collide_only', 'stream_pull_only', 'default_stream_collide')
     method = collision_rule.method
     q = len(method.stencil)
 
-    symbol_subs = _list_substitutions(method, src, idx)
+    if lbm_config.streaming_pattern == 'pull':
+        symbol_subs = {sym: src.absolute_access((idx(i),), ()) for i, sym in enumerate(method.pre_collision_pdf_symbols)}
+        if not inner_outer_split:
+            symbol_subs[method.pre_collision_pdf_symbols[0]] = src(0)
+            for i, tmp_pdf in enumerate(method.post_collision_pdf_symbols):
+                symbol_subs[tmp_pdf] = dst(i)
+        else:
+            for i, tmp_pdf in enumerate(method.post_collision_pdf_symbols):
+                symbol_subs[tmp_pdf] = dst.absolute_access((idx(0),), (i,))
 
-    if kernel_type == 'stream_pull_only':
-        assignments = []
-        for i in range(q):
-            lhs = dst(i)
-            rhs = symbol_subs[method.pre_collision_pdf_symbols[i]]
-            if lhs - rhs != 0:
-                assignments.append(Assignment(lhs, rhs))
-        return AssignmentCollection(assignments, subexpressions=[])
-    else:
-        write_target = src if kernel_type == 'collide_only' else dst
-        symbol_subs.update({sym: write_target(i) for i, sym in enumerate(method.post_collision_pdf_symbols)})
+        if lbm_config.kernel_type == 'stream_pull_only':
+            assignments = []
+            for i in range(q):
+                lhs = dst(i)
+                rhs = symbol_subs[method.pre_collision_pdf_symbols[i]]
+                if lhs - rhs != 0:
+                    assignments.append(Assignment(lhs, rhs))
+            return AssignmentCollection(assignments, subexpressions=[])
+        elif lbm_config.kernel_type == 'collide_only':
+            symbol_subs.update({sym: src(i) for i, sym in enumerate(method.post_collision_pdf_symbols)})
         return collision_rule.new_with_substitutions(symbol_subs)
+
+    elif lbm_config.streaming_pattern == 'aa':
+        symbol_subs = {}
+        if lbm_config.timestep == Timestep.EVEN:
+            if inner_outer_split:
+                symbol_subs.update({sym: src.absolute_access((idx(0),), (d,)) for d, sym in enumerate(method.pre_collision_pdf_symbols)})
+                symbol_subs.update({method.post_collision_pdf_symbols[method.stencil.index(d)]: src.absolute_access((idx(0),), (method.stencil.index(inverse_direction(d)),)) for d in method.stencil})
+            else:
+                symbol_subs.update({sym: src(d) for d, sym in enumerate(method.pre_collision_pdf_symbols)})
+                symbol_subs.update({method.post_collision_pdf_symbols[method.stencil.index(d)]: src(method.stencil.index(inverse_direction(d))) for d in method.stencil})
+
+        else: #Timestep.ODD
+            for d in method.stencil:
+                symbol_subs.update({method.pre_collision_pdf_symbols[method.stencil.index(d)] : src.absolute_access((idx(method.stencil.index(inverse_direction(d))),), ()) for d in method.stencil})
+                symbol_subs.update({method.post_collision_pdf_symbols[method.stencil.index(d)] : src.absolute_access((idx(method.stencil.index(d)),), ()) for d in method.stencil})
+
+            if not inner_outer_split:
+                symbol_subs[method.pre_collision_pdf_symbols[0]] = src(0)
+                symbol_subs[method.post_collision_pdf_symbols[0]] = src(0)
+
+        result = collision_rule.new_with_substitutions(symbol_subs)
+        result = add_subexpressions_for_field_reads(result, subexpressions=True, main_assignments=True)
+        return result
 
 
 def create_macroscopic_value_getter_sparse(method, pdfs, output_descriptor) -> AC:
@@ -77,13 +111,13 @@ def create_macroscopic_value_setter_sparse(method, pdfs, density, velocity) -> A
     inp_eqs = cqc.equilibrium_input_equations_from_init_values(density, velocity, force_substitution=False)
     result = method.get_equilibrium(conserved_quantity_equations=inp_eqs)
     substitutions = {a: b for a, b in zip(method.post_collision_pdf_symbols, pdfs.center_vector)}
-    return result.new_with_substitutions(substitutions).new_without_subexpressions()
+    return result.new_with_substitutions(substitutions)
 
 
 # ---------------------------------------- Helper Functions ------------------------------------------------------------
 
 
-def _list_substitutions(method, src, idx, store_center=False):
+def _list_substitutions(method, src, idx, dst=None, cell_idx=None, store_center=False):
     if store_center:
         result = {sym: src.absolute_access((idx(i),), ())
                   for i, sym in enumerate(method.pre_collision_pdf_symbols)}
@@ -92,4 +126,9 @@ def _list_substitutions(method, src, idx, store_center=False):
                   for i, sym in enumerate(method.pre_collision_pdf_symbols)}
         result[method.pre_collision_pdf_symbols[0]] = src(0)
 
+        if cell_idx is not None:
+            for i, tmp_pdf in enumerate(method.post_collision_pdf_symbols):
+                result[tmp_pdf] = dst.absolute_access((cell_idx(0),), (i, ))
+
     return result
+
