@@ -101,7 +101,11 @@ setup(name='lbmpy',
           'Intended Audience :: Science/Research',
           'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
       ],
-      python_requires=">=3.8",
+      project_urls={
+          "Bug Tracker": "https://i10git.cs.fau.de/pycodegen/lbmpy/-/issues",
+          "Documentation": "https://pycodegen.pages.i10git.cs.fau.de/lbmpy/",
+          "Source Code": "https://i10git.cs.fau.de/pycodegen/lbmpy",
+      },
       extras_require={
           'gpu': ['pycuda'],
           'opencl': ['pyopencl'],
@@ -112,5 +116,6 @@ setup(name='lbmpy',
                   'sphinxcontrib-bibtex', 'sphinx_autodoc_typehints', 'pandoc'],
           'phasefield': ['Cython']
       },
+      python_requires=">=3.8",
       cmdclass=get_cmdclass()
       )
