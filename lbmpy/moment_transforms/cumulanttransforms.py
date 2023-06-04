@@ -67,10 +67,10 @@ class CentralMomentsToCumulantsByGeneratingFunc(AbstractMomentTransform):
         self.cumulant_exponents = self.moment_exponents
         self.cumulant_polynomials = self.moment_polynomials
 
-        if(len(self.cumulant_exponents) != stencil.Q):
+        if len(self.cumulant_exponents) != stencil.Q:
             raise ValueError("Number of cumulant exponent tuples must match stencil size.")
 
-        if(len(self.cumulant_polynomials) != stencil.Q):
+        if len(self.cumulant_polynomials) != stencil.Q:
             raise ValueError("Number of cumulant polynomials must match stencil size.")
 
         self.central_moment_exponents = self.compute_required_central_moments()

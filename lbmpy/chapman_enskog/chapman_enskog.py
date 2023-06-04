@@ -370,7 +370,7 @@ def take_moments(eqn, pdf_to_moment_name=(('f', '\\Pi'), ('\\Omega f', '\\Upsilo
                 if new_f_index is None:
                     rest *= factor
                 else:
-                    assert not(new_f_index and f_index)
+                    assert not (new_f_index and f_index)
                     f_index = new_f_index
 
         moment_tuple = [0] * len(velocity_terms)
