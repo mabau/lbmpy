@@ -86,8 +86,8 @@ def moment_permutations(exponent_tuple):
 def moments_of_order(order, dim=3, include_permutations=True):
     """All tuples of length 'dim' which sum equals 'order'"""
     for item in __fixed_sum_tuples(dim, order, ordered=not include_permutations):
-        assert(len(item) == dim)
-        assert(sum(item) == order)
+        assert len(item) == dim
+        assert sum(item) == order
         yield item
 
 
