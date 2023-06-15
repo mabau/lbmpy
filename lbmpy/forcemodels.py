@@ -210,6 +210,28 @@ class Simple(AbstractForceModel):
         return before, after
 
 
+class CentralMoment(AbstractForceModel):
+    r"""
+    A force model that only shifts the macroscopic and equilibrium velocities and does not introduce a forcing term to
+    the collision process. Forcing is then applied through relaxation of the first central moments in the shifted
+    frame of reference (cf. https://doi.org/10.1016/j.camwa.2015.05.001).
+    """
+    def __call__(self, lb_method):
+        raise ValueError("This force model can only be combined with the Cumulant collision model")
+
+    def symmetric_central_moment_forcing(self, lb_method, *_):
+        before = sp.Matrix([0, ] * lb_method.stencil.Q)
+        after = sp.Matrix([0, ] * lb_method.stencil.Q)
+        for i, sf in enumerate(self.symbolic_force_vector):
+            before[i + 1] = sp.Rational(1, 2) * sf
+            after[i + 1] = sp.Rational(1, 2) * sf
+
+        return before, after
+
+    def equilibrium_velocity_shift(self, density):
+        return default_velocity_shift(density, self.symbolic_force_vector)
+
+
 class Luo(AbstractForceModel):
     r"""Force model by Luo :cite:`luo1993lattice`.
 

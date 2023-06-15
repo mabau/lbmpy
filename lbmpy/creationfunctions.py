@@ -412,7 +412,10 @@ class LBMConfig:
                 force_not_zero = True
 
         if self.force_model is None and force_not_zero:
-            self.force_model = forcemodels.Guo(self.force[:self.stencil.D])
+            if self.method == Method.CUMULANT:
+                self.force_model = forcemodels.CentralMoment(self.force[:self.stencil.D])
+            else:
+                self.force_model = forcemodels.Guo(self.force[:self.stencil.D])
 
         force_model_dict = {
             'simple': forcemodels.Simple,
@@ -424,7 +427,8 @@ class LBMConfig:
             'edm': forcemodels.EDM,
             'kupershtokh': forcemodels.EDM,
             'he': forcemodels.He,
-            'shanchen': forcemodels.ShanChen
+            'shanchen': forcemodels.ShanChen,
+            'centralmoment': forcemodels.CentralMoment
         }
 
         if isinstance(self.force_model, str):

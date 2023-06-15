@@ -217,3 +217,7 @@ class ForceModel(Enum):
     """
     See :class:`lbmpy.forcemodels.ShanChen`
     """
+    CENTRALMOMENT = auto()
+    """
+    See :class:`lbmpy.forcemodels`
+    """
