@@ -12,10 +12,9 @@ from lbmpy.macroscopic_value_kernels import macroscopic_values_setter, macroscop
 from lbmpy.moments import (is_bulk_moment, moments_up_to_component_order,
                            exponents_to_polynomial_representations, exponent_tuple_sort_key)
 from lbmpy.stencils import LBStencil
-from lbmpy.updatekernels import create_stream_pull_with_output_kernel
 
 # all force models available are defined in the ForceModel enum, but Cumulant is not a "real" force model
-force_models = [f for f in ForceModel]
+force_models = [f for f in ForceModel if f is not ForceModel.CENTRALMOMENT]
 
 
 @pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT, Method.MRT, Method.CUMULANT])
