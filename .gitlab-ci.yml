@@ -22,7 +22,7 @@ tests-and-coverage:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - env
     - pip list
-    - py.test -v -n $NUM_CORES --cov-report html --cov-report term --cov=. -m "not longrun" --junitxml=report.xml
+    - py.test -v -n $NUM_CORES --cov-report html --cov-report xml --cov-report term --cov=. -m "not longrun" --junitxml=report.xml
     - python3 -m coverage xml
   tags:
     - docker
