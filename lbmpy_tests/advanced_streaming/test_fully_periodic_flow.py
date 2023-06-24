@@ -20,7 +20,7 @@ all_results = dict()
 targets = [Target.CPU]
 
 try:
-    import pycuda.autoinit
+    import cupy
     targets += [Target.GPU]
 except Exception:
     pass

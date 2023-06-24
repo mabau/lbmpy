@@ -31,7 +31,7 @@ def run_equivalence_test(domain_size, lbm_config, lbm_opt, config, time_steps=13
                                       ((18, 20), Method.MRT, True, (4, 2), 'zyxf'),
                                       ((7, 11, 18), Method.TRT, False, False, 'numpy')])
 def test_force_driven_channel_short(scenario):
-    pytest.importorskip("pycuda")
+    pytest.importorskip("cupy")
     ds = scenario[0]
     method = scenario[1]
     compressible = scenario[2]

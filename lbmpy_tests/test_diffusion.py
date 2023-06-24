@@ -77,7 +77,7 @@ def test_diffusion():
 
       The hydrodynamic field is not simulated, instead a constant velocity is assumed.
     """
-    pytest.importorskip("pycuda")
+    pytest.importorskip("cupy")
     # Parameters
     domain_size = (1600, 160)
     omega = 1.38

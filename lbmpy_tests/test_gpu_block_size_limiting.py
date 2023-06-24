@@ -6,7 +6,7 @@ from pystencils import Target, CreateKernelConfig
 
 
 def test_gpu_block_size_limiting():
-    pytest.importorskip("pycuda")
+    pytest.importorskip("cupy")
     too_large = 2048*2048
     lbm_config = LBMConfig(method=Method.CUMULANT, stencil=LBStencil(Stencil.D3Q19),
                            relaxation_rate=1.8, compressible=True)

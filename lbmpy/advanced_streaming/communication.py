@@ -12,15 +12,15 @@ class LBMPeriodicityHandling:
 
     def __init__(self, stencil, data_handling, pdf_field_name,
                  streaming_pattern='pull', ghost_layers=1,
-                 pycuda_direct_copy=True):
+                 cupy_direct_copy=True):
         """
             Periodicity Handling for Lattice Boltzmann Streaming.
 
             **On the usage with cuda:**
-            - pycuda allows the copying of sliced arrays within device memory using the numpy syntax,
+            - cupy allows the copying of sliced arrays within device memory using the numpy syntax,
             e.g. `dst[:,0] = src[:,-1]`. In this implementation, this is the default for periodicity
-            handling. Alternatively, if you set `pycuda_direct_copy=False`, GPU kernels are generated and
-            compiled. The compiled kernels are almost twice as fast in execution as pycuda array copying,
+            handling. Alternatively, if you set `cupy_direct_copy=False`, GPU kernels are generated and
+            compiled. The compiled kernels are almost twice as fast in execution as cupy array copying,
             but especially for large stencils like D3Q27, their compilation can take up to 20 seconds.
             Choose your weapon depending on your use case.
         """
@@ -40,7 +40,7 @@ class LBMPeriodicityHandling:
         self.inplace_pattern = is_inplace(streaming_pattern)
 
         self.cpu = self.target == Target.CPU
-        self.pycuda_direct_copy = self.target == Target.GPU and pycuda_direct_copy
+        self.cupy_direct_copy = self.target == Target.GPU and cupy_direct_copy
 
         def is_copy_direction(direction):
             s = 0
@@ -63,7 +63,7 @@ class LBMPeriodicityHandling:
                                                            ghost_layers=ghost_layers)
             self.comm_slices.append(list(chain.from_iterable(v for k, v in slices_per_comm_dir.items())))
 
-        if self.target == Target.GPU and not pycuda_direct_copy:
+        if self.target == Target.GPU and not cupy_direct_copy:
             self.device_copy_kernels = list()
             for timestep in timesteps:
                 self.device_copy_kernels.append(self._compile_copy_kernels(timestep))
@@ -90,7 +90,7 @@ class LBMPeriodicityHandling:
 
     def _periodicity_handling_gpu(self, prev_timestep):
         arr = self.dh.gpu_arrays[self.pdf_field_name]
-        if self.pycuda_direct_copy:
+        if self.cupy_direct_copy:
             for src, dst in self.comm_slices[prev_timestep.idx]:
                 arr[dst] = arr[src]
         else:

@@ -26,7 +26,7 @@ def mirror_stencil(direction, mirror_axis):
 def test_simple(target):
     if target == Target.GPU:
         import pytest
-        pytest.importorskip('pycuda')
+        pytest.importorskip('cupy')
 
     dh = create_data_handling((4, 4), parallel=False, default_target=target)
     dh.add_array('pdfs', values_per_cell=9, cpu=True, gpu=target != Target.CPU)

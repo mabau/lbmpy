@@ -6,7 +6,7 @@ from pystencils import Target, CreateKernelConfig
 from lbmpy.scenarios import create_fully_periodic_flow, create_lid_driven_cavity
 
 try:
-    import pycuda.driver
+    import cupy
     gpu_available = True
 except ImportError:
     gpu_available = False

@@ -136,7 +136,7 @@ def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
 @pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize('galilean_correction', [False, True])
 def test_flow_around_sphere_short(stencil, galilean_correction):
-    pytest.importorskip('pycuda')
+    pytest.importorskip('cupy')
     flow_around_sphere(LBStencil(stencil), galilean_correction, 5, 200)
 
 
@@ -144,5 +144,5 @@ def test_flow_around_sphere_short(stencil, galilean_correction):
 @pytest.mark.parametrize('galilean_correction', [False, True])
 @pytest.mark.longrun
 def test_flow_around_sphere_long(stencil, galilean_correction):
-    pytest.importorskip('pycuda')
+    pytest.importorskip('cupy')
     flow_around_sphere(LBStencil(stencil), galilean_correction, 20, 3000)

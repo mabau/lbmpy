@@ -26,16 +26,28 @@ Examples:
 import warnings
 
 import numpy as np
+import pystencils
 
-# Optional packages cpuinfo, pycuda and psutil for hardware queries
+# Optional packages cpuinfo, cupy and psutil for hardware queries
 try:
     from cpuinfo import get_cpu_info
 except ImportError:
     get_cpu_info = None
 
 try:
-    from pycuda.autoinit import device
+    import cupy
+    device = cupy.cuda.Device(pystencils.GPU_DEVICE)
 except ImportError:
+    cupy = None
+    device = None
+
+if cupy:
+    try:
+        device = cupy.cuda.Device(pystencils.GPU_DEVICE)
+    except AttributeError:
+        warnings.warn("You are using an old pystencils version. Consider updating it")
+        device = cupy.cuda.Device(0)
+else:
     device = None
 
 try:
@@ -114,7 +126,7 @@ def memory_sizes_of_current_machine():
             result['L3'] = cpu_info['l3_cache_size']
 
     if device:
-        size = device.total_memory() / (1024 * 1024)
+        size = device.mem_info[1] / (1024 * 1024)
         result['GPU'] = "{0:.0f} MB".format(size)
 
     if virtual_memory:
@@ -124,7 +136,7 @@ def memory_sizes_of_current_machine():
 
     if not result:
         warnings.warn("Couldn't query for any local memory size."
-                      "Install py-cpuinfo to get cache sizes, psutil for RAM size and pycuda for GPU memory size.")
+                      "Install py-cpuinfo to get cache sizes, psutil for RAM size and cupy for GPU memory size.")
 
     return result
 

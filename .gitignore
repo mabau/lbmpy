@@ -23,6 +23,7 @@ doc/bibtex.json
 
 # macOS
 **/.DS_Store
+*.uuid
 
 # benchmark database
 /lbmpy_tests/benchmark/db

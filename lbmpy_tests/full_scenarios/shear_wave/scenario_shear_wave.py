@@ -215,7 +215,7 @@ def create_full_parameter_study():
 
 
 def test_shear_wave():
-    pytest.importorskip('pycuda')
+    pytest.importorskip('cupy')
     params = {
         'l_0': 32,
         'u_0': 0.096,

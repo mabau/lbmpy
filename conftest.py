@@ -46,7 +46,7 @@ add_path_to_ignore('pystencils_tests/benchmark')
 add_path_to_ignore('_local_tmp')
 
 try:
-    import pycuda
+    import cupy
 except ImportError:
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_cpu_gpu_equivalence.py")]
 

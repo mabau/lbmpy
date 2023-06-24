@@ -107,7 +107,7 @@ setup(name='lbmpy',
           "Source Code": "https://i10git.cs.fau.de/pycodegen/lbmpy",
       },
       extras_require={
-          'gpu': ['pycuda'],
+          'gpu': ['cupy'],
           'opencl': ['pyopencl'],
           'alltrafos': ['islpy', 'py-cpuinfo'],
           'interactive': ['scipy', 'scikit-image', 'cython', 'matplotlib',

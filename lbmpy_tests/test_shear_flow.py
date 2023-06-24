@@ -67,7 +67,7 @@ def test_shear_flow(target, stencil_name, zero_centered):
 
     # Cuda
     if target == ps.Target.GPU:
-        pytest.importorskip("pycuda")
+        pytest.importorskip("cupy")
 
     # LB parameters
     stencil = LBStencil(stencil_name)
