@@ -17,5 +17,5 @@ def test_gpu_block_size_limiting():
     kernel = ast.compile()
     assert all(b < too_large for b in limited_block_size['block'])
     bs = [too_large, too_large, too_large]
-    ast.indexing.limit_block_size_by_register_restriction(bs, kernel.num_regs)
+    bs = ast.indexing.limit_block_size_by_register_restriction(bs, kernel.num_regs)
     assert all(b < too_large for b in bs)
