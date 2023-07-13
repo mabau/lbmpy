@@ -26,7 +26,6 @@ Examples:
 import warnings
 
 import numpy as np
-import pystencils
 
 # Optional packages cpuinfo, cupy and psutil for hardware queries
 try:
@@ -36,19 +35,8 @@ except ImportError:
 
 try:
     import cupy
-    device = cupy.cuda.Device(pystencils.GPU_DEVICE)
 except ImportError:
     cupy = None
-    device = None
-
-if cupy:
-    try:
-        device = cupy.cuda.Device(pystencils.GPU_DEVICE)
-    except AttributeError:
-        warnings.warn("You are using an old pystencils version. Consider updating it")
-        device = cupy.cuda.Device(0)
-else:
-    device = None
 
 try:
     from psutil import virtual_memory
@@ -125,9 +113,11 @@ def memory_sizes_of_current_machine():
         if 'l3_cache_size' in cpu_info:
             result['L3'] = cpu_info['l3_cache_size']
 
-    if device:
-        size = device.mem_info[1] / (1024 * 1024)
-        result['GPU'] = "{0:.0f} MB".format(size)
+    if cupy:
+        for i in range(cupy.cuda.runtime.getDeviceCount()):
+            device = cupy.cuda.Device(i)
+            size = device.mem_info[1] / (1024 * 1024)
+            result[f'GPU{i}'] = "{0:.0f} MB".format(size)
 
     if virtual_memory:
         mem = virtual_memory()
