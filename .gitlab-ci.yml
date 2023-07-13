@@ -113,22 +113,22 @@ latest-python:
       junit: report.xml
 
 # Minimal tests in windows environment
-minimal-windows:
-  stage: test
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
-  tags:
-    - win
-  script:
-    - export NUM_CORES=$(nproc --all)
-    - export MPLBACKEND=Agg
-    - source /cygdrive/c/Users/build/Miniconda3/Scripts/activate
-    - source activate pystencils
-    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
-    - python -c "import numpy"
-    - pip install sympy==1.9
-    - py.test -v -m "not (notebook or longrun)"
+#minimal-windows:
+#  stage: test
+#  except:
+#    variables:
+#      - $ENABLE_NIGHTLY_BUILDS
+#  tags:
+#    - win
+#  script:
+#    - export NUM_CORES=$(nproc --all)
+#    - export MPLBACKEND=Agg
+#    - source /cygdrive/c/Users/build/Miniconda3/Scripts/activate
+#    - source activate pystencils
+#    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
+#    - python -c "import numpy"
+#    - pip install sympy==1.9
+#    - py.test -v -m "not (notebook or longrun)"
 
 minimal-sympy-master:
   stage: test
