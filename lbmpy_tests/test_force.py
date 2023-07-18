@@ -197,7 +197,7 @@ def test_literature(force_model, stencil, method):
     assert len(omega_momentum) == 1
     omega_momentum = omega_momentum[0]
 
-    subs_dict = lb_method.subs_dict_relxation_rate
+    subs_dict = lb_method.subs_dict_relaxation_rate
     force_term = sp.simplify(lb_method.force_model(lb_method).subs(subs_dict))
     u = sp.Matrix(lb_method.first_order_equilibrium_moment_symbols)
     rho = lb_method.conserved_quantity_computation.density_symbol
@@ -282,7 +282,7 @@ def test_modes_central_moment(force_model, compressible):
                            compressible=compressible, force_model=force_model, force=tuple(F))
     method = create_lb_method(lbm_config=lbm_config)
 
-    subs_dict = method.subs_dict_relxation_rate
+    subs_dict = method.subs_dict_relaxation_rate
     force_moments = method.force_model.central_moment_space_forcing(method)
     force_moments = force_moments.subs(subs_dict)
 
@@ -310,7 +310,7 @@ def test_symmetric_forcing_equivalence(force_model, compressible):
     if not method.force_model.has_symmetric_central_moment_forcing:
         return True
 
-    subs_dict = method.subs_dict_relxation_rate
+    subs_dict = method.subs_dict_relaxation_rate
     force_moments = method.force_model.central_moment_space_forcing(method)
     force_moments = force_moments.subs(subs_dict)
 
@@ -335,7 +335,7 @@ def test_modes_central_moment_longrun(stencil, force_model, compressible):
                            compressible=compressible, force_model=force_model, force=tuple(F))
     method = create_lb_method(lbm_config=lbm_config)
 
-    subs_dict = method.subs_dict_relxation_rate
+    subs_dict = method.subs_dict_relaxation_rate
     force_moments = method.force_model.moment_space_forcing(method)
     force_moments = force_moments.subs(subs_dict)
 
@@ -359,7 +359,7 @@ def _check_modes(stencil, force_model, compressible):
                            compressible=compressible, force_model=force_model, force=tuple(F))
     method = create_lb_method(lbm_config=lbm_config)
 
-    subs_dict = method.subs_dict_relxation_rate
+    subs_dict = method.subs_dict_relaxation_rate
     force_moments = method.force_model.moment_space_forcing(method)
     force_moments = force_moments.subs(subs_dict)
 

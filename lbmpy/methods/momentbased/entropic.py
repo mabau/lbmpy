@@ -286,7 +286,7 @@ def _get_relaxation_rates(collision_rule):
     omega_s = get_shear_relaxation_rate(method)
 
     # if the shear relaxation rate is not specified as a symbol look for its symbolic counter part in the subs dict
-    for symbolic_rr, rr in method.subs_dict_relxation_rate.items():
+    for symbolic_rr, rr in method.subs_dict_relaxation_rate.items():
         if omega_s == rr:
             omega_s = symbolic_rr
 

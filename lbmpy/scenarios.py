@@ -42,10 +42,10 @@ def create_fully_periodic_flow(initial_velocity, periodicity_in_kernel=False, lb
         initial_velocity: numpy array that defines an initial velocity for each cell. The shape of this
                          array determines the domain size.
         periodicity_in_kernel: don't use boundary handling for periodicity, but directly generate the kernel periodic
-        lbm_kernel: a LBM function, which would otherwise automatically created
+        lbm_kernel: an LBM function, which would otherwise automatically created
         data_handling: data handling instance that is used to create the necessary fields. If a data handling is
                        passed the periodicity and parallel arguments are ignored.
-        parallel: True for distributed memory parallelization with walberla
+        parallel: True for distributed memory parallelization with waLBerla
         kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
 
     Returns:
@@ -76,9 +76,9 @@ def create_lid_driven_cavity(domain_size=None, lid_velocity=0.005, lbm_kernel=No
     Args:
         domain_size: tuple specifying the number of cells in each dimension
         lid_velocity: x velocity of lid in lattice coordinates.
-        lbm_kernel: a LBM function, which would otherwise automatically created
+        lbm_kernel: an LBM function, which would otherwise automatically created
         kwargs: other parameters are passed on to the method, see :mod:`lbmpy.creationfunctions`
-        parallel: True for distributed memory parallelization with walberla
+        parallel: True for distributed memory parallelization with waLBerla
         data_handling: see documentation of :func:`create_fully_periodic_flow`
     Returns:
         instance of :class:`Scenario`

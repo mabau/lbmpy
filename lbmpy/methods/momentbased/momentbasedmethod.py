@@ -16,8 +16,8 @@ from lbmpy.moment_transforms import PdfsToMomentsByChimeraTransform
 class MomentBasedLbMethod(AbstractLbMethod):
     """
     Moment based LBM is a class to represent the single (SRT), two (TRT) and multi relaxation time (MRT) methods.
-    These methods work by transforming the pdfs into moment space using a linear transformation. In the moment
-    space each component (moment) is relaxed to an equilibrium moment by a certain relaxation rate. These
+    These methods work by transforming the pdfs into moment space using a linear transformation. In the moment-space
+    each component (moment) is relaxed to an equilibrium moment by a certain relaxation rate. These
     equilibrium moments can e.g. be determined by taking the equilibrium moments of the continuous Maxwellian.
 
     Parameters:
@@ -378,7 +378,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
             subexpressions += m_post_to_f_post_eqs.subexpressions
             main_assignments = m_post_to_f_post_eqs.main_assignments
         else:
-            #   For SRT, TRT by default, and whenever customly required, derive equations entirely in
+            #   For SRT, TRT by default, and whenever customarily required, derive equations entirely in
             #   population space
             if self._zero_centered and not self._equilibrium.deviation_only:
                 raise Exception("Can only derive population-space equations for zero-centered storage"

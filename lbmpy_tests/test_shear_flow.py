@@ -1,5 +1,5 @@
 """
-Test shear flow velocity and pressureagainst analytical solutions
+Test shear flow velocity and pressure against analytical solutions
 """
 
 
@@ -205,7 +205,7 @@ def test_shear_flow(target, stencil_name, zero_centered):
     p_expected = rho_0 * np.identity(dh.dim) / 3.0 + dynamic_viscosity * shear_rate / correction_factor * (
         np.outer(shear_plane_normal, shear_direction) + np.transpose(np.outer(shear_plane_normal, shear_direction)))
 
-    # Sustract the tensorproduct of the velosity to get the pressure
+    # Subtract the tensor product of the velocity to get the pressure
     pressure_profile[:, 0, 0] -= rho_0 * profile[:, 0]**2
     
     np.testing.assert_allclose(profile[:, 0], expected[1:-1], atol=1E-9)
