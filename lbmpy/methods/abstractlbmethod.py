@@ -67,8 +67,8 @@ class AbstractLbMethod(abc.ABC):
         return d
 
     @property
-    def subs_dict_relxation_rate(self):
-        """returns a dictonary which maps the replaced numerical relaxation rates to its original numerical value"""
+    def subs_dict_relaxation_rate(self):
+        """returns a dictionary which maps the replaced numerical relaxation rates to its original numerical value"""
         result = dict()
         for i in range(self._stencil.Q):
             result[self.symbolic_relaxation_matrix[i, i]] = self.relaxation_matrix[i, i]

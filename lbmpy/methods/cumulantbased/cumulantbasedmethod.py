@@ -23,7 +23,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
     This class implements cumulant-based lattice boltzmann methods which relax all the non-conserved quantities
     as either monomial or polynomial cumulants. It is mostly inspired by the work presented in :cite:`geier2015`.
 
-    This method is implemented modularily as the transformation from populations to central moments to cumulants
+    This method is implemented modularly as the transformation from populations to central moments to cumulants
     is governed by subclasses of :class:`lbmpy.moment_transforms.AbstractMomentTransform`
     which can be specified by constructor argument. This allows the selection of the most efficient transformation
     for a given setup.
@@ -124,7 +124,7 @@ class CumulantBasedLbMethod(AbstractLbMethod):
     @property
     def zeroth_order_equilibrium_moment_symbol(self, ):
         """Returns a symbol referring to the zeroth-order moment of this method's equilibrium distribution,
-        which is the area under it's curve
+        which is the area under its curve
         (see :attr:`lbmpy.equilibrium.AbstractEquilibrium.zeroth_order_moment_symbol`)."""
         return self._equilibrium.zeroth_order_moment_symbol
 

@@ -87,7 +87,7 @@ from pystencils.simp import sympy_cse, SimplificationStrategy
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule, AbstractLbMethod
 from lbmpy.methods.cumulantbased import CumulantBasedLbMethod
 
-# Filter out JobLib warnings. They are not usefull for use:
+# Filter out JobLib warnings. They are not useful for use:
 # https://github.com/joblib/joblib/issues/683
 filterwarnings("ignore", message="Persisting input arguments took")
 
@@ -99,7 +99,7 @@ class LBMConfig:
     """
     stencil: lbmpy.stencils.LBStencil = LBStencil(Stencil.D2Q9)
     """
-    All stencils are defined in :class:`lbmpy.enums.Stencil`. From that :class:`lbmpy.stencils.LBStenil` 
+    All stencils are defined in :class:`lbmpy.enums.Stencil`. From that :class:`lbmpy.stencils.LBStencil` 
     class will be created
     """
     method: Method = Method.SRT
@@ -196,6 +196,13 @@ class LBMConfig:
     """
     Special correction for D3Q27 cumulant LBMs. For Details see
     :mod:`lbmpy.methods.cumulantbased.galilean_correction`
+    """
+    fourth_order_correction: Union[float, bool] = False
+    """
+    Special correction for rendering D3Q27 cumulant LBMs fourth-order accurate in diffusion. For Details see
+    :mod:`lbmpy.methods.cumulantbased.fourth_order_correction`. If set to `True`, the fourth-order correction is 
+    employed without limiters (or more precisely with a very high limiter, practically disabling the limiters). If this 
+    variable is set to a number, the latter is used for the limiters (uniformly for omega_3, omega_4 and omega_5). 
     """
     collision_space_info: CollisionSpaceInfo = None
     """
@@ -646,6 +653,19 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
         from lbmpy.methods.cumulantbased import add_galilean_correction
         collision_rule = add_galilean_correction(collision_rule)
 
+    if lbm_config.fourth_order_correction:
+        from lbmpy.methods.cumulantbased import add_fourth_order_correction
+
+        # must provide a second relaxation rate in implementation; defaults to 1
+        if len(lbm_config.relaxation_rates) == 1:
+            lbm_config.relaxation_rates.append(1)
+
+        cumulant_limiter = 1e6 if lbm_config.fourth_order_correction is True else lbm_config.fourth_order_correction
+        collision_rule = add_fourth_order_correction(collision_rule=collision_rule,
+                                                     shear_relaxation_rate=lbm_config.relaxation_rates[0],
+                                                     bulk_relaxation_rate=lbm_config.relaxation_rates[1],
+                                                     limiter=cumulant_limiter)
+
     if lbm_config.entropic:
         if lbm_config.smagorinsky or lbm_config.cassons:
             raise ValueError("Choose either entropic, smagorinsky or cassons")
@@ -752,11 +772,25 @@ def create_lb_method(lbm_config=None, **params):
         method_nr = lbm_config.method.name[-1]
         method = create_trt_kbc(dim, relaxation_rates[0], relaxation_rates[1], 'KBC-N' + method_nr, **common_params)
     elif lbm_config.method == Method.CUMULANT:
+        if lbm_config.fourth_order_correction:
+            if lbm_config.stencil.D != 3 and lbm_config.stencil.Q != 27:
+                raise ValueError("Fourth-order correction can only be applied to D3Q27 cumulant methods.")
+
+            assert len(relaxation_rates) <= 2, "Optimal parametrisation for fourth-order cumulants needs either one " \
+                                               "or two relaxation rates, associated with the shear (and bulk) " \
+                                               "viscosity. All other relaxation rates are automatically chosen " \
+                                               "optimally"
+
+            # define method in terms of symbolic relaxation rates and assign optimal values later
+            from lbmpy.methods.cumulantbased.fourth_order_correction import FOURTH_ORDER_RELAXATION_RATE_SYMBOLS
+            relaxation_rates = FOURTH_ORDER_RELAXATION_RATE_SYMBOLS
+
         if lbm_config.nested_moments is not None:
             method = create_cumulant(
                 lbm_config.stencil, relaxation_rates, lbm_config.nested_moments, **cumulant_params)
         else:
             method = create_with_default_polynomial_cumulants(lbm_config.stencil, relaxation_rates, **cumulant_params)
+
     elif lbm_config.method == Method.MONOMIAL_CUMULANT:
         method = create_with_monomial_cumulants(lbm_config.stencil, relaxation_rates, **cumulant_params)
     else:

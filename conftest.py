@@ -60,7 +60,10 @@ try:
 except ImportError:
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/benchmark"),
                        os.path.join(SCRIPT_FOLDER,
-                                    "lbmpy_tests/full_scenarios/kida_vortex_flow/scenario_kida_vortex_flow.py")]
+                                    "lbmpy_tests/full_scenarios/kida_vortex_flow/scenario_kida_vortex_flow.py"),
+                       os.path.join(SCRIPT_FOLDER, "lbmpy_tests/full_scenarios/shear_wave/scenario_shear_wave.py"),
+                       os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_json_serializer.py"),
+                       os.path.join(SCRIPT_FOLDER, "lbmpy/db.py")]
 
 if platform.system().lower() == 'windows':
     collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_quicktests.py")]

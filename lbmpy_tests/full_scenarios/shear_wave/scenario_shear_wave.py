@@ -5,15 +5,16 @@
     Chapter 5.1
 """
 import numpy as np
+import pytest
 import sympy as sp
 
-import pytest
-from pystencils import Target
-
-from lbmpy.creationfunctions import update_with_default_parameters
+from lbmpy import LatticeBoltzmannStep, LBStencil
+from lbmpy.creationfunctions import LBMConfig, LBMOptimisation
+from lbmpy.db import LbmpyJsonSerializer
+from lbmpy.enums import Method, Stencil
 from lbmpy.relaxationrates import (
     relaxation_rate_from_lattice_viscosity, relaxation_rate_from_magic_number)
-from lbmpy.scenarios import create_fully_periodic_flow
+from pystencils import Target, create_data_handling, CreateKernelConfig
 
 
 def get_exponent_term(l, **kwargs):
@@ -53,14 +54,13 @@ def get_analytical_solution(l, l_0, u_0, v_0, nu, t):
 
 def plot_y_velocity(vel, **kwargs):
     import matplotlib.pyplot as plt
-    from matplotlib import cm
-    vel = vel[:, vel.shape[1]//2, :, 1]
+    vel = vel[:, vel.shape[1] // 2, :, 1]
     ranges = [np.arange(n, dtype=float) for n in vel.shape]
     x, y = np.meshgrid(*ranges, indexing='ij')
     fig = plt.gcf()
     ax = fig.gca(projection='3d')
 
-    ax.plot_surface(x, y, vel, cmap=cm.coolwarm, rstride=2, cstride=2,
+    ax.plot_surface(x, y, vel, cmap='coolwarm', rstride=2, cstride=2,
                     linewidth=0, antialiased=True, **kwargs)
 
 
@@ -71,9 +71,9 @@ def fit_and_get_slope(x_values, y_values):
 
 
 def get_phase_error(phases, evaluation_interval):
-    xValues = np.arange(len(phases) * evaluation_interval, step=evaluation_interval)
-    phaseError = fit_and_get_slope(xValues, phases)
-    return phaseError
+    x_values = np.arange(len(phases) * evaluation_interval, step=evaluation_interval)
+    phase_error = fit_and_get_slope(x_values, phases)
+    return phase_error
 
 
 def get_viscosity(abs_values, evaluation_interval, l):
@@ -92,33 +92,44 @@ def get_amplitude_and_phase(vel_slice):
     return fft_abs[max_index], fft_phase[max_index]
 
 
-def run(l, l_0, u_0, v_0, nu, y_size, periodicity_in_kernel, **kwargs):
+def run(l, l_0, u_0, v_0, nu, y_size, lbm_config, lbm_optimisation, config):
     inv_result = {
         'viscosity_error': np.nan,
         'phase_error': np.nan,
         'mlups': np.nan,
     }
-    if 'initial_velocity' in kwargs:
-        del kwargs['initial_velocity']
+    if lbm_config.initial_velocity:
+        # no manually specified initial velocity allowed in shear wave setup
+        lbm_config.initial_velocity = None
 
-    print("Running size l=%d nu=%f " % (l, nu), kwargs)
+    print(f"Running size l={l} nu={nu}")
     initial_vel_arr = get_initial_velocity_field(l, l_0, u_0, v_0, y_size)
     omega = relaxation_rate_from_lattice_viscosity(nu)
 
-    kwargs['relaxation_rates'] = [sp.sympify(r) for r in kwargs['relaxation_rates']]
-    if 'entropic' not in kwargs or not kwargs['entropic']:
-        kwargs['relaxation_rates'] = [r.subs(sp.Symbol("omega"), omega) for r in kwargs['relaxation_rates']]
+    if lbm_config.fourth_order_correction and omega < 1.75:
+        pytest.skip("Fourth-order correction only allowed for omega >= 1.75.")
 
-    scenario = create_fully_periodic_flow(initial_vel_arr, periodicity_in_kernel=periodicity_in_kernel, **kwargs)
+    lbm_config.relaxation_rates = [sp.sympify(r) for r in lbm_config.relaxation_rates]
+    lbm_config.relaxation_rates = [r.subs(sp.Symbol("omega"), omega) for r in lbm_config.relaxation_rates]
 
-    if 'entropic' in kwargs and kwargs['entropic']:
-        scenario.kernelParams['omega'] = kwargs['relaxation_rates'][0].subs(sp.Symbol("omega"), omega)
+    periodicity_in_kernel = (lbm_optimisation.builtin_periodicity != (False, False, False))
+    domain_size = initial_vel_arr.shape[:-1]
+
+    data_handling = create_data_handling(domain_size, periodicity=not periodicity_in_kernel,
+                                         default_ghost_layers=1, parallel=False)
+
+    scenario = LatticeBoltzmannStep(data_handling=data_handling, name="periodic_scenario", lbm_config=lbm_config,
+                                    lbm_optimisation=lbm_optimisation, config=config)
+    for b in scenario.data_handling.iterate(ghost_layers=False):
+        np.copyto(b[scenario.velocity_data_name], initial_vel_arr[b.global_slice])
+    scenario.set_pdf_fields_from_macroscopic_values()
 
     total_time_steps = 20000 * (l // l_0) ** 2
     initial_time_steps = 11000 * (l // l_0) ** 2
     eval_interval = 1000 * (l // l_0) ** 2
     scenario.run(initial_time_steps)
     if np.isnan(scenario.velocity_slice()).any():
+        print("   Result", inv_result)
         return inv_result
 
     magnitudes = []
@@ -149,65 +160,77 @@ def run(l, l_0, u_0, v_0, nu, y_size, periodicity_in_kernel, **kwargs):
 def create_full_parameter_study():
     from pystencils.runhelper import ParameterStudy
 
-    params = {
+    setup_params = {
         'l_0': 32,
         'u_0': 0.096,
         'v_0': 0.1,
-        'ySize': 1,
-        'periodicityInKernel': True,
-        'stencil': 'D3Q27',
-        'compressible': True,
+        'y_size': 1
     }
+
+    omega, omega_f = sp.symbols("omega, omega_f")
+
     ls = [32 * 2 ** i for i in range(0, 5)]
     nus = [1e-2, 1e-3, 1e-4, 1e-5]
 
-    srt_and_trt_methods = [{'method': method,
-                            'stencil': stencil,
-                            'compressible': comp,
-                            'relaxation_rates': ["omega", str(relaxation_rate_from_magic_number(sp.Symbol("omega")))],
-                            'equilibrium_order': eqOrder,
-                            'continuous_equilibrium': mbEq,
-                            'optimization': {'target': Target.CPU, 'split': True, 'cse_pdfs': True}}
-                           for method in ('srt', 'trt')
-                           for stencil in ('D3Q19', 'D3Q27')
+    srt_and_trt_methods = [LBMConfig(method=method,
+                                     stencil=LBStencil(stencil),
+                                     compressible=comp,
+                                     relaxation_rates=[omega, str(relaxation_rate_from_magic_number(omega))],
+                                     equilibrium_order=eqOrder,
+                                     continuous_equilibrium=mbEq)
+                           for method in (Method.SRT, Method.TRT)
+                           for stencil in (Stencil.D3Q19, Stencil.D3Q27)
                            for comp in (True, False)
                            for eqOrder in (1, 2, 3)
                            for mbEq in (True, False)]
 
-    methods = [{'method': 'trt', 'relaxation_rates': ["omega", 1]},
-               {'method': 'mrt3', 'relaxation_rates': ["omega", 1, 1], 'equilibrium_order': 2},
-               {'method': 'mrt3', 'relaxation_rates': ["omega", 1, 1], 'equilibrium_order': 3},
-               {'method': 'mrt3', 'cumulant': True, 'relaxation_rates': ["omega", 1, 1],  # cumulant
-                'continuous_equilibrium': True, 'equilibrium_order': 3,
-                'optimization': {'cse_global': True}},
-               {'method': 'trt-kbc-n4', 'relaxation_rates': ["omega", "omega_f"], 'entropic': True,  # entropic order 2
-                'continuous_equilibrium': True, 'equilibrium_order': 2},
-               {'method': 'trt-kbc-n4', 'relaxation_rates': ["omega", "omega_f"], 'entropic': True,  # entropic order 3
-                'continuous_equilibrium': True, 'equilibrium_order': 3},
+    optimization_srt_trt = LBMOptimisation(split=True, cse_pdfs=True)
 
-               # entropic cumulant:
-               {'method': 'trt-kbc-n4', 'relaxation_rates': ["omega", "omega_f"], 'entropic': True,
-                'cumulant': True, 'continuous_equilibrium': True, 'equilibrium_order': 3},
-               {'method': 'trt-kbc-n2', 'relaxation_rates': ["omega", "omega_f"], 'entropic': True,
-                'cumulant': True, 'continuous_equilibrium': True, 'equilibrium_order': 3},
-               {'method': 'mrt3', 'relaxation_rates': ["omega", "omega_f", "omega_f"], 'entropic': True,
-                'cumulant': True, 'continuous_equilibrium': True, 'equilibrium_order': 3},
+    config = CreateKernelConfig(target=Target.CPU)
+
+    methods = [LBMConfig(method=Method.TRT, relaxation_rates=[omega, 1]),
+               LBMConfig(method=Method.MRT, relaxation_rates=[omega], equilibrium_order=2),
+               LBMConfig(method=Method.MRT, relaxation_rates=[omega], equilibrium_order=3),
+               LBMConfig(method=Method.CUMULANT, relaxation_rates=[omega],  # cumulant
+                         compressible=True, continuous_equilibrium=True, equilibrium_order=3),
+               LBMConfig(method=Method.CUMULANT, relaxation_rates=[omega],  # cumulant with fourth-order correction
+                         compressible=True, continuous_equilibrium=True, fourth_order_correction=0.1),
+               LBMConfig(method=Method.TRT_KBC_N4, relaxation_rates=[omega, omega_f], entropic=True,
+                         zero_centered=False,  # entropic order 2
+                         continuous_equilibrium=True, equilibrium_order=2),
+               LBMConfig(method=Method.TRT_KBC_N4, relaxation_rates=[omega, omega_f], entropic=True,
+                         zero_centered=False,  # entropic order 3
+                         continuous_equilibrium=True, equilibrium_order=3),
+
+               # entropic cumulant: not supported for the moment
+               # LBMConfig(method=Method.CUMULANT, relaxation_rates=["omega", "omega_f"], entropic=True, zero_centered=False,
+               #           compressible=True, continuous_equilibrium=True, equilibrium_order=3)
                ]
 
-    parameter_study = ParameterStudy(run, database_connector="shear_wave_db")
+    parameter_study = ParameterStudy(run, database_connector="shear_wave_db",
+                                     serializer_info=('lbmpy_serializer', LbmpyJsonSerializer))
     for L in ls:
         for nu in nus:
-            for methodParams in methods + srt_and_trt_methods:
-                simulation_params = params.copy()
-                simulation_params.update(methodParams)
-                if 'optimization' not in simulation_params:
-                    simulation_params['optimization'] = {}
-                new_params, new_opt_params = update_with_default_parameters(simulation_params,
-                                                                            simulation_params['optimization'], False)
-                simulation_params = new_params
-                simulation_params['optimization'] = new_opt_params
+            for methodParams in srt_and_trt_methods:
+                simulation_params = setup_params.copy()
 
-                simulation_params['L'] = L
+                simulation_params['lbm_config'] = methodParams
+                simulation_params['lbm_optimisation'] = optimization_srt_trt
+                simulation_params['config'] = config
+
+                simulation_params['l'] = L
+                simulation_params['nu'] = nu
+                l_0 = simulation_params['l_0']
+                parameter_study.add_run(simulation_params.copy(), weight=(L / l_0) ** 4)
+
+            for methodParams in methods:
+                simulation_params = setup_params.copy()
+
+                simulation_params['lbm_config'] = methodParams
+                simulation_params['lbm_optimisation'] = LBMOptimisation()
+                simulation_params['config'] = config
+
+                simulation_params['l'] = L
                 simulation_params['nu'] = nu
                 l_0 = simulation_params['l_0']
                 parameter_study.add_run(simulation_params.copy(), weight=(L / l_0) ** 4)
@@ -217,13 +240,23 @@ def create_full_parameter_study():
 def test_shear_wave():
     pytest.importorskip('cupy')
     params = {
+        'y_size': 1,
         'l_0': 32,
         'u_0': 0.096,
         'v_0': 0.1,
 
-        'stencil': 'D3Q19',
-        'compressible': True,
-        "optimization": {"target": Target.GPU}
+        'l': 32,
+        'nu': 1e-2,
     }
-    run(32, nu=1e-2, equilibrium_order=2, method='srt', y_size=1, periodicity_in_kernel=True,
-        relaxation_rates=[sp.Symbol("omega"), 5, 5], continuous_equilibrium=True, **params)
+
+    kernel_config = CreateKernelConfig(target=Target.GPU)
+    lbm_config = LBMConfig(method=Method.SRT, relaxation_rates=[sp.Symbol("omega")], stencil=LBStencil(Stencil.D3Q27),
+                           compressible=True, continuous_equilibrium=True, equilibrium_order=2)
+
+    run(**params, lbm_config=lbm_config, config=kernel_config, lbm_optimisation=LBMOptimisation())
+
+
+@pytest.mark.longrun
+def test_all_scenarios():
+    parameter_study = create_full_parameter_study()
+    parameter_study.run()

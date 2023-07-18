@@ -16,7 +16,7 @@ from pystencils import create_kernel, create_data_handling, Assignment, Target, 
 from pystencils.slicing import slice_from_direction, get_slice_before_ghost_layer
 
 
-def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
+def flow_around_sphere(stencil, galilean_correction, fourth_order_correction, L_LU, total_steps):
     if galilean_correction and stencil.Q != 27:
         pytest.skip()
 
@@ -38,7 +38,7 @@ def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
 
     lbm_config = LBMConfig(stencil=stencil, method=Method.CUMULANT, relaxation_rate=omega_v,
                            compressible=True,
-                           galilean_correction=galilean_correction)
+                           galilean_correction=galilean_correction, fourth_order_correction=fourth_order_correction)
 
     lbm_opt = LBMOptimisation(pre_simplification=True)
     config = CreateKernelConfig(target=target)
@@ -135,14 +135,22 @@ def flow_around_sphere(stencil, galilean_correction, L_LU, total_steps):
 
 @pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize('galilean_correction', [False, True])
-def test_flow_around_sphere_short(stencil, galilean_correction):
+@pytest.mark.parametrize('fourth_order_correction', [False, True])
+def test_flow_around_sphere_short(stencil, galilean_correction, fourth_order_correction):
     pytest.importorskip('cupy')
-    flow_around_sphere(LBStencil(stencil), galilean_correction, 5, 200)
+    stencil = LBStencil(stencil)
+    if fourth_order_correction and stencil.Q != 27:
+        pytest.skip("Fourth-order correction only defined for D3Q27 stencil.")
+    flow_around_sphere(stencil, galilean_correction, fourth_order_correction, 5, 200)
 
 
 @pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19, Stencil.D3Q27])
 @pytest.mark.parametrize('galilean_correction', [False, True])
+@pytest.mark.parametrize('fourth_order_correction', [False, 0.01])
 @pytest.mark.longrun
-def test_flow_around_sphere_long(stencil, galilean_correction):
+def test_flow_around_sphere_long(stencil, galilean_correction, fourth_order_correction):
     pytest.importorskip('cupy')
-    flow_around_sphere(LBStencil(stencil), galilean_correction, 20, 3000)
+    stencil = LBStencil(stencil)
+    if fourth_order_correction and stencil.Q != 27:
+        pytest.skip("Fourth-order correction only defined for D3Q27 stencil.")
+    flow_around_sphere(stencil, galilean_correction, fourth_order_correction, 20, 3000)
