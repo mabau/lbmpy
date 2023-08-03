@@ -2,7 +2,11 @@
     The cumulant lattice Boltzmann equation in three dimensions: Theory and validation
     by  Geier, Martin; Schönherr, Martin; Pasquali, Andrea; Krafczyk, Manfred (2015)
 
-    Chapter 5.1
+    :cite:`geier2015` Chapter 5.1
+
+    NOTE: for integration tests, the parameter study is greatly shortened, i.e., the runs are shortened in time and
+    not all resolutions and viscosities are considered. Nevertheless, all values used by Geier et al. are still in
+    the setup, only commented, and remain ready to be used (check for comments that start with `NOTE`).
 """
 import numpy as np
 import pytest
@@ -124,9 +128,15 @@ def run(l, l_0, u_0, v_0, nu, y_size, lbm_config, lbm_optimisation, config):
         np.copyto(b[scenario.velocity_data_name], initial_vel_arr[b.global_slice])
     scenario.set_pdf_fields_from_macroscopic_values()
 
-    total_time_steps = 20000 * (l // l_0) ** 2
-    initial_time_steps = 11000 * (l // l_0) ** 2
-    eval_interval = 1000 * (l // l_0) ** 2
+    # NOTE: use those values to limit the runtime in integration tests
+    total_time_steps = 2000 * (l // l_0) ** 2
+    initial_time_steps = 1100 * (l // l_0) ** 2
+    eval_interval = 100 * (l // l_0) ** 2
+    # NOTE: for simulating the real shear-wave scenario from Geier et al. use the following values
+    # total_time_steps = 20000 * (l // l_0) ** 2
+    # initial_time_steps = 11000 * (l // l_0) ** 2
+    # eval_interval = 1000 * (l // l_0) ** 2
+
     scenario.run(initial_time_steps)
     if np.isnan(scenario.velocity_slice()).any():
         print("   Result", inv_result)
@@ -169,8 +179,12 @@ def create_full_parameter_study():
 
     omega, omega_f = sp.symbols("omega, omega_f")
 
-    ls = [32 * 2 ** i for i in range(0, 5)]
-    nus = [1e-2, 1e-3, 1e-4, 1e-5]
+    # NOTE: use those values to limit the runtime in integration tests
+    ls = [32]
+    nus = [1e-5]
+    # NOTE: for simulating the real shear-wave scenario from Geier et al. use the following values
+    # ls = [32 * 2 ** i for i in range(0, 5)]
+    # nus = [1e-2, 1e-3, 1e-4, 1e-5]
 
     srt_and_trt_methods = [LBMConfig(method=method,
                                      stencil=LBStencil(stencil),
