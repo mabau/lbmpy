@@ -16,11 +16,8 @@ def insert_logs(ac, **kwargs):
 def insert_log_products(ac, **kwargs):
     def callback(asm):
         rhs = asm.rhs
-        if isinstance(rhs, sp.log):
+        if rhs.find(sp.log):
             return True
-        if isinstance(rhs, sp.Mul):
-            if any(isinstance(arg, sp.log) for arg in rhs.args):
-                return True
         return False
 
     return insert_subexpressions(ac, callback, **kwargs)
