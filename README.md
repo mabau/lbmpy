@@ -71,6 +71,7 @@ Many thanks go to the [contributors](https://i10git.cs.fau.de/pycodegen/lbmpy/-/
 If you use lbmpy in a publication, please cite the following articles:
 
 Overview:
+  - F. Hennig et al, Advanced Automatic Code Generation for Multiple Relaxation-Time Lattice Boltzmann Methods. SIAM Journal on Scientific Computing, 2023. https://doi.org/10.1137/22M1531348 ([Preprint](https://arxiv.org/abs/2211.02435))
   - M. Bauer et al, lbmpy: Automatic code generation for efficient parallel lattice Boltzmann methods. Journal of Computational Science, 2021. https://doi.org/10.1016/j.jocs.2020.101269 ([Preprint](https://arxiv.org/abs/2001.11806))
 
 Multiphase:
