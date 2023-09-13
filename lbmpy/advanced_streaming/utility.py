@@ -58,22 +58,25 @@ odd_accessors = {
 }
 
 
-def get_accessor(streaming_pattern: str, timestep: Timestep) -> PdfFieldAccessor:
-    if streaming_pattern not in streaming_patterns:
-        raise ValueError(
-            "Invalid value of parameter 'streaming_pattern'.", streaming_pattern)
-
-    if timestep == Timestep.EVEN:
-        return even_accessors[streaming_pattern]
-    else:
-        return odd_accessors[streaming_pattern]
-
-
 def is_inplace(streaming_pattern):
     if streaming_pattern not in streaming_patterns:
         raise ValueError('Invalid streaming pattern', streaming_pattern)
 
     return streaming_pattern in ['aa', 'esotwist', 'esopull', 'esopush']
+
+
+def get_accessor(streaming_pattern: str, timestep: Timestep) -> PdfFieldAccessor:
+    if streaming_pattern not in streaming_patterns:
+        raise ValueError(
+            "Invalid value of parameter 'streaming_pattern'.", streaming_pattern)
+
+    if is_inplace(streaming_pattern) and (timestep == Timestep.BOTH):
+        raise ValueError(f"Invalid timestep for streaming pattern {streaming_pattern}: {str(timestep)}")
+
+    if timestep == Timestep.EVEN:
+        return even_accessors[streaming_pattern]
+    else:
+        return odd_accessors[streaming_pattern]
 
 
 def get_timesteps(streaming_pattern):
