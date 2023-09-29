@@ -2,12 +2,13 @@ import numpy as np
 import sympy as sp
 from lbmpy.advanced_streaming.indexing import BetweenTimestepsIndexing
 from lbmpy.advanced_streaming.utility import is_inplace, Timestep, AccessPdfValues
-from pystencils import Field, Assignment, TypedSymbol, create_kernel
+from pystencils import Assignment, Field, TypedSymbol, create_kernel
 from pystencils.stencil import inverse_direction
 from pystencils import CreateKernelConfig, Target
 from pystencils.boundaries import BoundaryHandling
 from pystencils.boundaries.createindexlist import numpy_data_type_for_boundary_object
 from pystencils.backends.cbackend import CustomCodeNode
+from pystencils.simp import add_subexpressions_for_field_reads
 
 
 class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
@@ -194,12 +195,15 @@ def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, 
     boundary_assignments = boundary_functor(f_out, f_in, dir_symbol, inv_dir, lb_method, index_field)
     boundary_assignments = indexing.substitute_proxies(boundary_assignments)
 
-    #   Code Elements inside the loop
-    elements = [Assignment(dir_symbol, index_field[0]('dir'))]
-    elements += boundary_assignments.all_assignments
-
     config = CreateKernelConfig(index_fields=[index_field], target=target, default_number_int="int32",
                                 skip_independence_check=True, **kernel_creation_args)
+
+    default_data_type = config.data_type.default_factory()
+    if pdf_field.dtype != default_data_type:
+        boundary_assignments = add_subexpressions_for_field_reads(boundary_assignments, data_type=default_data_type)
+
+    elements = [Assignment(dir_symbol, index_field[0]('dir'))]
+    elements += boundary_assignments.all_assignments
 
     kernel = create_kernel(elements, config=config)
 

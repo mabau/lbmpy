@@ -10,7 +10,8 @@ from pystencils.sympyextensions import fast_subs
 # -------------------------------------------- LBM Kernel Creation -----------------------------------------------------
 
 
-def create_lbm_kernel(collision_rule, src_field, dst_field=None, accessor=StreamPullTwoFieldsAccessor()):
+def create_lbm_kernel(collision_rule, src_field, dst_field=None, accessor=StreamPullTwoFieldsAccessor(),
+                      data_type=None):
     """Replaces the pre- and post collision symbols in the collision rule by field accesses.
 
     Args:
@@ -19,6 +20,7 @@ def create_lbm_kernel(collision_rule, src_field, dst_field=None, accessor=Stream
         dst_field: field used for writing pdf values if accessor.is_inplace this parameter is ignored
         accessor: instance of PdfFieldAccessor, defining where to read and write values
                   to create e.g. a fused stream-collide kernel See 'fieldaccess.PdfFieldAccessor'
+        data_type: If a datatype is given the field reads are isolated and written to TypedSymbols of type data_type
 
     Returns:
         LbmCollisionRule where pre- and post collision symbols have been replaced
@@ -49,8 +51,9 @@ def create_lbm_kernel(collision_rule, src_field, dst_field=None, accessor=Stream
             new_split_groups.append([fast_subs(e, substitutions) for e in split_group])
         result.simplification_hints['split_groups'] = new_split_groups
 
-    if accessor.is_inplace:
-        result = add_subexpressions_for_field_reads(result, subexpressions=True, main_assignments=True)
+    if accessor.is_inplace or (data_type is not None and src_field.dtype != data_type):
+        result = add_subexpressions_for_field_reads(result, subexpressions=True, main_assignments=True,
+                                                    data_type=data_type)
 
     return result
 
