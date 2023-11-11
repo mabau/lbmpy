@@ -24,7 +24,7 @@ force_models = [f for f in ForceModel if f is not ForceModel.CENTRALMOMENT]
 def test_total_momentum(method_enum, zero_centered, force_model, omega):
     if method_enum == Method.CUMULANT and \
             force_model not in (ForceModel.SIMPLE, ForceModel.LUO, ForceModel.GUO, ForceModel.HE):
-        return True
+        return
 
     L = (16, 16)
     stencil = LBStencil(Stencil.D2Q9)
@@ -308,7 +308,7 @@ def test_symmetric_forcing_equivalence(force_model, compressible):
                            nested_moments=moment_polys, compressible=True, force_model=force_model, force=tuple(F))
     method = create_lb_method(lbm_config=lbm_config)
     if not method.force_model.has_symmetric_central_moment_forcing:
-        return True
+        return
 
     subs_dict = method.subs_dict_relaxation_rate
     force_moments = method.force_model.central_moment_space_forcing(method)
