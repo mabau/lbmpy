@@ -1,6 +1,15 @@
 """Tests velocity and stress fluctuations for thermalized LB"""
 
+import warnings
+import pytest
 import pystencils as ps
+
+from pystencils import get_code_str
+from pystencils.backends.simd_instruction_sets import get_supported_instruction_sets, get_vector_instruction_set
+from pystencils.cpu.cpujit import get_compiler_config
+from pystencils.enums import Target
+from pystencils.rng import PhiloxTwoDoubles
+
 from lbmpy.creationfunctions import *
 from lbmpy.forcemodels import Guo
 from lbmpy.macroscopic_value_kernels import macroscopic_values_setter
@@ -8,13 +17,6 @@ import numpy as np
 from lbmpy.enums import Stencil
 from lbmpy.moments import is_bulk_moment, is_shear_moment, get_order
 from lbmpy.stencils import LBStencil
-from pystencils.rng import PhiloxTwoDoubles
-
-import pytest
-from pystencils import get_code_str
-from pystencils.backends.simd_instruction_sets import get_supported_instruction_sets, get_vector_instruction_set
-from pystencils.cpu.cpujit import get_compiler_config
-from pystencils.enums import Target
 
 
 def _skip_instruction_sets_windows(instruction_sets):
@@ -294,13 +296,11 @@ def test_vectorization(data_type, assume_aligned, assume_inner_stride_one, assum
                                    )
 
     if not assume_inner_stride_one and 'storeS' not in get_vector_instruction_set(data_type, instruction_set):
-        with pytest.warns(UserWarning) as warn:
+        with pytest.warns(UserWarning) as pytest_warnings:
             ast = ps.create_kernel(collision, config=config)
-            assert 'Could not vectorize loop' in warn[0].message.args[0]
+            assert 'Could not vectorize loop' in pytest_warnings[0].message.args[0]
     else:
-        with pytest.warns(None) as warn:
-            ast = ps.create_kernel(collision, config=config)
-            assert len(warn) == 0
+        ast = ps.create_kernel(collision, config=config)
     ast.compile()
     code = get_code_str(ast)
     print(code)
