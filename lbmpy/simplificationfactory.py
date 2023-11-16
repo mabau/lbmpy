@@ -92,6 +92,7 @@ def _cumulant_space_simplification(split_inner_loop):
     s.add(expand_post_collision_central_moments)
     s.add(insert_aliases)
     s.add(insert_constants)
+    s.add(insert_aliases)
     s.add(add_subexpressions_for_divisions)
     s.add(add_subexpressions_for_constants)
     if split_inner_loop:
