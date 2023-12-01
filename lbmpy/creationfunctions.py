@@ -112,13 +112,19 @@ class LBMConfig:
     """
     Sequence of relaxation rates, number depends on selected method. If you specify more rates than
     method needs, the additional rates are ignored.
+
+    If no relaxation rates are specified, the parameter `relaxation_rate` will be consulted.
     """
     relaxation_rate: Union[int, float, Type[sp.Symbol]] = None
     """
-    For SRT, TRT and polynomial cumulant models it is possible to define
-    a single ``relaxation_rate`` instead of a list (Internally this is converted to a list with a single entry).
-    The second rate for TRT is then determined via magic number. For the moment, central moment based and the
-    cumulant model, it sets only the relaxation rate corresponding to shear viscosity, setting all others to unity.
+    The method's primary relaxation rate. In most cases, this is the relaxation rate governing shear viscosity.
+    For SRT, this is the only relaxation rate.
+    For TRT, the second relaxation rate is then determined via magic number.
+    In the case of raw moment, central moment, and cumulant-based MRT methods, all other relaxation rates will be
+    set to unity.
+
+    If neither `relaxation_rate` nor `relaxation_rates` is specified, the behaviour is as if 
+    `relaxation_rate=sp.Symbol('omega')` was set.
     """
     compressible: bool = False
     """
@@ -332,9 +338,11 @@ class LBMConfig:
             self.stencil = LBStencil(self.stencil)
 
         if self.relaxation_rates is None:
-            self.relaxation_rates = [sp.Symbol("omega")] * self.stencil.Q
+            #   Fall back to regularized method
+            if self.relaxation_rate is None:
+                self.relaxation_rate = sp.Symbol("omega")
 
-        # if only a single relaxation rate is defined (which makes sense for SRT or TRT methods)
+        # if only a single relaxation rate is defined,
         # it is internally treated as a list with one element and just sets the relaxation_rates parameter
         if self.relaxation_rate is not None:
             if self.method in [Method.TRT, Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4]:
