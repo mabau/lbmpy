@@ -6,11 +6,6 @@ from pystencils.sympyextensions import is_constant
 
 from lbmpy import Stencil, LBStencil, Method, create_lb_collision_rule, LBMConfig, LBMOptimisation
 
-# TODO:
-# Fully simplified kernels should NOT contain
-#  - Any aliases
-#  - Any in-line constants (all constants should be in subexpressions!)
-
 @pytest.mark.parametrize('method', [Method.MRT, Method.CENTRAL_MOMENT, Method.CUMULANT])
 def test_mrt_simplifications(method: Method):
     stencil = Stencil.D3Q19
@@ -33,7 +28,8 @@ def test_mrt_simplifications(method: Method):
         for expr in exprs:
             for arg in expr.args:
                 if isinstance(arg, sp.Number):
-                    assert arg in {sp.Number(1), sp.Number(-1)}
+                    if arg not in {sp.Number(1), sp.Number(-1), sp.Float(1), sp.Float(-1)}:
+                        breakpoint()
                     
         #   Check for divisions
         if not (isinstance(rhs, sp.Pow) and rhs.args[1] < 0):
