@@ -1,15 +1,17 @@
 import abc
 from warnings import warn
 
-from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
-from pystencils.simp.assignment_collection import AssignmentCollection
 from pystencils import Assignment, Field
-from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
-from pystencils.typing import create_type
-from pystencils.sympyextensions import get_symmetric_part
-from lbmpy.simplificationfactory import create_simplification_strategy
-from lbmpy.advanced_streaming.indexing import NeighbourOffsetArrays, MirroredStencilDirections
+from pystencils.simp.assignment_collection import AssignmentCollection
 from pystencils.stencil import offset_to_direction_string, direction_string_to_offset, inverse_direction
+from pystencils.sympyextensions import get_symmetric_part, simplify_by_equality
+from pystencils.typing import create_type, TypedSymbol
+
+from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
+from lbmpy.custom_code_nodes import (NeighbourOffsetArrays, MirroredStencilDirections, LbmWeightInfo,
+                                     TranslationArraysNode)
+from lbmpy.maxwellian_equilibrium import discrete_equilibrium
+from lbmpy.simplificationfactory import create_simplification_strategy
 
 import sympy as sp
 
@@ -111,7 +113,207 @@ class NoSlip(LbBoundary):
         return Assignment(f_in(inv_dir[dir_symbol]), f_out(dir_symbol))
 
 
-# end class NoSlip
+class NoSlipLinearBouzidi(LbBoundary):
+    """
+    No-Slip, (half-way) simple bounce back boundary condition with interpolation
+    to increase accuracy: :cite:`BouzidiBC`. In order to make the boundary condition work properly a
+    Python callback function needs to be provided to calculate the distance from the wall for each cell near to the
+    boundary. If this is not done the boundary condition will fall back to a simple NoSlip boundary.
+    Furthermore, for this boundary condition a second fluid cell away from the wall is needed. If the second fluid
+    cell is not available (e.g. because it is marked as boundary as well), the boundary condition should fall back to
+    a NoSlip boundary as well.
+
+    Args:
+        name: optional name of the boundary.
+        init_wall_distance: Python callback function to calculate the wall distance for each cell near to the  boundary
+        data_type: data type of the wall distance q
+    """
+
+    def __init__(self, name=None, init_wall_distance=None, data_type='double'):
+        self.data_type = data_type
+        self.init_wall_distance = init_wall_distance
+
+        super(NoSlipLinearBouzidi, self).__init__(name)
+
+    @property
+    def additional_data(self):
+        """Used internally only. For the NoSlipLinearBouzidi boundary the distance to the obstacle of every
+        direction is needed. This information is stored in the index vector."""
+        return [('q', create_type(self.data_type))]
+
+    @property
+    def additional_data_init_callback(self):
+        def default_callback(boundary_data, **_):
+            for cell in boundary_data.index_array:
+                cell['q'] = -1
+
+        if self.init_wall_distance:
+            return self.init_wall_distance
+        else:
+            warn("No callback function provided to initialise the wall distance for each cell "
+                 "(init_wall_distance=None). The boundary condition will fall back to a simple NoSlip BC")
+            return default_callback
+
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        f_xf = sp.Symbol("f_xf")
+        f_xf_inv = sp.Symbol("f_xf_inv")
+        d_x2f = sp.Symbol("d_x2f")
+        q = sp.Symbol("q")
+        one = sp.Float(1.0)
+        two = sp.Float(2.0)
+        half = sp.Rational(1, 2)
+
+        subexpressions = [Assignment(f_xf, f_out(dir_symbol)),
+                          Assignment(f_xf_inv, f_out(inv_dir[dir_symbol])),
+                          Assignment(d_x2f, f_in(dir_symbol)),
+                          Assignment(q, index_field[0]('q'))]
+
+        case_one = (half * (f_xf + f_xf_inv * (two * q - one))) / q
+        case_two = two * q * f_xf + (one - two * q) * d_x2f
+        case_three = f_xf
+
+        rhs = sp.Piecewise((case_one, sp.Ge(q, 0.5)),
+                           (case_two, sp.And(sp.Gt(q, 0), sp.Lt(q, 0.5))),
+                           (case_three, True))
+
+        boundary_assignments = [Assignment(f_in(inv_dir[dir_symbol]), rhs)]
+
+        return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
+
+
+# end class NoSlipLinearBouzidi
+
+class QuadraticBounceBack(LbBoundary):
+    """
+    Second order accurate bounce back boundary condition. Implementation details are provided in a demo notebook here:
+    https://pycodegen.pages.i10git.cs.fau.de/lbmpy/notebooks/demo_interpolation_boundary_conditions.html
+
+    Args:
+        relaxation_rate: relaxation rate to realise a BGK scheme for recovering the pre collision PDF value.
+        name: optional name of the boundary.
+        init_wall_distance: Python callback function to calculate the wall distance for each cell near to the  boundary
+        data_type: data type of the wall distance q
+    """
+
+    def __init__(self, relaxation_rate, name=None, init_wall_distance=None, data_type='double'):
+        self.relaxation_rate = relaxation_rate
+        self.data_type = data_type
+        self.init_wall_distance = init_wall_distance
+        self.equilibrium_values_name = "f_eq"
+        self.inv_dir_symbol = TypedSymbol("inv_dir", create_type("int32"))
+
+        super(QuadraticBounceBack, self).__init__(name)
+
+    @property
+    def additional_data(self):
+        """Used internally only. For the NoSlipLinearBouzidi boundary the distance to the obstacle of every
+        direction is needed. This information is stored in the index vector."""
+        return [('q', create_type(self.data_type))]
+
+    @property
+    def additional_data_init_callback(self):
+        def default_callback(boundary_data, **_):
+            for cell in boundary_data.index_array:
+                cell['q'] = 0.5
+
+        if self.init_wall_distance:
+            return self.init_wall_distance
+        else:
+            warn("No callback function provided to initialise the wall distance for each cell "
+                 "(init_wall_distance=None). The boundary condition will fall back to a simple NoSlip BC")
+            return default_callback
+
+    def get_additional_code_nodes(self, lb_method):
+        """Return a list of code nodes that will be added in the generated code before the index field loop.
+
+        Args:
+            lb_method: Lattice Boltzmann method. See :func:`lbmpy.creationfunctions.create_lb_method`
+
+        Returns:
+            list containing LbmWeightInfo
+        """
+        stencil = lb_method.stencil
+        inv_directions = [str(stencil.index(inverse_direction(direction))) for direction in stencil]
+        dtype = self.inv_dir_symbol.dtype
+        name = self.inv_dir_symbol.name
+        inverse_dir_node = TranslationArraysNode([(dtype, name, inv_directions), ], {self.inv_dir_symbol})
+        return [LbmWeightInfo(lb_method, self.data_type), inverse_dir_node, NeighbourOffsetArrays(lb_method.stencil)]
+
+    @staticmethod
+    def get_equilibrium(v, u, rho, drho, weight, compressible, deviation_only):
+        rho_background = sp.Integer(1)
+
+        result = discrete_equilibrium(v, u, rho, weight,
+                                      order=2, c_s_sq=sp.Rational(1, 3), compressible=compressible)
+        if deviation_only:
+            shift = discrete_equilibrium(v, [0] * len(u), rho_background, weight,
+                                         order=0, c_s_sq=sp.Rational(1, 3), compressible=False)
+            result = simplify_by_equality(result - shift, rho, drho, rho_background)
+
+        return result
+
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        inv = sp.IndexedBase(self.inv_dir_symbol, shape=(1,))[dir_symbol]
+        weight_info = LbmWeightInfo(lb_method, data_type=self.data_type)
+        weight_of_direction = weight_info.weight_of_direction
+        pdf_field_accesses = [f_out(i) for i in range(len(lb_method.stencil))]
+
+        pdf_symbols = [sp.Symbol(f"pdf_{i}") for i in range(len(lb_method.stencil))]
+        f_xf = sp.Symbol("f_xf")
+        f_xf_inv = sp.Symbol("f_xf_inv")
+        q = sp.Symbol("q")
+        feq = sp.Symbol("f_eq")
+        weight = sp.Symbol("w")
+        weight_inv = sp.Symbol("w_inv")
+        v = [TypedSymbol(f"c_{i}", self.data_type) for i in range(lb_method.stencil.D)]
+        v_inv = [TypedSymbol(f"c_inv_{i}", self.data_type) for i in range(lb_method.stencil.D)]
+        one = sp.Float(1.0)
+        two = sp.Float(2.0)
+
+        subexpressions = [Assignment(pdf_symbols[i], pdf) for i, pdf in enumerate(pdf_field_accesses)]
+        subexpressions.append(Assignment(f_xf, f_out(dir_symbol)))
+        subexpressions.append(Assignment(f_xf_inv, f_out(inv_dir[dir_symbol])))
+        subexpressions.append(Assignment(q, index_field[0]('q')))
+        subexpressions.append(Assignment(weight, weight_of_direction(dir_symbol, lb_method)))
+        subexpressions.append(Assignment(weight_inv, weight_of_direction(inv, lb_method)))
+
+        for i in range(lb_method.stencil.D):
+            offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+            subexpressions.append(Assignment(v[i], offset[i]))
+
+        for i in range(lb_method.stencil.D):
+            offset = NeighbourOffsetArrays.neighbour_offset(inv, lb_method.stencil)
+            subexpressions.append(Assignment(v_inv[i], offset[i]))
+
+        cqc = lb_method.conserved_quantity_computation
+        rho = cqc.density_symbol
+        drho = cqc.density_deviation_symbol
+        u = sp.Matrix(cqc.velocity_symbols)
+        compressible = cqc.compressible
+        deviation_only = lb_method.equilibrium_distribution.deviation_only
+
+        cqe = cqc.equilibrium_input_equations_from_pdfs(pdf_symbols, False)
+        subexpressions.append(cqe.all_assignments)
+
+        eq_dir = self.get_equilibrium(v, u, rho, drho, weight, compressible, deviation_only)
+        eq_inv = self.get_equilibrium(v_inv, u, rho, drho, weight_inv, compressible, deviation_only)
+
+        subexpressions.append(Assignment(feq, eq_dir + eq_inv))
+
+        # equation E.4 first summand
+        e41 = (f_xf_inv - f_xf) / two
+        # equation E.4 second summand
+        e42 = (f_xf_inv + f_xf - self.relaxation_rate * feq) / (two - two * self.relaxation_rate)
+        # equation E.3
+        fw = ((one - q) * (e41 + e42)) + q * f_xf_inv
+        # equation E.1
+        result = (one / (q + one)) * fw + (q / (q + one)) * f_xf
+
+        boundary_assignments = [Assignment(f_in(inv_dir[dir_symbol]), result)]
+        return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
+
+
+# end class QuadraticBounceBack
 
 class FreeSlip(LbBoundary):
     """

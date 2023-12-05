@@ -3,15 +3,10 @@ import sympy as sp
 import pystencils as ps
 
 from pystencils.typing import TypedSymbol, create_type
-from pystencils.backends.cbackend import CustomCodeNode
-
 from lbmpy.advanced_streaming.utility import get_accessor, inverse_dir_index, is_inplace, Timestep
+from lbmpy.custom_code_nodes import TranslationArraysNode
 
 from itertools import product
-
-
-def _array_pattern(dtype, name, content):
-    return f"const {str(dtype)} {name} [] = {{ {','.join(str(c) for c in content)} }}; \n"
 
 
 class BetweenTimestepsIndexing:
@@ -30,7 +25,7 @@ class BetweenTimestepsIndexing:
 
     @property
     def inverse_dir_symbol(self):
-        """Symbol denoting the inversion of a PDF field index. 
+        """Symbol denoting the inversion of a PDF field index.
         Use only at top-level of index to f_out or f_in, otherwise it can't be correctly replaced."""
         return sp.IndexedBase('invdir')
 
@@ -168,90 +163,21 @@ class BetweenTimestepsIndexing:
         return trivial_index_translations, trivial_offset_translations
 
     def create_code_node(self):
-        return BetweenTimestepsIndexing.TranslationArraysNode(self)
+        array_content = list()
+        symbols_defined = set()
+        for f_dir, inv in self._required_index_arrays:
+            indices, offsets = self._get_translated_indices_and_offsets(f_dir, inv)
+            index_array_symbol = self._index_array_symbol(f_dir, inv)
+            symbols_defined.add(index_array_symbol)
+            array_content.append((self._index_dtype, index_array_symbol.name, indices))
 
-    class TranslationArraysNode(CustomCodeNode):
+        for f_dir, inv in self._required_offset_arrays:
+            indices, offsets = self._get_translated_indices_and_offsets(f_dir, inv)
+            offset_array_symbols = self._offset_array_symbols(f_dir, inv)
+            symbols_defined |= set(offset_array_symbols)
+            for d, arrsymb in enumerate(offset_array_symbols):
+                array_content.append((self._offsets_dtype, arrsymb.name, offsets[d]))
 
-        def __init__(self, indexing):
-            code = ''
-            symbols_defined = set()
-
-            for f_dir, inv in indexing._required_index_arrays:
-                indices, offsets = indexing._get_translated_indices_and_offsets(f_dir, inv)
-                index_array_symbol = indexing._index_array_symbol(f_dir, inv)
-                symbols_defined.add(index_array_symbol)
-                code += _array_pattern(indexing._index_dtype, index_array_symbol.name, indices)
-
-            for f_dir, inv in indexing._required_offset_arrays:
-                indices, offsets = indexing._get_translated_indices_and_offsets(f_dir, inv)
-                offset_array_symbols = indexing._offset_array_symbols(f_dir, inv)
-                symbols_defined |= set(offset_array_symbols)
-                for d, arrsymb in enumerate(offset_array_symbols):
-                    code += _array_pattern(indexing._offsets_dtype, arrsymb.name, offsets[d])
-
-            super(BetweenTimestepsIndexing.TranslationArraysNode, self).__init__(
-                code, symbols_read=set(), symbols_defined=symbols_defined)
-
-        def __str__(self):
-            return "Variable PDF Access Translation Arrays"
-
-        def __repr__(self):
-            return "Variable PDF Access Translation Arrays"
+        return TranslationArraysNode(array_content, symbols_defined)
 
 #   end class AdvancedStreamingIndexing
-
-
-class NeighbourOffsetArrays(CustomCodeNode):
-
-    @staticmethod
-    def neighbour_offset(dir_idx, stencil):
-        if isinstance(sp.sympify(dir_idx), sp.Integer):
-            return stencil[dir_idx]
-        else:
-            return tuple([sp.IndexedBase(symbol, shape=(1,))[dir_idx]
-                         for symbol in NeighbourOffsetArrays._offset_symbols(len(stencil[0]))])
-
-    @staticmethod
-    def _offset_symbols(dim):
-        return [TypedSymbol(f"neighbour_offset_{d}", create_type(np.int32)) for d in ['x', 'y', 'z'][:dim]]
-
-    def __init__(self, stencil, offsets_dtype=np.int32):
-        offsets_dtype = create_type(offsets_dtype)
-        dim = len(stencil[0])
-
-        array_symbols = NeighbourOffsetArrays._offset_symbols(dim)
-        code = "\n"
-        for i, arrsymb in enumerate(array_symbols):
-            code += _array_pattern(offsets_dtype, arrsymb.name, (d[i] for d in stencil))
-
-        offset_symbols = NeighbourOffsetArrays._offset_symbols(dim)
-        super(NeighbourOffsetArrays, self).__init__(code, symbols_read=set(),
-                                                    symbols_defined=set(offset_symbols))
-
-
-class MirroredStencilDirections(CustomCodeNode):
-
-    @staticmethod
-    def mirror_stencil(direction, mirror_axis):
-        assert mirror_axis <= len(direction), f"only {len(direction)} axis available for mirage"
-        direction = list(direction)
-        direction[mirror_axis] = -direction[mirror_axis]
-
-        return tuple(direction)
-
-    @staticmethod
-    def _mirrored_symbol(mirror_axis):
-        axis = ['x', 'y', 'z']
-        return TypedSymbol(f"{axis[mirror_axis]}_axis_mirrored_stencil_dir", create_type(np.int32))
-
-    def __init__(self, stencil, mirror_axis, dtype=np.int32):
-        offsets_dtype = create_type(dtype)
-
-        mirrored_stencil_symbol = MirroredStencilDirections._mirrored_symbol(mirror_axis)
-        mirrored_directions = [stencil.index(MirroredStencilDirections.mirror_stencil(direction, mirror_axis))
-                               for direction in stencil]
-        code = "\n"
-        code += _array_pattern(offsets_dtype, mirrored_stencil_symbol.name, mirrored_directions)
-
-        super(MirroredStencilDirections, self).__init__(code, symbols_read=set(),
-                                                        symbols_defined={mirrored_stencil_symbol})
