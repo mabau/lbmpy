@@ -12,7 +12,7 @@ from .stencils import LBStencil
 
 
 __all__ = ['create_lb_ast', 'create_lb_collision_rule', 'create_lb_function', 'create_lb_method',
-           'create_lb_method_from_existing', 'create_lb_update_rule', 'LBMConfig', 'LBMOptimisation',
+           'create_lb_update_rule', 'LBMConfig', 'LBMOptimisation',
            'Stencil', 'Method', 'ForceModel', 'CollisionSpace',
            'LatticeBoltzmannStep',
            'pdf_initialization_assignments', 'macroscopic_values_getter', 'compile_macroscopic_values_getter',

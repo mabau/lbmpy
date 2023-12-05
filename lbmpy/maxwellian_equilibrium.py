@@ -76,38 +76,49 @@ def discrete_maxwellian_equilibrium(stencil, rho=sp.Symbol("rho"), u=sp.symbols(
     """
     weights = get_weights(stencil, c_s_sq)
     assert stencil.Q == len(weights)
-
     u = u[:stencil.D]
 
+    res = [discrete_equilibrium(e_q, u, rho, w_q, order, c_s_sq, compressible) for w_q, e_q in zip(weights, stencil)]
+    return tuple(res)
+
+
+def discrete_equilibrium(v=sp.symbols("v_:3"), u=sp.symbols("u_:3"), rho=sp.Symbol("rho"), weight=sp.Symbol("w"),
+                         order=2, c_s_sq=sp.Symbol("c_s") ** 2, compressible=True):
+    """
+    Returns the common discrete LBM equilibrium as a list of sympy expressions
+
+    Args:
+        v: symbols for mesoscopic velocity
+        u: symbols for macroscopic velocity
+        rho: sympy symbol for the density
+        weight: symbol for stencil weights
+        order: highest order of velocity terms (for hydrodynamics order 2 is sufficient)
+        c_s_sq: square of speed of sound
+        compressible: compressibility
+    """
     rho_outside = rho if compressible else sp.Rational(1, 1)
     rho_inside = rho if not compressible else sp.Rational(1, 1)
 
-    res = []
-    for w_q, e_q in zip(weights, stencil):
-        e_times_u = 0
-        for c_q_alpha, u_alpha in zip(e_q, u):
-            e_times_u += c_q_alpha * u_alpha
+    e_times_u = 0
+    for c_q_alpha, u_alpha in zip(v, u):
+        e_times_u += c_q_alpha * u_alpha
 
-        fq = rho_inside + e_times_u / c_s_sq
+    fq = rho_inside + e_times_u / c_s_sq
 
-        if order <= 1:
-            res.append(fq * rho_outside * w_q)
-            continue
+    if order <= 1:
+        return fq * rho_outside * weight
 
-        u_times_u = 0
-        for u_alpha in u:
-            u_times_u += u_alpha * u_alpha
-        fq += sp.Rational(1, 2) / c_s_sq**2 * e_times_u ** 2 - sp.Rational(1, 2) / c_s_sq * u_times_u
+    u_times_u = 0
+    for u_alpha in u:
+        u_times_u += u_alpha * u_alpha
+    fq += sp.Rational(1, 2) / c_s_sq**2 * e_times_u ** 2 - sp.Rational(1, 2) / c_s_sq * u_times_u
 
-        if order <= 2:
-            res.append(fq * rho_outside * w_q)
-            continue
+    if order <= 2:
+        return fq * rho_outside * weight
 
-        fq += sp.Rational(1, 6) / c_s_sq**3 * e_times_u**3 - sp.Rational(1, 2) / c_s_sq**2 * u_times_u * e_times_u
+    fq += sp.Rational(1, 6) / c_s_sq**3 * e_times_u**3 - sp.Rational(1, 2) / c_s_sq**2 * u_times_u * e_times_u
 
-        res.append(sp.expand(fq * rho_outside * w_q))
-
-    return tuple(res)
+    return sp.expand(fq * rho_outside * weight)
 
 
 @disk_cache

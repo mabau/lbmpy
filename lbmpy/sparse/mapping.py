@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 import sympy as sp
 
-from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
+from lbmpy.custom_code_nodes import LbmWeightInfo
 from pystencils import Assignment, Field, TypedSymbol
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 from pystencils.boundaries.createindexlist import (

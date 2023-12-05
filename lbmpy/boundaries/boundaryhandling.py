@@ -1,14 +1,13 @@
 import numpy as np
-import sympy as sp
-from lbmpy.advanced_streaming.indexing import BetweenTimestepsIndexing
-from lbmpy.advanced_streaming.utility import is_inplace, Timestep, AccessPdfValues
-from pystencils import Assignment, Field, TypedSymbol, create_kernel
-from pystencils.stencil import inverse_direction
-from pystencils import CreateKernelConfig, Target
+
+from pystencils import Assignment, CreateKernelConfig, create_kernel, Field, Target
 from pystencils.boundaries import BoundaryHandling
 from pystencils.boundaries.createindexlist import numpy_data_type_for_boundary_object
-from pystencils.backends.cbackend import CustomCodeNode
 from pystencils.simp import add_subexpressions_for_field_reads
+from pystencils.stencil import inverse_direction
+
+from lbmpy.advanced_streaming.indexing import BetweenTimestepsIndexing
+from lbmpy.advanced_streaming.utility import is_inplace, Timestep, AccessPdfValues
 
 
 class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
@@ -154,32 +153,6 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
 
 
 # end class LatticeBoltzmannBoundaryHandling
-
-
-class LbmWeightInfo(CustomCodeNode):
-    def __init__(self, lb_method, data_type='double'):
-        self.weights_symbol = TypedSymbol("weights", data_type)
-        data_type_string = "double" if self.weights_symbol.dtype.numpy_dtype == np.float64 else "float"
-
-        weights = [str(w.evalf(17)) for w in lb_method.weights]
-        if data_type_string == "float":
-            weights = "f, ".join(weights)
-            weights += "f"  # suffix for the last element
-        else:
-            weights = ", ".join(weights)
-        w_sym = self.weights_symbol
-        code = f"const {data_type_string} {w_sym.name} [] = {{{ weights }}};\n"
-        super(LbmWeightInfo, self).__init__(code, symbols_read=set(), symbols_defined={w_sym})
-
-    def weight_of_direction(self, dir_idx, lb_method=None):
-        if isinstance(sp.sympify(dir_idx), sp.Integer):
-            return lb_method.weights[dir_idx].evalf(17)
-        else:
-            return sp.IndexedBase(self.weights_symbol, shape=(1,))[dir_idx]
-
-
-# end class LbmWeightInfo
-
 
 def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, boundary_functor,
                                              prev_timestep=Timestep.BOTH, streaming_pattern='pull',

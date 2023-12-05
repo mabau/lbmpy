@@ -1,8 +1,8 @@
 import sympy as sp
 
-from lbmpy.boundaries.boundaryhandling import LbmWeightInfo
 from lbmpy.advanced_streaming.indexing import BetweenTimestepsIndexing
 from lbmpy.advanced_streaming.utility import Timestep, get_accessor
+from lbmpy.custom_code_nodes import LbmWeightInfo
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 from pystencils.assignment import Assignment
 from pystencils.astnodes import Block, Conditional, LoopOverCoordinate, SympyAssignment
