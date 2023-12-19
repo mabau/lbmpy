@@ -99,7 +99,7 @@ class AbstractLbMethod(abc.ABC):
 
     # -------------------------------- Helper Functions ----------------------------------------------------------------
 
-    def _generate_symbolic_relaxation_matrix(self, relaxation_rates=None):
+    def _generate_symbolic_relaxation_matrix(self, relaxation_rates=None, relaxation_rates_modifier=None):
         """
         This function replaces the numbers in the relaxation matrix with symbols in this case, and returns also
         the subexpressions, that assign the number to the newly introduced symbol
@@ -120,5 +120,7 @@ class AbstractLbMethod(abc.ABC):
 
         new_rr = [subexpressions[sp.sympify(e)] if sp.sympify(e) in subexpressions else e for e in rr]
         substitutions = [Assignment(e[1], e[0]) for e in subexpressions.items()]
+        if relaxation_rates_modifier is not None:
+            new_rr = [r * relaxation_rates_modifier for r in new_rr]
 
         return substitutions, sp.diag(*new_rr)

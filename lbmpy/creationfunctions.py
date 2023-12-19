@@ -52,6 +52,8 @@ For example, to modify the AST one can run::
     func = create_lb_function(ast=ast, ...)
 
 """
+import copy
+
 from dataclasses import dataclass, field, replace
 from typing import Union, List, Tuple, Any, Type, Iterable
 from warnings import warn, filterwarnings
@@ -65,6 +67,7 @@ from lbmpy.enums import Stencil, Method, ForceModel, CollisionSpace
 import lbmpy.forcemodels as forcemodels
 from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
+from lbmpy.partially_saturated_cells import add_psm_to_collision_rule, PSMConfig
 from lbmpy.non_newtonian_models import add_cassons_model, CassonsParameters
 from lbmpy.methods import (create_mrt_orthogonal, create_mrt_raw, create_central_moment,
                            create_srt, create_trt, create_trt_kbc)
@@ -79,7 +82,9 @@ from lbmpy.turbulence_models import add_smagorinsky_model
 from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
 from lbmpy.advanced_streaming.utility import Timestep, get_accessor
 from pystencils import CreateKernelConfig, create_kernel
+from pystencils.astnodes import Conditional, Block
 from pystencils.cache import disk_cache_no_fallback
+from pystencils.node_collection import NodeCollection
 from pystencils.typing import collate_types
 from pystencils.field import Field
 from pystencils.simp import sympy_cse, SimplificationStrategy
@@ -255,6 +260,12 @@ class LBMConfig:
     temperature: Any = None
     """
     Temperature for fluctuating lattice Boltzmann methods.
+    """
+
+    psm_config: PSMConfig = None
+    """
+    If a PSM config is specified, (1 - fractionField) is added to the relaxation rates of the collision 
+    and to the potential force term, and a solid collision is build and added to the main assignments.
     """
 
     output: dict = field(default_factory=dict)
@@ -445,6 +456,9 @@ class LBMConfig:
             'shanchen': forcemodels.ShanChen,
             'centralmoment': forcemodels.CentralMoment
         }
+
+        if self.psm_config is not None and self.psm_config.fraction_field is not None:
+            self.force = [(1.0 - self.psm_config.fraction_field.center) * f for f in self.force]
 
         if isinstance(self.force_model, str):
             new_force_model = ForceModel[self.force_model.upper()]
@@ -657,6 +671,11 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
     else:
         collision_rule = lb_method.get_collision_rule(pre_simplification=pre_simplification)
 
+    if lbm_config.psm_config is not None:
+        if lbm_config.psm_config.fraction_field is None or lbm_config.psm_config.object_velocity_field is None:
+            raise ValueError("Specify a fraction and object velocity field in the PSM Config")
+        collision_rule = add_psm_to_collision_rule(collision_rule, lbm_config.psm_config)
+
     if lbm_config.galilean_correction:
         from lbmpy.methods.cumulantbased import add_galilean_correction
         collision_rule = add_galilean_correction(collision_rule)
@@ -686,6 +705,7 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
                                                              omega_output_field=lbm_config.omega_output_field)
         else:
             collision_rule = add_entropy_condition(collision_rule, omega_output_field=lbm_config.omega_output_field)
+
     elif lbm_config.smagorinsky:
         if lbm_config.cassons:
             raise ValueError("Cassons model can not be combined with Smagorinsky model")
@@ -738,6 +758,11 @@ def create_lb_method(lbm_config=None, **params):
     if isinstance(lbm_config.force, Field):
         lbm_config.force = tuple(lbm_config.force(i) for i in range(dim))
 
+    if lbm_config.psm_config is None:
+        fraction_field = None
+    else:
+        fraction_field = lbm_config.psm_config.fraction_field
+
     common_params = {
         'compressible': lbm_config.compressible,
         'zero_centered': lbm_config.zero_centered,
@@ -747,6 +772,7 @@ def create_lb_method(lbm_config=None, **params):
         'continuous_equilibrium': lbm_config.continuous_equilibrium,
         'c_s_sq': lbm_config.c_s_sq,
         'collision_space_info': lbm_config.collision_space_info,
+        'fraction_field': fraction_field,
     }
 
     cumulant_params = {
@@ -754,6 +780,7 @@ def create_lb_method(lbm_config=None, **params):
         'force_model': lbm_config.force_model,
         'c_s_sq': lbm_config.c_s_sq,
         'collision_space_info': lbm_config.collision_space_info,
+        'fraction_field': fraction_field,
     }
 
     if lbm_config.method == Method.SRT:
@@ -813,6 +840,54 @@ def create_lb_method(lbm_config=None, **params):
 
     lbm_config.lb_method = method
     return method
+
+
+def create_psm_update_rule(lbm_config, lbm_optimisation):
+    node_collection = []
+
+    # Use regular lb update rule for no overlapping particles
+    config_without_psm = copy.deepcopy(lbm_config)
+    config_without_psm.psm_config = None
+    # TODO: the force is still multiplied by (1.0 - self.psm_config.fraction_field.center)
+    #  (should not harm if memory bound since self.psm_config.fraction_field.center should always be 0.0)
+    lb_update_rule = create_lb_update_rule(
+        lbm_config=config_without_psm, lbm_optimisation=lbm_optimisation
+    )
+    node_collection.append(
+        Conditional(
+            lbm_config.psm_config.fraction_field.center(0) <= 0.0,
+            Block(lb_update_rule.all_assignments),
+        )
+    )
+
+    # Only one particle, i.e., no individual_fraction_field is provided
+    if lbm_config.psm_config.individual_fraction_field is None:
+        assert lbm_config.psm_config.MaxParticlesPerCell == 1
+        psm_update_rule = create_lb_update_rule(
+            lbm_config=lbm_config, lbm_optimisation=lbm_optimisation
+        )
+        node_collection.append(
+            Conditional(
+                lbm_config.psm_config.fraction_field.center(0) > 0.0,
+                Block(psm_update_rule.all_assignments),
+            )
+        )
+    else:
+        for p in range(lbm_config.psm_config.MaxParticlesPerCell):
+            # Add psm update rule for p overlapping particles
+            config_with_p_particles = copy.deepcopy(lbm_config)
+            config_with_p_particles.psm_config.MaxParticlesPerCell = p + 1
+            psm_update_rule = create_lb_update_rule(
+                lbm_config=config_with_p_particles, lbm_optimisation=lbm_optimisation
+            )
+            node_collection.append(
+                Conditional(
+                    lbm_config.psm_config.individual_fraction_field.center(p) > 0.0,
+                    Block(psm_update_rule.all_assignments),
+                )
+            )
+
+    return NodeCollection(node_collection)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
