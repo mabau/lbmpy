@@ -39,7 +39,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     def __init__(self, stencil, equilibrium, relaxation_dict,
                  conserved_quantity_computation=None, force_model=None, zero_centered=False,
-                 moment_transform_class=PdfsToMomentsByChimeraTransform):
+                 fraction_field=None, moment_transform_class=PdfsToMomentsByChimeraTransform):
         assert isinstance(conserved_quantity_computation, AbstractConservedQuantityComputation)
         super(MomentBasedLbMethod, self).__init__(stencil)
 
@@ -48,6 +48,7 @@ class MomentBasedLbMethod(AbstractLbMethod):
         self._cqc = conserved_quantity_computation
         self._force_model = force_model
         self._zero_centered = zero_centered
+        self.fraction_field = fraction_field
         self._weights = None
         self._moment_transform_class = moment_transform_class
 
@@ -174,7 +175,14 @@ class MomentBasedLbMethod(AbstractLbMethod):
 
     def get_collision_rule(self, conserved_quantity_equations: AssignmentCollection = None,
                            pre_simplification: bool = True) -> LbmCollisionRule:
-        rr_sub_expressions, d = self._generate_symbolic_relaxation_matrix()
+
+        if self.fraction_field is not None:
+            relaxation_rates_modifier = (1.0 - self.fraction_field.center)
+            rr_sub_expressions, d = self._generate_symbolic_relaxation_matrix(
+                relaxation_rates_modifier=relaxation_rates_modifier)
+        else:
+            rr_sub_expressions, d = self._generate_symbolic_relaxation_matrix()
+
         ac = self._collision_rule_with_relaxation_matrix(d=d,
                                                          additional_subexpressions=rr_sub_expressions,
                                                          include_force_terms=True,

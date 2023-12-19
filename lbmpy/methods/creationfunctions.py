@@ -162,7 +162,7 @@ def create_with_continuous_maxwellian_equilibrium(stencil, moment_to_relaxation_
 def create_from_equilibrium(stencil, equilibrium, conserved_quantity_computation,
                             moment_to_relaxation_rate_dict,
                             collision_space_info=CollisionSpaceInfo(CollisionSpace.POPULATIONS),
-                            zero_centered=False, force_model=None):
+                            zero_centered=False, force_model=None, fraction_field=None):
     r"""
     Creates a lattice Boltzmann method in either population, moment, or central moment space, from a given
     discrete velocity set and equilibrium distribution. 
@@ -201,11 +201,11 @@ def create_from_equilibrium(stencil, equilibrium, conserved_quantity_computation
 
     if cspace.collision_space == CollisionSpace.POPULATIONS:
         return MomentBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
-                                   force_model=force_model, zero_centered=zero_centered,
+                                   force_model=force_model, zero_centered=zero_centered, fraction_field=fraction_field,
                                    moment_transform_class=None)
     elif cspace.collision_space == CollisionSpace.RAW_MOMENTS:
         return MomentBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
-                                   force_model=force_model, zero_centered=zero_centered,
+                                   force_model=force_model, zero_centered=zero_centered, fraction_field=fraction_field,
                                    moment_transform_class=cspace.raw_moment_transform_class)
     elif cspace.collision_space == CollisionSpace.CENTRAL_MOMENTS:
         return CentralMomentBasedLbMethod(stencil, equilibrium, mom_to_rr_dict, conserved_quantity_computation=cqc,
@@ -333,7 +333,7 @@ def create_mrt_raw(stencil, relaxation_rates, continuous_equilibrium=True, **kwa
 
 
 def create_central_moment(stencil, relaxation_rates, nested_moments=None,
-                          continuous_equilibrium=True, **kwargs):
+                          continuous_equilibrium=True, fraction_field=None, **kwargs):
     r"""
     Creates moment based LB method where the collision takes place in the central moment space.
 
@@ -368,6 +368,10 @@ def create_central_moment(stencil, relaxation_rates, nested_moments=None,
         nested_moments = cascaded_moment_sets_literature(stencil)
 
     rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D)
+    if fraction_field is not None:
+        relaxation_rates_modifier = (1.0 - fraction_field.center)
+        rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D,
+                                            relaxation_rates_modifier=relaxation_rates_modifier)
 
     if continuous_equilibrium:
         return create_with_continuous_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
@@ -519,7 +523,7 @@ def create_mrt_orthogonal(stencil, relaxation_rates, continuous_equilibrium=True
 
 # ----------------------------------------- Cumulant method creators ---------------------------------------------------
 
-def create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs):
+def create_cumulant(stencil, relaxation_rates, cumulant_groups, fraction_field=None, **kwargs):
     r"""Creates a cumulant-based lattice Boltzmann method.
 
     Args:
@@ -537,6 +541,12 @@ def create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs):
         :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` instance
     """
     cumulant_to_rr_dict = _get_relaxation_info_dict(relaxation_rates, cumulant_groups, stencil.D)
+
+    if fraction_field is not None:
+        relaxation_rates_modifier = (1.0 - fraction_field.center)
+        cumulant_to_rr_dict = _get_relaxation_info_dict(relaxation_rates, cumulant_groups, stencil.D,
+                                                        relaxation_rates_modifier=relaxation_rates_modifier)
+
     kwargs.setdefault('collision_space_info', CollisionSpaceInfo(CollisionSpace.CUMULANTS))
 
     if kwargs['collision_space_info'].collision_space != CollisionSpace.CUMULANTS:
@@ -581,7 +591,7 @@ def create_with_default_polynomial_cumulants(stencil, relaxation_rates, **kwargs
     return create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs)
 
 
-def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
+def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim, relaxation_rates_modifier=None):
     r"""Creates a dictionary where each moment is mapped to a relaxation rate.
 
     Args:
@@ -599,7 +609,9 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
             rr = iter(relaxation_rates(group))
             for moment in group:
                 result[moment] = next(rr)
-
+        if relaxation_rates_modifier is not None:
+            for key in result:
+                result[key] *= relaxation_rates_modifier
         return result
 
     number_of_moments = 0
@@ -664,6 +676,9 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim):
                              "moment. In this case, conserved moments are also "
                              "relaxed with 0. The last possibility is to specify a relaxation rate for each moment, "
                              "including conserved moments")
+    if relaxation_rates_modifier is not None:
+        for key in result:
+            result[key] *= relaxation_rates_modifier
     return result
 
 
