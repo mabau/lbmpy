@@ -327,20 +327,20 @@ class He(AbstractForceModel):
 
     .. math::
 
-        F (\mathbf{c}) 
-        = \frac{1}{\rho c_s^2} 
-          \mathbf{F} \cdot ( \mathbf{c} - \mathbf{u} ) 
+        F (\mathbf{c})
+        = \frac{1}{\rho c_s^2}
+          \mathbf{F} \cdot ( \mathbf{c} - \mathbf{u} )
           f^{\mathrm{eq}} (\mathbf{c})
 
     the following analytical expresson for the monomial raw moments of the force is found:
 
     .. math::
 
-        m_{\alpha\beta\gamma}^{F, \mathrm{He}} 
-            = \frac{1}{\rho c_s^2} \left( 
-                F_x m^{\mathrm{eq}}_{\alpha+1,\beta,\gamma} 
-                + F_y m^{\mathrm{eq}}_{\alpha,\beta+1,\gamma} 
-                + F_z m^{\mathrm{eq}}_{\alpha,\beta,\gamma+1} 
+        m_{\alpha\beta\gamma}^{F, \mathrm{He}}
+            = \frac{1}{\rho c_s^2} \left(
+                F_x m^{\mathrm{eq}}_{\alpha+1,\beta,\gamma}
+                + F_y m^{\mathrm{eq}}_{\alpha,\beta+1,\gamma}
+                + F_z m^{\mathrm{eq}}_{\alpha,\beta,\gamma+1}
                 - m^{eq}_{\alpha\beta\gamma} ( \mathbf{F} \cdot \mathbf{u} )
             \right)
     """

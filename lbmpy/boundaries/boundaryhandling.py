@@ -12,8 +12,8 @@ from lbmpy.advanced_streaming.utility import is_inplace, Timestep, AccessPdfValu
 
 class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
     """
-    Enables boundary handling for LBM simulations with advanced streaming patterns. 
-    For the in-place patterns AA and EsoTwist, two kernels are generated for a boundary 
+    Enables boundary handling for LBM simulations with advanced streaming patterns.
+    For the in-place patterns AA and EsoTwist, two kernels are generated for a boundary
     object and the right one selected depending on the time step.
     """
 

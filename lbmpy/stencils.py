@@ -185,6 +185,10 @@ def _predefined_stencils(stencil: str, ordering: str):
                         (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
                         (1, 1, 1), (-1, -1, -1), (1, 1, -1), (-1, -1, 1),
                         (1, -1, 1), (-1, 1, -1), (-1, 1, 1), (1, -1, -1)),
+            'fakhari': ((0, 0, 0),
+                        (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+                        (1, 1, 1), (-1, -1, -1), (-1, 1, 1), (1, -1, -1),
+                        (1, -1, 1), (-1, 1, -1), (1, 1, -1), (-1, -1, 1)),
         },
         'D3Q19': {
             'walberla': ((0, 0, 0),
@@ -244,7 +248,6 @@ def _predefined_stencils(stencil: str, ordering: str):
                         (1, -1, -1)),
         }
     }
-
     try:
         return predefined_stencils[stencil][ordering]
     except KeyError:

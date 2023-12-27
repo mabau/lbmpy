@@ -21,12 +21,17 @@ def get_all_stencils():
         LBStencil(Stencil.D3Q27, 'walberla'),
 
         LBStencil(Stencil.D2Q9, 'counterclockwise'),
-
         LBStencil(Stencil.D2Q9, 'braunschweig'),
+        LBStencil(Stencil.D2Q9, 'uk'),
+
+
+        LBStencil(Stencil.D3Q15, 'premnath'),
+        LBStencil(Stencil.D3Q15, 'fakhari'),
+
         LBStencil(Stencil.D3Q19, 'braunschweig'),
+        LBStencil(Stencil.D3Q19, 'premnath'),
 
-        LBStencil(Stencil.D3Q27, 'premnath'),
-
+        LBStencil(Stencil.D3Q27, "premnath"),
         LBStencil(Stencil.D3Q27, "fakhari"),
     ]
 
