@@ -4,7 +4,7 @@ from warnings import warn
 from pystencils import Assignment, Field
 from pystencils.simp.assignment_collection import AssignmentCollection
 from pystencils.stencil import offset_to_direction_string, direction_string_to_offset, inverse_direction
-from pystencils.sympyextensions import get_symmetric_part, simplify_by_equality
+from pystencils.sympyextensions import get_symmetric_part, simplify_by_equality, scalar_product
 from pystencils.typing import create_type, TypedSymbol
 
 from lbmpy.advanced_streaming.utility import AccessPdfValues, Timestep
@@ -806,22 +806,45 @@ class FixedDensity(LbBoundary):
 
 # end class FixedDensity
 
-
 class DiffusionDirichlet(LbBoundary):
-    """Boundary condition for advection-diffusion problems that fixes the concentration at the obstacle.
+    """Concentration boundary which is used for concentration or thermal boundary conditions of convection-diffusion
+    equation Base on https://doi.org/10.1103/PhysRevE.85.016701.
 
     Args:
-        concentration: value of the concentration which should be set.
+        concentration: can either be a constant, an access into a field, or a callback function.
+                       The callback functions gets a numpy record array with members, 'x','y','z', 'dir' (direction)
+                       and 'concentration' which has to be set to the desired velocity of the corresponding link
+        velocity_field: if velocity field is given the boundary value is approximated by using the discrete equilibrium.
         name: optional name of the boundary.
+        data_type: data type of the concentration value. default is double
     """
 
-    def __init__(self, concentration, name=None, data_type='double'):
+    def __init__(self, concentration, velocity_field=None, name=None, data_type='double'):
         if name is None:
-            name = "Diffusion Dirichlet " + str(concentration)
+            name = "DiffusionDirichlet"
         self.concentration = concentration
         self._data_type = data_type
+        self.concentration_is_callable = callable(self.concentration)
+        self.velocity_field = velocity_field
 
         super(DiffusionDirichlet, self).__init__(name)
+
+    @property
+    def additional_data(self):
+        """ In case of the UBB boundary additional data is a velocity vector. This vector is added to each cell to
+            realize velocity profiles for the inlet."""
+        if self.concentration_is_callable:
+            return [('concentration', create_type(self._data_type))]
+        else:
+            return []
+
+    @property
+    def additional_data_init_callback(self):
+        """Initialise additional data of the boundary. For an example see
+            `tutorial 02 <https://pycodegen.pages.i10git.cs.fau.de/lbmpy/notebooks/02_tutorial_boundary_setup.html>`_
+            or lbmpy.geometry.add_pipe_inflow_boundary"""
+        if self.concentration_is_callable:
+            return self.concentration
 
     def get_additional_code_nodes(self, lb_method):
         """Return a list of code nodes that will be added in the generated code before the index field loop.
@@ -832,15 +855,34 @@ class DiffusionDirichlet(LbBoundary):
         Returns:
             list containing LbmWeightInfo
         """
-        return [LbmWeightInfo(lb_method, self._data_type)]
+        if self.velocity_field:
+            return [LbmWeightInfo(lb_method, self._data_type), NeighbourOffsetArrays(lb_method.stencil)]
+        else:
+            return [LbmWeightInfo(lb_method, self._data_type)]
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
         assert lb_method.conserved_quantity_computation.zero_centered_pdfs is False, \
             "DiffusionDirichlet only works for methods with normal pdfs storage -> set zero_centered=False"
         weight_info = LbmWeightInfo(lb_method, self._data_type)
         w_dir = weight_info.weight_of_direction(dir_symbol, lb_method)
-        return [Assignment(f_in(inv_dir[dir_symbol]),
-                           2 * w_dir * self.concentration - f_out(dir_symbol))]
+
+        if self.concentration_is_callable:
+            concentration = index_field[0]('concentration')
+        else:
+            concentration = self.concentration
+
+        if self.velocity_field:
+            neighbour_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+            u = self.velocity_field
+            cs = sp.Rational(1, 3)
+
+            equilibrium = (1 + scalar_product(neighbour_offset, u.center_vector)**2 / (2 * cs**4)
+                           - scalar_product(u.center_vector, u.center_vector) / (2 * cs**2))
+        else:
+            equilibrium = sp.Rational(1, 1)
+
+        result = [Assignment(f_in(inv_dir[dir_symbol]), 2.0 * w_dir * concentration * equilibrium - f_out(dir_symbol))]
+        return result
 
 
 # end class DiffusionDirichlet

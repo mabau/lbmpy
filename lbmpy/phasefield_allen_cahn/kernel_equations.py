@@ -1,10 +1,17 @@
-from pystencils.fd.derivation import FiniteDifferenceStencilDerivation
+from typing import Union
+
 from pystencils import Assignment, AssignmentCollection, Field
+from pystencils.sympyextensions import scalar_product
 
 from lbmpy import pdf_initialization_assignments
+from lbmpy.advanced_streaming.utility import get_accessor
+from lbmpy.creationfunctions import LBMConfig
+from lbmpy.fieldaccess import StreamPushTwoFieldsAccessor
 from lbmpy.methods.abstractlbmethod import LbmCollisionRule
 from lbmpy.utils import second_order_moment_tensor
-from lbmpy.phasefield_allen_cahn.parameter_calculation import AllenCahnParameters
+
+from lbmpy.phasefield_allen_cahn.derivatives import isotropic_gradient_symbolic, laplacian_symbolic
+from lbmpy.phasefield_allen_cahn.parameter_calculation import AllenCahnParameters, ThermocapillaryParameters
 
 import sympy as sp
 
@@ -18,79 +25,13 @@ def chemical_potential_symbolic(phi_field, stencil, beta, kappa):
         beta: coefficient related to surface tension and interface thickness
         kappa: coefficient related to surface tension and interface thickness
     """
-    lap = sp.simplify(0)
-    for i in range(stencil.D):
-        deriv = FiniteDifferenceStencilDerivation((i, i), stencil)
-        for j in range(stencil.D):
-            # assume the stencil is symmetric
-            deriv.assume_symmetric(dim=j, anti_symmetric=False)
-
-        # set weights for missing degrees of freedom in the calculation and assume the stencil is isotropic
-        if stencil.Q == 9:
-            res = deriv.get_stencil(isotropic=True)
-            lap += res.apply(phi_field.center)
-        elif stencil.Q == 15:
-            deriv.set_weight((0, 0, 0), sp.Rational(-32, 27))
-            res = deriv.get_stencil(isotropic=True)
-            lap += res.apply(phi_field.center)
-        elif stencil.Q == 19:
-            res = deriv.get_stencil(isotropic=True)
-            lap += res.apply(phi_field.center)
-        else:
-            deriv.set_weight((0, 0, 0), sp.Rational(-38, 27))
-            res = deriv.get_stencil(isotropic=True)
-            lap += res.apply(phi_field.center)
-
+    lap = laplacian_symbolic(phi_field, stencil)
     # get the chemical potential
     four = sp.Rational(4, 1)
     one = sp.Rational(1, 1)
     half = sp.Rational(1, 2)
     mu = four * beta * phi_field.center * (phi_field.center - one) * (phi_field.center - half) - kappa * lap
     return mu
-
-
-def isotropic_gradient_symbolic(phi_field, stencil):
-    r"""
-    Get a symbolic expression for the isotropic gradient of the phase-field
-    Args:
-        phi_field: the phase-field on which the isotropic gradient is applied
-        stencil: stencil to derive the finite difference for the gradient (2nd order isotropic)
-    """
-    deriv = FiniteDifferenceStencilDerivation((0,), stencil)
-
-    deriv.assume_symmetric(0, anti_symmetric=True)
-    deriv.assume_symmetric(1, anti_symmetric=False)
-    if stencil.D == 3:
-        deriv.assume_symmetric(2, anti_symmetric=False)
-
-    # set weights for missing degrees of freedom in the calculation and assume the stencil is isotropic
-    # furthermore the stencils gets rotated to get the y and z components
-    if stencil.Q == 9:
-        res = deriv.get_stencil(isotropic=True)
-        grad = [res.apply(phi_field.center), res.rotate_weights_and_apply(phi_field.center, (0, 1)), 0]
-    elif stencil.Q == 15:
-        res = deriv.get_stencil(isotropic=True)
-        grad = [res.apply(phi_field.center),
-                res.rotate_weights_and_apply(phi_field.center, (0, 1)),
-                res.rotate_weights_and_apply(phi_field.center, (1, 2))]
-    elif stencil.Q == 19:
-        deriv.set_weight((0, 0, 0), sp.sympify(0))
-        deriv.set_weight((1, 0, 0), sp.Rational(1, 6))
-
-        res = deriv.get_stencil(isotropic=True)
-        grad = [res.apply(phi_field.center),
-                res.rotate_weights_and_apply(phi_field.center, (0, 1)),
-                res.rotate_weights_and_apply(phi_field.center, (1, 2))]
-    else:
-        deriv.set_weight((0, 0, 0), sp.sympify(0))
-        deriv.set_weight((1, 0, 0), sp.Rational(2, 9))
-
-        res = deriv.get_stencil(isotropic=True)
-        grad = [res.apply(phi_field.center),
-                res.rotate_weights_and_apply(phi_field.center, (0, 1)),
-                res.rotate_weights_and_apply(phi_field.center, (1, 2))]
-
-    return grad
 
 
 def normalized_isotropic_gradient_symbolic(phi_field, stencil, fd_stencil=None):
@@ -134,11 +75,10 @@ def pressure_force(phi_field, lb_method, stencil, density_heavy, density_light, 
     return result
 
 
-def viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, density_light, fd_stencil=None):
+def viscous_force(phi_field, lb_method, tau, density_heavy, density_light, fd_stencil=None):
     r"""
     Get a symbolic expression for the viscous force
     Args:
-        lb_velocity_field: hydrodynamic distribution function
         phi_field: phase-field
         lb_method: lattice boltzmann method used for hydrodynamics
         tau: relaxation time of the hydrodynamic lattice boltzmann step
@@ -154,7 +94,7 @@ def viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, d
 
     iso_grad = sp.Matrix(isotropic_gradient_symbolic(phi_field, fd_stencil)[:stencil.D])
 
-    f_neq = lb_velocity_field.center_vector - lb_method.get_equilibrium_terms()
+    f_neq = sp.Matrix(lb_method.pre_collision_pdf_symbols) - lb_method.get_equilibrium_terms()
     stress_tensor = second_order_moment_tensor(f_neq, lb_method.stencil)
     normal_stress_tensor = stress_tensor * iso_grad
 
@@ -169,17 +109,19 @@ def viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, d
     return [fmx, fmy, fmz]
 
 
-def surface_tension_force(phi_field, stencil, beta, kappa, fd_stencil=None):
+def surface_tension_force(phi_field, stencil, parameters, fd_stencil=None):
     r"""
     Get a symbolic expression for the surface tension force
     Args:
         phi_field: the phase-field on which the chemical potential is applied
         stencil: stencil of the lattice Boltzmann step
-        beta: coefficient related to surface tension and interface thickness
-        kappa: coefficient related to surface tension and interface thickness
+        parameters: AllenCahnParameters
         fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
         field. If it is not given the stencil of the LB method will be applied.
     """
+    beta = parameters.beta
+    kappa = parameters.kappa
+
     if fd_stencil is None:
         fd_stencil = stencil
 
@@ -188,18 +130,57 @@ def surface_tension_force(phi_field, stencil, beta, kappa, fd_stencil=None):
     return [chemical_potential * x for x in iso_grad]
 
 
-def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, parameters: AllenCahnParameters,
-                       body_force, fd_stencil=None):
+def thermocapillary_surface_tension_force(phi_field, temperature_field,
+                                          stencil, parameters, fd_stencil=None):
     r"""
-    Get a symbolic expression for the hydrodynamic force
+    Get a symbolic expression for the surface tension force
     Args:
-        lb_velocity_field: hydrodynamic distribution function
+        phi_field: the phase-field on which the chemical potential is applied
+        temperature_field: the temperature field which contains the temperature for each cell
+        stencil: stencil of the lattice Boltzmann step
+        parameters: AllenCahnParameters
+        fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
+        field. If it is not given the stencil of the LB method will be applied.
+    """
+    if fd_stencil is None:
+        fd_stencil = stencil
+
+    sigma_ref = parameters.symbolic_sigma_ref
+    sigma_t = parameters.symbolic_sigma_t
+    tmp_ref = parameters.symbolic_tmp_ref
+    interface_thickness = parameters.symbolic_interface_thickness
+
+    sigma = sigma_ref + sigma_t * (temperature_field.center - tmp_ref)
+    beta = sp.Rational(12, 1) * (sigma / interface_thickness)
+    kappa = sp.Rational(3, 2) * sigma * interface_thickness
+
+    chemical_potential = chemical_potential_symbolic(phi_field, fd_stencil, beta, kappa)
+    gradient_phi = isotropic_gradient_symbolic(phi_field, fd_stencil)
+    gradient_temp = isotropic_gradient_symbolic(temperature_field, fd_stencil)
+    magnitude_phi = sum([x * x for x in gradient_phi])
+
+    dot_temperature_phase = scalar_product(gradient_temp, gradient_phi)
+    delta_s = sp.Rational(3, 2) * interface_thickness * sigma_t
+
+    return [chemical_potential * gp + delta_s * (magnitude_phi * gt - dot_temperature_phase * gp) for gp, gt in
+            zip(gradient_phi, gradient_temp)]
+
+
+def hydrodynamic_force(phi_field, lb_method,
+                       parameters: Union[AllenCahnParameters, ThermocapillaryParameters],
+                       body_force, fd_stencil=None,
+                       temperature_field=None):
+    r"""
+    Get a symbolic expression for the hydrodynamic force. If a temperature field is provided the hydrodynamic force
+    for thermocapillary simulations is derived.
+    Args:
         phi_field: phase-field
         lb_method: Lattice boltzmann method used for hydrodynamics
         parameters: AllenCahnParameters
         body_force: force acting on the fluids. Usually the gravity
         fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
         field. If it is not given the stencil of the LB method will be applied.
+        temperature_field: the temperature field which contains the temperature for each cell
     """
     stencil = lb_method.stencil
 
@@ -211,12 +192,16 @@ def hydrodynamic_force(lb_velocity_field, phi_field, lb_method, parameters: Alle
     tau_L = parameters.symbolic_tau_light
     tau_H = parameters.symbolic_tau_heavy
     tau = sp.Rational(1, 2) + tau_L + phi_field.center * (tau_H - tau_L)
-    beta = parameters.beta
-    kappa = parameters.kappa
 
     fp = pressure_force(phi_field, lb_method, stencil, density_heavy, density_light, fd_stencil)
-    fm = viscous_force(lb_velocity_field, phi_field, lb_method, tau, density_heavy, density_light, fd_stencil)
-    fs = surface_tension_force(phi_field, stencil, beta, kappa, fd_stencil)
+    fm = viscous_force(phi_field, lb_method, tau, density_heavy, density_light, fd_stencil)
+
+    if temperature_field is None:
+        fs = surface_tension_force(phi_field, stencil, parameters, fd_stencil)
+    else:
+        assertion_string = "For thermocapillary ThermocapillaryParameters needs to be passed"
+        assert isinstance(parameters, ThermocapillaryParameters), assertion_string
+        fs = thermocapillary_surface_tension_force(phi_field, temperature_field, stencil, parameters, fd_stencil)
 
     result = []
     for i in range(stencil.D):
@@ -254,14 +239,14 @@ def interface_tracking_force(phi_field, stencil, parameters: AllenCahnParameters
     return result
 
 
-def hydrodynamic_force_assignments(lb_velocity_field, velocity_field, phi_field, lb_method,
+def hydrodynamic_force_assignments(velocity_field, phi_field, lb_method,
                                    parameters: AllenCahnParameters,
-                                   body_force, fd_stencil=None, sub_iterations=2):
+                                   body_force, fd_stencil=None, sub_iterations=2,
+                                   temperature_field=None):
 
     r"""
     Get a symbolic expression for the hydrodynamic force
     Args:
-        lb_velocity_field: hydrodynamic distribution function
         velocity_field: velocity
         phi_field: phase-field
         lb_method: Lattice boltzmann method used for hydrodynamics
@@ -270,6 +255,7 @@ def hydrodynamic_force_assignments(lb_velocity_field, velocity_field, phi_field,
         fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
         field. If it is not given the stencil of the LB method will be applied.
         sub_iterations: number of sub iterations for the hydrodynamic force
+        temperature_field: the temperature field which contains the temperature for each cell
     """
 
     rho_L = parameters.symbolic_density_light
@@ -280,12 +266,13 @@ def hydrodynamic_force_assignments(lb_velocity_field, velocity_field, phi_field,
     # method has to have a force model
     symbolic_force = lb_method.force_model.symbolic_force_vector
 
-    force = hydrodynamic_force(lb_velocity_field, phi_field, lb_method, parameters, body_force, fd_stencil=fd_stencil)
+    force = hydrodynamic_force(phi_field, lb_method, parameters, body_force, fd_stencil=fd_stencil,
+                               temperature_field=temperature_field)
 
     cqc = lb_method.conserved_quantity_computation
 
     u_symp = cqc.velocity_symbols
-    cqe = cqc.equilibrium_input_equations_from_pdfs(lb_velocity_field.center_vector)
+    cqe = cqc.equilibrium_input_equations_from_pdfs(lb_method.pre_collision_pdf_symbols)
     cqe = cqe.new_without_subexpressions()
 
     cqe_velocity = [eq.rhs for eq in cqe.main_assignments[1:]]
@@ -332,7 +319,7 @@ def add_interface_tracking_force(update_rule: LbmCollisionRule, force):
 
 
 def add_hydrodynamic_force(update_rule: LbmCollisionRule, force, phi_field,
-                           hydro_pdfs, parameters: AllenCahnParameters):
+                           hydro_pdfs, parameters: AllenCahnParameters, lbm_config: LBMConfig = None):
     r"""
      Adds the interface tracking force to a lattice Boltzmann update rule
      Args:
@@ -341,29 +328,53 @@ def add_hydrodynamic_force(update_rule: LbmCollisionRule, force, phi_field,
          phi_field: phase-field
          hydro_pdfs: source field of the hydrodynamic PDFs
          parameters: AllenCahnParameters
+         lbm_config: LBMConfig to determine the streaming scheme
      """
+    if lbm_config is None:
+        accessor = StreamPushTwoFieldsAccessor()
+    else:
+        accessor = get_accessor(lbm_config.streaming_pattern, lbm_config.timestep)
+    method = update_rule.method
+    reads = accessor.read(hydro_pdfs, method.stencil)
+
+    # First apply force according to Allen Cahn model
     rho_L = parameters.symbolic_density_light
     rho_H = parameters.symbolic_density_heavy
     density = rho_L + phi_field.center * (rho_H - rho_L)
 
-    method = update_rule.method
-    symbolic_force = method.force_model.symbolic_force_vector
-    cqc = method.conserved_quantity_computation
-    rho = cqc.density_deviation_symbol
-
-    force_subs = {f: f / density for f in symbolic_force}
-
-    update_rule = update_rule.subs(force_subs)
-
-    update_rule.subexpressions += [Assignment(rho, sum(hydro_pdfs.center_vector))]
+    force_subs = {f: f / density for f in method.force_model.symbolic_force_vector}
+    update_rule = update_rule.new_with_substitutions(force_subs)
     update_rule.subexpressions += force
+
+    # Then add missing conversed quantities that occur in the force terms
+    cqc = method.conserved_quantity_computation
+    density = cqc.density_symbol
+    density_deviation = cqc.density_deviation_symbol
+    free_symbols = update_rule.free_symbols
+
+    if density_deviation in free_symbols:
+        t = cqc.output_equations_from_pdfs(reads,
+                                           {"density_deviation": density_deviation}).new_without_subexpressions()
+        update_rule.add_subexpression(t.main_assignments[0].rhs, t.main_assignments[0].lhs)
+
+    if density in free_symbols:
+        t = cqc.output_equations_from_pdfs(reads, {"density": density}).new_without_subexpressions()
+        update_rule.add_subexpression(t.main_assignments[0].rhs, t.main_assignments[0].lhs)
+
     update_rule.topological_sort(sort_subexpressions=True, sort_main_assignments=False)
 
-    return update_rule
+    subs_dict = {f: read for f, read in zip(method.pre_collision_pdf_symbols, reads)}
+
+    up = update_rule.new_with_substitutions(subs_dict)
+    result = LbmCollisionRule(lb_method=method, main_assignments=up.main_assignments,
+                              subexpressions=up.subexpressions, simplification_hints=up.simplification_hints,
+                              subexpression_symbol_generator=up.subexpression_symbol_generator)
+
+    return result
 
 
 def initializer_kernel_phase_field_lb(lb_method, phi, velocity, ac_pdfs, parameters: AllenCahnParameters,
-                                      fd_stencil=None):
+                                      fd_stencil=None, **kwargs):
     r"""
     Returns an assignment list for initializing the phase-field distribution functions
     Args:
@@ -374,9 +385,10 @@ def initializer_kernel_phase_field_lb(lb_method, phi, velocity, ac_pdfs, paramet
         parameters: AllenCahnParameters
         fd_stencil: stencil to derive the finite differences of the isotropic gradient and the laplacian of the phase
         field. If it is not given the stencil of the LB method will be applied.
+        kwargs: keyword arguments for pdf_initialization_assignments
     """
 
-    h_updates = pdf_initialization_assignments(lb_method, phi, velocity, ac_pdfs)
+    h_updates = pdf_initialization_assignments(lb_method, phi, velocity, ac_pdfs, **kwargs)
     force_h = interface_tracking_force(phi, lb_method.stencil, parameters,
                                        fd_stencil=fd_stencil)
 
@@ -407,7 +419,7 @@ def initializer_kernel_phase_field_lb(lb_method, phi, velocity, ac_pdfs, paramet
     return h_updates
 
 
-def initializer_kernel_hydro_lb(lb_method, pressure, velocity, hydro_pdfs):
+def initializer_kernel_hydro_lb(lb_method, pressure, velocity, hydro_pdfs, **kwargs):
     r"""
     Returns an assignment list for initializing the velocity distribution functions
     Args:
@@ -415,11 +427,12 @@ def initializer_kernel_hydro_lb(lb_method, pressure, velocity, hydro_pdfs):
         pressure: order parameter of the hydrodynamic LB step (pressure)
         velocity: initial velocity
         hydro_pdfs: source field of the hydrodynamic PDFs
+        kwargs: keyword arguments for pdf_initialization_assignments
     """
     symbolic_force = lb_method.force_model.symbolic_force_vector
     force_subs = {f: 0 for f in symbolic_force}
 
-    g_updates = pdf_initialization_assignments(lb_method, pressure, velocity, hydro_pdfs)
+    g_updates = pdf_initialization_assignments(lb_method, pressure, velocity, hydro_pdfs, **kwargs)
     g_updates = g_updates.new_with_substitutions(force_subs)
 
     return g_updates

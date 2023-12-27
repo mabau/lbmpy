@@ -284,6 +284,11 @@ class LBMConfig:
     Symbolic field where the density is read from. If `None` is given the density is calculated inplace from
     with zeroth order moment.
     """
+    conserved_moments: bool = True
+    """
+    If lower order moments are conserved or not. If velocity or density input is set the lower order moments are not 
+    conserved anymore.
+    """
 
     kernel_type: Union[str, Type[PdfFieldAccessor]] = 'default_stream_collide'
     """
@@ -469,6 +474,9 @@ class LBMConfig:
         elif isinstance(self.force_model, ForceModel):
             force_model_class = force_model_dict[self.force_model.name.lower()]
             self.force_model = force_model_class(force=self.force[:self.stencil.D])
+
+        if self.density_input or self.velocity_input:
+            self.conserved_moments = False
 
 
 @dataclass
@@ -791,12 +799,15 @@ def create_lb_method(lbm_config=None, **params):
         method = create_trt(lbm_config.stencil, relaxation_rates[0], relaxation_rates[1], **common_params)
     elif lbm_config.method == Method.MRT:
         method = create_mrt_orthogonal(lbm_config.stencil, relaxation_rates, weighted=lbm_config.weighted,
-                                       nested_moments=lbm_config.nested_moments, **common_params)
+                                       nested_moments=lbm_config.nested_moments,
+                                       conserved_moments=lbm_config.conserved_moments, **common_params)
     elif lbm_config.method == Method.CENTRAL_MOMENT:
         method = create_central_moment(lbm_config.stencil, relaxation_rates,
-                                       nested_moments=lbm_config.nested_moments, **common_params)
+                                       nested_moments=lbm_config.nested_moments,
+                                       conserved_moments=lbm_config.conserved_moments, **common_params)
     elif lbm_config.method == Method.MRT_RAW:
-        method = create_mrt_raw(lbm_config.stencil, relaxation_rates, **common_params)
+        method = create_mrt_raw(lbm_config.stencil, relaxation_rates,
+                                conserved_moments=lbm_config.conserved_moments, **common_params)
     elif lbm_config.method in (Method.TRT_KBC_N1, Method.TRT_KBC_N2, Method.TRT_KBC_N3, Method.TRT_KBC_N4):
         if lbm_config.stencil.D == 2 and lbm_config.stencil.Q == 9:
             dim = 2
@@ -821,13 +832,14 @@ def create_lb_method(lbm_config=None, **params):
             relaxation_rates = FOURTH_ORDER_RELAXATION_RATE_SYMBOLS
 
         if lbm_config.nested_moments is not None:
-            method = create_cumulant(
-                lbm_config.stencil, relaxation_rates, lbm_config.nested_moments, **cumulant_params)
+            method = create_cumulant(lbm_config.stencil, relaxation_rates, lbm_config.nested_moments,
+                                     conserved_moments=lbm_config.conserved_moments, **cumulant_params)
         else:
             method = create_with_default_polynomial_cumulants(lbm_config.stencil, relaxation_rates, **cumulant_params)
 
     elif lbm_config.method == Method.MONOMIAL_CUMULANT:
-        method = create_with_monomial_cumulants(lbm_config.stencil, relaxation_rates, **cumulant_params)
+        method = create_with_monomial_cumulants(lbm_config.stencil, relaxation_rates,
+                                                conserved_moments=lbm_config.conserved_moments, **cumulant_params)
     else:
         raise ValueError("Failed to create LB method. Please use lbmpy.enums.Method for the creation")
 

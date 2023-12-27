@@ -163,6 +163,7 @@ def periodic_pdf_copy_kernel(pdf_field, src_slice, dst_slice,
     src_slice = src_slice[:-1]
     dst_slice = dst_slice[:-1]
 
+    # TODO this is the domain_size with GL
     if domain_size is None:
         domain_size = pdf_field.spatial_shape
 

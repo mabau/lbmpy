@@ -1,7 +1,7 @@
 import math
 import sympy as sp
 
-from pystencils.astnodes import SympyAssignment
+from pystencils.astnodes import Block, Conditional, SympyAssignment
 
 from pystencils.boundaries.boundaryhandling import BoundaryOffsetInfo
 from pystencils.boundaries.boundaryconditions import Boundary
@@ -34,26 +34,29 @@ class ContactAngle(Boundary):
     def __call__(self, field, direction_symbol, **kwargs):
 
         neighbor = BoundaryOffsetInfo.offset_from_dir(direction_symbol, field.spatial_dimensions)
+        dist = TypedSymbol("h", self._data_type)
+        angle = TypedSymbol("a", self._data_type)
+        d = CastFunc(sum([x * x for x in neighbor]), self._data_type)
 
+        var = - dist * (4.0 / self._interface_width) * angle
+        tmp = 1 + var
+        else_branch = (tmp - sp.sqrt(tmp * tmp - 4.0 * var * field[neighbor])) / var - field[neighbor]
         if field.index_dimensions == 0:
-            if math.isclose(90, self._contact_angle, abs_tol=1e-5):
-                return [SympyAssignment(field.center, field[neighbor])]
+            if isinstance(self._contact_angle, (int, float)):
+                result = [SympyAssignment(angle, math.cos(math.radians(self._contact_angle))),
+                          SympyAssignment(dist, 0.5 * sp.sqrt(d)),
+                          Conditional(sp.LessThan(var * var, 0.000001),
+                                      Block([SympyAssignment(field.center, field[neighbor])]),
+                                      Block([SympyAssignment(field.center, else_branch)]))]
+                return result
+            else:
+                result = [SympyAssignment(angle, sp.cos(self._contact_angle * (sp.pi / sp.Number(180)))),
+                          SympyAssignment(dist, 0.5 * sp.sqrt(d)),
+                          Conditional(sp.LessThan(var * var, 0.000001),
+                                      Block([SympyAssignment(field.center, field[neighbor])]),
+                                      Block([SympyAssignment(field.center, else_branch)]))]
+                return result
 
-            dist = TypedSymbol("h", self._data_type)
-            angle = TypedSymbol("a", self._data_type)
-            tmp = TypedSymbol("tmp", self._data_type)
-
-            result = [SympyAssignment(tmp, CastFunc(sum([x * x for x in neighbor]), self._data_type)),
-                      SympyAssignment(dist, 0.5 * sp.sqrt(tmp)),
-                      SympyAssignment(angle, math.cos(math.radians(self._contact_angle)))]
-
-            var = - dist * (4.0 / self._interface_width) * angle
-            tmp = 1 + var
-            else_branch = (tmp - sp.sqrt(tmp * tmp - 4 * var * field[neighbor])) / var - field[neighbor]
-            update = sp.Piecewise((field[neighbor], dist < 0.001), (else_branch, True))
-
-            result.append(SympyAssignment(field.center, update))
-            return result
         else:
             raise NotImplementedError("Contact angle only implemented for phase-fields which have a single "
                                       "value for each cell")

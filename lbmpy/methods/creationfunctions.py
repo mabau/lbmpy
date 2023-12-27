@@ -304,7 +304,7 @@ def create_trt_with_magic_number(stencil, relaxation_rate, magic_number=sp.Ratio
                       relaxation_rate_odd_moments=rr_odd, **kwargs)
 
 
-def create_mrt_raw(stencil, relaxation_rates, continuous_equilibrium=True, **kwargs):
+def create_mrt_raw(stencil, relaxation_rates, continuous_equilibrium=True, conserved_moments=True, **kwargs):
     r"""
     Creates a MRT method using non-orthogonalized moments.
 
@@ -318,6 +318,7 @@ def create_mrt_raw(stencil, relaxation_rates, continuous_equilibrium=True, **kwa
         relaxation_rates: relaxation rates (inverse of the relaxation times) for each moment
         continuous_equilibrium: determines if the discrete or continuous maxwellian equilibrium is
                         used to compute the equilibrium moments.
+        conserved_moments: If lower order moments are conserved or not.
     Returns:
         :class:`lbmpy.methods.momentbased.MomentBasedLbMethod` instance
     """
@@ -325,7 +326,7 @@ def create_mrt_raw(stencil, relaxation_rates, continuous_equilibrium=True, **kwa
     check_and_set_mrt_space(CollisionSpace.RAW_MOMENTS)
     moments = get_default_moment_set_for_stencil(stencil)
     nested_moments = [(c,) for c in moments]
-    rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D)
+    rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D, conserved_moments)
     if continuous_equilibrium:
         return create_with_continuous_maxwellian_equilibrium(stencil, rr_dict, **kwargs)
     else:
@@ -333,7 +334,7 @@ def create_mrt_raw(stencil, relaxation_rates, continuous_equilibrium=True, **kwa
 
 
 def create_central_moment(stencil, relaxation_rates, nested_moments=None,
-                          continuous_equilibrium=True, fraction_field=None, **kwargs):
+                          continuous_equilibrium=True, conserved_moments=True, fraction_field=None, **kwargs):
     r"""
     Creates moment based LB method where the collision takes place in the central moment space.
 
@@ -346,6 +347,8 @@ def create_central_moment(stencil, relaxation_rates, nested_moments=None,
         nested_moments: a list of lists of modes, grouped by common relaxation times.
         continuous_equilibrium: determines if the discrete or continuous maxwellian equilibrium is
                         used to compute the equilibrium moments.
+        conserved_moments: If lower order moments are conserved or not.
+        fraction_field: fraction field for the PSM method
     Returns:
         :class:`lbmpy.methods.momentbased.CentralMomentBasedLbMethod` instance
     """
@@ -367,7 +370,7 @@ def create_central_moment(stencil, relaxation_rates, nested_moments=None,
     if not nested_moments:
         nested_moments = cascaded_moment_sets_literature(stencil)
 
-    rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D)
+    rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D, conserved_moments)
     if fraction_field is not None:
         relaxation_rates_modifier = (1.0 - fraction_field.center)
         rr_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D,
@@ -459,7 +462,7 @@ def create_trt_kbc(dim, shear_relaxation_rate, higher_order_relaxation_rate, met
 
 
 def create_mrt_orthogonal(stencil, relaxation_rates, continuous_equilibrium=True, weighted=None,
-                          nested_moments=None, **kwargs):
+                          nested_moments=None, conserved_moments=True, **kwargs):
     r"""
     Returns an orthogonal multi-relaxation time model for the stencils D2Q9, D3Q15, D3Q19 and D3Q27.
     These MRT methods are just one specific version - there are many MRT methods possible for all these stencils
@@ -480,6 +483,7 @@ def create_mrt_orthogonal(stencil, relaxation_rates, continuous_equilibrium=True
         nested_moments: a list of lists of modes, grouped by common relaxation times. If this argument is not provided,
                         Gram-Schmidt orthogonalization of the default modes is performed. The default modes equal the
                         raw moments except for the separation of the shear and bulk viscosity.
+        conserved_moments: If lower order moments are conserved or not.
     """
     continuous_equilibrium = _deprecate_maxwellian_moments(continuous_equilibrium, kwargs)
     check_and_set_mrt_space(CollisionSpace.RAW_MOMENTS)
@@ -511,7 +515,8 @@ def create_mrt_orthogonal(stencil, relaxation_rates, continuous_equilibrium=True
         nested_moments[2] = shear_moments
         nested_moments.insert(3, bulk_moment)
 
-    moment_to_relaxation_rate_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments, stencil.D)
+    moment_to_relaxation_rate_dict = _get_relaxation_info_dict(relaxation_rates, nested_moments,
+                                                               stencil.D, conserved_moments)
 
     if continuous_equilibrium:
         return create_with_continuous_maxwellian_equilibrium(stencil,
@@ -522,8 +527,7 @@ def create_mrt_orthogonal(stencil, relaxation_rates, continuous_equilibrium=True
 
 
 # ----------------------------------------- Cumulant method creators ---------------------------------------------------
-
-def create_cumulant(stencil, relaxation_rates, cumulant_groups, fraction_field=None, **kwargs):
+def create_cumulant(stencil, relaxation_rates, cumulant_groups, conserved_moments=True, fraction_field=None, **kwargs):
     r"""Creates a cumulant-based lattice Boltzmann method.
 
     Args:
@@ -535,12 +539,13 @@ def create_cumulant(stencil, relaxation_rates, cumulant_groups, fraction_field=N
                           that the force is applied correctly to the momentum groups
         cumulant_groups: Nested sequence of polynomial expressions defining the cumulants to be relaxed. All cumulants 
                          within one group are relaxed with the same relaxation rate.
+        conserved_moments: If lower order moments are conserved or not.
         kwargs: See :func:`create_with_continuous_maxwellian_equilibrium`
 
     Returns:
         :class:`lbmpy.methods.cumulantbased.CumulantBasedLbMethod` instance
     """
-    cumulant_to_rr_dict = _get_relaxation_info_dict(relaxation_rates, cumulant_groups, stencil.D)
+    cumulant_to_rr_dict = _get_relaxation_info_dict(relaxation_rates, cumulant_groups, stencil.D, conserved_moments)
 
     if fraction_field is not None:
         relaxation_rates_modifier = (1.0 - fraction_field.center)
@@ -557,7 +562,7 @@ def create_cumulant(stencil, relaxation_rates, cumulant_groups, fraction_field=N
                                                          **kwargs)
 
 
-def create_with_monomial_cumulants(stencil, relaxation_rates, **kwargs):
+def create_with_monomial_cumulants(stencil, relaxation_rates, conserved_moments=True, **kwargs):
     r"""Creates a cumulant lattice Boltzmann model using the given stencil's canonical monomial cumulants.
 
     Args:
@@ -567,6 +572,7 @@ def create_with_monomial_cumulants(stencil, relaxation_rates, **kwargs):
                           used for determine the viscosity of the simulation. All other cumulants are relaxed with one.
                           If a cumulant force model is provided the first order cumulants are relaxed with two to ensure
                           that the force is applied correctly to the momentum groups
+        conserved_moments: If lower order moments are conserved or not.
         kwargs: See :func:`create_cumulant`
 
     Returns:
@@ -575,10 +581,10 @@ def create_with_monomial_cumulants(stencil, relaxation_rates, **kwargs):
     # Get monomial moments
     cumulants = get_default_moment_set_for_stencil(stencil)
     cumulant_groups = [(c,) for c in cumulants]
-    return create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs)
+    return create_cumulant(stencil, relaxation_rates, cumulant_groups, conserved_moments, **kwargs)
 
 
-def create_with_default_polynomial_cumulants(stencil, relaxation_rates, **kwargs):
+def create_with_default_polynomial_cumulants(stencil, relaxation_rates, conserved_moments=True, **kwargs):
     r"""Creates a cumulant lattice Boltzmann model based on the default polynomial set of :cite:`geier2015`.
 
     Args: See :func:`create_cumulant`.
@@ -588,10 +594,11 @@ def create_with_default_polynomial_cumulants(stencil, relaxation_rates, **kwargs
     """
     # Get polynomial groups
     cumulant_groups = cascaded_moment_sets_literature(stencil)
-    return create_cumulant(stencil, relaxation_rates, cumulant_groups, **kwargs)
+    return create_cumulant(stencil, relaxation_rates, cumulant_groups, conserved_moments, **kwargs)
 
 
-def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim, relaxation_rates_modifier=None):
+def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim,
+                              conserved_moments=True, relaxation_rates_modifier=None):
     r"""Creates a dictionary where each moment is mapped to a relaxation rate.
 
     Args:
@@ -601,6 +608,7 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim, relaxation_
                           in the moment group.
         nested_moments: list of lists containing the moments.
         dim: dimension
+        conserved_moments: If lower order moments are conserved or not.
     """
     result = OrderedDict()
 
@@ -630,12 +638,18 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim, relaxation_
     if len(relaxation_rates) == 1:
         for group in nested_moments:
             for moment in group:
-                if get_order(moment) <= 1:
-                    result[moment] = 0.0
-                elif is_shear_moment(moment, dim):
-                    result[moment] = relaxation_rates[0]
+                if conserved_moments:
+                    if get_order(moment) <= 1:
+                        result[moment] = 0.0
+                    elif is_shear_moment(moment, dim):
+                        result[moment] = relaxation_rates[0]
+                    else:
+                        result[moment] = 1.0
                 else:
-                    result[moment] = 1.0
+                    if is_shear_moment(moment, dim) or get_order(moment) <= 1:
+                        result[moment] = relaxation_rates[0]
+                    else:
+                        result[moment] = 1.0
 
     # if relaxation rate for each moment is specified they are all used
     if len(relaxation_rates) == number_of_moments:
@@ -659,15 +673,25 @@ def _get_relaxation_info_dict(relaxation_rates, nested_moments, dim, relaxation_
                     rr = next(rr_iter)
                 next_rr = False
                 for moment in group:
-                    if get_order(moment) <= 1:
-                        result[moment] = 0.0
-                    elif is_shear_moment(moment, dim):
-                        result[moment] = shear_rr
-                    elif is_bulk_moment(moment, dim):
-                        result[moment] = bulk_rr
+                    if conserved_moments:
+                        if get_order(moment) <= 1:
+                            result[moment] = 0.0
+                        elif is_shear_moment(moment, dim):
+                            result[moment] = shear_rr
+                        elif is_bulk_moment(moment, dim):
+                            result[moment] = bulk_rr
+                        else:
+                            next_rr = True
+                            result[moment] = rr
                     else:
-                        next_rr = True
-                        result[moment] = rr
+                        if is_shear_moment(moment, dim) or get_order(moment) <= 1:
+                            result[moment] = shear_rr
+                        elif is_bulk_moment(moment, dim):
+                            result[moment] = bulk_rr
+                        else:
+                            next_rr = True
+                            result[moment] = rr
+
         except StopIteration:
             raise ValueError("Not enough relaxation rates are specified. You can either specify one relaxation rate, "
                              "which is used as the shear relaxation rate. In this case, conserved moments are "
