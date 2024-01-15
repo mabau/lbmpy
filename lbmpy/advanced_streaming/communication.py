@@ -1,7 +1,7 @@
 import itertools
 from pystencils import CreateKernelConfig, Field, Assignment, AssignmentCollection
 from pystencils.slicing import shift_slice, get_slice_before_ghost_layer, normalize_slice
-from lbmpy.advanced_streaming.utility import is_inplace, get_accessor, numeric_index,\
+from lbmpy.advanced_streaming.utility import is_inplace, get_accessor, numeric_index, \
     Timestep, get_timesteps, numeric_offsets
 from pystencils.datahandling import SerialDataHandling
 from pystencils.enums import Target

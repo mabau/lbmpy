@@ -163,7 +163,7 @@ ubuntu:
     - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
     - env
     - pip3 list
-    - pytest-3 -v -n $NUM_CORES -m "not longrun" --junitxml=report.xml
+    - pytest -v -n $NUM_CORES -m "not longrun" --junitxml=report.xml
   tags:
     - docker
     - cuda11
