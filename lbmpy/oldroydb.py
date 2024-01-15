@@ -118,7 +118,7 @@ class Flux(Boundary):
         return hash((Flux, self.stencil, self.value))
 
     def __eq__(self, other):
-        return type(other) == Flux and other.stencil == self.stencil and self.value == other.value
+        return type(other) is Flux and other.stencil == self.stencil and self.value == other.value
 
 
 class Extrapolation(Boundary):
@@ -169,7 +169,7 @@ class Extrapolation(Boundary):
         return hash((Extrapolation, self.stencil, self.src, self.weights))
 
     def __eq__(self, other):
-        return type(other) == Extrapolation and other.stencil == self.stencil and \
+        return type(other) is Extrapolation and other.stencil == self.stencil and \
             other.src == self.src and other.weights == self.weights
 
 
@@ -205,5 +205,5 @@ class ForceOnBoundary(Boundary):
         return hash((ForceOnBoundary, self.stencil, self.force_field))
 
     def __eq__(self, other):
-        return type(other) == ForceOnBoundary and other.stencil == self.stencil and \
+        return type(other) is ForceOnBoundary and other.stencil == self.stencil and \
             other.force_field == self.force_field
