@@ -2,4 +2,4 @@
 max-line-length=120
 exclude=lbmpy/plot.py
         lbmpy/session.py
-ignore = W293 W503 W291 E741
+ignore = W293 W503 W291 C901 E741

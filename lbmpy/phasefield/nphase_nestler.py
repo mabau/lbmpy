@@ -4,10 +4,7 @@ try:
     pyximport.install(language_level=3)
     from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
 except ImportError:
-    try:
-        from lbmpy.phasefield.simplex_projection import simplex_projection_2d  # NOQA
-    except ImportError:
-        raise ImportError("neither pyximport nor binary module simplex_projection_2d available.")
+    raise ImportError("pyximport not available. Please install Cython to use simplex_projection_2d.")
 
 import sympy as sp
 
