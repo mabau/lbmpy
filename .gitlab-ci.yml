@@ -68,7 +68,7 @@ minimal-conda:
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
   script:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
-    - python setup.py quicktest
+    - python quicktest.py
   tags:
     - docker
 
@@ -140,7 +140,7 @@ minimal-sympy-master:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - python -m pip install --upgrade git+https://github.com/sympy/sympy.git
     - pip list
-    - python setup.py quicktest
+    - python quicktest.py
   allow_failure: true
   tags:
     - docker
