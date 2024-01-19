@@ -97,9 +97,13 @@ class LbBoundary(abc.ABC):
 
 
 class NoSlip(LbBoundary):
-    """
+    r"""
     No-Slip, (half-way) simple bounce back boundary condition, enforcing zero velocity at obstacle.
-    Extended for use with any streaming pattern.
+    Populations leaving the boundary node :math:`\mathbf{x}_b` at time :math:`t` are reflected
+    back with :math:`\mathbf{c}_{\overline{i}} = -\mathbf{c}_{i}`
+
+    .. math ::
+        f_{\overline{i}}(\mathbf{x}_b, t + \Delta t) = f^{\star}_{i}(\mathbf{x}_b, t)
 
     Args:
         name: optional name of the boundary.
@@ -445,12 +449,21 @@ class FreeSlip(LbBoundary):
 
 
 class UBB(LbBoundary):
-    """Velocity bounce back boundary condition, enforcing specified velocity at obstacle
+    r"""Velocity bounce back boundary condition, enforcing specified velocity at obstacle. Furthermore, a density
+        at the wall can be implied. The boundary condition is implemented with the following formula:
+
+    .. math ::
+        f_{\overline{i}}(\mathbf{x}_b, t + \Delta t) = f^{\star}_{i}(\mathbf{x}_b, t) -
+        2 w_{i} \rho_{w} \frac{\mathbf{c}_i \cdot \mathbf{u}_w}{c_s^2}
+
 
     Args:
-        velocity: can either be a constant, an access into a field, or a callback function.
-                  The callback functions gets a numpy record array with members, 'x','y','z', 'dir' (direction)
-                  and 'velocity' which has to be set to the desired velocity of the corresponding link
+        velocity: Prescribe the fluid velocity :math:`\mathbf{u}_w` at the wall.
+                  Can either be a constant, an access into a field, or a callback function.
+                  The callback functions gets a numpy record array with members, ``x``, ``y``, ``z``, ``dir``
+                  (direction) and ``velocity`` which has to be set to the desired velocity of the corresponding link
+        density: Prescribe the fluid density :math:`\rho_{w}` at the wall. If not prescribed the density is
+                 calculated from the PDFs at the wall. The density can only be set constant.
         adapt_velocity_to_force: adapts the velocity to the correct equilibrium when the lattice Boltzmann method holds
                                  a forcing term. If no forcing term is set and adapt_velocity_to_force is set to True
                                  it has no effect.
@@ -458,8 +471,9 @@ class UBB(LbBoundary):
         name: optional name of the boundary.
     """
 
-    def __init__(self, velocity, adapt_velocity_to_force=False, dim=None, name=None, data_type='double'):
+    def __init__(self, velocity, density=None, adapt_velocity_to_force=False, dim=None, name=None, data_type='double'):
         self._velocity = velocity
+        self._density = density
         self._adaptVelocityToForce = adapt_velocity_to_force
         if callable(self._velocity) and not dim:
             raise ValueError("When using a velocity callback the dimension has to be specified with the dim parameter")
@@ -539,7 +553,10 @@ class UBB(LbBoundary):
             pdf_field_accesses = [f_out(i) for i in range(len(lb_method.stencil))]
             density_equations = cqc.output_equations_from_pdfs(pdf_field_accesses, {'density': density_symbol})
             density_symbol = lb_method.conserved_quantity_computation.density_symbol
-            result = density_equations.all_assignments
+            if self._density:
+                result = [Assignment(density_symbol, self._density)]
+            else:
+                result = density_equations.all_assignments
             result += [Assignment(f_in(inv_dir[dir_symbol]),
                                   f_out(dir_symbol) - vel_term * density_symbol)]
             return result
@@ -752,7 +769,12 @@ class ExtrapolationOutflow(LbBoundary):
 
 
 class FixedDensity(LbBoundary):
-    """Boundary condition that fixes the density/pressure at the obstacle.
+    r"""Boundary condition for prescribing a density at the wall. Through :math:`p = c_s^2 \rho` this boundary condition
+        can also function as a pressure boundary condition.
+
+    .. math ::
+        f_{\overline{i}}(\mathbf{x}_b, t + \Delta t) = - f^{\star}_{i}(\mathbf{x}_b, t) +
+        2 w_{i} \rho_{w} (1 + \frac{(\mathbf{c}_i \cdot \mathbf{u}_w)^2}{2c_s^4} + \frac{\mathbf{u}_w^2}{2c_s^2})
 
     Args:
         density: value of the density which should be set.
@@ -812,8 +834,9 @@ class DiffusionDirichlet(LbBoundary):
 
     Args:
         concentration: can either be a constant, an access into a field, or a callback function.
-                       The callback functions gets a numpy record array with members, 'x','y','z', 'dir' (direction)
-                       and 'concentration' which has to be set to the desired velocity of the corresponding link
+                       The callback functions gets a numpy record array with members, ``x``, ``y``, ``z``, ``dir``
+                       (direction) and ``concentration`` which has to be set to the desired
+                       velocity of the corresponding link
         velocity_field: if velocity field is given the boundary value is approximated by using the discrete equilibrium.
         name: optional name of the boundary.
         data_type: data type of the concentration value. default is double
