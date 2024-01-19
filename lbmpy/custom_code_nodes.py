@@ -64,16 +64,11 @@ class MirroredStencilDirections(CustomCodeNode):
 class LbmWeightInfo(CustomCodeNode):
     def __init__(self, lb_method, data_type='double'):
         self.weights_symbol = TypedSymbol("weights", data_type)
-        data_type_string = "double" if self.weights_symbol.dtype.numpy_dtype == np.float64 else "float"
 
-        weights = [str(w.evalf(17)) for w in lb_method.weights]
-        if data_type_string == "float":
-            weights = "f, ".join(weights)
-            weights += "f"  # suffix for the last element
-        else:
-            weights = ", ".join(weights)
+        weights = [f"(({self.weights_symbol.dtype.c_name})({str(w.evalf(17))}))" for w in lb_method.weights]
+        weights = ", ".join(weights)
         w_sym = self.weights_symbol
-        code = f"const {data_type_string} {w_sym.name} [] = {{{ weights }}};\n"
+        code = f"const {self.weights_symbol.dtype.c_name} {w_sym.name} [] = {{{ weights }}};\n"
         super(LbmWeightInfo, self).__init__(code, symbols_read=set(), symbols_defined={w_sym})
 
     def weight_of_direction(self, dir_idx, lb_method=None):

@@ -1,6 +1,6 @@
-*******************************************
-Methods and Method Creation (lbmpy.methods)
-*******************************************
+********************************
+Collision models (lbmpy.methods)
+********************************
 
 This module defines the classes defining all types of lattice Boltzmann methods available in *lbmpy*,
 together with a set of factory functions used to create their instances. The factory functions are
@@ -21,21 +21,6 @@ Abstract LB Method Base Class
 
 .. autoclass:: lbmpy.methods.AbstractLbMethod
     :members:
-
-
-Conserved Quantity Computation
-==============================
-
-The classes of the conserved quantity computation (CQC) submodule define an LB Method's conserved quantities and
-the equations to compute them. For hydrodynamic methods, :class:`lbmpy.methods.DensityVelocityComputation` is
-the typical choice. For custom methods, however, a custom CQC class might have to be created.
-
-.. autoclass:: lbmpy.methods.AbstractConservedQuantityComputation
-    :members:
-
-.. autoclass:: lbmpy.methods.DensityVelocityComputation
-    :members:
-
 
 .. _methods_rawmomentbased:
 
@@ -163,3 +148,17 @@ Low-Level Creation Functions
 .. autofunction:: lbmpy.methods.creationfunctions.create_with_continuous_maxwellian_equilibrium
 
 .. autofunction:: lbmpy.methods.creationfunctions.create_from_equilibrium
+
+
+Conserved Quantity Computation
+==============================
+
+The classes of the conserved quantity computation (CQC) submodule define an LB Method's conserved quantities and
+the equations to compute them. For hydrodynamic methods, :class:`lbmpy.methods.DensityVelocityComputation` is
+the typical choice. For custom methods, however, a custom CQC class might have to be created.
+
+.. autoclass:: lbmpy.methods.AbstractConservedQuantityComputation
+    :members:
+
+.. autoclass:: lbmpy.methods.DensityVelocityComputation
+    :members:

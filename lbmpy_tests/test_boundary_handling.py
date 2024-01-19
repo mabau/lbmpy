@@ -45,7 +45,7 @@ def test_simple(target):
     bh = LatticeBoltzmannBoundaryHandling(lb_func.method, dh, 'pdfs', target=target)
 
     wall = NoSlip()
-    moving_wall = UBB((1, 0))
+    moving_wall = UBB((1, 0), density=1.0)
     bh.set_boundary(wall, make_slice[0, :])
     bh.set_boundary(wall, make_slice[-1, :])
     bh.set_boundary(wall, make_slice[:, 0])
