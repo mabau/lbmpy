@@ -42,36 +42,35 @@ def add_path_to_ignore(path):
 
 collect_ignore = [os.path.join(SCRIPT_FOLDER, "doc", "conf.py"),
                   os.path.join(SCRIPT_FOLDER, "doc", "img", "mb_discretization", "maxwell_boltzmann_stencil_plot.py")]
-add_path_to_ignore('pystencils_tests/benchmark')
 add_path_to_ignore('_local_tmp')
 
 try:
     import cupy
 except ImportError:
-    collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_cpu_gpu_equivalence.py")]
+    collect_ignore += [os.path.join(SCRIPT_FOLDER, "tests/test_cpu_gpu_equivalence.py")]
 
 try:
     import waLBerla
 except ImportError:
-    collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_datahandling_parallel.py")]
+    collect_ignore += [os.path.join(SCRIPT_FOLDER, "tests/test_datahandling_parallel.py")]
 
 try:
     import blitzdb
 except ImportError:
-    collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/benchmark"),
+    collect_ignore += [os.path.join(SCRIPT_FOLDER, "tests/benchmark"),
                        os.path.join(SCRIPT_FOLDER,
-                                    "lbmpy_tests/full_scenarios/kida_vortex_flow/scenario_kida_vortex_flow.py"),
-                       os.path.join(SCRIPT_FOLDER, "lbmpy_tests/full_scenarios/shear_wave/scenario_shear_wave.py"),
-                       os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_json_serializer.py"),
-                       os.path.join(SCRIPT_FOLDER, "lbmpy/db.py")]
+                                    "tests/full_scenarios/kida_vortex_flow/scenario_kida_vortex_flow.py"),
+                       os.path.join(SCRIPT_FOLDER, "tests/full_scenarios/shear_wave/scenario_shear_wave.py"),
+                       os.path.join(SCRIPT_FOLDER, "tests/test_json_serializer.py"),
+                       os.path.join(SCRIPT_FOLDER, "src/lbmpy/db.py")]
 
 if platform.system().lower() == 'windows':
-    collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_quicktests.py")]
+    collect_ignore += [os.path.join(SCRIPT_FOLDER, "tests/test_quicktests.py")]
 
 sver = sympy.__version__.split(".")
 if int(sver[0]) == 1 and int(sver[1]) < 2:
-    add_path_to_ignore('lbmpy_tests/phasefield')
-    collect_ignore += [os.path.join(SCRIPT_FOLDER, "lbmpy_tests/test_n_phase_boyer_noncoupled.ipynb")]
+    add_path_to_ignore('tests/phasefield')
+    collect_ignore += [os.path.join(SCRIPT_FOLDER, "tests/test_n_phase_boyer_noncoupled.ipynb")]
 
 collect_ignore += [os.path.join(SCRIPT_FOLDER, 'setup.py')]
 

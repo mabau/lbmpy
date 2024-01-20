@@ -5,11 +5,11 @@ import pystencils as ps
 from lbmpy.enums import ForceModel, Method, Stencil
 from lbmpy.scenarios import create_lid_driven_cavity
 
-from lbmpy_tests.poiseuille import poiseuille_channel
+from . import poiseuille
 
 
 def test_poiseuille_channel_quicktest():
-    poiseuille_channel(target=ps.Target.CPU, stencil_name=Stencil.D2Q9)
+    poiseuille.poiseuille_channel(target=ps.Target.CPU, stencil_name=Stencil.D2Q9)
 
 
 def test_entropic_methods():

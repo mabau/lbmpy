@@ -68,6 +68,7 @@ minimal-conda:
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
   script:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
+    - pip install -e .
     - python quicktest.py
   tags:
     - docker
@@ -80,7 +81,7 @@ flake8-lint:
       - $ENABLE_NIGHTLY_BUILDS
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
-    - flake8 lbmpy
+    - flake8 src/lbmpy
   tags:
     - docker
     - cuda11
@@ -136,6 +137,8 @@ minimal-sympy-master:
     variables:
       - $ENABLE_NIGHTLY_BUILDS
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
+  before_script:
+    - pip install -e .
   script:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
     - python -m pip install --upgrade git+https://github.com/sympy/sympy.git
@@ -212,6 +215,8 @@ pycodegen-integration:
 build-documentation:
   stage: test
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/documentation
+  before_script:
+    - pip install -e .
   script:
     - export PYTHONPATH=`pwd`
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils

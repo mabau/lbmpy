@@ -1,0 +1,1 @@
+{"indexes": {"simulationresult": {"pk": {"key": "pk", "id": "76f7f2660bd4475b90697716ef655a46"}}}, "store_class": "transactional", "index_class": "transactional", "index_store_class": "basic", "serializer_class": "json", "autocommit": false, "version": "0.2.12"}
