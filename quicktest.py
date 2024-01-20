@@ -2,7 +2,7 @@
 
 from contextlib import redirect_stdout
 import io
-from lbmpy_tests.test_quicktests import (
+from tests.test_quicktests import (
     test_poiseuille_channel_quicktest,
     test_entropic_methods,
     test_cumulant_ldc

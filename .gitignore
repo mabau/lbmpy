@@ -1,12 +1,12 @@
 __pycache__
 .ipynb_checkpoints
-.coverage
+.coverage*
 *.pyc
 *.vti
 /build
 /html_doc
 /dist
-/*.egg-info
+*.egg-info
 .cache
 _build
 /.idea
@@ -15,15 +15,15 @@ _local_tmp
 **/pylintrc
 *.bak
 *.tmp
-/lbmpy_tests/db
+/tests/db
 doc/bibtex.json
 /db
-/lbmpy/phasefield/simplex_projection.*.so
-/lbmpy/phasefield/simplex_projection.c
+/src/lbmpy/phasefield/simplex_projection.*.so
+/src/lbmpy/phasefield/simplex_projection.c
 
 # macOS
 **/.DS_Store
 *.uuid
 
 # benchmark database
-/lbmpy_tests/benchmark/db
+/tests/benchmark/db

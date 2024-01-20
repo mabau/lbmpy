@@ -7,7 +7,7 @@ import pytest
 from lbmpy.enums import Stencil, CollisionSpace
 
 import pystencils as ps
-from poiseuille import poiseuille_channel
+from . import poiseuille
 
 
 @pytest.mark.parametrize('target', (ps.Target.CPU, ps.Target.GPU))
@@ -21,4 +21,7 @@ def test_poiseuille_channel(target, stencil_name, zero_centered, moment_space_co
         pytest.importorskip("cupy")
 
     cspace_info = CollisionSpace.RAW_MOMENTS if moment_space_collision else CollisionSpace.POPULATIONS
-    poiseuille_channel(target=target, stencil_name=stencil_name, zero_centered=zero_centered, collision_space_info=cspace_info)
+    poiseuille.poiseuille_channel(target=target,
+                                  stencil_name=stencil_name,
+                                  zero_centered=zero_centered,
+                                  collision_space_info=cspace_info)
