@@ -6,10 +6,11 @@ from pystencils import AssignmentCollection
 
 from lbmpy.moment_transforms import (
     CentralMomentsToCumulantsByGeneratingFunc, PRE_COLLISION_MONOMIAL_CENTRAL_MOMENT,
-    PRE_COLLISION_CUMULANT, PRE_COLLISION_MONOMIAL_CUMULANT
+    PRE_COLLISION_CUMULANT
 )
 from lbmpy.methods import cascaded_moment_sets_literature
 from lbmpy.stencils import Stencil, LBStencil
+
 
 @pytest.mark.parametrize("stencil", [Stencil.D2Q9, Stencil.D3Q19])
 def test_identity(stencil):
@@ -18,7 +19,7 @@ def test_identity(stencil):
     rho = sp.Symbol('rho')
     u = sp.symbols('u_:2')
     transform = CentralMomentsToCumulantsByGeneratingFunc(stencil, polys, rho, u,
-                    post_collision_symbol_base=PRE_COLLISION_CUMULANT)
+                                                          post_collision_symbol_base=PRE_COLLISION_CUMULANT)
 
     forward_eqs = transform.forward_transform()
     backward_eqs = transform.backward_transform(central_moment_base=PRE_COLLISION_MONOMIAL_CENTRAL_MOMENT)

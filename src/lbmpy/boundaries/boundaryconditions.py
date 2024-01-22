@@ -244,12 +244,12 @@ class QuadraticBounceBack(LbBoundary):
         return [LbmWeightInfo(lb_method, self.data_type), inverse_dir_node, NeighbourOffsetArrays(lb_method.stencil)]
 
     @staticmethod
-    def get_equilibrium(v, u, rho, drho, weight, compressible, deviation_only):
+    def get_equilibrium(v, u, rho, drho, weight, compressible, zero_centered):
         rho_background = sp.Integer(1)
 
         result = discrete_equilibrium(v, u, rho, weight,
                                       order=2, c_s_sq=sp.Rational(1, 3), compressible=compressible)
-        if deviation_only:
+        if zero_centered:
             shift = discrete_equilibrium(v, [0] * len(u), rho_background, weight,
                                          order=0, c_s_sq=sp.Rational(1, 3), compressible=False)
             result = simplify_by_equality(result - shift, rho, drho, rho_background)
@@ -257,6 +257,7 @@ class QuadraticBounceBack(LbBoundary):
         return result
 
     def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        omega = self.relaxation_rate
         inv = sp.IndexedBase(self.inv_dir_symbol, shape=(1,))[dir_symbol]
         weight_info = LbmWeightInfo(lb_method, data_type=self.data_type)
         weight_of_direction = weight_info.weight_of_direction
@@ -272,7 +273,7 @@ class QuadraticBounceBack(LbBoundary):
         v = [TypedSymbol(f"c_{i}", self.data_type) for i in range(lb_method.stencil.D)]
         v_inv = [TypedSymbol(f"c_inv_{i}", self.data_type) for i in range(lb_method.stencil.D)]
         one = sp.Float(1.0)
-        two = sp.Float(2.0)
+        half = sp.Rational(1, 2)
 
         subexpressions = [Assignment(pdf_symbols[i], pdf) for i, pdf in enumerate(pdf_field_accesses)]
         subexpressions.append(Assignment(f_xf, f_out(dir_symbol)))
@@ -294,24 +295,19 @@ class QuadraticBounceBack(LbBoundary):
         drho = cqc.density_deviation_symbol
         u = sp.Matrix(cqc.velocity_symbols)
         compressible = cqc.compressible
-        deviation_only = lb_method.equilibrium_distribution.deviation_only
+        zero_centered = cqc.zero_centered_pdfs
 
         cqe = cqc.equilibrium_input_equations_from_pdfs(pdf_symbols, False)
         subexpressions.append(cqe.all_assignments)
 
-        eq_dir = self.get_equilibrium(v, u, rho, drho, weight, compressible, deviation_only)
-        eq_inv = self.get_equilibrium(v_inv, u, rho, drho, weight_inv, compressible, deviation_only)
+        eq_dir = self.get_equilibrium(v, u, rho, drho, weight, compressible, zero_centered)
+        eq_inv = self.get_equilibrium(v_inv, u, rho, drho, weight_inv, compressible, zero_centered)
 
         subexpressions.append(Assignment(feq, eq_dir + eq_inv))
 
-        # equation E.4 first summand
-        e41 = (f_xf_inv - f_xf) / two
-        # equation E.4 second summand
-        e42 = (f_xf_inv + f_xf - self.relaxation_rate * feq) / (two - two * self.relaxation_rate)
-        # equation E.3
-        fw = ((one - q) * (e41 + e42)) + q * f_xf_inv
-        # equation E.1
-        result = (one / (q + one)) * fw + (q / (q + one)) * f_xf
+        t1 = (f_xf - f_xf_inv + (f_xf + f_xf_inv - feq * omega) / (one - omega))
+        t2 = (q * (f_xf + f_xf_inv)) / (one + q)
+        result = (one - q) / (one + q) * t1 * half + t2
 
         boundary_assignments = [Assignment(f_in(inv_dir[dir_symbol]), result)]
         return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
