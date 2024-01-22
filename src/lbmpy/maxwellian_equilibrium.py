@@ -85,7 +85,7 @@ def discrete_maxwellian_equilibrium(stencil, rho=sp.Symbol("rho"), u=sp.symbols(
 def discrete_equilibrium(v=sp.symbols("v_:3"), u=sp.symbols("u_:3"), rho=sp.Symbol("rho"), weight=sp.Symbol("w"),
                          order=2, c_s_sq=sp.Symbol("c_s") ** 2, compressible=True):
     """
-    Returns the common discrete LBM equilibrium as a list of sympy expressions
+    Returns the common discrete LBM equilibrium depending on the mesoscopic velocity and the directional lattice weight
 
     Args:
         v: symbols for mesoscopic velocity
