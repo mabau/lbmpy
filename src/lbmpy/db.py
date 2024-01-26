@@ -4,7 +4,7 @@ import inspect
 
 from pystencils.runhelper.db import PystencilsJsonEncoder
 from pystencils.simp import SimplificationStrategy
-from lbmpy import LBStencil, Method, CollisionSpace
+from lbmpy import LBStencil, Method, CollisionSpace, SubgridScaleModel
 from lbmpy.creationfunctions import LBMConfig, LBMOptimisation
 from lbmpy.methods import CollisionSpaceInfo
 from lbmpy.forcemodels import AbstractForceModel
@@ -16,7 +16,7 @@ class LbmpyJsonEncoder(PystencilsJsonEncoder):
     def default(self, obj):
         if isinstance(obj, (LBMConfig, LBMOptimisation, CollisionSpaceInfo, CassonsParameters)):
             return obj.__dict__
-        if isinstance(obj, (LBStencil, Method, CollisionSpace)):
+        if isinstance(obj, (LBStencil, Method, CollisionSpace, SubgridScaleModel)):
             return obj.name
         if isinstance(obj, AbstractForceModel):
             return obj.__class__.__name__

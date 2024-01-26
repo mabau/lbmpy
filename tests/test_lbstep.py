@@ -4,6 +4,7 @@ from types import MappingProxyType
 from pystencils import Target, CreateKernelConfig
 
 from lbmpy.scenarios import create_fully_periodic_flow, create_lid_driven_cavity
+from lbmpy import SubgridScaleModel
 
 try:
     import cupy
@@ -77,7 +78,13 @@ def test_data_handling_2d():
 
 
 def test_smagorinsky_setup():
-    step = create_lid_driven_cavity((30, 30), smagorinsky=0.16, relaxation_rate=1.99)
+    step = create_lid_driven_cavity((30, 30), subgrid_scale_model=(SubgridScaleModel.SMAGORINSKY, 0.16),
+                                    relaxation_rate=1.99)
+    step.run(10)
+
+def test_qr_setup():
+    step = create_lid_driven_cavity((30, 30), subgrid_scale_model=(SubgridScaleModel.QR, 0.33),
+                                    relaxation_rate=1.99)
     step.run(10)
 
 

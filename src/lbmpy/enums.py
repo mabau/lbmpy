@@ -219,5 +219,20 @@ class ForceModel(Enum):
     """
     CENTRALMOMENT = auto()
     """
-    See :class:`lbmpy.forcemodels`
+    See :class:`lbmpy.forcemodels.CentralMoment`
+    """
+
+
+class SubgridScaleModel(Enum):
+    """
+    The SubgridScaleModel enumeration defines which subgrid-scale model (SGS) is used to perform
+    Large-Eddy-Simulations (LES).
+    """
+    SMAGORINSKY = auto()
+    """
+    See :func:`lbmpy.turbulence_models.add_smagorinsky_model`
+    """
+    QR = auto()
+    """
+    See :func:`lbmpy.turbulence_models.add_qr_model`
     """

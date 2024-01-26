@@ -20,21 +20,21 @@ and belongs to pystencils, not lbmpy. This can be found in the pystencils module
 of the generated code is specified.
 
 1. *Method*:
-         the method defines the collision process. Currently there are two big categories:
+         the method defines the collision process. Currently, there are two big categories:
          moment and cumulant based methods. A method defines how each moment or cumulant is relaxed by
          storing the equilibrium value and the relaxation rate for each moment/cumulant.
 2. *Collision/Update Rule*:
          Methods can generate a "collision rule" which is an equation collection that define the
          post collision values as a function of the pre-collision values. On these equation collection
          simplifications are applied to reduce the number of floating point operations.
-         At this stage an entropic optimization step can also be added to determine one relaxation rate by an
+         At this stage an entropic optimisation step can also be added to determine one relaxation rate by an
          entropy condition.
          Then a streaming rule is added which transforms the collision rule into an update rule.
          The streaming step depends on the pdf storage (source/destination, AABB pattern, EsoTwist).
          Currently only the simple source/destination  pattern is supported.
 3. *AST*:
         The abstract syntax tree describes the structure of the kernel, including loops and conditionals.
-        The ast can be modified e.g. to add OpenMP pragmas, reorder loops or apply other optimizations.
+        The ast can be modified, e.g., to add OpenMP pragmas, reorder loops or apply other optimisations.
 4. *Function*:
         This step compiles the AST into an executable function, either for CPU or GPUs. This function
         behaves like a normal Python function and runs one LBM time step.
@@ -63,7 +63,7 @@ import pystencils.astnodes
 import sympy as sp
 import sympy.core.numbers
 
-from lbmpy.enums import Stencil, Method, ForceModel, CollisionSpace
+from lbmpy.enums import Stencil, Method, ForceModel, CollisionSpace, SubgridScaleModel
 import lbmpy.forcemodels as forcemodels
 from lbmpy.fieldaccess import CollideOnlyInplaceAccessor, PdfFieldAccessor, PeriodicTwoFieldsAccessor
 from lbmpy.fluctuatinglb import add_fluctuations_to_collision_rule
@@ -78,7 +78,7 @@ from lbmpy.methods.momentbased.entropic import add_entropy_condition, add_iterat
 from lbmpy.relaxationrates import relaxation_rate_from_magic_number
 from lbmpy.simplificationfactory import create_simplification_strategy
 from lbmpy.stencils import LBStencil
-from lbmpy.turbulence_models import add_smagorinsky_model
+from lbmpy.turbulence_models import add_sgs_model
 from lbmpy.updatekernels import create_lbm_kernel, create_stream_pull_with_output_kernel
 from lbmpy.advanced_streaming.utility import Timestep, get_accessor
 from pystencils import CreateKernelConfig, create_kernel
@@ -145,7 +145,7 @@ class LBMConfig:
     """
     delta_equilibrium: bool = None
     """
-    Determines whether or not the (continuous or discrete, see `continuous_equilibrium`) maxwellian equilibrium is
+    Determines whether or not the (continuous or discrete, see `continuous_equilibrium`) Maxwellian equilibrium is
     expressed in its absolute form, or only by its deviation from the rest state (typically given by the reference
     density and zero velocity). This parameter is only effective if `zero_centered` is set to `True`. Then, if
     `delta_equilibrium` is `False`, the rest state must be reintroduced to the populations during collision. Otherwise,
@@ -175,7 +175,7 @@ class LBMConfig:
     """
     A list of lists of modes, grouped by common relaxation times. This is usually used in
     conjunction with `lbmpy.methods.default_moment_sets.mrt_orthogonal_modes_literature`.
-    If this argument is not provided, Gram-Schmidt orthogonalization of the default modes is performed.
+    If this argument is not provided, Gram-Schmidt orthogonalisation of the default modes is performed.
     """
 
     force_model: Union[lbmpy.forcemodels.AbstractForceModel, ForceModel] = None
@@ -239,12 +239,17 @@ class LBMConfig:
     omega_output_field: Field = None
     """
     A pystencils Field can be passed here, where the calculated free relaxation rate of
-    an entropic or Smagorinsky method is written to
+    an entropic or subgrid-scale method is written to
     """
-    smagorinsky: Union[float, bool] = False
+    eddy_viscosity_field: Field = None
     """
-    set to Smagorinsky constant to activate turbulence model, ``omega_output_field`` can be set to
-    write out adapted relaxation rates. If set to `True`, 0.12 is used as default smagorinsky constant.
+    A pystencils Field can be passed here, where the eddy-viscosity of a subgrid-scale model is written.
+    """
+    subgrid_scale_model: Union[SubgridScaleModel, tuple[SubgridScaleModel, float], tuple[SubgridScaleModel, int]] = None
+    """
+    Choose a subgrid-scale model (SGS) for large-eddy simulations. ``omega_output_field`` can be set to
+    write out adapted relaxation rates. Either provide just the SGS and use the default model constants or provide a
+    tuple of the SGS and its corresponding model constant.
     """
     cassons: CassonsParameters = False
     """
@@ -702,8 +707,8 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
                                                      limiter=cumulant_limiter)
 
     if lbm_config.entropic:
-        if lbm_config.smagorinsky or lbm_config.cassons:
-            raise ValueError("Choose either entropic, smagorinsky or cassons")
+        if lbm_config.subgrid_scale_model or lbm_config.cassons:
+            raise ValueError("Choose either entropic, subgrid-scale or cassons")
         if lbm_config.entropic_newton_iterations:
             if isinstance(lbm_config.entropic_newton_iterations, bool):
                 iterations = 3
@@ -714,14 +719,23 @@ def create_lb_collision_rule(lb_method=None, lbm_config=None, lbm_optimisation=N
         else:
             collision_rule = add_entropy_condition(collision_rule, omega_output_field=lbm_config.omega_output_field)
 
-    elif lbm_config.smagorinsky:
+    elif lbm_config.subgrid_scale_model:
         if lbm_config.cassons:
-            raise ValueError("Cassons model can not be combined with Smagorinsky model")
-        smagorinsky_constant = 0.12 if lbm_config.smagorinsky is True else lbm_config.smagorinsky
-        collision_rule = add_smagorinsky_model(collision_rule, smagorinsky_constant,
-                                               omega_output_field=lbm_config.omega_output_field)
-        if 'split_groups' in collision_rule.simplification_hints:
-            collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("smagorinsky_omega"))
+            raise ValueError("Cassons model can not be combined with a subgrid-scale model")
+
+        model_constant = None
+        sgs_model = lbm_config.subgrid_scale_model
+
+        if isinstance(lbm_config.subgrid_scale_model, tuple):
+            sgs_model = lbm_config.subgrid_scale_model[0]
+            model_constant = lbm_config.subgrid_scale_model[1]
+
+        collision_rule = add_sgs_model(collision_rule=collision_rule, subgrid_scale_model=sgs_model,
+                                       model_constant=model_constant, omega_output_field=lbm_config.omega_output_field,
+                                       eddy_viscosity_field=lbm_config.eddy_viscosity_field)
+
+    if 'split_groups' in collision_rule.simplification_hints:
+        collision_rule.simplification_hints['split_groups'][0].append(sp.Symbol("sgs_omega"))
 
     elif lbm_config.cassons:
         collision_rule = add_cassons_model(collision_rule, parameter=lbm_config.cassons,
