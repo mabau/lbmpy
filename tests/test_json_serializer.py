@@ -5,7 +5,7 @@ Test the lbmpy-specific JSON encoder and serializer as used in the Database clas
 import tempfile
 import pystencils as ps
 
-from lbmpy import Stencil, Method, ForceModel
+from lbmpy import Stencil, Method, ForceModel, SubgridScaleModel
 from lbmpy.advanced_streaming import Timestep
 from lbmpy.creationfunctions import LBMConfig, LBMOptimisation, LBStencil
 from lbmpy.fieldaccess import StreamPullTwoFieldsAccessor
@@ -26,9 +26,9 @@ def test_json_serializer():
 
     # create dummy lbmpy config
     lbm_config = LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=Method.CUMULANT, force_model=ForceModel.GUO,
-                           compressible=True, relaxation_rate=1.999, smagorinsky=True, galilean_correction=True,
-                           cassons=cassons_params, density_input=density, kernel_type=StreamPullTwoFieldsAccessor,
-                           timestep=Timestep.BOTH)
+                           compressible=True, relaxation_rate=1.999, subgrid_scale_model=SubgridScaleModel.SMAGORINSKY,
+                           galilean_correction=True, cassons=cassons_params, density_input=density,
+                           kernel_type=StreamPullTwoFieldsAccessor, timestep=Timestep.BOTH)
 
     lbm_optimization = LBMOptimisation(cse_pdfs=False, cse_global=False, builtin_periodicity=(True, False, False),
                                        symbolic_field=pdfs, symbolic_temporary_field=pdfs_tmp)

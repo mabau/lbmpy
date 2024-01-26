@@ -7,7 +7,7 @@ from .creationfunctions import (
     LBMConfig,
     LBMOptimisation,
 )
-from .enums import Stencil, Method, ForceModel, CollisionSpace
+from .enums import Stencil, Method, ForceModel, CollisionSpace, SubgridScaleModel
 from .lbstep import LatticeBoltzmannStep
 from .macroscopic_value_kernels import (
     pdf_initialization_assignments,
@@ -38,6 +38,7 @@ __all__ = [
     "Method",
     "ForceModel",
     "CollisionSpace",
+    "SubgridScaleModel",
     "LatticeBoltzmannStep",
     "pdf_initialization_assignments",
     "macroscopic_values_getter",
