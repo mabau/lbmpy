@@ -65,14 +65,16 @@ def welford_assignments(field, mean_field, sum_of_products_field=None):
 
     for i in range(dim):
         main_assignments.append(ps.Assignment(delta[i], welford_field.at_index(i) - welford_mean_field.at_index(i)))
-        main_assignments.append(ps.Assignment(welford_mean_field.at_index(i), welford_mean_field.at_index(i) + delta[i] / counter))
+        main_assignments.append(ps.Assignment(welford_mean_field.at_index(i),
+                                              welford_mean_field.at_index(i) + delta[i] / counter))
         main_assignments.append(ps.Assignment(delta2[i], welford_field.at_index(i) - welford_mean_field.at_index(i)))
 
     if sum_of_products_field is not None:
         for i in range(dim):
             for j in range(dim):
                 idx = i * dim + j
-                main_assignments.append(ps.Assignment(welford_sum_of_products_field.at_index(idx),
-                                                      welford_sum_of_products_field.at_index(idx) + delta[i] * delta2[j]))
+                main_assignments.append(ps.Assignment(
+                    welford_sum_of_products_field.at_index(idx),
+                    welford_sum_of_products_field.at_index(idx) + delta[i] * delta2[j]))
 
     return main_assignments
