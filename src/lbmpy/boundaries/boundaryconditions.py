@@ -509,13 +509,14 @@ class WallFunctionBounce(LbBoundary):
                 self.mean_velocity = mean_velocity
             else:
                 raise ValueError("Mean velocity field has to be a pystencils Field or Field.Access")
+        else:
+            self.mean_velocity = None
 
-        if sampling_shift:
-            if not isinstance(sampling_shift, int):
-                self.sampling_shift = TypedSymbol(sampling_shift.name, np.uint32)
-            else:
-                assert sampling_shift >= 1, "The sampling shift must be greater than 1."
-                self.sampling_shift = sampling_shift
+        if not isinstance(sampling_shift, int):
+            self.sampling_shift = TypedSymbol(sampling_shift.name, np.uint32)
+        else:
+            assert sampling_shift >= 1, "The sampling shift must be greater than 1."
+            self.sampling_shift = sampling_shift
 
         if maronga_sampling_shift:
             assert self.mean_velocity, "Mean velocity field must be provided when using the Maronga correction"

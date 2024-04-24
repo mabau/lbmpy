@@ -157,7 +157,7 @@ class MuskerLaw(ImplicitWallFunctionModel):
         def law(u_p, y_p):
             arctan = sp.Float(5.424) * sp.atan(sp.Float(0.119760479041916168) * y_p - sp.Float(0.488023952095808383))
             logarithm = (sp.Float(0.434) * sp.log((y_p + sp.Float(10.6)) ** sp.Float(9.6)
-                                                  / (y_p ** 2 - sp.Float(8.15) * y_p + sp.Float(86)) ** 2), 10)
+                                                  / (y_p ** 2 - sp.Float(8.15) * y_p + sp.Float(86)) ** 2, 10))
             return (arctan + logarithm - sp.Float(3.50727901936264842)) - u_p
 
         u_plus = velocity_symbol / self.u_tau[0]

@@ -59,7 +59,6 @@ def welford_assignments(field, mean_field, sum_of_products_field=None):
 
     counter = sp.Symbol('counter')
     delta = sp.symbols(f"delta_:{dim}")
-    delta2 = sp.symbols(f"delta2_:{dim}")
 
     main_assignments = list()
 
@@ -67,9 +66,10 @@ def welford_assignments(field, mean_field, sum_of_products_field=None):
         main_assignments.append(ps.Assignment(delta[i], welford_field.at_index(i) - welford_mean_field.at_index(i)))
         main_assignments.append(ps.Assignment(welford_mean_field.at_index(i),
                                               welford_mean_field.at_index(i) + delta[i] / counter))
-        main_assignments.append(ps.Assignment(delta2[i], welford_field.at_index(i) - welford_mean_field.at_index(i)))
 
     if sum_of_products_field is not None:
+        delta2 = sp.symbols(f"delta2_:{dim}")
+        main_assignments.append(ps.Assignment(delta2[i], welford_field.at_index(i) - welford_mean_field.at_index(i)))
         for i in range(dim):
             for j in range(dim):
                 idx = i * dim + j
