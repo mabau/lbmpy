@@ -49,6 +49,9 @@ class LatticeBoltzmannStep:
                                                  default_target=target,
                                                  parallel=False)
 
+        if lbm_config:
+            method_parameters['stencil'] = lbm_config.stencil
+
         if 'stencil' not in method_parameters:
             method_parameters['stencil'] = LBStencil(Stencil.D2Q9) \
                 if data_handling.dim == 2 else LBStencil(Stencil.D3Q27)

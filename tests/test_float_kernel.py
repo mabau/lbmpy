@@ -3,8 +3,9 @@ import pytest
 import pystencils as ps
 
 from lbmpy.creationfunctions import create_lb_function, LBMConfig
-from lbmpy.enums import Method
+from lbmpy.enums import Method, Stencil
 from lbmpy.scenarios import create_lid_driven_cavity
+from lbmpy.stencils import LBStencil
 
 
 @pytest.mark.parametrize('double_precision', [False, True])
@@ -28,7 +29,8 @@ def test_creation(double_precision, method_enum):
 @pytest.mark.parametrize('double_precision', [False, True])
 @pytest.mark.parametrize('method_enum', [Method.SRT, Method.CENTRAL_MOMENT, Method.CUMULANT])
 def test_scenario(method_enum, double_precision):
-    lbm_config = LBMConfig(method=method_enum, relaxation_rate=1.45, compressible=True)
+    lbm_config = LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=method_enum,
+                           relaxation_rate=1.45, compressible=True)
     config = ps.CreateKernelConfig(data_type="float64" if double_precision else "float32",
                                    default_number_float="float64" if double_precision else "float32")
     sc = create_lid_driven_cavity((16, 16, 8), lbm_config=lbm_config, config=config)

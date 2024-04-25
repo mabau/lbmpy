@@ -5,8 +5,9 @@ import pytest
 from pystencils import Backend, Target, CreateKernelConfig
 
 from lbmpy.creationfunctions import LBMConfig, LBMOptimisation
+from lbmpy.enums import Method, Stencil
 from lbmpy.scenarios import create_channel
-from lbmpy.enums import Method
+from lbmpy.stencils import LBStencil
 
 
 def run_equivalence_test(domain_size, lbm_config, lbm_opt, config, time_steps=13):
@@ -33,12 +34,14 @@ def run_equivalence_test(domain_size, lbm_config, lbm_opt, config, time_steps=13
 def test_force_driven_channel_short(scenario):
     pytest.importorskip("cupy")
     ds = scenario[0]
+    stencil = LBStencil(Stencil.D2Q9) if len(ds) == 2 else LBStencil(Stencil.D3Q27)
     method = scenario[1]
     compressible = scenario[2]
     block_size = scenario[3]
     field_layout = scenario[4]
 
-    lbm_config = LBMConfig(method=method, compressible=compressible, relaxation_rates=[1.95, 1.9, 1.92, 1.92])
+    lbm_config = LBMConfig(stencil=stencil, method=method,
+                           compressible=compressible, relaxation_rates=[1.95, 1.9, 1.92, 1.92])
     lbm_opt = LBMOptimisation(field_layout=field_layout)
 
     # Different methods
