@@ -1,4 +1,5 @@
 import abc
+from enum import Enum, auto
 from warnings import warn
 
 from pystencils import Assignment, Field
@@ -14,6 +15,7 @@ from lbmpy.maxwellian_equilibrium import discrete_equilibrium
 from lbmpy.simplificationfactory import create_simplification_strategy
 
 import sympy as sp
+import numpy as np
 
 
 class LbBoundary(abc.ABC):
@@ -442,6 +444,241 @@ class FreeSlip(LbBoundary):
 
 
 # end class FreeSlip
+
+
+class WallFunctionBounce(LbBoundary):
+    """
+    Wall function based on the bounce back idea, cf. :cite:`Han2021`. Its implementation is extended to the D3Q27
+    stencil, whereas different weights of the drag distribution are proposed.
+
+    Args:
+        lb_method: LB method which is used for the simulation
+        pdfs: Symbolic representation of the particle distribution functions.
+        normal_direction: Normal direction of the wall. Currently, only straight and axis-aligned walls are supported.
+        wall_function_model: Wall function that is used to retrieve the wall stress :math:`tau_w` during the simulation.
+                             See :class:`lbmpy.boundaries.wall_treatment.WallFunctionModel` for more details
+        mean_velocity: Optional field or field access for the mean velocity. As wall functions are typically defined
+                       in terms of the mean velocity, it is recommended to provide this variable. Per default, the
+                       instantaneous velocity obtained from pdfs is used for the wall function.
+        sampling_shift: Optional sampling shift for the velocity sampling. Can be provided as symbolic variable or
+                        integer. In both cases, the user must assure that the sampling shift is at least 1, as sampling
+                        in boundary cells is not physical. Per default, a sampling shift of 1 is employed which
+                        corresponds to a sampling in the first fluid cell normal to the wall. For lower friction
+                        Reynolds numbers, choosing a sampling shift >1 has shown to improve the results for higher
+                        resolutions.
+                        Mutually exclusive with the Maronga sampling shift.
+        maronga_sampling_shift: Optionally, apply a correction factor to the wall shear stress proposed by Maronga et
+                                al. :cite:`Maronga2020`. Has only been tested and validated for the MOST wall function.
+                                No guarantee is given that it also works with other wall functions.
+                                Mutually exclusive with the standard sampling shift.
+        dt: time discretisation. Usually one in LB units
+        dy: space discretisation. Usually one in LB units
+        y: distance from the wall
+        target_friction_velocity: A target friction velocity can be given if an estimate is known a priori. This target
+                                  friction velocity will be used as initial guess for implicit wall functions to ensure
+                                  convergence of the Newton algorithm.
+        weight_method: The extension of the WFB to a D3Q27 stencil is non-unique. Different weights can be chosen to
+                       define the drag distribution onto the pdfs. Per default, weights corresponding to the weights
+                       in the D3Q27 stencil are chosen.
+        name: Optional name of the boundary.
+        data_type: Floating-point precision. Per default, double.
+    """
+
+    class WeightMethod(Enum):
+        LATTICE_WEIGHT = auto(),
+        GEOMETRIC_WEIGHT = auto()
+
+    def __init__(self, lb_method, pdfs, normal_direction, wall_function_model,
+                 mean_velocity=None, sampling_shift=1, maronga_sampling_shift=None,
+                 dt=1, dy=1, y=0.5,
+                 target_friction_velocity=None,
+                 weight_method=WeightMethod.LATTICE_WEIGHT,
+                 name=None, data_type='double'):
+        """Set an optional name here, to mark boundaries, for example for force evaluations"""
+        self.stencil = lb_method.stencil
+        if not (self.stencil.Q == 19 or self.stencil.Q == 27):
+            raise ValueError("WFB boundary is currently only defined for D3Q19 and D3Q27 stencils.")
+        self.pdfs = pdfs
+
+        self.wall_function_model = wall_function_model
+
+        if mean_velocity:
+            if isinstance(mean_velocity, Field):
+                self.mean_velocity = mean_velocity.center_vector
+            elif isinstance(mean_velocity, Field.Access):
+                self.mean_velocity = mean_velocity.field.neighbor_vector(mean_velocity.offsets)
+            else:
+                raise ValueError("Mean velocity field has to be a pystencils Field or Field.Access")
+        else:
+            self.mean_velocity = None
+
+        if not isinstance(sampling_shift, int):
+            self.sampling_shift = TypedSymbol(sampling_shift.name, np.uint32)
+        else:
+            assert sampling_shift >= 1, "The sampling shift must be greater than 1."
+            self.sampling_shift = sampling_shift
+
+        if maronga_sampling_shift:
+            assert self.mean_velocity, "Mean velocity field must be provided when using the Maronga correction"
+            if not isinstance(maronga_sampling_shift, int):
+                self.maronga_sampling_shift = TypedSymbol(maronga_sampling_shift.name, np.uint32)
+            else:
+                assert maronga_sampling_shift >= 1, "The Maronga sampling shift must be greater than 1."
+                self.maronga_sampling_shift = maronga_sampling_shift
+        else:
+            self.maronga_sampling_shift = None
+
+        if (self.sampling_shift != 1) and self.maronga_sampling_shift:
+            raise ValueError("Both sampling shift and Maronga offset are set. This is currently not supported.")
+
+        self.dt = dt
+        self.dy = dy
+        self.y = y
+        self.data_type = data_type
+
+        self.target_friction_velocity = target_friction_velocity
+
+        self.weight_method = weight_method
+
+        if len(normal_direction) - normal_direction.count(0) != 1:
+            raise ValueError("Only normal directions for straight walls are supported for example (0, 1, 0) for "
+                             "a WallFunctionBounce applied to the southern boundary of the domain")
+
+        self.mirror_axis = normal_direction.index(*[direction for direction in normal_direction if direction != 0])
+
+        self.normal_direction = normal_direction
+        assert all([n in [-1, 0, 1] for n in self.normal_direction]), \
+            "Only -1, 0 and 1 allowed for defining the normal direction"
+        tangential_component = [int(not n) for n in self.normal_direction]
+        self.normal_axis = tangential_component.index(0)
+        self.tangential_axis = [0, 1, 2]
+        self.tangential_axis.remove(self.normal_axis)
+
+        self.dim = self.stencil.D
+
+        if name is None:
+            name = f"WFB : {offset_to_direction_string([-x for x in normal_direction])}"
+
+        super(WallFunctionBounce, self).__init__(name)
+
+    def get_additional_code_nodes(self, lb_method):
+        return [MirroredStencilDirections(self.stencil, self.mirror_axis),
+                NeighbourOffsetArrays(lb_method.stencil)]
+
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+        # needed symbols for offsets and indices
+        # neighbour offset symbols are basically the stencil directions defined in stencils.py:L130ff.
+        neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+        tangential_offset = tuple(offset + normal for offset, normal in zip(neighbor_offset, self.normal_direction))
+        mirrored_stencil_symbol = MirroredStencilDirections._mirrored_symbol(self.mirror_axis)
+        mirrored_direction = inv_dir[sp.IndexedBase(mirrored_stencil_symbol, shape=(1,))[dir_symbol]]
+
+        name_base = "f_in_inv_offsets_"
+        offset_array_symbols = [TypedSymbol(name_base + d, mirrored_stencil_symbol.dtype) for d in ['x', 'y', 'z']]
+        mirrored_offset = sp.IndexedBase(mirrored_stencil_symbol, shape=(1,))[dir_symbol]
+        offsets = tuple(sp.IndexedBase(s, shape=(1,))[mirrored_offset] for s in offset_array_symbols)
+
+        # needed symbols in the Assignments
+        u_m = sp.Symbol("u_m")
+        tau_w = sp.Symbol("tau_w")
+        wall_stress = sp.symbols("tau_w_x tau_w_y tau_w_z")
+
+        # if the mean velocity field is not given, or the Maronga correction is applied, density and velocity values
+        # will be calculated from pdfs
+        cqc = lb_method.conserved_quantity_computation
+
+        result = []
+        if (not self.mean_velocity) or self.maronga_sampling_shift:
+            pdf_center_vector = sp.Matrix([0] * self.stencil.Q)
+
+            for i in range(self.stencil.Q):
+                pdf_center_vector[i] = self.pdfs[offsets[0] + self.normal_direction[0],
+                                                 offsets[1] + self.normal_direction[1],
+                                                 offsets[2] + self.normal_direction[2]](i)
+
+            eq_equations = cqc.equilibrium_input_equations_from_pdfs(pdf_center_vector)
+            result.append(eq_equations.all_assignments)
+
+        # sample velocity which will be used in the wall stress calculation
+        if self.mean_velocity:
+            if self.maronga_sampling_shift:
+                u_for_tau_wall = tuple(u_mean_i.get_shifted(
+                    self.maronga_sampling_shift * self.normal_direction[0],
+                    self.maronga_sampling_shift * self.normal_direction[1],
+                    self.maronga_sampling_shift * self.normal_direction[2]
+                ) for u_mean_i in self.mean_velocity)
+            else:
+                u_for_tau_wall = tuple(u_mean_i.get_shifted(
+                    self.sampling_shift * self.normal_direction[0],
+                    self.sampling_shift * self.normal_direction[1],
+                    self.sampling_shift * self.normal_direction[2]
+                ) for u_mean_i in self.mean_velocity)
+
+            rho_for_tau_wall = sp.Float(1)
+        else:
+            rho_for_tau_wall = cqc.density_symbol
+            u_for_tau_wall = cqc.velocity_symbols
+
+        # calculate Maronga factor in case of correction
+        maronga_fix = sp.Symbol("maronga_fix")
+        if self.maronga_sampling_shift:
+            inst_first_cell_vel = cqc.velocity_symbols
+            mean_first_cell_vel = tuple(u_mean_i.get_shifted(*self.normal_direction) for u_mean_i in self.mean_velocity)
+
+            mag_inst_vel_first_cell = sp.sqrt(sum([inst_first_cell_vel[i] ** 2 for i in self.tangential_axis]))
+            mag_mean_vel_first_cell = sp.sqrt(sum([mean_first_cell_vel[i] ** 2 for i in self.tangential_axis]))
+
+            result.append(Assignment(maronga_fix, mag_inst_vel_first_cell / mag_mean_vel_first_cell))
+        else:
+            maronga_fix = 1
+
+        # store which direction is tangential component (only those are used for the wall shear stress)
+        red_u_mag = sp.sqrt(sum([u_for_tau_wall[i]**2 for i in self.tangential_axis]))
+
+        u_mag = Assignment(u_m, red_u_mag)
+        result.append(u_mag)
+
+        wall_distance = self.maronga_sampling_shift if self.maronga_sampling_shift else self.sampling_shift
+
+        # using wall function model
+        wall_law_assignments = self.wall_function_model.shear_stress_assignments(
+            density_symbol=rho_for_tau_wall, velocity_symbol=u_m, shear_stress_symbol=tau_w,
+            wall_distance=(wall_distance - sp.Rational(1, 2) * self.dy),
+            u_tau_target=self.target_friction_velocity)
+        result.append(wall_law_assignments)
+
+        # calculate wall stress components and use them to calculate the drag
+        for i in self.tangential_axis:
+            result.append(Assignment(wall_stress[i], - u_for_tau_wall[i] / u_m * tau_w * maronga_fix))
+
+        weight, inv_weight_sq = sp.symbols("wfb_weight inverse_weight_squared")
+
+        if self.stencil.Q == 19:
+            result.append(Assignment(weight, sp.Rational(1, 2)))
+        elif self.stencil.Q == 27:
+            result.append(Assignment(inv_weight_sq, sum([neighbor_offset[i]**2 for i in self.tangential_axis])))
+            a, b = sp.symbols("wfb_a wfb_b")
+
+            if self.weight_method == self.WeightMethod.LATTICE_WEIGHT:
+                res_ab = sp.solve([2 * a + 4 * b - 1, a - 4 * b], [a, b])  # lattice weight scaling
+            elif self.weight_method == self.WeightMethod.GEOMETRIC_WEIGHT:
+                res_ab = sp.solve([2 * a + 4 * b - 1, a - sp.sqrt(2) * b], [a, b])  # geometric scaling
+            else:
+                raise ValueError("Unknown weighting method for the WFB D3Q27 extension. Currently, only lattice "
+                                 "weights and geometric weights are supported.")
+
+            result.append(Assignment(weight, sp.Piecewise((sp.Float(0), sp.Equality(inv_weight_sq, 0)),
+                                                          (res_ab[a], sp.Equality(inv_weight_sq, 1)),
+                                                          (res_ab[b], True))))
+
+        factor = self.dt / self.dy * weight
+        drag = sum([neighbor_offset[i] * factor * wall_stress[i] for i in self.tangential_axis])
+
+        result.append(Assignment(f_in.center(inv_dir[dir_symbol]), f_out[tangential_offset](mirrored_direction) - drag))
+
+        return result
+
+# end class WallFunctionBounce
 
 
 class UBB(LbBoundary):
