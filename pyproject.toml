@@ -69,8 +69,7 @@ tests = [
 [build-system]
 requires = [
     "setuptools>=69",
-    "versioneer>=0.29",
-    "tomli; python_version < '3.11'",
+    "versioneer[toml]>=0.29",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -87,7 +86,7 @@ namespaces = false
 # resulting files.
 VCS = "git"
 style = "pep440"
-versionfile_source = "lbmpy/_version.py"
+versionfile_source = "src/lbmpy/_version.py"
 versionfile_build = "lbmpy/_version.py"
 tag_prefix = "release/"
 parentdir_prefix = "lbmpy-"
