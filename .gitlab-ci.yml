@@ -265,7 +265,7 @@ build-documentation:
 pages:
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   stage: deploy
-  needs: ["build-documentation"]
+  needs: ["tests-and-coverage", "build-documentation"]
   script:
     - ls -l
     - mv coverage_report html_doc
