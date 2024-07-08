@@ -1,17 +1,28 @@
 stages:
   - pretest
   - test
+  - nightly
+  - docs
   - deploy
 
+# --------------------------  Templates ------------------------------------------------------------------------------------
+
+# Base configuration for jobs meant to run at every commit
+.every-commit:
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
+# Base configuration for jobs meant to run at a schedule
+.scheduled:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
 
 # --------------------------  Pre Tests --------------------------------------------------------------------------------
 
 # Normal test - runs on every commit all but "long run" tests
 tests-and-coverage:
   stage: pretest
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
+  extends: .every-commit
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
     # - pip install sympy --upgrade
@@ -62,9 +73,7 @@ tests-and-coverage-with-longrun:
 
 minimal-conda:
   stage: pretest
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
+  extends: .every-commit
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
   script:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
@@ -76,9 +85,7 @@ minimal-conda:
 # Linter for code formatting
 flake8-lint:
   stage: pretest
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
+  extends: .every-commit
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   script:
     - flake8 src/lbmpy
@@ -91,9 +98,7 @@ flake8-lint:
 # pipeline with latest python version
 latest-python:
   stage: test
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
+  extends: .every-commit
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/latest_python
   before_script:
     - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
@@ -133,9 +138,7 @@ latest-python:
 
 minimal-sympy-master:
   stage: test
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
+  extends: .every-commit
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/minimal_conda
   before_script:
     - pip install -e .
@@ -151,9 +154,7 @@ minimal-sympy-master:
 
 ubuntu:
   stage: test
-  except:
-    variables:
-      - $ENABLE_NIGHTLY_BUILDS
+  extends: .every-commit
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/ubuntu
   before_script:
     # - apt-get -y remove python3-sympy
@@ -210,10 +211,41 @@ pycodegen-integration:
     - cuda11
     - AVX
 
+# -------------------- Scheduled Tasks --------------------------------------------------------------------------
+
+
+nightly-sympy:
+  stage: nightly
+  extends: .scheduled
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/latest_python
+  before_script:
+    - pip install -e .
+    - pip install git+https://gitlab-ci-token:${CI_JOB_TOKEN}@i10git.cs.fau.de/pycodegen/pystencils.git@master#egg=pystencils
+    - pip install --upgrade --pre sympy
+  script:
+    - env
+    - pip list
+    - export NUM_CORES=$(nproc --all)
+    - mkdir -p ~/.config/matplotlib
+    - echo "backend:template" > ~/.config/matplotlib/matplotlibrc
+    - mkdir public
+    - pytest -v -n $NUM_CORES -m "not longrun" --junitxml=report.xml
+  tags:
+    - docker
+    - AVX
+    - cuda
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+
 # -------------------- Documentation and deploy ------------------------------------------------------------------------
 
 build-documentation:
-  stage: test
+  stage: docs
+  needs: []
+  extends: .every-commit
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/documentation
   before_script:
     - pip install -e .
@@ -233,6 +265,7 @@ build-documentation:
 pages:
   image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
   stage: deploy
+  needs: ["build-documentation"]
   script:
     - ls -l
     - mv coverage_report html_doc

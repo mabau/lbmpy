@@ -123,7 +123,10 @@ class SparseLbMapper:
                 assert direction_idx == 0
                 continue
             for own_cell_idx, cell in enumerate(self.fluid_coordinates):
-                inv_neighbor_cell = np.array([cell_i - dir_i for cell_i, dir_i in zip(cell, direction)])
+                inv_neighbor_cell = np.array(
+                    [np.int32(cell_i) - dir_i for cell_i, dir_i in zip(cell, direction)],
+                    dtype=np.uint32
+                )
                 if flag_arr[tuple(inv_neighbor_cell)] & fluid_boundary_mask:
                     neighbor_cell_idx = self.cell_idx(tuple(inv_neighbor_cell))
                     result.append(pdf_index(neighbor_cell_idx, direction_idx))

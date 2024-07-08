@@ -135,8 +135,7 @@ def get_triple_points(phase_arr, phase_indices, contour_line_eps=0.01, threshold
 def analytic_neumann_angles(kappas):
     """Computes analytic Neumann angles using surface tension parameters.
 
-    >>> analytic_neumann_angles([0.1, 0.1, 0.1])
-    [120.00000000000001, 120.00000000000001, 120.00000000000001]
+    >>> assert analytic_neumann_angles([0.1, 0.1, 0.1]) == [120.00000000000001, 120.00000000000001, 120.00000000000001]
     >>> r = analytic_neumann_angles([0.1, 0.2, 0.3])
     >>> assert np.allclose(sum(r), 360)
 
