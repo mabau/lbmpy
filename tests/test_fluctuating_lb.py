@@ -178,7 +178,7 @@ def test_resting_fluid(target=Target.CPU):
         np.testing.assert_allclose(momentum, [0, 0, 0], atol=1E-10)
 
         # temperature
-        kinetic_energy = 1 / 2 * np.dot(res_rho, res_u * res_u) / np.product(L)
+        kinetic_energy = 1 / 2 * np.dot(res_rho, res_u * res_u) / np.prod(L)
         np.testing.assert_allclose(
             kinetic_energy, [kT / 2] * 3, atol=kT * 0.01)
 

@@ -58,7 +58,13 @@ def flow_around_sphere(stencil, galilean_correction, fourth_order_correction, L_
             boundary_assignments)
         iter_slice = get_slice_before_ghost_layer((1,) + (0,) * (stencil.D - 1))
         extrapolation_ast = create_kernel(
-            boundary_assignments, config=CreateKernelConfig(iteration_slice=iter_slice, ghost_layers=1, target=target))
+            boundary_assignments,
+            config=CreateKernelConfig(
+                iteration_slice=iter_slice,
+                ghost_layers=1,
+                target=target,
+                skip_independence_check=True)
+            )
         return extrapolation_ast.compile()
 
     dh = create_data_handling(channel_size, periodicity=False, default_layout='fzyx', default_target=target)
