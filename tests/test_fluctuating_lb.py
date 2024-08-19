@@ -33,7 +33,13 @@ def _skip_instruction_sets_windows(instruction_sets):
 def single_component_maxwell(x1, x2, kT, mass):
     """Integrate the probability density from x1 to x2 using the trapezoidal rule"""
     x = np.linspace(x1, x2, 1000)
-    return np.trapz(np.exp(-mass * x ** 2 / (2. * kT)), x) / np.sqrt(2. * np.pi * kT / mass)
+
+    try:
+        trapezoid = np.trapezoid # since numpy 2.0
+    except AttributeError:
+        trapezoid = np.trapz
+
+    return trapezoid(np.exp(-mass * x ** 2 / (2. * kT)), x) / np.sqrt(2. * np.pi * kT / mass)
 
 
 def rr_getter(moment_group):

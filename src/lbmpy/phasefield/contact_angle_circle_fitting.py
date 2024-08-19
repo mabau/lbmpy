@@ -39,8 +39,8 @@ def circle_intersections(midpoint0, midpoint1, radius0, radius1):
 def interface_region(concentration_arr, phase0, phase1, area=3):
     import scipy.ndimage as sc_image
 
-    area_phase0 = sc_image.morphology.binary_dilation(concentration_arr[..., phase0] > 0.5, iterations=area)
-    area_phase1 = sc_image.morphology.binary_dilation(concentration_arr[..., phase1] > 0.5, iterations=area)
+    area_phase0 = sc_image.binary_dilation(concentration_arr[..., phase0] > 0.5, iterations=area)
+    area_phase1 = sc_image.binary_dilation(concentration_arr[..., phase1] > 0.5, iterations=area)
     return np.logical_and(area_phase0, area_phase1)
 
 

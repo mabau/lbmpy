@@ -107,17 +107,24 @@ class IPyNbTest(pytest.Item):
 
         # disable matplotlib output
         exec("import matplotlib.pyplot as p; "
+             "p.close('all'); "
              "p.switch_backend('Template')", global_dict)
 
         # in notebooks there is an implicit plt.show() - if this is not called a warning is shown when the next
         # plot is created. This warning is suppressed here
+        # Also animations cannot be shown, which also leads to a warning.
         exec("import warnings;"
-             "warnings.filterwarnings('ignore', 'Adding an axes using the same arguments as a previous.*');",
+             "warnings.filterwarnings('ignore', 'Adding an axes using the same arguments as a previous.*');"
+             "warnings.filterwarnings('ignore', 'Animation was deleted without rendering anything.*');",
              global_dict)
         with tempfile.NamedTemporaryFile() as f:
             f.write(self.code.encode())
             f.flush()
             runpy.run_path(f.name, init_globals=global_dict, run_name=self.name)
+
+        #   Close any open figures
+        exec("import matplotlib.pyplot as p; "
+             "p.close('all')", global_dict)
 
 
 class IPyNbFile(pytest.File):
@@ -141,10 +148,19 @@ class IPyNbFile(pytest.File):
         pass
 
 
-def pytest_collect_file(path, parent):
-    glob_exprs = ["*demo*.ipynb", "*tutorial*.ipynb", "test_*.ipynb"]
-    if any(path.fnmatch(g) for g in glob_exprs):
-        if pytest_version >= 50403:
-            return IPyNbFile.from_parent(fspath=path, parent=parent)
-        else:
-            return IPyNbFile(path, parent)
+if pytest_version >= 70000:
+    #   Since pytest 7.0, usage of `py.path.local` is deprecated and `pathlib.Path` should be used instead
+    import pathlib
+
+    def pytest_collect_file(file_path: pathlib.Path, parent):
+        glob_exprs = ["*demo*.ipynb", "*tutorial*.ipynb", "test_*.ipynb"]
+        if any(file_path.match(g) for g in glob_exprs):
+            return IPyNbFile.from_parent(path=file_path, parent=parent)
+else:
+    def pytest_collect_file(path, parent):
+        glob_exprs = ["*demo*.ipynb", "*tutorial*.ipynb", "test_*.ipynb"]
+        if any(path.fnmatch(g) for g in glob_exprs):
+            if pytest_version >= 50403:
+                return IPyNbFile.from_parent(fspath=path, parent=parent)
+            else:
+                return IPyNbFile(path, parent)
