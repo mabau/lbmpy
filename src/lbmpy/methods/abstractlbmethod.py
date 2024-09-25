@@ -105,22 +105,26 @@ class AbstractLbMethod(abc.ABC):
         the subexpressions, that assign the number to the newly introduced symbol
         """
         rr = relaxation_rates if relaxation_rates is not None else self.relaxation_rates
-        unique_relaxation_rates = set()
         subexpressions = {}
+        symbolic_relaxation_rates = list()
         for relaxation_rate in rr:
             relaxation_rate = sp.sympify(relaxation_rate)
-            if relaxation_rate not in unique_relaxation_rates:
-                # special treatment for zero, sp.Zero would be an integer ..
+            if isinstance(relaxation_rate, sp.Symbol):
+                symbolic_relaxation_rate = relaxation_rate
+            else:
                 if isinstance(relaxation_rate, Zero):
                     relaxation_rate = 0.0
-                if not isinstance(relaxation_rate, sp.Symbol):
-                    rt_symbol = sp.Symbol(f"rr_{len(subexpressions)}")
-                    subexpressions[relaxation_rate] = rt_symbol
-            unique_relaxation_rates.add(relaxation_rate)
+                if relaxation_rate in subexpressions:
+                    symbolic_relaxation_rate = subexpressions[relaxation_rate]
+                else:
+                    symbolic_relaxation_rate = sp.Symbol(f"rr_{len(subexpressions)}")
+                    subexpressions[relaxation_rate] = symbolic_relaxation_rate
+            symbolic_relaxation_rates.append(symbolic_relaxation_rate)
 
-        new_rr = [subexpressions[sp.sympify(e)] if sp.sympify(e) in subexpressions else e for e in rr]
         substitutions = [Assignment(e[1], e[0]) for e in subexpressions.items()]
         if relaxation_rates_modifier is not None:
-            new_rr = [r * relaxation_rates_modifier for r in new_rr]
+            symbolic_relaxation_rates = [r * relaxation_rates_modifier for r in symbolic_relaxation_rates]
+        for srr in symbolic_relaxation_rates:
+            assert isinstance(srr, sp.Symbol)
 
-        return substitutions, sp.diag(*new_rr)
+        return substitutions, sp.diag(*symbolic_relaxation_rates)
