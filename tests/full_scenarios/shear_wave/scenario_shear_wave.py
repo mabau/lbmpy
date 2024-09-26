@@ -202,19 +202,19 @@ def create_full_parameter_study():
 
     config = CreateKernelConfig(target=Target.CPU)
 
-    methods = [LBMConfig(method=Method.TRT, relaxation_rates=[omega, 1]),
-               LBMConfig(method=Method.MRT, relaxation_rates=[omega], equilibrium_order=2),
-               LBMConfig(method=Method.MRT, relaxation_rates=[omega], equilibrium_order=3),
-               LBMConfig(method=Method.CUMULANT, relaxation_rates=[omega],  # cumulant
+    methods = [LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=Method.TRT, relaxation_rates=[omega, 1]),
+               LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=Method.MRT, relaxation_rates=[omega],
+                         equilibrium_order=2),
+               LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=Method.MRT, relaxation_rates=[omega],
+                         equilibrium_order=3),
+               LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=Method.CUMULANT, relaxation_rates=[omega],  # cumulant
                          compressible=True, continuous_equilibrium=True, equilibrium_order=3),
-               LBMConfig(method=Method.CUMULANT, relaxation_rates=[omega],  # cumulant with fourth-order correction
+               LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=Method.CUMULANT, relaxation_rates=[omega],  # cumulant with fourth-order correction
                          compressible=True, continuous_equilibrium=True, fourth_order_correction=0.1),
-               LBMConfig(method=Method.TRT_KBC_N4, relaxation_rates=[omega, omega_f], entropic=True,
-                         zero_centered=False,  # entropic order 2
-                         continuous_equilibrium=True, equilibrium_order=2),
-               LBMConfig(method=Method.TRT_KBC_N4, relaxation_rates=[omega, omega_f], entropic=True,
-                         zero_centered=False,  # entropic order 3
-                         continuous_equilibrium=True, equilibrium_order=3),
+               LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=Method.TRT_KBC_N4, relaxation_rates=[omega, omega_f],
+                         entropic=True, zero_centered=False, continuous_equilibrium=True, equilibrium_order=2),
+               LBMConfig(stencil=LBStencil(Stencil.D3Q27), method=Method.TRT_KBC_N4, relaxation_rates=[omega, omega_f],
+                         entropic=True, zero_centered=False, continuous_equilibrium=True, equilibrium_order=3),
 
                # entropic cumulant: not supported for the moment
                # LBMConfig(method=Method.CUMULANT, relaxation_rates=["omega", "omega_f"], entropic=True, zero_centered=False,
