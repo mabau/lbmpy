@@ -28,10 +28,11 @@ class LbBoundary(abc.ABC):
     inner_or_boundary = True
     single_link = False
 
-    def __init__(self, name=None):
+    def __init__(self, name=None, calculate_force_on_boundary=False):
         self._name = name
+        self.calculate_force_on_boundary = calculate_force_on_boundary
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         """
         This function defines the boundary behavior and must therefore be implemented by all boundaries.
         The boundary is defined through a list of sympy equations from which a boundary kernel is generated.
@@ -48,6 +49,8 @@ class LbBoundary(abc.ABC):
         lb_method:      an instance of the LB method used. Use this to adapt the boundary to the method
                         (e.g. compressibility)
         index_field:    the boundary index field that can be used to retrieve and update boundary data
+        force_vector:   vector to store the force on the boundary. Has the same size as the index field and
+                        D-entries per cell
 
         Returns:
             list of pystencils assignments, or pystencils.AssignmentCollection
@@ -109,14 +112,31 @@ class NoSlip(LbBoundary):
 
     Args:
         name: optional name of the boundary.
+        calculate_force_on_boundary: stores the force for each PDF at the boundary in a force vector
     """
 
-    def __init__(self, name=None):
+    def __init__(self, name=None, calculate_force_on_boundary=False):
         """Set an optional name here, to mark boundaries, for example for force evaluations"""
-        super(NoSlip, self).__init__(name)
+        super(NoSlip, self).__init__(name, calculate_force_on_boundary)
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
-        return Assignment(f_in(inv_dir[dir_symbol]), f_out(dir_symbol))
+    def get_additional_code_nodes(self, lb_method):
+        if self.calculate_force_on_boundary:
+            return [NeighbourOffsetArrays(lb_method.stencil)]
+        else:
+            return []
+
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
+        if self.calculate_force_on_boundary:
+            force = sp.Symbol("f")
+            subexpressions = [Assignment(force, sp.Float(2.0) * f_out(dir_symbol))]
+            offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+            for i in range(lb_method.stencil.D):
+                subexpressions.append(Assignment(force_vector[0](f'F_{i}'), force * offset[i]))
+        else:
+            subexpressions = []
+
+        boundary_assignments = [Assignment(f_in(inv_dir[dir_symbol]), f_out(dir_symbol))]
+        return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
 
 
 class NoSlipLinearBouzidi(LbBoundary):
@@ -135,17 +155,22 @@ class NoSlipLinearBouzidi(LbBoundary):
         data_type: data type of the wall distance q
     """
 
-    def __init__(self, name=None, init_wall_distance=None, data_type='double'):
+    def __init__(self, name=None, init_wall_distance=None, data_type='double', calculate_force_on_boundary=False):
         self.data_type = data_type
         self.init_wall_distance = init_wall_distance
-
-        super(NoSlipLinearBouzidi, self).__init__(name)
+        super(NoSlipLinearBouzidi, self).__init__(name, calculate_force_on_boundary)
 
     @property
     def additional_data(self):
         """Used internally only. For the NoSlipLinearBouzidi boundary the distance to the obstacle of every
         direction is needed. This information is stored in the index vector."""
         return [('q', create_type(self.data_type))]
+
+    def get_additional_code_nodes(self, lb_method):
+        if self.calculate_force_on_boundary:
+            return [NeighbourOffsetArrays(lb_method.stencil)]
+        else:
+            return []
 
     @property
     def additional_data_init_callback(self):
@@ -160,7 +185,7 @@ class NoSlipLinearBouzidi(LbBoundary):
                  "(init_wall_distance=None). The boundary condition will fall back to a simple NoSlip BC")
             return default_callback
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         f_xf = sp.Symbol("f_xf")
         f_xf_inv = sp.Symbol("f_xf_inv")
         d_x2f = sp.Symbol("d_x2f")
@@ -182,6 +207,13 @@ class NoSlipLinearBouzidi(LbBoundary):
                            (case_two, sp.And(sp.Gt(q, 0), sp.Lt(q, 0.5))),
                            (case_three, True))
 
+        if self.calculate_force_on_boundary:
+            force = sp.Symbol("f")
+            subexpressions.append(Assignment(force, f_xf + rhs))
+            offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+            for i in range(lb_method.stencil.D):
+                subexpressions.append(Assignment(force_vector[0](f'F_{i}'), force * offset[i]))
+
         boundary_assignments = [Assignment(f_in(inv_dir[dir_symbol]), rhs)]
 
         return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
@@ -201,14 +233,15 @@ class QuadraticBounceBack(LbBoundary):
         data_type: data type of the wall distance q
     """
 
-    def __init__(self, relaxation_rate, name=None, init_wall_distance=None, data_type='double'):
+    def __init__(self, relaxation_rate, name=None, init_wall_distance=None, data_type='double',
+                 calculate_force_on_boundary=False):
         self.relaxation_rate = relaxation_rate
         self.data_type = data_type
         self.init_wall_distance = init_wall_distance
         self.equilibrium_values_name = "f_eq"
         self.inv_dir_symbol = TypedSymbol("inv_dir", create_type("int32"))
 
-        super(QuadraticBounceBack, self).__init__(name)
+        super(QuadraticBounceBack, self).__init__(name, calculate_force_on_boundary)
 
     @property
     def additional_data(self):
@@ -258,7 +291,7 @@ class QuadraticBounceBack(LbBoundary):
 
         return result
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         omega = self.relaxation_rate
         inv = sp.IndexedBase(self.inv_dir_symbol, shape=(1,))[dir_symbol]
         weight_info = LbmWeightInfo(lb_method, data_type=self.data_type)
@@ -311,6 +344,13 @@ class QuadraticBounceBack(LbBoundary):
         t2 = (q * (f_xf + f_xf_inv)) / (one + q)
         result = (one - q) / (one + q) * t1 * half + t2
 
+        if self.calculate_force_on_boundary:
+            force = sp.Symbol("f")
+            subexpressions.append(Assignment(force, f_xf + result))
+            offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
+            for i in range(lb_method.stencil.D):
+                subexpressions.append(Assignment(force_vector[0](f'F_{i}'), force * offset[i]))
+
         boundary_assignments = [Assignment(f_in(inv_dir[dir_symbol]), result)]
         return AssignmentCollection(boundary_assignments, subexpressions=subexpressions)
 
@@ -355,7 +395,7 @@ class FreeSlip(LbBoundary):
         if name is None and normal_direction:
             name = f"Free Slip : {offset_to_direction_string([-x for x in normal_direction])}"
 
-        super(FreeSlip, self).__init__(name)
+        super(FreeSlip, self).__init__(name, calculate_force_on_boundary=False)
 
     def init_callback(self, boundary_data, **_):
         if len(boundary_data.index_array) > 1e6:
@@ -425,7 +465,7 @@ class FreeSlip(LbBoundary):
         else:
             return [NeighbourOffsetArrays(lb_method.stencil)]
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         if self.normal_direction:
             tangential_offset = tuple(offset + normal for offset, normal in zip(neighbor_offset, self.normal_direction))
@@ -559,13 +599,13 @@ class WallFunctionBounce(LbBoundary):
         if name is None:
             name = f"WFB : {offset_to_direction_string([-x for x in normal_direction])}"
 
-        super(WallFunctionBounce, self).__init__(name)
+        super(WallFunctionBounce, self).__init__(name, calculate_force_on_boundary=False)
 
     def get_additional_code_nodes(self, lb_method):
         return [MirroredStencilDirections(self.stencil, self.mirror_axis),
                 NeighbourOffsetArrays(lb_method.stencil)]
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         # needed symbols for offsets and indices
         # neighbour offset symbols are basically the stencil directions defined in stencils.py:L130ff.
         neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
@@ -715,7 +755,7 @@ class UBB(LbBoundary):
         self.dim = dim
         self.data_type = data_type
 
-        super(UBB, self).__init__(name)
+        super(UBB, self).__init__(name, calculate_force_on_boundary=False)
 
     @property
     def additional_data(self):
@@ -751,7 +791,7 @@ class UBB(LbBoundary):
         This is useful if the inflow velocity should have a certain profile for instance"""
         return callable(self._velocity)
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         vel_from_idx_field = callable(self._velocity)
         vel = [index_field(f'vel_{i}') for i in range(self.dim)] if vel_from_idx_field else self._velocity
 
@@ -827,7 +867,7 @@ class SimpleExtrapolationOutflow(LbBoundary):
         self.normal_direction = tuple([int(n) for n in normal_direction])
         assert all([n in [-1, 0, 1] for n in self.normal_direction]), \
             "Only -1, 0 and 1 allowed for defining the normal direction"
-        super(SimpleExtrapolationOutflow, self).__init__(name)
+        super(SimpleExtrapolationOutflow, self).__init__(name, calculate_force_on_boundary=False)
 
     def get_additional_code_nodes(self, lb_method):
         """Return a list of code nodes that will be added in the generated code before the index field loop.
@@ -841,7 +881,7 @@ class SimpleExtrapolationOutflow(LbBoundary):
         """
         return [NeighbourOffsetArrays(lb_method.stencil)]
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         neighbor_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         tangential_offset = tuple(offset - normal for offset, normal in zip(neighbor_offset, self.normal_direction))
 
@@ -867,7 +907,7 @@ class ExtrapolationOutflow(LbBoundary):
 
     Args:
         normal_direction: direction vector normal to the outflow
-        lb_method: the lattice boltzman method to be used in the simulation
+        lb_method: the lattice Boltzmann method to be used in the simulation
         dt: lattice time step size
         dx: lattice spacing distance
         name: optional name of the boundary.
@@ -920,7 +960,7 @@ class ExtrapolationOutflow(LbBoundary):
 
             self.equilibrium_calculation = calc_eq_pdfs
 
-        super(ExtrapolationOutflow, self).__init__(name)
+        super(ExtrapolationOutflow, self).__init__(name, calculate_force_on_boundary=False)
 
     def init_callback(self, boundary_data, **_):
         dim = boundary_data.dim
@@ -973,7 +1013,7 @@ class ExtrapolationOutflow(LbBoundary):
         """
         return [NeighbourOffsetArrays(lb_method.stencil)]
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         subexpressions = []
         boundary_assignments = []
         dtdx = sp.Rational(self.dt, self.dx)
@@ -1019,9 +1059,9 @@ class FixedDensity(LbBoundary):
             name = "Fixed Density " + str(density)
         self.density = density
 
-        super(FixedDensity, self).__init__(name)
+        super(FixedDensity, self).__init__(name, calculate_force_on_boundary=False)
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         def remove_asymmetric_part_of_main_assignments(assignment_collection, degrees_of_freedom):
             new_main_assignments = [Assignment(a.lhs, get_symmetric_part(a.rhs, degrees_of_freedom))
                                     for a in assignment_collection.main_assignments]
@@ -1083,7 +1123,7 @@ class DiffusionDirichlet(LbBoundary):
         self.concentration_is_callable = callable(self.concentration)
         self.velocity_field = velocity_field
 
-        super(DiffusionDirichlet, self).__init__(name)
+        super(DiffusionDirichlet, self).__init__(name, calculate_force_on_boundary=False)
 
     @property
     def additional_data(self):
@@ -1116,7 +1156,7 @@ class DiffusionDirichlet(LbBoundary):
         else:
             return [LbmWeightInfo(lb_method, self._data_type)]
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         assert lb_method.conserved_quantity_computation.zero_centered_pdfs is False, \
             "DiffusionDirichlet only works for methods with normal pdfs storage -> set zero_centered=False"
         weight_info = LbmWeightInfo(lb_method, self._data_type)
@@ -1159,7 +1199,7 @@ class NeumannByCopy(LbBoundary):
         """
         return [NeighbourOffsetArrays(lb_method.stencil)]
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         neighbour_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         return [Assignment(f_in(inv_dir[dir_symbol]), f_out(inv_dir[dir_symbol])),
                 Assignment(f_out[neighbour_offset](dir_symbol), f_out(dir_symbol))]
@@ -1178,7 +1218,7 @@ class StreamInConstant(LbBoundary):
     """
 
     def __init__(self, constant, name=None):
-        super(StreamInConstant, self).__init__(name)
+        super(StreamInConstant, self).__init__(name, calculate_force_on_boundary=False)
         self.constant = constant
 
     def get_additional_code_nodes(self, lb_method):
@@ -1192,7 +1232,7 @@ class StreamInConstant(LbBoundary):
         """
         return [NeighbourOffsetArrays(lb_method.stencil)]
 
-    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field):
+    def __call__(self, f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector):
         neighbour_offset = NeighbourOffsetArrays.neighbour_offset(dir_symbol, lb_method.stencil)
         return [Assignment(f_in(inv_dir[dir_symbol]), self.constant),
                 Assignment(f_out[neighbour_offset](dir_symbol), self.constant)]

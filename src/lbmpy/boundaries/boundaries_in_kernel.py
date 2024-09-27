@@ -67,7 +67,7 @@ def boundary_conditional(boundary, direction, streaming_pattern, prev_timestep, 
 
     assignments = []
     for direction_idx in dir_indices:
-        rule = boundary(f_out, f_in, direction_idx, inv_dir, lb_method, index_field=None)
+        rule = boundary(f_out, f_in, direction_idx, inv_dir, lb_method, index_field=None, force_vector=None)
 
         #   rhs: replace f_out by post collision symbols.
         rhs_substitutions = {f_out(i): sym for i, sym in enumerate(lb_method.post_collision_pdf_symbols)}
