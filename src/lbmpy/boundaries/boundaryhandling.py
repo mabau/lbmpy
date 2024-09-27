@@ -1,8 +1,10 @@
+from dataclasses import replace
 import numpy as np
 
 from pystencils import Assignment, CreateKernelConfig, create_kernel, Field, Target
 from pystencils.boundaries import BoundaryHandling
 from pystencils.boundaries.createindexlist import numpy_data_type_for_boundary_object
+from pystencils.field import FieldType
 from pystencils.simp import add_subexpressions_for_field_reads
 from pystencils.stencil import inverse_direction
 
@@ -156,22 +158,31 @@ class LatticeBoltzmannBoundaryHandling(BoundaryHandling):
 
 def create_lattice_boltzmann_boundary_kernel(pdf_field, index_field, lb_method, boundary_functor,
                                              prev_timestep=Timestep.BOTH, streaming_pattern='pull',
-                                             target=Target.CPU, **kernel_creation_args):
+                                             target=Target.CPU, force_vector=None, **kernel_creation_args):
 
     indexing = BetweenTimestepsIndexing(
         pdf_field, lb_method.stencil, prev_timestep, streaming_pattern, np.int32, np.int32)
 
+    dim = lb_method.stencil.D
     f_out, f_in = indexing.proxy_fields
     dir_symbol = indexing.dir_symbol
     inv_dir = indexing.inverse_dir_symbol
 
-    boundary_assignments = boundary_functor(f_out, f_in, dir_symbol, inv_dir, lb_method, index_field)
-    boundary_assignments = indexing.substitute_proxies(boundary_assignments)
-
-    config = CreateKernelConfig(index_fields=[index_field], target=target, default_number_int="int32",
+    config = CreateKernelConfig(target=target, default_number_int="int32",
                                 skip_independence_check=True, **kernel_creation_args)
 
     default_data_type = config.data_type.default_factory()
+
+    if force_vector is None:
+        force_vector_type = np.dtype([(f"F_{i}", default_data_type.c_name) for i in range(dim)], align=True)
+        force_vector = Field.create_generic('force_vector', spatial_dimensions=1,
+                                            dtype=force_vector_type, field_type=FieldType.INDEXED)
+
+    config = replace(config, index_fields=[index_field, force_vector])
+
+    boundary_assignments = boundary_functor(f_out, f_in, dir_symbol, inv_dir, lb_method, index_field, force_vector)
+    boundary_assignments = indexing.substitute_proxies(boundary_assignments)
+
     if pdf_field.dtype != default_data_type:
         boundary_assignments = add_subexpressions_for_field_reads(boundary_assignments, data_type=default_data_type)
 

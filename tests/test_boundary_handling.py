@@ -1,14 +1,16 @@
 import numpy as np
 import pytest
 
-from lbmpy.boundaries import NoSlip, UBB, SimpleExtrapolationOutflow, ExtrapolationOutflow, \
-    FixedDensity, DiffusionDirichlet, NeumannByCopy, StreamInConstant, FreeSlip
-from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling
+from lbmpy.boundaries import (NoSlip, NoSlipLinearBouzidi, QuadraticBounceBack,
+                              UBB, SimpleExtrapolationOutflow, ExtrapolationOutflow, FixedDensity, DiffusionDirichlet,
+                              NeumannByCopy, StreamInConstant, FreeSlip)
+from lbmpy.boundaries.boundaryhandling import LatticeBoltzmannBoundaryHandling, create_lattice_boltzmann_boundary_kernel
 from lbmpy.creationfunctions import create_lb_function, create_lb_method, LBMConfig
 from lbmpy.enums import Stencil, Method
 from lbmpy.geometry import add_box_boundary
 from lbmpy.lbstep import LatticeBoltzmannStep
 from lbmpy.stencils import LBStencil
+import pystencils as ps
 from pystencils import create_data_handling, make_slice, Target, CreateKernelConfig
 from pystencils.slicing import slice_from_direction
 from pystencils.stencil import inverse_direction
@@ -435,3 +437,45 @@ def test_boundary_utility_functions():
     assert stream == StreamInConstant(constant=1.0, name="stream")
     assert not stream == StreamInConstant(constant=1.0, name="test")
     assert not stream == noslip
+
+
+@pytest.mark.parametrize("given_force_vector", [True, False])
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+def test_force_on_boundary(given_force_vector, dtype):
+    stencil = LBStencil(Stencil.D2Q9)
+    pdfs = ps.fields(f"pdfs_src({stencil.Q}): {dtype}[{stencil.D}D]", layout='fzyx')
+
+    method = create_lb_method(lbm_config=LBMConfig(stencil=stencil, method=Method.SRT, relaxation_rate=1.8))
+
+    noslip = NoSlip(name="noslip", calculate_force_on_boundary=True)
+    bouzidi = NoSlipLinearBouzidi(name="bouzidi", calculate_force_on_boundary=True)
+    qq_bounce_Back = QuadraticBounceBack(name="qqBB", relaxation_rate=1.8, calculate_force_on_boundary=True)
+
+    boundary_objects = [noslip, bouzidi, qq_bounce_Back]
+    for boundary in boundary_objects:
+        if given_force_vector:
+            force_vector_type = np.dtype([(f"F_{i}", dtype) for i in range(stencil.D)], align=True)
+            force_vector = ps.Field('forceVector', ps.FieldType.INDEXED, force_vector_type, layout=[0],
+                                    shape=(ps.TypedSymbol("forceVectorSize", "int32"), 1), strides=(1, 1))
+        else:
+            force_vector = None
+
+        index_struct_dtype = _numpy_data_type_for_boundary_object(boundary, stencil.D)
+
+        index_field = ps.Field('indexVector', ps.FieldType.INDEXED, index_struct_dtype, layout=[0],
+                               shape=(ps.TypedSymbol("indexVectorSize", "int32"), 1), strides=(1, 1))
+
+        create_lattice_boltzmann_boundary_kernel(pdfs, index_field, method, boundary, force_vector=force_vector)
+
+
+def _numpy_data_type_for_boundary_object(boundary_object, dim):
+    boundary_index_array_coordinate_names = ["x", "y", "z"]
+    direction_member_name = "dir"
+    default_index_array_dtype = np.int32
+
+    coordinate_names = boundary_index_array_coordinate_names[:dim]
+    return np.dtype(
+        [(name, default_index_array_dtype) for name in coordinate_names]
+        + [(direction_member_name, default_index_array_dtype)]
+        + [(i[0], i[1].numpy_dtype) for i in boundary_object.additional_data],
+        align=True,)
