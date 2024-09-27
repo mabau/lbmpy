@@ -12,6 +12,7 @@ from .lbstep import LatticeBoltzmannStep
 from .macroscopic_value_kernels import (
     pdf_initialization_assignments,
     macroscopic_values_getter,
+    strain_rate_tensor_getter,
     compile_macroscopic_values_getter,
     compile_macroscopic_values_setter,
     create_advanced_velocity_setter_collision_rule,
@@ -42,6 +43,7 @@ __all__ = [
     "LatticeBoltzmannStep",
     "pdf_initialization_assignments",
     "macroscopic_values_getter",
+    "strain_rate_tensor_getter",
     "compile_macroscopic_values_getter",
     "compile_macroscopic_values_setter",
     "create_advanced_velocity_setter_collision_rule",
