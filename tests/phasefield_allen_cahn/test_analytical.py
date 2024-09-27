@@ -44,6 +44,6 @@ def test_analytical():
     assert np.isclose(parameters.density_heavy, 1.0)
     assert np.isclose(parameters.density_light, 0.001207114228456914)
     assert np.isclose(parameters.dynamic_viscosity_heavy, 5.733727652152216e-05)
-    assert np.isclose(parameters.dynamic_viscosity_light, 0.0008630017037694861)
+    assert np.isclose(parameters.dynamic_viscosity_light, 1.0417416358027054e-06)
     assert np.isclose(parameters.gravitational_acceleration, -7.407407407407407e-08)
     assert np.isclose(parameters.surface_tension, 3.149857262258028e-05, rtol=1e-05)

@@ -366,8 +366,8 @@ def calculate_parameters_taylor_bubble(reference_length=128,
     water_mu_lattice_units = math.sqrt(density_diff * density_heavy * grav_df_cube) / inverse_viscosity_number
     air_mu_lattice_units = water_mu_lattice_units / (water_mu / air_mu)
 
-    dynamic_viscosity_heavy = water_mu_lattice_units / density_heavy
-    dynamic_viscosity_light = air_mu_lattice_units / density_light
+    dynamic_viscosity_heavy = water_mu_lattice_units
+    dynamic_viscosity_light = air_mu_lattice_units
 
     surface_tension_lattice_units = density_diff * gravity_lattice_units * diameter_fluid ** 2 / bond_number
 
