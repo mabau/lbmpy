@@ -1,10 +1,11 @@
 import pytest
 import numpy as np
+import sympy as sp
 
 from lbmpy.creationfunctions import create_lb_method, LBMConfig
 from lbmpy.enums import Stencil, ForceModel, Method
 from lbmpy.macroscopic_value_kernels import (
-    compile_macroscopic_values_getter, compile_macroscopic_values_setter)
+    compile_macroscopic_values_getter, compile_macroscopic_values_setter, strain_rate_tensor_getter)
 from lbmpy.advanced_streaming.utility import streaming_patterns, Timestep
 from lbmpy.stencils import LBStencil
 
@@ -83,3 +84,18 @@ def test_set_get_constant_velocity(stencil, force_model, compressible):
         computed_velocity = velocity_output_field[0, 0, 0, :]
 
     np.testing.assert_almost_equal(np.array(ref_velocity[:method.dim]), computed_velocity)
+
+
+@pytest.mark.parametrize('stencil', [Stencil.D2Q9, Stencil.D3Q19])
+@pytest.mark.parametrize("method_enum", [Method.SRT, Method.TRT, Method.MRT, Method.CUMULANT])
+def test_get_strain_rate_tensor(stencil, method_enum):
+    stencil = LBStencil(stencil)
+    lbm_config = LBMConfig(stencil=stencil, method=method_enum, compressible=True)
+    method = create_lb_method(lbm_config=lbm_config)
+
+    pdfs = sp.symbols(f"f_:{stencil.Q}")
+    strain_rate_tensor = sp.symbols(f"strain_rate_tensor_:{method.dim * method.dim}")
+
+    getter_assignments = strain_rate_tensor_getter(method, strain_rate_tensor, pdfs)
+
+    assert len(getter_assignments) == method.dim * method.dim
