@@ -124,7 +124,8 @@ class AbstractLbMethod(abc.ABC):
         substitutions = [Assignment(e[1], e[0]) for e in subexpressions.items()]
         if relaxation_rates_modifier is not None:
             symbolic_relaxation_rates = [r * relaxation_rates_modifier for r in symbolic_relaxation_rates]
-        for srr in symbolic_relaxation_rates:
-            assert isinstance(srr, sp.Symbol)
+        else:
+            for srr in symbolic_relaxation_rates:
+                assert isinstance(srr, sp.Symbol)
 
         return substitutions, sp.diag(*symbolic_relaxation_rates)
