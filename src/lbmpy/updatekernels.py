@@ -120,6 +120,26 @@ def create_stream_pull_with_output_kernel(lb_method, src_field, dst_field=None, 
                             simplification_hints=output_eq_collection.simplification_hints)
 
 
+def create_copy_kernel(stencil, src_field, dst_field, accessor=StreamPullTwoFieldsAccessor()):
+    """Creates a copy kernel, which can be used to transfer information from src to dst field.
+
+    Args:
+        stencil: lattice Boltzmann stencil which is used in the form of a tuple of tuples
+        src_field: field used for reading pdf values
+        dst_field: field used for writing pdf values
+        accessor: instance of PdfFieldAccessor, defining where to read and write values
+                  to create e.g. a fused stream-collide kernel See 'fieldaccess.PdfFieldAccessor'
+
+    Returns:
+        AssignmentCollection of a copy update rule
+    """
+
+    temporary_symbols = sp.symbols(f'copied:{stencil.Q}')
+    subexpressions = [Assignment(tmp, acc) for tmp, acc in zip(temporary_symbols, accessor.write(src_field, stencil))]
+    main_assignments = [Assignment(acc, tmp) for acc, tmp in zip(accessor.write(dst_field, stencil), temporary_symbols)]
+    return AssignmentCollection(main_assignments, subexpressions=subexpressions)
+
+
 # ---------------------------------- Pdf array creation for various layouts --------------------------------------------
 
 
