@@ -172,7 +172,7 @@ class PdfsToMomentsByMatrixTransform(AbstractRawMomentTransform):
 
     #   ----------------------------- Private Members -----------------------------
 
-    @ property
+    @property
     def _default_simplification(self):
         forward_simp = SimplificationStrategy()
         # forward_simp.add(substitute_moments_in_conserved_quantity_equations)
@@ -218,7 +218,7 @@ class PdfsToMomentsByChimeraTransform(AbstractRawMomentTransform):
                                                                                 self.moment_polynomials)
         self.poly_to_mono_matrix = self.mono_to_poly_matrix.inv()
 
-    @ property
+    @property
     def absorbs_conserved_quantity_equations(self):
         return True
 
@@ -414,7 +414,7 @@ class PdfsToMomentsByChimeraTransform(AbstractRawMomentTransform):
 
     #   ----------------------------- Private Members -----------------------------
 
-    @ property
+    @property
     def _default_simplification(self):
         from lbmpy.methods.momentbased.momentbasedsimplifications import (
             substitute_moments_in_conserved_quantity_equations,

@@ -1,8 +1,18 @@
 import itertools
 from pystencils import CreateKernelConfig, Field, Assignment, AssignmentCollection
-from pystencils.slicing import shift_slice, get_slice_before_ghost_layer, normalize_slice
-from lbmpy.advanced_streaming.utility import is_inplace, get_accessor, numeric_index, \
-    Timestep, get_timesteps, numeric_offsets
+from pystencils.slicing import (
+    shift_slice,
+    get_slice_before_ghost_layer,
+    normalize_slice,
+)
+from lbmpy.advanced_streaming.utility import (
+    is_inplace,
+    get_accessor,
+    numeric_index,
+    Timestep,
+    get_timesteps,
+    numeric_offsets,
+)
 from pystencils.datahandling import SerialDataHandling
 from pystencils.enums import Target
 from itertools import chain
@@ -10,22 +20,28 @@ from itertools import chain
 
 class LBMPeriodicityHandling:
 
-    def __init__(self, stencil, data_handling, pdf_field_name,
-                 streaming_pattern='pull', ghost_layers=1,
-                 cupy_direct_copy=True):
+    def __init__(
+        self,
+        stencil,
+        data_handling,
+        pdf_field_name,
+        streaming_pattern="pull",
+        ghost_layers=1,
+        cupy_direct_copy=True,
+    ):
         """
-            Periodicity Handling for Lattice Boltzmann Streaming.
+        Periodicity Handling for Lattice Boltzmann Streaming.
 
-            **On the usage with cuda:**
-            - cupy allows the copying of sliced arrays within device memory using the numpy syntax,
-            e.g. `dst[:,0] = src[:,-1]`. In this implementation, this is the default for periodicity
-            handling. Alternatively, if you set `cupy_direct_copy=False`, GPU kernels are generated and
-            compiled. The compiled kernels are almost twice as fast in execution as cupy array copying,
-            but especially for large stencils like D3Q27, their compilation can take up to 20 seconds.
-            Choose your weapon depending on your use case.
+        **On the usage with cuda:**
+        - cupy allows the copying of sliced arrays within device memory using the numpy syntax,
+        e.g. `dst[:,0] = src[:,-1]`. In this implementation, this is the default for periodicity
+        handling. Alternatively, if you set `cupy_direct_copy=False`, GPU kernels are generated and
+        compiled. The compiled kernels are almost twice as fast in execution as cupy array copying,
+        but especially for large stencils like D3Q27, their compilation can take up to 20 seconds.
+        Choose your weapon depending on your use case.
         """
         if not isinstance(data_handling, SerialDataHandling):
-            raise ValueError('Only serial data handling is supported!')
+            raise ValueError("Only serial data handling is supported!")
 
         self.stencil = stencil
         self.dim = stencil.D
@@ -56,12 +72,16 @@ class LBMPeriodicityHandling:
         self.comm_slices = []
         timesteps = get_timesteps(streaming_pattern)
         for timestep in timesteps:
-            slices_per_comm_dir = get_communication_slices(stencil=stencil,
-                                                           comm_stencil=copy_directions,
-                                                           streaming_pattern=streaming_pattern,
-                                                           prev_timestep=timestep,
-                                                           ghost_layers=ghost_layers)
-            self.comm_slices.append(list(chain.from_iterable(v for k, v in slices_per_comm_dir.items())))
+            slices_per_comm_dir = get_communication_slices(
+                stencil=stencil,
+                comm_stencil=copy_directions,
+                streaming_pattern=streaming_pattern,
+                prev_timestep=timestep,
+                ghost_layers=ghost_layers,
+            )
+            self.comm_slices.append(
+                list(chain.from_iterable(v for k, v in slices_per_comm_dir.items()))
+            )
 
         if self.target == Target.GPU and not cupy_direct_copy:
             self.device_copy_kernels = list()
@@ -81,11 +101,11 @@ class LBMPeriodicityHandling:
             arr[dst] = arr[src]
 
     def _compile_copy_kernels(self, timestep):
+        assert self.target == Target.GPU
         pdf_field = self.dh.fields[self.pdf_field_name]
         kernels = []
         for src, dst in self.comm_slices[timestep.idx]:
-            kernels.append(
-                periodic_pdf_copy_kernel(pdf_field, src, dst, target=self.target))
+            kernels.append(periodic_pdf_gpu_copy_kernel(pdf_field, src, dst))
         return kernels
 
     def _periodicity_handling_gpu(self, prev_timestep):
@@ -100,7 +120,12 @@ class LBMPeriodicityHandling:
 
 
 def get_communication_slices(
-        stencil, comm_stencil=None, streaming_pattern='pull', prev_timestep=Timestep.BOTH, ghost_layers=1):
+    stencil,
+    comm_stencil=None,
+    streaming_pattern="pull",
+    prev_timestep=Timestep.BOTH,
+    ghost_layers=1,
+):
     """
     Return the source and destination slices for periodicity handling or communication between blocks.
 
@@ -116,7 +141,9 @@ def get_communication_slices(
     if comm_stencil is None:
         comm_stencil = itertools.product(*([-1, 0, 1] for _ in range(stencil.D)))
 
-    pdfs = Field.create_generic('pdfs', spatial_dimensions=len(stencil[0]), index_shape=(stencil.Q,))
+    pdfs = Field.create_generic(
+        "pdfs", spatial_dimensions=len(stencil[0]), index_shape=(stencil.Q,)
+    )
     write_accesses = get_accessor(streaming_pattern, prev_timestep).write(pdfs, stencil)
     slices_per_comm_direction = dict()
 
@@ -130,7 +157,9 @@ def get_communication_slices(
             d = stencil.index(streaming_dir)
             write_index = numeric_index(write_accesses[d])[0]
 
-            origin_slice = get_slice_before_ghost_layer(comm_dir, ghost_layers=ghost_layers, thickness=1)
+            origin_slice = get_slice_before_ghost_layer(
+                comm_dir, ghost_layers=ghost_layers, thickness=1
+            )
             src_slice = _fix_length_one_slices(origin_slice)
 
             write_offsets = numeric_offsets(write_accesses[d])
@@ -138,13 +167,15 @@ def get_communication_slices(
 
             # TODO: this is just a hotfix. _trim_slice_in_direction breaks FreeSlip BC with adjacent periodic side
             if streaming_pattern != "pull":
-                src_slice = shift_slice(_trim_slice_in_direction(src_slice, tangential_dir), write_offsets)
+                src_slice = shift_slice(
+                    _trim_slice_in_direction(src_slice, tangential_dir), write_offsets
+                )
 
             neighbour_transform = _get_neighbour_transform(comm_dir, ghost_layers)
             dst_slice = shift_slice(src_slice, neighbour_transform)
 
-            src_slice = src_slice + (write_index, )
-            dst_slice = dst_slice + (write_index, )
+            src_slice = src_slice + (write_index,)
+            dst_slice = dst_slice + (write_index,)
 
             slices_for_dir.append((src_slice, dst_slice))
 
@@ -152,10 +183,10 @@ def get_communication_slices(
     return slices_per_comm_direction
 
 
-def periodic_pdf_copy_kernel(pdf_field, src_slice, dst_slice,
-                             domain_size=None, target=Target.GPU):
-    """Copies a rectangular array slice onto another non-overlapping array slice"""
-    from pystencils.gpucuda.kernelcreation import create_cuda_kernel
+def periodic_pdf_gpu_copy_kernel(pdf_field, src_slice, dst_slice, domain_size=None):
+    """Generate a GPU kernel which copies all values from one slice of a field
+    to another non-overlapping slice."""
+    from pystencils import create_kernel
 
     pdf_idx = src_slice[-1]
     assert isinstance(pdf_idx, int), "PDF index needs to be an integer constant"
@@ -176,18 +207,28 @@ def periodic_pdf_copy_kernel(pdf_field, src_slice, dst_slice,
     def _stop(s):
         return s.stop if isinstance(s, slice) else s
 
-    offset = [_start(s1) - _start(s2) for s1, s2 in zip(normalized_from_slice, normalized_to_slice)]
-    assert offset == [_stop(s1) - _stop(s2) for s1, s2 in zip(normalized_from_slice, normalized_to_slice)], \
-        "Slices have to have same size"
+    offset = [
+        _start(s1) - _start(s2)
+        for s1, s2 in zip(normalized_from_slice, normalized_to_slice)
+    ]
+    assert offset == [
+        _stop(s1) - _stop(s2)
+        for s1, s2 in zip(normalized_from_slice, normalized_to_slice)
+    ], "Slices have to have same size"
 
-    copy_eq = AssignmentCollection(main_assignments=[Assignment(pdf_field(pdf_idx), pdf_field[tuple(offset)](pdf_idx))])
-    config = CreateKernelConfig(iteration_slice=dst_slice, skip_independence_check=True)
-    ast = create_cuda_kernel(copy_eq, config=config)
-    if target == Target.GPU:
-        from pystencils.gpucuda import make_python_function
-        return make_python_function(ast)
-    else:
-        raise ValueError('Invalid target:', target)
+    copy_eq = AssignmentCollection(
+        main_assignments=[
+            Assignment(pdf_field(pdf_idx), pdf_field[tuple(offset)](pdf_idx))
+        ]
+    )
+    config = CreateKernelConfig(
+        iteration_slice=dst_slice,
+        skip_independence_check=True,
+        target=Target.GPU,
+    )
+
+    ast = create_kernel(copy_eq, config=config)
+    return ast.compile()
 
 
 def _extend_dir(direction):
@@ -196,10 +237,10 @@ def _extend_dir(direction):
     elif direction[0] == 0:
         for d in [-1, 0, 1]:
             for rest in _extend_dir(direction[1:]):
-                yield (d, ) + rest
+                yield (d,) + rest
     else:
         for rest in _extend_dir(direction[1:]):
-            yield (direction[0], ) + rest
+            yield (direction[0],) + rest
 
 
 def _get_neighbour_transform(direction, ghost_layers):
