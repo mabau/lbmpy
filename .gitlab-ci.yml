@@ -29,7 +29,7 @@ stages:
 tests-and-coverage:
   stage: pretest
   extends: .every-commit
-  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full
+  image: i10git.cs.fau.de:5005/pycodegen/pycodegen/full:cupy12.3
   script:
     # - pip install sympy --upgrade
     - export NUM_CORES=$(nproc --all)
