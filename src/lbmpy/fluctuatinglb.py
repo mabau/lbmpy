@@ -19,9 +19,7 @@ def add_fluctuations_to_collision_rule(collision_rule, temperature=None, amplitu
     """"""
     if not (temperature and not amplitudes) or (temperature and amplitudes):
         raise ValueError("Fluctuating LBM: Pass either 'temperature' or 'amplitudes'.")
-    if collision_rule.method.conserved_quantity_computation.zero_centered_pdfs:
-        raise ValueError("The fluctuating LBM is not implemented for zero-centered PDF storage.")
-
+    
     method = collision_rule.method
     if not amplitudes:
         amplitudes = fluctuation_amplitude_from_temperature(method, temperature, c_s_sq)
@@ -44,9 +42,7 @@ def fluctuation_amplitude_from_temperature(method, temperature, c_s_sq=sp.Symbol
     """Produces amplitude equations according to (2.60) and (3.54) in Schiller08"""
     normalization_factors = sp.matrix_multiply_elementwise(method.moment_matrix, method.moment_matrix) * \
         sp.Matrix(method.weights)
-    density = method.zeroth_order_equilibrium_moment_symbol
-    if method.conserved_quantity_computation.zero_centered_pdfs:
-        density += 1
+    density = method._cqc.density_symbol
     mu = temperature * density / c_s_sq
     return [sp.sqrt(mu * norm * (1 - (1 - rr) ** 2))
             for norm, rr in zip(normalization_factors, method.relaxation_rates)]

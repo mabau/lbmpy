@@ -376,8 +376,8 @@ class LBMConfig:
         if not self.compressible and self.method in (Method.MONOMIAL_CUMULANT, Method.CUMULANT):
             raise ValueError("Incompressible cumulant-based methods are not supported (yet).")
 
-        if self.zero_centered and (self.entropic or self.fluctuating):
-            raise ValueError("Entropic and fluctuating methods can only be created with `zero_centered=False`.")
+        if self.zero_centered and self.entropic:
+            raise ValueError("Entropic methods can only be created with `zero_centered=False`.")
 
         #   Check or infer delta-equilibrium
         if self.delta_equilibrium is not None:
